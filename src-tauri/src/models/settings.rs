@@ -195,8 +195,6 @@ pub struct DescriptionGenerator {
     pub prompt: Option<String>,
 }
 
-// --- Default helpers ---
-
 fn default_true() -> bool {
     true
 }
@@ -222,8 +220,6 @@ fn default_debounce_ms() -> u32 {
 fn default_white() -> String {
     "#FFFFFF".to_string()
 }
-
-// --- Default trait implementations ---
 
 impl Default for Settings {
     fn default() -> Self {
@@ -327,17 +323,14 @@ mod tests {
         assert_eq!(settings.number_input_debounce_ms, 200);
         assert_eq!(settings.default_model, Some("550e8400-e29b-41d4-a716-446655440000".to_string()));
 
-        // Notification settings
         assert!(settings.notifications.events.prompt_execution_success);
         assert!(settings.notifications.monochromatic_notification_icons);
         assert_eq!(settings.notifications.background_colors.success, "#FFFFFF");
 
-        // Speech model
         let speech = settings.speech_to_text_model.expect("speech model should be present");
         assert_eq!(speech.model, "gpt-4o-transcribe");
         assert_eq!(speech.api_key_env, "OPENAI_API_KEY");
 
-        // Description generator
         assert_eq!(settings.description_generator.model, "");
         assert!(settings.description_generator.prompt.is_some());
     }
@@ -349,7 +342,6 @@ mod tests {
         let serialized = serde_json::to_string_pretty(&settings).expect("serialize");
         let settings2: Settings = serde_json::from_str(&serialized).expect("re-deserialize");
 
-        // Verify key fields survive round-trip
         assert_eq!(settings.show_tray_icon, settings2.show_tray_icon);
         assert_eq!(settings.debug_mode, settings2.debug_mode);
         assert_eq!(settings.code_theme, settings2.code_theme);
