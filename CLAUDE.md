@@ -4,7 +4,7 @@ Desktop application built with **Tauri 2**.
 
 ## Rules
 
-- Always use the latest versions of Tauri, its plugins, and all dependencies.
+- Always use the latest versions of Tauri, its plugins, and all dependencies. Before adding any dependency, verify the current latest version (`cargo search`, `npm info`, etc.) — do not trust versions from task files or memory, they may be outdated.
 - When using a framework API or plugin not yet documented, follow the process in [`docs/api-verification.md`](docs/api-verification.md).
 - When working in any directory, check for a `DOCS.md` file first — it contains conventions and patterns for that area, or references to detailed files for complex topics.
 
