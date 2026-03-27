@@ -9,6 +9,7 @@ mod traits;
 use commands::settings::AppState;
 use services::clipboard::ClipboardService;
 use services::config::ConfigService;
+use services::notification::NotificationService;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -26,9 +27,11 @@ pub fn run() {
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             let clipboard_service = ClipboardService::new()
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            let notification_service = NotificationService::new(app.handle().clone());
             app.manage(Mutex::new(AppState {
                 config: config_service,
                 clipboard: clipboard_service,
+                notifications: notification_service,
             }));
             Ok(())
         })

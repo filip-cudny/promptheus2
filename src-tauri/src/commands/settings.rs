@@ -6,10 +6,12 @@ use crate::models::settings::{
 };
 use crate::services::clipboard::ClipboardService;
 use crate::services::config::ConfigService;
+use crate::services::notification::NotificationService;
 
 pub struct AppState {
     pub config: ConfigService,
     pub clipboard: ClipboardService,
+    pub notifications: NotificationService,
 }
 
 fn emit_changed(app: &AppHandle) -> Result<(), String> {

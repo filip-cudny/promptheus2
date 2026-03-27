@@ -99,3 +99,17 @@ export interface DescriptionGenerator {
   system_prompt: string | null;
   prompt: string | null;
 }
+
+export type NotificationLevel = "success" | "error" | "info" | "warning";
+
+export interface NotificationPayload {
+  level: NotificationLevel;
+  title: string;
+  message?: string;
+}
+
+export interface ActiveNotification extends NotificationPayload {
+  id: string;
+  created_at: number;
+  duration: number;
+}
