@@ -1,16 +1,17 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+  import type { MenuItem } from "$lib/types/menu";
   import {
-    items,
-    selectedIndex,
-    visible,
+    getItems,
+    getSelectedIndex,
+    setSelectedIndex,
+    isVisible,
     closeMenu,
     moveSelection,
     executeItem,
     executeSelected,
     handleNumberInput,
-    setSelectedIndex,
     init,
     destroy,
   } from "$lib/stores/contextMenu.svelte";
@@ -18,15 +19,16 @@
   type SectionGroup = {
     sectionId: string;
     startIndex: number;
-    items: { item: typeof items[number]; globalIndex: number }[];
+    items: { item: MenuItem; globalIndex: number }[];
   };
 
   let sections = $derived.by(() => {
+    const allItems = getItems();
     const groups: SectionGroup[] = [];
     let currentSection: SectionGroup | null = null;
 
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
+    for (let i = 0; i < allItems.length; i++) {
+      const item = allItems[i];
       const sectionId = item.section_id ?? "default";
 
       if (!currentSection || currentSection.sectionId !== sectionId) {
@@ -40,8 +42,12 @@
     return groups;
   });
 
+  let menuVisible = $derived(isVisible());
+  let menuItems = $derived(getItems());
+  let currentSelectedIndex = $derived(getSelectedIndex());
+
   function handleKeydown(e: KeyboardEvent) {
-    if (!visible) return;
+    if (!menuVisible) return;
 
     switch (e.key) {
       case "ArrowDown":
@@ -72,10 +78,6 @@
     executeItem(index, e.shiftKey);
   }
 
-  function handleBlur() {
-    closeMenu();
-  }
-
   onMount(async () => {
     await init();
 
@@ -94,8 +96,8 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="context-menu" class:visible role="menu" onblur={handleBlur}>
-  {#if items.length === 0 && visible}
+<div class="context-menu" class:visible={menuVisible} role="menu">
+  {#if menuItems.length === 0 && menuVisible}
     <div class="empty-state" role="menuitem">No items available</div>
   {:else}
     {#each sections as section, sectionIdx}
@@ -105,7 +107,7 @@
       {#each section.items as { item, globalIndex }}
         <button
           class="menu-item"
-          class:selected={globalIndex === selectedIndex}
+          class:selected={globalIndex === currentSelectedIndex}
           class:disabled={!item.enabled}
           role="menuitem"
           aria-disabled={!item.enabled}

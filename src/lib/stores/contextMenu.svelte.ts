@@ -3,26 +3,42 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { MenuItem } from "$lib/types/menu";
 
-let items = $state<MenuItem[]>([]);
-let selectedIndex = $state(-1);
-let visible = $state(false);
-let numberBuffer = $state("");
+let _items = $state<MenuItem[]>([]);
+let _selectedIndex = $state(-1);
+let _visible = $state(false);
+let numberBuffer = "";
 let numberTimer: ReturnType<typeof setTimeout> | null = null;
 let unlisten: (() => void) | null = null;
 
 const NUMBER_DEBOUNCE_MS = 300;
 
-const navigableItems = $derived(
-  items.filter((item) => item.enabled),
+const _navigableItems = $derived(
+  _items.filter((item) => item.enabled),
 );
+
+function getItems(): MenuItem[] {
+  return _items;
+}
+
+function getSelectedIndex(): number {
+  return _selectedIndex;
+}
+
+function setSelectedIndex(index: number) {
+  _selectedIndex = index;
+}
+
+function isVisible(): boolean {
+  return _visible;
+}
 
 async function openMenu() {
   try {
     const fetched = await invoke<MenuItem[]>("get_context_menu_items");
-    items = fetched;
-    selectedIndex = -1;
+    _items = fetched;
+    _selectedIndex = -1;
     numberBuffer = "";
-    visible = true;
+    _visible = true;
 
     const win = getCurrentWebviewWindow();
     await win.show();
@@ -33,9 +49,9 @@ async function openMenu() {
 }
 
 async function closeMenu() {
-  visible = false;
-  items = [];
-  selectedIndex = -1;
+  _visible = false;
+  _items = [];
+  _selectedIndex = -1;
   numberBuffer = "";
 
   const win = getCurrentWebviewWindow();
@@ -43,28 +59,28 @@ async function closeMenu() {
 }
 
 function moveSelection(direction: 1 | -1) {
-  if (navigableItems.length === 0) return;
+  if (_navigableItems.length === 0) return;
 
-  const currentItem = selectedIndex >= 0 ? items[selectedIndex] : null;
+  const currentItem = _selectedIndex >= 0 ? _items[_selectedIndex] : null;
   const currentNavIndex = currentItem
-    ? navigableItems.indexOf(currentItem)
+    ? _navigableItems.indexOf(currentItem)
     : -1;
 
   let nextNavIndex: number;
   if (currentNavIndex === -1) {
-    nextNavIndex = direction === 1 ? 0 : navigableItems.length - 1;
+    nextNavIndex = direction === 1 ? 0 : _navigableItems.length - 1;
   } else {
     nextNavIndex =
-      (currentNavIndex + direction + navigableItems.length) %
-      navigableItems.length;
+      (currentNavIndex + direction + _navigableItems.length) %
+      _navigableItems.length;
   }
 
-  const targetItem = navigableItems[nextNavIndex];
-  selectedIndex = items.indexOf(targetItem);
+  const targetItem = _navigableItems[nextNavIndex];
+  _selectedIndex = _items.indexOf(targetItem);
 }
 
 async function executeItem(index: number, shiftPressed: boolean = false) {
-  const item = items[index];
+  const item = _items[index];
   if (!item || !item.enabled) return;
 
   try {
@@ -80,8 +96,8 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
 }
 
 async function executeSelected(shiftPressed: boolean = false) {
-  if (selectedIndex >= 0 && selectedIndex < items.length) {
-    await executeItem(selectedIndex, shiftPressed);
+  if (_selectedIndex >= 0 && _selectedIndex < _items.length) {
+    await executeItem(_selectedIndex, shiftPressed);
   }
 }
 
@@ -94,10 +110,10 @@ function handleNumberInput(digit: string) {
     const num = parseInt(numberBuffer, 10);
     numberBuffer = "";
 
-    if (num >= 1 && num <= navigableItems.length) {
-      const targetItem = navigableItems[num - 1];
-      const targetIndex = items.indexOf(targetItem);
-      selectedIndex = targetIndex;
+    if (num >= 1 && num <= _navigableItems.length) {
+      const targetItem = _navigableItems[num - 1];
+      const targetIndex = _items.indexOf(targetItem);
+      _selectedIndex = targetIndex;
       executeItem(targetIndex);
     }
   }, NUMBER_DEBOUNCE_MS);
@@ -116,21 +132,17 @@ function destroy() {
   }
 }
 
-function setSelectedIndex(index: number) {
-  selectedIndex = index;
-}
-
 export {
-  items,
-  selectedIndex,
-  visible,
+  getItems,
+  getSelectedIndex,
+  setSelectedIndex,
+  isVisible,
   openMenu,
   closeMenu,
   moveSelection,
   executeItem,
   executeSelected,
   handleNumberInput,
-  setSelectedIndex,
   init,
   destroy,
 };
