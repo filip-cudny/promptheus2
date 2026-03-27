@@ -39,7 +39,10 @@ function add(
 }
 
 function remove(id: string) {
-  notifications = notifications.filter((n) => n.id !== id);
+  const index = notifications.findIndex((n) => n.id === id);
+  if (index !== -1) {
+    notifications.splice(index, 1);
+  }
 }
 
 async function init() {

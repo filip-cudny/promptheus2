@@ -19,5 +19,11 @@ export default defineConfig({
     target: "esnext",
     minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_DEBUG,
+    rollupOptions: {
+      input: {
+        main: path.resolve("./index.html"),
+        "context-menu": path.resolve("./context-menu.html"),
+      },
+    },
   },
 });

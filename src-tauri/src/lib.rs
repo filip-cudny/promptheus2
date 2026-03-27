@@ -1,4 +1,4 @@
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 mod commands;
@@ -9,7 +9,42 @@ mod traits;
 use commands::settings::AppState;
 use services::clipboard::ClipboardService;
 use services::config::ConfigService;
+use services::menu_coordinator::MenuCoordinator;
 use services::notification::NotificationService;
+
+fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+    use tauri::tray::TrayIconBuilder;
+
+    let show_menu_i = MenuItem::with_id(app, "show-menu", "Show Menu", true, None::<&str>)?;
+    let sep1 = PredefinedMenuItem::separator(app)?;
+    let settings_i = MenuItem::with_id(app, "settings", "Settings", true, None::<&str>)?;
+    let sep2 = PredefinedMenuItem::separator(app)?;
+    let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+
+    let menu = Menu::with_items(app, &[&show_menu_i, &sep1, &settings_i, &sep2, &quit_i])?;
+
+    TrayIconBuilder::with_id("main-tray")
+        .icon(app.default_window_icon().cloned().unwrap())
+        .menu(&menu)
+        .show_menu_on_left_click(true)
+        .tooltip("Promptheus")
+        .on_menu_event(|app: &tauri::AppHandle, event: tauri::menu::MenuEvent| match event.id().as_ref() {
+            "show-menu" => {
+                let _ = app.emit("show-context-menu", ());
+            }
+            "settings" => {
+                let _ = app.emit("open-settings", ());
+            }
+            "quit" => {
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .build(app)?;
+
+    Ok(())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -25,13 +60,20 @@ pub fn run() {
             let config_service =
                 ConfigService::load(&config_dir, Some(&resource_dir))
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+            if config_service.settings().show_tray_icon {
+                setup_tray(app)?;
+            }
+
             let clipboard_service = ClipboardService::new()
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             let notification_service = NotificationService::new(app.handle().clone());
+            let menu_coordinator = MenuCoordinator::new();
             app.manage(Mutex::new(AppState {
                 config: config_service,
                 clipboard: clipboard_service,
                 notifications: notification_service,
+                menu_coordinator,
             }));
             Ok(())
         })
@@ -55,6 +97,9 @@ pub fn run() {
             commands::settings::update_keymaps,
             commands::settings::update_menu_section_order,
             commands::settings::reload_settings,
+            commands::menu::get_context_menu_items,
+            commands::menu::execute_menu_item,
+            commands::menu::refresh_menu_providers,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

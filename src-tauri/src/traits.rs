@@ -1,7 +1,8 @@
 use crate::models::execution::ExecutionResult;
 use crate::models::menu::MenuItem;
 
-pub trait MenuItemProvider {
+pub trait MenuItemProvider: Send + Sync {
+    fn provider_name(&self) -> &str;
     fn get_menu_items(&self) -> Vec<MenuItem>;
     fn refresh(&mut self);
 }
