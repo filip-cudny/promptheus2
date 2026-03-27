@@ -15,6 +15,8 @@ src-tauri/
     ├── lib.rs                  # App builder setup, plugin registration
     ├── commands/               # Tauri command handlers (thin wrappers)
     │   ├── mod.rs
+    │   ├── clipboard.rs        # Clipboard read/write commands
+    │   ├── menu.rs             # Context menu commands (get items, execute, show window)
     │   ├── prompt.rs           # Prompt execution commands
     │   ├── settings.rs         # Config read/write commands
     │   ├── history.rs          # History CRUD commands
@@ -28,17 +30,19 @@ src-tauri/
     │   ├── context.rs          # Context manager (text + images)
     │   ├── clipboard.rs        # System clipboard access
     │   ├── hotkey.rs           # Global hotkey registration
+    │   ├── menu_coordinator.rs # Aggregates menu providers into ordered sections
     │   ├── notification.rs     # Desktop notifications
     │   ├── speech.rs           # Audio recording + transcription
     │   └── placeholder.rs      # Template variable substitution
     ├── models/                 # Data structures (serde Serialize/Deserialize)
     │   ├── mod.rs
-    │   ├── menu_item.rs
+    │   ├── menu.rs             # MenuItem, MenuItemType
     │   ├── prompt.rs           # PromptData, PromptMessage
     │   ├── execution.rs        # ExecutionResult, ErrorCode
     │   ├── history.rs          # HistoryEntry, ConversationData
     │   ├── context.rs          # ContextItem (text/image)
     │   └── settings.rs         # Full settings structure
+    ├── traits.rs               # Shared traits (MenuItemProvider)
     └── providers/              # Menu item generators
         ├── mod.rs
         ├── prompt_provider.rs
@@ -100,5 +104,5 @@ Uses `tauri-plugin-log` with the standard Rust `log` crate. Logs go to stdout, a
 
 ### Capabilities
 
-- `capabilities/default.json` declares permissions for the main window.
+- `capabilities/default.json` declares permissions for all app windows (`main` and `context-menu`).
 - When adding a Tauri plugin, add its permissions here (e.g., `"clipboard-manager:default"`).

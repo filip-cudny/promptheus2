@@ -6,10 +6,11 @@ Business logic layer. Services own state and behavior; Tauri commands delegate t
 
 ```
 services/
-├── mod.rs            # Module declarations
-├── clipboard.rs      # ClipboardService — text and image clipboard operations
-├── config.rs         # ConfigService — settings load/validate/save/mutate
-├── notification.rs   # NotificationService — event-gated Tauri event emission
+├── mod.rs               # Module declarations
+├── clipboard.rs         # ClipboardService — text and image clipboard operations
+├── config.rs            # ConfigService — settings load/validate/save/mutate
+├── menu_coordinator.rs  # MenuCoordinator — aggregates menu providers into ordered sections
+├── notification.rs      # NotificationService — event-gated Tauri event emission
 └── DOCS.md
 ```
 
@@ -74,6 +75,20 @@ Holds an `AppHandle` to emit Tauri events to the frontend. Unlike other services
 **`is_event_enabled` mapping**: maps 12 string event names (e.g., `"prompt_execution_success"`, `"clipboard_copy"`) to the corresponding bool field on `NotificationEvents`. Unknown event names return `true` (safe default — show rather than hide).
 
 **Methods**: `new(AppHandle)`, `notify(event_name, level, title, message, settings)`.
+
+### MenuCoordinator specifics
+
+Aggregates `MenuItemProvider` trait implementors (defined in `traits.rs`) into a flat, ordered list of `MenuItem`s. Section order comes from `ConfigService.settings().menu_section_order`.
+
+**Built-in virtual sections**: `"prompts"` and `"settings"` are handled directly (not via providers). Prompts are built from config, with dynamic providers (ContextMenuProvider, LastInteractionMenuProvider, SpeechMenuProvider) excluded. Settings builds model and prompt toggle items.
+
+**Provider sections**: Any other section ID queries registered providers whose `section_id()` matches. Providers are added at startup via `add_provider()`.
+
+**Separator placement**: A `separator_after = true` flag is set on the last item of each non-final section. No trailing separator.
+
+**Methods**: `new`, `add_provider`, `get_menu_items(&config)`, `refresh_all`.
+
+**Testing**: Unit tests cover section ordering, separator placement, empty-provider skipping, dynamic-provider exclusion, and settings section content. Tests use mock providers implementing `MenuItemProvider`.
 
 ### Adding a new service
 

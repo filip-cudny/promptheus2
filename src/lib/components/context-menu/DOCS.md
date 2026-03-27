@@ -22,11 +22,12 @@ Defined in `src-tauri/tauri.conf.json` under `app.windows` with label `context-m
 
 ## Interaction flow
 
-1. Backend emits `show-context-menu` event (from tray "Show Menu" or global hotkey).
-2. Store's `init()` listener catches the event → calls `openMenu()`.
-3. `openMenu()` invokes `get_context_menu_items` command, populates state, shows the window.
-4. User interacts via keyboard or mouse → executes item via `execute_menu_item` command.
-5. After execution (or Escape/blur), `closeMenu()` hides the window.
+1. Trigger (tray "Show Menu" or future global hotkey) calls `show_context_menu_window` backend command.
+2. Backend positions the window at cursor, emits `show-context-menu` event to the window, then shows and focuses it.
+3. Store's `init()` listener catches the event → calls `openMenu()`.
+4. `openMenu()` invokes `get_context_menu_items` command and populates state (window is already visible).
+5. User interacts via keyboard or mouse → executes item via `execute_menu_item` command.
+6. After execution (or Escape/blur), `closeMenu()` hides the window.
 
 ## Keyboard shortcuts
 
