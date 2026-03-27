@@ -4,10 +4,12 @@ use tokio::sync::Mutex;
 use crate::models::settings::{
     KeymapGroup, ModelConfig, NotificationSettings, PromptData, Settings, SpeechToTextModel,
 };
+use crate::services::clipboard::ClipboardService;
 use crate::services::config::ConfigService;
 
 pub struct AppState {
     pub config: ConfigService,
+    pub clipboard: ClipboardService,
 }
 
 fn emit_changed(app: &AppHandle) -> Result<(), String> {
