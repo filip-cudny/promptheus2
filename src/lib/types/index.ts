@@ -1,3 +1,8 @@
+export * from "./menu";
+export * from "./execution";
+export * from "./context";
+export * from "./history";
+
 export interface Settings {
   show_tray_icon: boolean;
   debug_mode: boolean;

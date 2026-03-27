@@ -28,3 +28,25 @@ pub struct ExecutionResult {
     #[serde(default)]
     pub execution_id: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_error_code_serialization() {
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::NoActivePrompt).unwrap(),
+            "\"no_active_prompt\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::ExecutionInProgress).unwrap(),
+            "\"execution_in_progress\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ErrorCode::UnknownError).unwrap(),
+            "\"unknown_error\""
+        );
+    }
+}
