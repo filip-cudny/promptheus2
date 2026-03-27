@@ -62,5 +62,12 @@ Store files use `.svelte.ts` extension to enable rune syntax outside components.
 ### Types
 
 - `lib/types/index.ts` mirrors Rust serializable structs.
-- Types must match the Rust side exactly (camelCase JS ↔ snake_case Rust, handled by serde).
+- The Rust structs use default serde field names (snake_case), so TypeScript types also use snake_case.
 - When adding a new Rust command/struct, update types here too.
+- The `$lib` alias resolves to `src/lib/` (configured in `vite.config.ts` and `tsconfig.json`).
+
+### Services (Settings)
+
+- `lib/services/settings.ts` — typed wrappers for all settings Tauri commands.
+- `lib/services/events.ts` — Tauri event listener helpers (e.g., `onSettingsChanged`).
+- Invoke parameter names must match Rust command parameter names exactly (snake_case).
