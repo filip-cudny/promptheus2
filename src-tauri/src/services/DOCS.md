@@ -6,8 +6,9 @@ Business logic layer. Services own state and behavior; Tauri commands delegate t
 
 ```
 services/
-├── mod.rs       # Module declarations
-├── config.rs    # ConfigService — settings load/validate/save/mutate
+├── mod.rs         # Module declarations
+├── clipboard.rs   # ClipboardService — text and image clipboard operations
+├── config.rs      # ConfigService — settings load/validate/save/mutate
 └── DOCS.md
 ```
 
@@ -33,6 +34,21 @@ Services are plain structs (not singletons). They are created once at startup an
 - **Constructor**: `Service::load(args) -> Result<Self, ServiceError>` — reads from disk, validates, returns ready-to-use instance.
 - **Persistence**: `save(&self)` writes to disk. Mutation methods do **not** auto-save — the command layer decides when to persist.
 - **Reload**: `reload(&mut self)` re-reads from disk, replacing in-memory state.
+
+### ClipboardService specifics
+
+Uses the `arboard` crate for cross-platform clipboard access (text and images). No Tauri dependency — keeps the service layer framework-independent.
+
+**Key pattern — no stored clipboard handle**: `arboard::Clipboard` is not `Send`/`Sync`, so it cannot be held across await points or stored in shared state. Each method creates a fresh `arboard::Clipboard` instance per call. The `ClipboardService` struct itself is a unit struct.
+
+**Error variants**:
+- `Unavailable` — clipboard is empty or content can't be read (soft error)
+- `Access` — clipboard system is inaccessible (hard error)
+- `ImageConversion` — image encode/decode failed
+
+**Image pipeline**: `arboard::ImageData` (raw RGBA pixels) → `image::ImageBuffer` → PNG encode → base64 string. Returns `(base64_data, media_type)` tuple.
+
+**Methods**: `new`, `get_text`, `set_text`, `is_empty`, `has_image`, `get_image_base64`.
 
 ### ConfigService specifics
 
