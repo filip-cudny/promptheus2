@@ -4,6 +4,7 @@ use tokio::sync::Mutex;
 mod commands;
 mod models;
 mod services;
+mod traits;
 
 use commands::settings::AppState;
 use services::config::ConfigService;
