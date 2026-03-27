@@ -55,6 +55,7 @@ impl ConfigService {
         resource_dir: Option<&Path>,
     ) -> Result<(), ConfigError> {
         std::fs::create_dir_all(config_dir)?;
+        log::info!("initializing default settings in {}", config_dir.display());
 
         let copied = if let Some(res_dir) = resource_dir {
             let default_settings = res_dir.join("resources/default_settings.json");
@@ -126,6 +127,7 @@ impl ConfigService {
 
         validate(&settings)?;
         self.settings = settings;
+        log::debug!("settings reloaded");
 
         Ok(())
     }

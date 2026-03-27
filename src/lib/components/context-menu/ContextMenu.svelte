@@ -96,8 +96,8 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="context-menu" class:visible={menuVisible} role="menu">
-  {#if menuItems.length === 0 && menuVisible}
+<div class="context-menu" role="menu">
+  {#if menuItems.length === 0}
     <div class="empty-state" role="menuitem">No items available</div>
   {:else}
     {#each sections as section, sectionIdx}
@@ -129,25 +129,17 @@
   .context-menu {
     display: flex;
     flex-direction: column;
-    background: rgba(30, 30, 30, 0.95);
+    background: #1e1e1e;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
     padding: 4px 0;
-    min-width: 240px;
-    max-width: 360px;
-    max-height: 100vh;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
     overflow-y: auto;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-    opacity: 0;
-    pointer-events: none;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 13px;
     color: #e0e0e0;
-  }
-
-  .context-menu.visible {
-    opacity: 1;
-    pointer-events: auto;
   }
 
   .empty-state {

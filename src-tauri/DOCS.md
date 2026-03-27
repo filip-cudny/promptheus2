@@ -88,6 +88,16 @@ Mirrors the original app's architecture:
 - Providers are registered at startup and queried when the menu is shown.
 - Adding a new menu section = adding a new provider.
 
+### Logging
+
+Uses `tauri-plugin-log` with the standard Rust `log` crate. Logs go to stdout, a log file (in the app data directory), and the webview console.
+
+- Rust: use `log::{info, warn, error, debug}` macros directly.
+- Frontend: `import { error, info, warn } from "@tauri-apps/plugin-log"`.
+- Both `main.ts` and `context-menu-main.ts` call `attachConsole()` to bridge Rust logs into browser devtools.
+- Default level is `Info` globally, `Debug` for the app crate. Override with `RUST_LOG` env var.
+- Log at decision points and errors, not at every function boundary.
+
 ### Capabilities
 
 - `capabilities/default.json` declares permissions for the main window.

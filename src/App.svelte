@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import { emit } from "@tauri-apps/api/event";
   import { init, destroy } from "$lib/stores/notifications.svelte";
   import NotificationToast from "$lib/components/ui/NotificationToast.svelte";
 
@@ -21,7 +20,7 @@
   }
 
   async function openContextMenu() {
-    await emit("show-context-menu");
+    await invoke("show_context_menu_window");
   }
 </script>
 

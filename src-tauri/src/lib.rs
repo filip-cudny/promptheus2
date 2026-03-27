@@ -31,7 +31,10 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .tooltip("Promptheus")
         .on_menu_event(|app: &tauri::AppHandle, event: tauri::menu::MenuEvent| match event.id().as_ref() {
             "show-menu" => {
-                let _ = app.emit("show-context-menu", ());
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = commands::menu::show_context_menu_window(app).await;
+                });
             }
             "settings" => {
                 let _ = app.emit("open-settings", ());
@@ -49,6 +52,20 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: None,
+                    }),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
+                ])
+                .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+                .level(log::LevelFilter::Info)
+                .level_for("app_lib", log::LevelFilter::Debug)
+                .build(),
+        )
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
@@ -60,9 +77,11 @@ pub fn run() {
             let config_service =
                 ConfigService::load(&config_dir, Some(&resource_dir))
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            log::info!("config loaded from {}", config_dir.display());
 
             if config_service.settings().show_tray_icon {
                 setup_tray(app)?;
+                log::info!("system tray initialized");
             }
 
             let clipboard_service = ClipboardService::new()
@@ -100,6 +119,7 @@ pub fn run() {
             commands::menu::get_context_menu_items,
             commands::menu::execute_menu_item,
             commands::menu::refresh_menu_providers,
+            commands::menu::show_context_menu_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

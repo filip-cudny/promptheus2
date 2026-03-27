@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { error } from "@tauri-apps/plugin-log";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { MenuItem } from "$lib/types/menu";
 
@@ -39,12 +39,8 @@ async function openMenu() {
     _selectedIndex = -1;
     numberBuffer = "";
     _visible = true;
-
-    const win = getCurrentWebviewWindow();
-    await win.show();
-    await win.setFocus();
   } catch (e) {
-    console.error("Failed to open context menu:", e);
+    error("Failed to open context menu: " + e);
   }
 }
 
@@ -89,7 +85,7 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
       shiftPressed,
     });
   } catch (e) {
-    console.error("Failed to execute menu item:", e);
+    error("Failed to execute menu item: " + e);
   }
 
   await closeMenu();
@@ -120,7 +116,8 @@ function handleNumberInput(digit: string) {
 }
 
 async function init() {
-  unlisten = await listen("show-context-menu", () => {
+  const win = getCurrentWebviewWindow();
+  unlisten = await win.listen("show-context-menu", () => {
     openMenu();
   });
 }
