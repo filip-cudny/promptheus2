@@ -24,14 +24,12 @@ pub struct ConfigService {
 }
 
 impl ConfigService {
-    pub fn load(config_dir: &Path) -> Result<Self, ConfigError> {
+    pub fn load(config_dir: &Path, resource_dir: Option<&Path>) -> Result<Self, ConfigError> {
         load_env(config_dir);
 
         let settings_path = config_dir.join("settings.json");
         if !settings_path.exists() {
-            return Err(ConfigError::FileNotFound(
-                settings_path.display().to_string(),
-            ));
+            Self::initialize_defaults(config_dir, resource_dir)?;
         }
 
         let content = std::fs::read_to_string(&settings_path)?;
@@ -50,6 +48,42 @@ impl ConfigService {
             settings,
             config_dir: config_dir.to_path_buf(),
         })
+    }
+
+    fn initialize_defaults(
+        config_dir: &Path,
+        resource_dir: Option<&Path>,
+    ) -> Result<(), ConfigError> {
+        std::fs::create_dir_all(config_dir)?;
+
+        let copied = if let Some(res_dir) = resource_dir {
+            let default_settings = res_dir.join("resources/default_settings.json");
+            if default_settings.exists() {
+                std::fs::copy(&default_settings, config_dir.join("settings.json"))?;
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if !copied {
+            let fallback_json = include_str!("../../resources/default_settings.json");
+            std::fs::write(config_dir.join("settings.json"), fallback_json)?;
+        }
+
+        Self::initialize_env(config_dir)?;
+
+        Ok(())
+    }
+
+    fn initialize_env(config_dir: &Path) -> Result<(), ConfigError> {
+        let env_path = config_dir.join(".env");
+        if !env_path.exists() {
+            std::fs::write(&env_path, "OPENAI_API_KEY=your_api_key_here\n")?;
+        }
+        Ok(())
     }
 
     pub fn save(&self) -> Result<(), ConfigError> {
@@ -336,7 +370,7 @@ mod tests {
     #[test]
     fn test_load_example_settings() {
         let dir = setup_test_dir();
-        let service = ConfigService::load(dir.path()).expect("should load example settings");
+        let service = ConfigService::load(dir.path(), None).expect("should load example settings");
         assert!(!service.settings().models.is_empty());
         assert_eq!(service.settings().models[0].model, "gpt-4.1");
         assert_eq!(service.settings().prompts.len(), 5);
@@ -378,11 +412,11 @@ mod tests {
     #[test]
     fn test_save_and_reload() {
         let dir = setup_test_dir();
-        let service = ConfigService::load(dir.path()).expect("load");
+        let service = ConfigService::load(dir.path(), None).expect("load");
 
         service.save().expect("save");
 
-        let mut service2 = ConfigService::load(dir.path()).expect("reload");
+        let mut service2 = ConfigService::load(dir.path(), None).expect("reload");
         assert_eq!(
             service.settings().models.len(),
             service2.settings().models.len()
@@ -403,7 +437,7 @@ mod tests {
     #[test]
     fn test_api_key_sanitization_on_save() {
         let dir = setup_test_dir();
-        let mut service = ConfigService::load(dir.path()).expect("load");
+        let mut service = ConfigService::load(dir.path(), None).expect("load");
 
 
         service.settings_mut().models[0].api_key = Some("secret-key".to_string());
@@ -460,7 +494,7 @@ mod tests {
         )
         .unwrap();
 
-        let service = ConfigService::load(dir.path()).expect("load");
+        let service = ConfigService::load(dir.path(), None).expect("load");
         assert_eq!(
             service.settings().models[0].api_key.as_deref(),
             Some("loaded-from-env")
@@ -492,7 +526,7 @@ mod tests {
     #[test]
     fn test_mutation_methods() {
         let dir = setup_test_dir();
-        let mut service = ConfigService::load(dir.path()).expect("load");
+        let mut service = ConfigService::load(dir.path(), None).expect("load");
 
 
         let new_model = ModelConfig {
@@ -657,10 +691,57 @@ mod tests {
     }
 
     #[test]
-    fn test_file_not_found() {
+    fn test_first_run_creates_defaults_from_fallback() {
         let dir = TempDir::new().unwrap();
-        let result = ConfigService::load(dir.path());
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ConfigError::FileNotFound(_)));
+        let service = ConfigService::load(dir.path(), None).expect("should create defaults");
+        assert!(dir.path().join("settings.json").exists());
+        assert!(dir.path().join(".env").exists());
+        assert!(!service.settings().models.is_empty());
+    }
+
+    #[test]
+    fn test_first_run_copies_from_resource() {
+        let dir = TempDir::new().unwrap();
+        let resource_dir = TempDir::new().unwrap();
+        let resource_settings_dir = resource_dir.path().join("resources");
+        fs::create_dir_all(&resource_settings_dir).unwrap();
+        let example = include_str!("../../../../promptheus/settings_example/settings.json");
+        fs::write(
+            resource_settings_dir.join("default_settings.json"),
+            example,
+        )
+        .unwrap();
+
+        let service =
+            ConfigService::load(dir.path(), Some(resource_dir.path())).expect("should load");
+        assert!(dir.path().join("settings.json").exists());
+        assert_eq!(service.settings().models[0].model, "gpt-4.1");
+    }
+
+    #[test]
+    fn test_first_run_does_not_overwrite_existing() {
+        let dir = setup_test_dir();
+        let original_content = fs::read_to_string(dir.path().join("settings.json")).unwrap();
+        let _service = ConfigService::load(dir.path(), None).expect("should load existing");
+        let after_content = fs::read_to_string(dir.path().join("settings.json")).unwrap();
+        assert_eq!(original_content, after_content);
+    }
+
+    #[test]
+    fn test_first_run_env_template_created() {
+        let dir = TempDir::new().unwrap();
+        let _service = ConfigService::load(dir.path(), None).expect("should create defaults");
+        let env_content = fs::read_to_string(dir.path().join(".env")).unwrap();
+        assert!(env_content.contains("OPENAI_API_KEY"));
+    }
+
+    #[test]
+    fn test_existing_env_not_overwritten() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path()).unwrap();
+        fs::write(dir.path().join(".env"), "OPENAI_API_KEY=real_key\n").unwrap();
+        let _service = ConfigService::load(dir.path(), None).expect("should create defaults");
+        let env_content = fs::read_to_string(dir.path().join(".env")).unwrap();
+        assert_eq!(env_content, "OPENAI_API_KEY=real_key\n");
     }
 }

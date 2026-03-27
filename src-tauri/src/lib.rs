@@ -14,9 +14,13 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let config_dir = app.path().app_config_dir()?;
+            let resource_dir =
+                app.path()
+                    .resolve("", tauri::path::BaseDirectory::Resource)?;
             services::config::load_env(&config_dir);
-            let config_service = ConfigService::load(&config_dir)
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            let config_service =
+                ConfigService::load(&config_dir, Some(&resource_dir))
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             app.manage(Mutex::new(AppState {
                 config: config_service,
             }));
