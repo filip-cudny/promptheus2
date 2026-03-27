@@ -6,9 +6,10 @@ Business logic layer. Services own state and behavior; Tauri commands delegate t
 
 ```
 services/
-├── mod.rs         # Module declarations
-├── clipboard.rs   # ClipboardService — text and image clipboard operations
-├── config.rs      # ConfigService — settings load/validate/save/mutate
+├── mod.rs            # Module declarations
+├── clipboard.rs      # ClipboardService — text and image clipboard operations
+├── config.rs         # ConfigService — settings load/validate/save/mutate
+├── notification.rs   # NotificationService — event-gated Tauri event emission
 └── DOCS.md
 ```
 
@@ -61,6 +62,18 @@ Uses the `arboard` crate for cross-platform clipboard access (text and images). 
 ### Testing pattern
 
 Service tests use `tempfile::TempDir` to create isolated config directories. A `setup_test_dir()` helper copies the example settings into a temp dir. Tests that touch env vars should set and remove them within the test.
+
+### NotificationService specifics
+
+Holds an `AppHandle` to emit Tauri events to the frontend. Unlike other services, this one depends on the Tauri runtime — it uses the `Emitter` trait (`use tauri::Emitter`) to send events.
+
+**Event gating**: `notify()` checks `NotificationSettings.events` before emitting. If the event is disabled in settings, the notification is silently dropped. Error-level notifications bypass the gate and always emit.
+
+**Event name**: all notifications are emitted as a single `"notification"` Tauri event. The payload includes `level`, `title`, and optional `message`. The frontend listens on this one event name and routes by level.
+
+**`is_event_enabled` mapping**: maps 12 string event names (e.g., `"prompt_execution_success"`, `"clipboard_copy"`) to the corresponding bool field on `NotificationEvents`. Unknown event names return `true` (safe default — show rather than hide).
+
+**Methods**: `new(AppHandle)`, `notify(event_name, level, title, message, settings)`.
 
 ### Adding a new service
 
