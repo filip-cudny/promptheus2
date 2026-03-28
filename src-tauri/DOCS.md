@@ -102,7 +102,27 @@ Uses `tauri-plugin-log` with the standard Rust `log` crate. Logs go to stdout, a
 - Default level is `Info` globally, `Debug` for the app crate. Override with `RUST_LOG` env var.
 - Log at decision points and errors, not at every function boundary.
 
+### Hotkey Actions
+
+Global hotkeys are handled **entirely in the Rust backend** (`lib.rs → execute_hotkey_action`). Do **not** route hotkey actions through `app.emit()` to the frontend — this app has no persistent main window, so frontend event listeners are unreliable.
+
+When adding a new hotkey action:
+
+1. Add the action string to `services/hotkeys.rs` (binding resolution).
+2. Add a match arm in `execute_hotkey_action()` in `lib.rs`.
+3. Implement the action as a Rust async function or call an existing command directly.
+
+### App Lifecycle
+
+This is a **tray-only app** — no main window opens on startup. On macOS, activation policy is set to `Accessory` (no Dock icon, no Cmd+Tab entry). UI is shown on demand via:
+
+- System tray menu (native)
+- Context menu window (borderless Tauri window, hotkey-triggered)
+- Prompt dialog windows (created dynamically)
+
+When showing a window from a background context (e.g., global hotkey), call `app.show()` on macOS before `win.show()` to activate the app and ensure the window appears in front.
+
 ### Capabilities
 
-- `capabilities/default.json` declares permissions for all app windows (`main` and `context-menu`).
+- `capabilities/default.json` declares permissions for app windows.
 - When adding a Tauri plugin, add its permissions here (e.g., `"clipboard-manager:default"`).

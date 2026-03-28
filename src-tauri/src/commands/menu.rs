@@ -77,6 +77,9 @@ pub async fn show_context_menu_window(app: tauri::AppHandle) -> Result<(), Strin
     app.emit_to("context-menu", "show-context-menu", ())
         .map_err(|e| e.to_string())?;
 
+    #[cfg(target_os = "macos")]
+    app.show().map_err(|e| e.to_string())?;
+
     win.show().map_err(|e| e.to_string())?;
     win.set_focus().map_err(|e| e.to_string())?;
 

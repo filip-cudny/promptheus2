@@ -17,13 +17,6 @@
     },
     "windows": [
       {
-        "label": "main",
-        "title": "Promptheus",
-        "width": 800,
-        "height": 600,
-        "resizable": true
-      },
-      {
         "label": "notification",
         "url": "notification.html",
         "title": "",

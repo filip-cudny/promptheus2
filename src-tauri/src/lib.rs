@@ -143,6 +143,23 @@ async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
     }
 }
 
+async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
+    match action {
+        "set_context_value" | "append_context_value" | "clear_context" => {
+            execute_context_action(app, action).await;
+        }
+        "open_context_menu" => {
+            let _ = commands::menu::show_context_menu_window(app.clone()).await;
+        }
+        "execute_active_prompt" | "speech_to_text_toggle" => {
+            log::warn!("hotkey action '{}' is not yet implemented", action);
+        }
+        _ => {
+            log::warn!("unknown hotkey action: {}", action);
+        }
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -163,6 +180,9 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+
             let config_dir = app.path().app_config_dir()?;
             let resource_dir =
                 app.path()
@@ -211,17 +231,10 @@ pub fn run() {
                                     let action = action.clone();
                                     drop(map);
                                     log::info!("hotkey action: {} -> {}", shortcut_str, action);
-                                    match action.as_str() {
-                                        "set_context_value" | "append_context_value" | "clear_context" => {
-                                            let app = app.clone();
-                                            tauri::async_runtime::spawn(async move {
-                                                execute_context_action(&app, &action).await;
-                                            });
-                                        }
-                                        _ => {
-                                            let _ = app.emit("hotkey-action", &action);
-                                        }
-                                    }
+                                    let app = app.clone();
+                                    tauri::async_runtime::spawn(async move {
+                                        execute_hotkey_action(&app, &action).await;
+                                    });
                                 }
                             }
                         })
