@@ -52,11 +52,13 @@
       />
       {#if pair.assistant}
         {@const assistant = pair.assistant}
+        {@const streaming = store.isStreaming && isLastAssistant(pair)}
         <AssistantBubble
           node={assistant}
+          displayContent={streaming ? store.streamedContent : assistant.content}
           outputNumber={pair.message_number}
           showDelete={false}
-          isStreaming={store.isStreaming && isLastAssistant(pair)}
+          isStreaming={streaming}
           branchInfo={store.getBranchInfo(assistant.node_id)}
           onRegenerate={() => store.regenerate(assistant.node_id)}
           onBranchPrev={() => store.switchBranch(assistant.node_id, -1)}

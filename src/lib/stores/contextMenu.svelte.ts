@@ -4,6 +4,7 @@ import { error } from "@tauri-apps/plugin-log";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { MenuItem } from "$lib/types/menu";
 import { startExecution, isExecuting } from "$lib/stores/execution.svelte";
+import { openPromptDialog } from "$lib/services/promptDialog";
 
 let _items = $state<MenuItem[]>([]);
 let _selectedIndex = $state(-1);
@@ -13,6 +14,7 @@ let numberTimer: ReturnType<typeof setTimeout> | null = null;
 let unlisten: (() => void) | null = null;
 let unlistenContextChanged: (() => void) | null = null;
 let unlistenExecutionCompleted: (() => void) | null = null;
+let unlistenHistoryChanged: (() => void) | null = null;
 
 const NUMBER_DEBOUNCE_MS = 300;
 
@@ -91,10 +93,14 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
   if (!item || !item.enabled) return;
 
   if (item.item_type === "prompt") {
-    const data = item.data as { prompt_id: string } | null;
+    const data = item.data as { prompt_id: string; prompt_name: string } | null;
     if (data?.prompt_id) {
       await closeMenu();
-      startExecution(data.prompt_id);
+      if (shiftPressed) {
+        await openPromptDialog(data.prompt_id, data.prompt_name ?? item.label);
+      } else {
+        startExecution(data.prompt_id);
+      }
       return;
     }
   }
@@ -156,6 +162,9 @@ async function init() {
   unlistenExecutionCompleted = await listen("execution-completed", () => {
     refreshItems();
   });
+  unlistenHistoryChanged = await listen("history-changed", () => {
+    refreshItems();
+  });
 }
 
 function destroy() {
@@ -171,6 +180,19 @@ function destroy() {
     unlistenExecutionCompleted();
     unlistenExecutionCompleted = null;
   }
+  if (unlistenHistoryChanged) {
+    unlistenHistoryChanged();
+    unlistenHistoryChanged = null;
+  }
+}
+
+async function openDialogForItem(index: number) {
+  const item = _items[index];
+  if (!item || item.item_type !== "prompt") return;
+  const data = item.data as { prompt_id: string; prompt_name: string } | null;
+  if (!data?.prompt_id) return;
+  await closeMenu();
+  await openPromptDialog(data.prompt_id, data.prompt_name ?? item.label);
 }
 
 export {
@@ -184,6 +206,7 @@ export {
   executeItem,
   executeSelected,
   handleNumberInput,
+  openDialogForItem,
   init,
   destroy,
 };

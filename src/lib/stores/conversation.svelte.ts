@@ -1,3 +1,4 @@
+import { SvelteMap } from "svelte/reactivity";
 import { error as logError } from "@tauri-apps/plugin-log";
 import { generateId } from "$lib/utils/id";
 import {
@@ -22,7 +23,7 @@ import type {
 
 export function createEmptyTree(): ConversationTree {
   return {
-    nodes: new Map(),
+    nodes: new SvelteMap(),
     root_node_id: null,
     current_path: [],
   };
@@ -299,10 +300,12 @@ export function createConversationStore(
     const callbacks: ExecutionCallbacks = {
       onChunk: (_delta, accumulated) => {
         assistantNode.content = accumulated;
+        tab.tree.nodes.set(assistantNode.node_id, assistantNode);
         tab.streamed_content = accumulated;
       },
       onDone: (fullText) => {
         assistantNode.content = fullText;
+        tab.tree.nodes.set(assistantNode.node_id, assistantNode);
         tab.is_executing = false;
         tab.is_streaming = false;
         tab.streamed_content = "";
@@ -312,6 +315,7 @@ export function createConversationStore(
       onError: (message) => {
         logError("Conversation execution error: " + message);
         assistantNode.content = assistantNode.content || `[error: ${message}]`;
+        tab.tree.nodes.set(assistantNode.node_id, assistantNode);
         tab.is_executing = false;
         tab.is_streaming = false;
         tab.streamed_content = "";
@@ -380,10 +384,12 @@ export function createConversationStore(
     const callbacks: ExecutionCallbacks = {
       onChunk: (_delta, accumulated) => {
         newAssistant.content = accumulated;
+        tab.tree.nodes.set(newAssistant.node_id, newAssistant);
         tab.streamed_content = accumulated;
       },
       onDone: (fullText) => {
         newAssistant.content = fullText;
+        tab.tree.nodes.set(newAssistant.node_id, newAssistant);
         tab.is_executing = false;
         tab.is_streaming = false;
         tab.streamed_content = "";
@@ -393,6 +399,7 @@ export function createConversationStore(
         logError("Regeneration error: " + message);
         newAssistant.content =
           newAssistant.content || `[error: ${message}]`;
+        tab.tree.nodes.set(newAssistant.node_id, newAssistant);
         tab.is_executing = false;
         tab.is_streaming = false;
         tab.streamed_content = "";
@@ -567,9 +574,11 @@ export function createConversationStore(
       newTab.history_entry_id = entryId;
       newTab.context_text = data.context_text;
 
-      const restoredTree = createEmptyTree();
-      restoredTree.root_node_id = data.root_node_id;
-      restoredTree.current_path = data.current_path;
+      const restoredTree: ConversationTree = {
+        nodes: new SvelteMap(),
+        root_node_id: data.root_node_id,
+        current_path: data.current_path,
+      };
 
       for (const serialized of data.nodes) {
         restoredTree.nodes.set(serialized.node_id, {

@@ -18,8 +18,8 @@ pub async fn open_prompt_dialog(
         if let Some(entry_id) = history_entry_id {
             app.emit_to(
                 &label,
-                "open-history-entry",
-                entry_id,
+                "restore-history",
+                serde_json::json!({ "entry_id": entry_id }),
             )
             .map_err(|e| e.to_string())?;
         }

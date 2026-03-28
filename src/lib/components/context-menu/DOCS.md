@@ -64,6 +64,21 @@ During execution, prompt items are disabled. The store applies this by overlayin
 
 The execution store is initialized in `ContextMenuApp.svelte` alongside the context store.
 
+### LastInteractionSection (`LastInteractionSection.svelte`)
+
+Renders when `item.item_type === "last_interaction"`. The backend injects last interaction data into `item.data` in the `get_context_menu_items` command (from `HistoryService`).
+
+| Element | Description |
+|---------|-------------|
+| Section header | "Last interaction" label + History button |
+| Input chip | Last text entry's input content (copy on click) |
+| Output chip | Last text entry's output content (copy on click) |
+| Transcription chip | Last speech entry's output content (copy on click) |
+
+Chips are disabled (grayed out) when no content is available. Copy uses `copyHistoryContent` from the history service which also triggers a clipboard notification. The store refreshes on `"history-changed"` events so chips update after each execution.
+
+History button is a placeholder — the history dialog window is not yet implemented.
+
 ### Other types
 
 Speech, settings, and other item types are rendered as simple label + icon buttons and use the generic `execute_menu_item` backend command. Future tasks will add specialized renderers as needed.

@@ -16,6 +16,7 @@
   let collapsed = $state(false);
   let disabled = $state(false);
   let saving = $state(false);
+  let saved = $state(false);
 
   let localText = $state("");
   let localImages = $state<ConversationImage[]>([]);
@@ -72,6 +73,8 @@
       for (const img of localImages) {
         await setContextImage(img.data, img.media_type);
       }
+      saved = true;
+      setTimeout(() => (saved = false), 1500);
     } finally {
       saving = false;
     }
@@ -82,7 +85,7 @@
   <CollapsibleSection title="Context" bind:collapsed>
     {#snippet actions()}
       <button class="save-btn" onclick={saveContext} disabled={disabled || saving}>
-        {saving ? "Saving…" : "Save"}
+        {saving ? "Saving…" : saved ? "Saved ✓" : "Save"}
       </button>
     {/snippet}
     <div class="context-body">

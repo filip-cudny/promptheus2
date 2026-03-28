@@ -5,6 +5,7 @@
 
   let {
     node,
+    displayContent,
     outputNumber,
     showDelete = false,
     isStreaming = false,
@@ -16,6 +17,7 @@
     onDelete,
   }: {
     node: ConversationNode;
+    displayContent: string;
     outputNumber: number;
     showDelete: boolean;
     isStreaming: boolean;
@@ -40,7 +42,7 @@
 
   $effect(() => {
     if (rawMode && textarea) {
-      node.content;
+      displayContent;
       requestAnimationFrame(autoResize);
     }
   });
@@ -59,7 +61,7 @@
   }
 
   async function copyContent() {
-    await navigator.clipboard.writeText(node.content);
+    await navigator.clipboard.writeText(displayContent);
     copyLabel = "Copied!";
     setTimeout(() => {
       copyLabel = "Copy";
@@ -109,13 +111,13 @@
     {#if rawMode}
       <textarea
         bind:this={textarea}
-        value={node.content}
+        value={displayContent}
         oninput={handleInput}
         class="bubble-textarea"
         rows="1"
       ></textarea>
     {:else}
-      <MarkdownRenderer content={node.content} {isStreaming} />
+      <MarkdownRenderer content={displayContent} {isStreaming} />
     {/if}
   </CollapsibleSection>
 </div>

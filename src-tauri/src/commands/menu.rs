@@ -2,7 +2,20 @@ use tauri::{Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 use crate::commands::settings::AppState;
-use crate::models::menu::MenuItem;
+use crate::models::history::HistoryEntryType;
+use crate::models::menu::{MenuItem, MenuItemType};
+
+fn truncate(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        s.to_string()
+    } else {
+        let mut end = max_len;
+        while !s.is_char_boundary(end) && end > 0 {
+            end -= 1;
+        }
+        format!("{}…", &s[..end])
+    }
+}
 
 #[tauri::command]
 pub async fn get_context_menu_items(
@@ -11,7 +24,29 @@ pub async fn get_context_menu_items(
     let mut state = state.lock().await;
     let context_items = state.context.get_items();
     state.menu_coordinator.update_context_items(context_items);
-    Ok(state.menu_coordinator.get_menu_items(&state.config))
+
+    let last_text = state.history.get_last_item_by_type(HistoryEntryType::Text);
+    let last_speech = state.history.get_last_item_by_type(HistoryEntryType::Speech);
+
+    let mut items = state.menu_coordinator.get_menu_items(&state.config);
+
+    for item in &mut items {
+        if item.item_type == MenuItemType::LastInteraction {
+            item.data = Some(serde_json::json!({
+                "input": last_text.as_ref().map(|e| {
+                    serde_json::json!({ "content": truncate(&e.input_content, 200) })
+                }),
+                "output": last_text.as_ref().and_then(|e| {
+                    e.output_content.as_ref().map(|c| serde_json::json!({ "content": truncate(c, 200) }))
+                }),
+                "transcription": last_speech.as_ref().and_then(|e| {
+                    e.output_content.as_ref().map(|c| serde_json::json!({ "content": truncate(c, 200) }))
+                }),
+            }));
+        }
+    }
+
+    Ok(items)
 }
 
 #[tauri::command]

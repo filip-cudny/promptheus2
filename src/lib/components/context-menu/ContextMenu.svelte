@@ -4,6 +4,8 @@
   import type { MenuItem } from "$lib/types/menu";
   import type { ContextItem } from "$lib/types/context";
   import ContextSection from "./ContextSection.svelte";
+  import LastInteractionSection from "./LastInteractionSection.svelte";
+  import { MessageSquareShare } from "lucide-svelte";
   import {
     getItems,
     getSelectedIndex,
@@ -14,6 +16,7 @@
     executeItem,
     executeSelected,
     handleNumberInput,
+    openDialogForItem,
     init,
     destroy,
   } from "$lib/stores/contextMenu.svelte";
@@ -28,6 +31,21 @@
     if (item.item_type !== "context") return null;
     const data = (item.data ?? {}) as { items?: ContextItem[] };
     return data.items ?? [];
+  }
+
+  interface LastInteractionChipData {
+    content: string;
+  }
+
+  interface LastInteractionData {
+    input: LastInteractionChipData | null;
+    output: LastInteractionChipData | null;
+    transcription: LastInteractionChipData | null;
+  }
+
+  function extractLastInteractionData(item: MenuItem): LastInteractionData | null {
+    if (item.item_type !== "last_interaction") return null;
+    return (item.data ?? null) as LastInteractionData | null;
   }
 
   let sections = $derived.by(() => {
@@ -114,24 +132,41 @@
       {/if}
       {#each section.items as { item, globalIndex }}
         {@const contextItems = extractContextItems(item)}
+        {@const lastInteractionData = extractLastInteractionData(item)}
         {#if contextItems}
           <ContextSection items={contextItems} />
+        {:else if lastInteractionData !== null}
+          <LastInteractionSection data={lastInteractionData} />
         {:else}
-          <button
-            class="menu-item"
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div
+            class="menu-item-row"
             class:selected={globalIndex === currentSelectedIndex}
-            class:disabled={!item.enabled}
-            role="menuitem"
-            aria-disabled={!item.enabled}
-            tabindex={-1}
-            onclick={(e) => handleItemClick(globalIndex, e)}
             onmouseenter={() => { if (item.enabled) setSelectedIndex(globalIndex); }}
           >
-            {#if item.icon}
-              <span class="item-icon">{item.icon}</span>
+            <button
+              class="menu-item"
+              class:disabled={!item.enabled}
+              role="menuitem"
+              aria-disabled={!item.enabled}
+              tabindex={-1}
+              onclick={(e) => handleItemClick(globalIndex, e)}
+            >
+              {#if item.icon}
+                <span class="item-icon">{item.icon}</span>
+              {/if}
+              <span class="item-label">{item.label}</span>
+            </button>
+            {#if item.item_type === "prompt"}
+              <button
+                class="dialog-btn"
+                title="Open dialog"
+                onclick={() => openDialogForItem(globalIndex)}
+              >
+                <MessageSquareShare size={14} />
+              </button>
             {/if}
-            <span class="item-label">{item.label}</span>
-          </button>
+          </div>
         {/if}
       {/each}
     {/each}
@@ -168,6 +203,15 @@
     margin: 4px 8px;
   }
 
+  .menu-item-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .menu-item-row.selected {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
   .menu-item {
     display: flex;
     align-items: center;
@@ -179,14 +223,11 @@
     font: inherit;
     text-align: left;
     cursor: pointer;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     box-sizing: border-box;
     border-radius: 0;
     outline: none;
-  }
-
-  .menu-item.selected {
-    background: rgba(255, 255, 255, 0.1);
   }
 
   .menu-item.disabled {
@@ -209,5 +250,26 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .dialog-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin-right: 8px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.3);
+    cursor: pointer;
+  }
+
+  .dialog-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.8);
   }
 </style>
