@@ -1,5 +1,5 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
-import type { ProcessedMessage } from "$lib/types/history";
+import type { ProcessedMessage } from "$lib/types/ai";
 import type { StreamEvent } from "$lib/types/ai";
 
 export async function complete(
