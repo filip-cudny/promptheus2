@@ -12,6 +12,7 @@ services/
 ├── menu_coordinator.rs  # MenuCoordinator — aggregates menu providers into ordered sections
 ├── context.rs           # ContextManagerService — ordered context items (text/image)
 ├── notification.rs      # NotificationService — event-gated Tauri event emission
+├── placeholder.rs       # PlaceholderService — template variable substitution and image injection
 └── DOCS.md
 ```
 
@@ -108,6 +109,28 @@ Aggregates `MenuItemProvider` trait implementors (defined in `traits.rs`) into a
 **Methods**: `new`, `add_provider`, `get_menu_items(&config)`, `refresh_all`.
 
 **Testing**: Unit tests cover section ordering, separator placement, empty-provider skipping, dynamic-provider exclusion, and settings section content. Tests use mock providers implementing `MenuItemProvider`.
+
+### PlaceholderService specifics
+
+Resolves `{{name}}` template variables in prompt messages before they are sent to the LLM API. Also injects context images into the last message when present.
+
+**Error variants**:
+- `ClipboardUnavailable` — clipboard is empty or override is whitespace (propagates to caller)
+- `ProcessorFailed` — non-clipboard processor error (logged, placeholder silently replaced with `""`)
+
+**Processor trait**: `PlaceholderProcessor` defines `name`, `description`, and `process(context_override, clipboard, context_mgr)`. Two built-in processors are registered by `new()`:
+- `ClipboardProcessor` — resolves `{{clipboard}}` from system clipboard or `context_override`
+- `ContextProcessor` — resolves `{{context}}` from `ContextManagerService`
+
+**Processing flow**:
+1. `process_messages()` iterates messages as `(role, content)` pairs.
+2. For each message, `process_content()` does single-pass string replacement for all registered `{{name}}` patterns.
+3. For the last message, if `context_mgr.has_images()`, content is converted to `MessageContent::Parts` with text + image data URIs (`data:{media_type};base64,{data}`). Empty text is omitted from parts.
+4. `ClipboardUnavailable` errors propagate immediately; other processor errors silently replace with `""`.
+
+**Validation methods**: `has_placeholders()`, `find_invalid_placeholders()` (regex-based), `get_placeholder_info()`, `get_available_placeholders()`.
+
+**Testing**: Tests use mock processors (registered via the trait) to avoid system clipboard dependency. `ContextManagerService` is used directly since it's in-memory. `ClipboardService` is passed but unused by mock processors.
 
 ### Adding a new service
 

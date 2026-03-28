@@ -12,6 +12,7 @@ use services::config::ConfigService;
 use services::context::{ContextManagerService, ContextMenuProvider};
 use services::menu_coordinator::MenuCoordinator;
 use services::notification::NotificationService;
+use services::placeholder::PlaceholderService;
 
 fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -91,12 +92,14 @@ pub fn run() {
             let mut menu_coordinator = MenuCoordinator::new();
             menu_coordinator.add_provider(Box::new(ContextMenuProvider::new()));
             let context_service = ContextManagerService::new();
+            let placeholder_service = PlaceholderService::new();
             app.manage(Mutex::new(AppState {
                 config: config_service,
                 clipboard: clipboard_service,
                 notifications: notification_service,
                 menu_coordinator,
                 context: context_service,
+                placeholder: placeholder_service,
             }));
             Ok(())
         })

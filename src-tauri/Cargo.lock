@@ -3113,6 +3113,7 @@ dependencies = [
  "dotenvy",
  "image",
  "log",
+ "regex",
  "serde",
  "serde_json",
  "tauri",

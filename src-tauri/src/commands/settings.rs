@@ -9,6 +9,7 @@ use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
 use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::notification::NotificationService;
+use crate::services::placeholder::PlaceholderService;
 
 pub struct AppState {
     pub config: ConfigService,
@@ -16,6 +17,7 @@ pub struct AppState {
     pub notifications: NotificationService,
     pub menu_coordinator: MenuCoordinator,
     pub context: ContextManagerService,
+    pub placeholder: PlaceholderService,
 }
 
 fn emit_changed(app: &AppHandle) -> Result<(), String> {
