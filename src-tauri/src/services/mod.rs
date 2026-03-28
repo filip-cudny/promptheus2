@@ -2,6 +2,8 @@ pub mod ai;
 pub mod clipboard;
 pub mod config;
 pub mod context;
+pub mod history;
+pub mod image_storage;
 pub mod menu_coordinator;
 pub mod notification;
 pub mod placeholder;

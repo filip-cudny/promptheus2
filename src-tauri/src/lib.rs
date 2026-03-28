@@ -11,6 +11,8 @@ use services::ai::AiService;
 use services::clipboard::ClipboardService;
 use services::config::ConfigService;
 use services::context::{ContextManagerService, ContextMenuProvider};
+use services::history::HistoryService;
+use services::image_storage::ImageStorage;
 use services::menu_coordinator::MenuCoordinator;
 use services::notification::NotificationService;
 use services::placeholder::PlaceholderService;
@@ -95,6 +97,15 @@ pub fn run() {
             let ai_service = AiService::new(&config_service.settings().models);
             let context_service = ContextManagerService::new();
             let placeholder_service = PlaceholderService::new();
+            let history_service = HistoryService::new(100);
+
+            let app_data_dir = app.path().app_data_dir()?;
+            let image_storage = ImageStorage::new(&app_data_dir);
+            image_storage
+                .initialize()
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            log::info!("image storage initialized at {}", app_data_dir.display());
+
             app.manage(Mutex::new(AppState {
                 config: config_service,
                 clipboard: clipboard_service,
@@ -103,6 +114,8 @@ pub fn run() {
                 context: context_service,
                 placeholder: placeholder_service,
                 ai: ai_service,
+                history: history_service,
+                image_storage,
             }));
             Ok(())
         })
@@ -144,6 +157,14 @@ pub fn run() {
             commands::menu::execute_menu_item,
             commands::menu::refresh_menu_providers,
             commands::menu::show_context_menu_window,
+            commands::history::get_history,
+            commands::history::get_history_entry,
+            commands::history::add_history_entry,
+            commands::history::add_conversation_entry,
+            commands::history::update_conversation_entry,
+            commands::history::get_last_interaction,
+            commands::history::clear_history,
+            commands::history::copy_history_content,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

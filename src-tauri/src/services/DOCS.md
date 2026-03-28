@@ -14,8 +14,10 @@ services/
 │   └── sse.rs           #   Lightweight SSE line parser for reqwest byte streams
 ├── clipboard.rs         # ClipboardService — text and image clipboard operations
 ├── config.rs            # ConfigService — settings load/validate/save/mutate
-├── menu_coordinator.rs  # MenuCoordinator — aggregates menu providers into ordered sections
 ├── context.rs           # ContextManagerService — ordered context items (text/image)
+├── history.rs           # HistoryService — in-memory execution history tracking
+├── image_storage.rs     # ImageStorage — temp image file save/load for conversation history
+├── menu_coordinator.rs  # MenuCoordinator — aggregates menu providers into ordered sections
 ├── notification.rs      # NotificationService — event-gated Tauri event emission
 ├── placeholder.rs       # PlaceholderService — template variable substitution and image injection
 └── DOCS.md
@@ -88,6 +90,54 @@ Manages an ordered list of `ContextItem` values (text and/or images) in memory. 
 **General methods**: `clear`, `get_items` (cloned), `remove_item(index) -> bool`, `item_count`, `has_text_or_images`, `is_empty`.
 
 **Key edge case**: `has_context()` checks for Text variant existence; `get_context()` additionally filters out empty-content items. Image-only context returns `None` from `get_context()`.
+
+### HistoryService specifics
+
+In-memory record of prompt executions (text and speech). Session-only — no persistence to disk. History is lost on app restart, matching original behavior.
+
+**No internal locking**: plain struct with `Vec<HistoryEntry>`. Thread safety provided by `Mutex<AppState>` in the command layer.
+
+**Constructor**: `HistoryService::new(max_entries)` — creates an empty service with a bounded capacity.
+
+**ID generation**: millisecond timestamp via `SystemTime::now().duration_since(UNIX_EPOCH).as_millis()`. Not globally unique but sufficient for single-user desktop app.
+
+**Timestamp format**: `chrono::Local::now().format("%Y-%m-%d %H:%M:%S")` for `timestamp`, `created_at`, and `updated_at` fields.
+
+**Max entries enforcement**: after each append, if `entries.len() > max_entries`, entries are sorted by recency and truncated to `max_entries`. Oldest entries are silently dropped.
+
+**Sorting**: `get_history()` returns entries sorted most-recent-first using a fallback chain: `updated_at` → `created_at` → `timestamp`. All three are `"%Y-%m-%d %H:%M:%S"` strings, so lexicographic comparison works.
+
+**Simple entries**: `add_entry()` records a single prompt execution (text or speech) with input, output, success/error status, and prompt metadata.
+
+**Conversation entries**: `add_conversation_entry()` creates a multi-turn entry with full `ConversationHistoryData` (turns, tree nodes, context). Returns the entry ID for later updates. `update_conversation_entry()` modifies an existing conversation entry and sets `updated_at`.
+
+**Summary builders**: conversation entries auto-generate `input_content` and `output_content` summaries from turns. Last turn's text is used, truncated to 200 chars (100 if multiple turns), with "+N more" suffix.
+
+**Methods**: `new`, `add_entry`, `add_conversation_entry`, `update_conversation_entry`, `get_history`, `get_entry_by_id`, `get_last_item_by_type`, `get_conversation_data`, `clear`, `entry_count`.
+
+**Error enum**: `HistoryError` with single variant `EntryNotFound(String)`.
+
+### ImageStorage specifics
+
+Manages temporary image files for conversation history. Saves base64-encoded image data to disk and loads it back, matching the original `image_storage.py` behavior.
+
+**Temp directory**: `{app_data_dir}/temp_images/`. Created on `initialize()`, which clears any existing files first (called on app startup).
+
+**Constructor**: `ImageStorage::new(app_data_dir)` — sets the temp directory path but does not create it. Call `initialize()` at startup.
+
+**Save flow**: `save_image(base64_data, media_type)` decodes base64, writes to `img_{timestamp_ms}_{hash_12chars}.{ext}`. Returns the full file path as a `String`.
+
+**Load flow**: `load_image(filepath)` reads the file, encodes to base64, infers media type from extension. Returns `(base64_data, media_type)`.
+
+**Supported formats**: PNG, JPEG, GIF, WebP, BMP. Unknown types default to PNG.
+
+**Cleanup**: `cleanup()` removes all files and recreates the empty directory. `initialize()` does the same on startup.
+
+**Coordination with HistoryService**: `ImageStorage` is a separate service. `HistoryService` stores file paths as `Vec<String>` in `context_image_paths` and `message_image_paths`. The command layer coordinates between the two.
+
+**Error variants**: `Io` (filesystem errors), `Base64Decode` (invalid base64 input).
+
+**Methods**: `new`, `initialize`, `save_image`, `load_image`, `cleanup`.
 
 ### NotificationService specifics
 

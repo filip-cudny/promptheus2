@@ -8,6 +8,8 @@ use crate::services::ai::AiService;
 use crate::services::clipboard::ClipboardService;
 use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
+use crate::services::history::HistoryService;
+use crate::services::image_storage::ImageStorage;
 use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::notification::NotificationService;
 use crate::services::placeholder::PlaceholderService;
@@ -20,6 +22,8 @@ pub struct AppState {
     pub context: ContextManagerService,
     pub placeholder: PlaceholderService,
     pub ai: AiService,
+    pub history: HistoryService,
+    pub image_storage: ImageStorage,
 }
 
 fn emit_changed(app: &AppHandle) -> Result<(), String> {
