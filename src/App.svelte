@@ -1,8 +1,21 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { setupHotkeyListener } from "$lib/services/hotkeys";
 
   let greeting = $state("");
   let name = $state("");
+  let unlistenHotkeys: (() => void) | undefined;
+
+  onMount(() => {
+    setupHotkeyListener().then((unlisten) => {
+      unlistenHotkeys = unlisten;
+    });
+
+    return () => {
+      unlistenHotkeys?.();
+    };
+  });
 
   async function greet() {
     greeting = await invoke("greet", { name });
