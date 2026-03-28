@@ -3,6 +3,7 @@ export * from "./menu";
 export * from "./execution";
 export * from "./context";
 export * from "./history";
+export * from "./conversation";
 
 export interface Settings {
   show_tray_icon: boolean;

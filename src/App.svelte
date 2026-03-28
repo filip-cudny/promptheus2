@@ -1,19 +1,8 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import { init, destroy } from "$lib/stores/notifications.svelte";
-  import NotificationToast from "$lib/components/ui/NotificationToast.svelte";
 
   let greeting = $state("");
   let name = $state("");
-
-  onMount(() => {
-    init();
-  });
-
-  onDestroy(() => {
-    destroy();
-  });
 
   async function greet() {
     greeting = await invoke("greet", { name });
@@ -37,4 +26,3 @@
   <button onclick={openContextMenu}>Open Context Menu</button>
 </main>
 
-<NotificationToast />

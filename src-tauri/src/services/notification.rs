@@ -45,6 +45,7 @@ impl NotificationService {
         if !matches!(level, NotificationLevel::Error)
             && !is_event_enabled(event_name, &settings.events)
         {
+            log::debug!("notification event '{event_name}' is disabled, skipping");
             return Ok(());
         }
 
@@ -54,9 +55,18 @@ impl NotificationService {
             message: message.map(|m| m.into()),
         };
 
+        log::debug!(
+            "emitting notification: event={event_name} level={:?} title={}",
+            payload.level,
+            payload.title
+        );
+
         self.handle
             .emit("notification", &payload)
-            .map_err(|e| NotificationError::EmitFailed(e.to_string()))
+            .map_err(|e| {
+                log::error!("failed to emit notification event: {e}");
+                NotificationError::EmitFailed(e.to_string())
+            })
     }
 }
 

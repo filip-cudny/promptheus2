@@ -23,6 +23,20 @@
         "resizable": true
       },
       {
+        "label": "notification",
+        "url": "notification.html",
+        "title": "",
+        "width": 380,
+        "height": 100,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": false
+      },
+      {
         "label": "context-menu",
         "url": "context-menu.html",
         "title": "",

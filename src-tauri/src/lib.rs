@@ -177,6 +177,7 @@ pub fn run() {
             commands::prompt_execution::execute_conversation_turn,
             commands::prompt_execution::get_execution_state,
             commands::prompt_dialog::open_prompt_dialog,
+            commands::notification::update_notification_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

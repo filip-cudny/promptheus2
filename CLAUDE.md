@@ -21,6 +21,41 @@ Documentation lives close to the code it describes:
 - `DOCS.md` is kept short. For complex topics it references separate files in the same directory (e.g., `auth.docs.md`).
 - A top-level index at [`DOCS.md`](DOCS.md) links to all directory-level docs for discoverability.
 
+## Development Commands
+
+All commands run from `promptheus-tauri/` unless noted otherwise.
+
+### Frontend (Svelte/TypeScript)
+
+| Command | What it does |
+|---------|-------------|
+| `npx svelte-check` | Type-check all Svelte and TS files (0 errors = pass) |
+| `pnpm build` | Vite production build to `dist/` |
+| `pnpm dev` | Vite dev server |
+
+### Backend (Rust)
+
+Run from `promptheus-tauri/src-tauri/`:
+
+| Command | What it does |
+|---------|-------------|
+| `cargo check` | Type-check Rust code (fast, no codegen) |
+| `cargo test --lib` | Run unit tests |
+| `cargo build` | Full debug build |
+
+### Full app
+
+| Command | What it does |
+|---------|-------------|
+| `pnpm tauri dev` | Run the full Tauri app in dev mode (frontend + backend) |
+| `pnpm tauri build` | Production bundle |
+
+### Common mistakes to avoid
+
+- `pnpm check` does **not** exist — use `npx svelte-check`.
+- `cargo` commands must run from `src-tauri/`, not the project root.
+- `pnpm` commands run from the project root (`promptheus-tauri/`).
+
 ## References
 
 _(to be added as the project grows)_

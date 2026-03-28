@@ -1,0 +1,134 @@
+<script lang="ts">
+  import { onMount } from "svelte";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
+  import type { createConversationStore } from "$lib/stores/conversation.svelte";
+  import type { ConversationImage } from "$lib/types/conversation";
+
+  let {
+    store,
+    onSendAndCopy,
+  }: {
+    store: ReturnType<typeof createConversationStore>;
+    onSendAndCopy: () => void;
+  } = $props();
+
+  let textarea: HTMLTextAreaElement | undefined = $state();
+  let inputText = $state(store.inputText);
+  let inputImages = $state<ConversationImage[]>([...store.inputImages]);
+
+  $effect(() => {
+    store.updateInputText(inputText);
+  });
+
+  $effect(() => {
+    store.updateInputImages(inputImages);
+  });
+
+  onMount(() => {
+    textarea?.focus();
+  });
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      getCurrentWindow().close();
+      return;
+    }
+
+    if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      if (store.isRegenerateMode) {
+        const path = store.tree.current_path;
+        if (path.length > 0) {
+          store.regenerate(path[path.length - 1]);
+        }
+      } else if (store.canSend) {
+        store.sendMessage();
+      }
+      return;
+    }
+
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      if (store.canSend) {
+        onSendAndCopy();
+      }
+      return;
+    }
+  }
+
+  function handlePaste(e: ClipboardEvent) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        e.preventDefault();
+        const blob = item.getAsFile();
+        if (!blob) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64 = result.split(",")[1];
+          const mediaType = item.type;
+          inputImages = [
+            ...inputImages,
+            { data: base64, media_type: mediaType },
+          ];
+        };
+        reader.readAsDataURL(blob);
+        return;
+      }
+    }
+  }
+</script>
+
+<div class="message-input">
+  <ImageChipBar bind:images={inputImages} readonly={false} />
+  <textarea
+    bind:this={textarea}
+    class="input-textarea"
+    bind:value={inputText}
+    placeholder="Type a message… (Enter to send, Shift+Enter for newline, Ctrl+Enter to send & copy, Esc to close)"
+    onkeydown={handleKeydown}
+    onpaste={handlePaste}
+    disabled={store.isExecuting}
+  ></textarea>
+</div>
+
+<style>
+  .message-input {
+    flex-shrink: 0;
+    padding: 0 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .input-textarea {
+    width: 100%;
+    min-height: 60px;
+    max-height: 200px;
+    resize: vertical;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: #e0e0e0;
+    font: inherit;
+    font-size: 13px;
+    padding: 10px;
+    box-sizing: border-box;
+  }
+
+  .input-textarea:focus {
+    outline: none;
+    border-color: rgba(100, 160, 255, 0.5);
+  }
+
+  .input-textarea:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>
