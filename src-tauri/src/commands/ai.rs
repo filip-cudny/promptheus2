@@ -1,19 +1,11 @@
-use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::State;
 use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
 
 use crate::commands::settings::AppState;
+use crate::models::ai::StreamEvent;
 use crate::models::message::ProcessedMessage;
-
-#[derive(Clone, Serialize)]
-#[serde(tag = "event", content = "data", rename_all = "snake_case")]
-pub enum StreamEvent {
-    Chunk { delta: String, accumulated: String },
-    Done { full_text: String },
-    Error { message: String },
-}
 
 #[tauri::command]
 pub async fn complete(

@@ -7,3 +7,4 @@ pub mod image_storage;
 pub mod menu_coordinator;
 pub mod notification;
 pub mod placeholder;
+pub mod prompt_execution;

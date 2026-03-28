@@ -8,3 +8,25 @@ export function onSettingsChanged(callback: () => void): Promise<UnlistenFn> {
 export function onHistoryChanged(callback: () => void): Promise<UnlistenFn> {
   return listen("history-changed", callback);
 }
+
+export function onExecutionStarted(
+  callback: (payload: { execution_id: string }) => void,
+): Promise<UnlistenFn> {
+  return listen<{ execution_id: string }>("execution-started", (event) =>
+    callback(event.payload),
+  );
+}
+
+export function onExecutionCompleted(
+  callback: (payload: {
+    execution_id: string;
+    success: boolean;
+    error: string | null;
+  }) => void,
+): Promise<UnlistenFn> {
+  return listen<{
+    execution_id: string;
+    success: boolean;
+    error: string | null;
+  }>("execution-completed", (event) => callback(event.payload));
+}

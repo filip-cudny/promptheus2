@@ -3,4 +3,5 @@ pub mod clipboard;
 pub mod context;
 pub mod history;
 pub mod menu;
+pub mod prompt_execution;
 pub mod settings;

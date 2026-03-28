@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { error } from "@tauri-apps/plugin-log";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { MenuItem } from "$lib/types/menu";
+import { startExecution, isExecuting } from "$lib/stores/execution.svelte";
 
 let _items = $state<MenuItem[]>([]);
 let _selectedIndex = $state(-1);
@@ -11,6 +12,7 @@ let numberBuffer = "";
 let numberTimer: ReturnType<typeof setTimeout> | null = null;
 let unlisten: (() => void) | null = null;
 let unlistenContextChanged: (() => void) | null = null;
+let unlistenExecutionCompleted: (() => void) | null = null;
 
 const NUMBER_DEBOUNCE_MS = 300;
 
@@ -34,10 +36,17 @@ function isVisible(): boolean {
   return _visible;
 }
 
+function applyExecutionState(items: MenuItem[]): MenuItem[] {
+  if (!isExecuting()) return items;
+  return items.map((item) =>
+    item.item_type === "prompt" ? { ...item, enabled: false } : item,
+  );
+}
+
 async function openMenu() {
   try {
     const fetched = await invoke<MenuItem[]>("get_context_menu_items");
-    _items = fetched;
+    _items = applyExecutionState(fetched);
     _selectedIndex = -1;
     numberBuffer = "";
     _visible = true;
@@ -81,6 +90,15 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
   const item = _items[index];
   if (!item || !item.enabled) return;
 
+  if (item.item_type === "prompt") {
+    const data = item.data as { prompt_id: string } | null;
+    if (data?.prompt_id) {
+      await closeMenu();
+      startExecution(data.prompt_id);
+      return;
+    }
+  }
+
   try {
     await invoke("execute_menu_item", {
       itemId: item.id,
@@ -121,7 +139,7 @@ async function refreshItems() {
   if (!_visible) return;
   try {
     const fetched = await invoke<MenuItem[]>("get_context_menu_items");
-    _items = fetched;
+    _items = applyExecutionState(fetched);
   } catch (e) {
     error("Failed to refresh context menu: " + e);
   }
@@ -135,6 +153,9 @@ async function init() {
   unlistenContextChanged = await listen("context-changed", () => {
     refreshItems();
   });
+  unlistenExecutionCompleted = await listen("execution-completed", () => {
+    refreshItems();
+  });
 }
 
 function destroy() {
@@ -145,6 +166,10 @@ function destroy() {
   if (unlistenContextChanged) {
     unlistenContextChanged();
     unlistenContextChanged = null;
+  }
+  if (unlistenExecutionCompleted) {
+    unlistenExecutionCompleted();
+    unlistenExecutionCompleted = null;
   }
 }
 

@@ -56,6 +56,14 @@ Renders when `item.item_type === "context"`. Extracts `ContextItem[]` from `item
 
 The context store (`$lib/stores/context.svelte.ts`) is initialized in `ContextMenuApp.svelte` so the section updates reactively via the `"context-changed"` Tauri event.
 
+### Prompt execution
+
+When a `prompt` item is clicked, the context menu store intercepts it (instead of calling the generic `execute_menu_item` backend command) and delegates to the execution store's `startExecution(promptId)`. The menu closes immediately, and the execution runs asynchronously.
+
+During execution, prompt items are disabled. The store applies this by overlaying `enabled: false` on prompt items when `isExecuting()` is true (see `applyExecutionState` in `contextMenu.svelte.ts`). On `execution-completed`, the store refreshes items so they re-enable on next open.
+
+The execution store is initialized in `ContextMenuApp.svelte` alongside the context store.
+
 ### Other types
 
-Prompts, speech, settings, and other item types are rendered as simple label + icon buttons. Future tasks will add specialized renderers as needed.
+Speech, settings, and other item types are rendered as simple label + icon buttons and use the generic `execute_menu_item` backend command. Future tasks will add specialized renderers as needed.

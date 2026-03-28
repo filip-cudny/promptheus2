@@ -13,6 +13,7 @@ use crate::services::image_storage::ImageStorage;
 use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::notification::NotificationService;
 use crate::services::placeholder::PlaceholderService;
+use crate::services::prompt_execution::PromptExecutionService;
 
 pub struct AppState {
     pub config: ConfigService,
@@ -24,6 +25,7 @@ pub struct AppState {
     pub ai: AiService,
     pub history: HistoryService,
     pub image_storage: ImageStorage,
+    pub prompt_execution: PromptExecutionService,
 }
 
 fn emit_changed(app: &AppHandle) -> Result<(), String> {

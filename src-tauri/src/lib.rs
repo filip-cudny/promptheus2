@@ -17,7 +17,8 @@ use services::image_storage::ImageStorage;
 use services::menu_coordinator::MenuCoordinator;
 use services::notification::NotificationService;
 use services::placeholder::PlaceholderService;
-use providers::LastInteractionMenuProvider;
+use services::prompt_execution::PromptExecutionService;
+use providers::{LastInteractionMenuProvider, PromptMenuProvider};
 
 fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -97,6 +98,9 @@ pub fn run() {
             let mut menu_coordinator = MenuCoordinator::new();
             menu_coordinator.add_provider(Box::new(ContextMenuProvider::new()));
             menu_coordinator.add_provider(Box::new(LastInteractionMenuProvider::new()));
+            menu_coordinator.add_provider(Box::new(PromptMenuProvider::new(
+                config_service.settings().prompts.clone(),
+            )));
             let ai_service = AiService::new(&config_service.settings().models);
             let context_service = ContextManagerService::new();
             let placeholder_service = PlaceholderService::new();
@@ -119,6 +123,7 @@ pub fn run() {
                 ai: ai_service,
                 history: history_service,
                 image_storage,
+                prompt_execution: PromptExecutionService::new(),
             }));
             Ok(())
         })
@@ -168,6 +173,8 @@ pub fn run() {
             commands::history::get_last_interaction,
             commands::history::clear_history,
             commands::history::copy_history_content,
+            commands::prompt_execution::execute_prompt,
+            commands::prompt_execution::get_execution_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

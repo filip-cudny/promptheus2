@@ -20,6 +20,7 @@ services/
 ├── menu_coordinator.rs  # MenuCoordinator — aggregates menu providers into ordered sections
 ├── notification.rs      # NotificationService — event-gated Tauri event emission
 ├── placeholder.rs       # PlaceholderService — template variable substitution and image injection
+├── prompt_execution.rs  # PromptExecutionService — prompt execution pipeline orchestration
 └── DOCS.md
 ```
 
@@ -207,6 +208,24 @@ Multi-provider LLM service. Lives in `ai/` subdirectory with one file per provid
 **Error variants**: `ModelNotFound`, `ModelUnavailable`, `Authentication`, `Connection`, `RateLimit`, `ApiStatus { status, message }`, `Stream`, `Request`.
 
 **OpenAiProvider** (`openai.rs`): Sends requests to `{base_url}/chat/completions`. Default base URL: `https://api.openai.com/v1`. Supports any OpenAI-compatible endpoint via the `base_url` config field. Model parameters (temperature, max_tokens, etc.) are merged into the request body when present.
+
+### PromptExecutionService specifics
+
+Orchestrates the full prompt execution pipeline: validate → resolve prompt → process placeholders → call AI → deliver result. Lives in `prompt_execution.rs`.
+
+**Execution state tracking**: `is_executing: bool` and `current_execution_id: Option<String>`. Guards against concurrent execution — `start_execution()` returns `ExecutionError::AlreadyExecuting` if already busy.
+
+**Constructor**: `PromptExecutionService::new()` — creates idle service.
+
+**State methods**: `is_busy()`, `current_execution_id()`, `start_execution() -> Result<String, ExecutionError>` (generates UUID), `finish_execution()`.
+
+**Resolution methods** (associated functions, take `&ConfigService`):
+- `resolve_prompt(config, prompt_id)` — finds prompt by ID in config settings
+- `resolve_model(config, model_id)` — validates explicit model ID or falls back to `default_model`
+
+**Message preparation**: `prepare_messages(prompt, placeholder, clipboard, context, input_override)` — converts `PromptData.messages` to `Vec<ProcessedMessage>` via `PlaceholderService`. Maps `ClipboardUnavailable` to `ExecutionError::ClipboardError`.
+
+**Error enum**: `ExecutionError` with variants `AlreadyExecuting`, `PromptNotFound(String)`, `ModelNotFound(String)`, `ClipboardError(String)`, `AiError(String)`.
 
 ### Adding a new service
 
