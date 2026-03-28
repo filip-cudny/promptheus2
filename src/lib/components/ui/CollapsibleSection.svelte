@@ -1,22 +1,36 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import { ChevronRight, ChevronDown } from "lucide-svelte";
 
   let {
     title,
     collapsed = $bindable(false),
+    headerClass,
+    headerLeft,
     actions,
     children,
   }: {
     title: string;
     collapsed: boolean;
+    headerClass?: string;
+    headerLeft?: Snippet;
     actions?: Snippet;
     children: Snippet;
   } = $props();
 </script>
 
 <div class="collapsible-section">
-  <button class="collapsible-header" onclick={() => (collapsed = !collapsed)}>
-    <span class="collapse-arrow" class:rotated={!collapsed}>▶</span>
+  <button class="collapsible-header {headerClass ?? ''}" onclick={() => (collapsed = !collapsed)}>
+    <span class="collapse-arrow">
+      {#if collapsed}
+        <ChevronRight size={14} />
+      {:else}
+        <ChevronDown size={14} />
+      {/if}
+    </span>
+    {#if headerLeft}
+      {@render headerLeft()}
+    {/if}
     <span class="collapsible-title">{title}</span>
     {#if actions}
       <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
@@ -60,13 +74,9 @@
   }
 
   .collapse-arrow {
-    font-size: 10px;
-    transition: transform 150ms ease;
+    display: flex;
+    align-items: center;
     flex-shrink: 0;
-  }
-
-  .collapse-arrow.rotated {
-    transform: rotate(90deg);
   }
 
   .collapsible-title {

@@ -41,7 +41,6 @@
   {#if store.messagePairs.length === 0}
     <div class="empty-state">Send a message to start the conversation.</div>
   {:else}
-    <div class="top-spacer"></div>
     {#each store.messagePairs as pair (pair.user.node_id)}
       <UserBubble
         node={pair.user}
@@ -81,12 +80,7 @@
     gap: 8px;
   }
 
-  .top-spacer {
-    flex: 1;
-    min-height: 12px;
-  }
-
-  .empty-state {
+.empty-state {
     flex: 1;
     display: flex;
     align-items: center;

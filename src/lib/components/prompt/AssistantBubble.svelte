@@ -1,7 +1,9 @@
 <script lang="ts">
   import type { ConversationNode } from "$lib/types/conversation";
   import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
+  import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
+  import { Copy, Check, RefreshCw, Trash2 } from "lucide-svelte";
 
   let {
     node,
@@ -32,7 +34,6 @@
   let collapsed = $state(false);
   let rawMode = $state(false);
   let textarea: HTMLTextAreaElement | undefined = $state();
-  let copyLabel = $state("Copy");
 
   function autoResize() {
     if (!textarea) return;
@@ -62,19 +63,16 @@
 
   async function copyContent() {
     await navigator.clipboard.writeText(displayContent);
-    copyLabel = "Copied!";
-    setTimeout(() => {
-      copyLabel = "Copy";
-    }, 1500);
   }
 </script>
 
 <div class="assistant-bubble">
   <CollapsibleSection title="" bind:collapsed>
-    {#snippet actions()}
+    {#snippet headerLeft()}
       <span class="role-badge assistant-badge">Assistant</span>
       <span class="turn-number"># {outputNumber}</span>
-
+    {/snippet}
+    {#snippet actions()}
       {#if branchInfo.total > 1}
         <span class="branch-nav">
           <button
@@ -91,19 +89,26 @@
         </span>
       {/if}
 
-      <button class="bubble-action-btn" onclick={() => onRegenerate(node.node_id)}>
-        ↻
-      </button>
-      <button class="bubble-action-btn" onclick={copyContent}>
-        {copyLabel}
-      </button>
+      <ActionIconButton
+        icon={RefreshCw}
+        onclick={() => onRegenerate(node.node_id)}
+        title="Regenerate"
+        size={13}
+      />
+      <ActionIconButton
+        icon={Copy}
+        confirmIcon={Check}
+        onclick={copyContent}
+        title="Copy"
+        size={13}
+      />
       <button class="bubble-action-btn" class:active={rawMode} onclick={toggleRawMode}>
         {rawMode ? "Render" : "Raw"}
       </button>
 
       {#if showDelete}
-        <button class="bubble-action-btn delete-btn" onclick={() => onDelete(node.node_id)}>
-          ✕
+        <button class="icon-btn delete-btn" onclick={() => onDelete(node.node_id)} title="Delete">
+          <Trash2 size={13} />
         </button>
       {/if}
     {/snippet}
@@ -201,6 +206,23 @@
   .bubble-action-btn.active {
     background: rgba(155, 109, 204, 0.2);
     border-color: rgba(155, 109, 204, 0.4);
+  }
+
+  .icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+  }
+
+  .icon-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
   }
 
   .delete-btn:hover {

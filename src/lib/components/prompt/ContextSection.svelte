@@ -1,9 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
+  import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import { getContextItems, setContext, setContextImage, clearContext } from "$lib/services/context";
   import { getSettings } from "$lib/services/settings";
+  import { Save, Check } from "lucide-svelte";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
 
@@ -13,13 +15,15 @@
     store: ReturnType<typeof createConversationStore>;
   } = $props();
 
-  let collapsed = $state(false);
+  let collapsed = $state(true);
   let disabled = $state(false);
   let saving = $state(false);
-  let saved = $state(false);
 
   let localText = $state("");
   let localImages = $state<ConversationImage[]>([]);
+
+  let hasContent = $derived(localText.trim().length > 0 || localImages.length > 0);
+  let contextHeaderClass = $derived(collapsed && hasContent ? "context-has-content" : "");
 
   $effect(() => {
     store.updateContextText(localText);
@@ -73,8 +77,6 @@
       for (const img of localImages) {
         await setContextImage(img.data, img.media_type);
       }
-      saved = true;
-      setTimeout(() => (saved = false), 1500);
     } finally {
       saving = false;
     }
@@ -82,11 +84,16 @@
 </script>
 
 <div class="context-section" class:disabled>
-  <CollapsibleSection title="Context" bind:collapsed>
+  <CollapsibleSection title="Context" bind:collapsed headerClass={contextHeaderClass}>
     {#snippet actions()}
-      <button class="save-btn" onclick={saveContext} disabled={disabled || saving}>
-        {saving ? "Saving…" : saved ? "Saved ✓" : "Save"}
-      </button>
+      <ActionIconButton
+        icon={Save}
+        confirmIcon={Check}
+        onclick={saveContext}
+        title="Save context"
+        disabled={disabled || saving}
+        size={14}
+      />
     {/snippet}
     <div class="context-body">
       <ImageChipBar bind:images={localImages} readonly={disabled} />
@@ -108,6 +115,15 @@
 
   .context-section.disabled {
     opacity: 0.5;
+  }
+
+  .context-section :global(.collapsible-header.context-has-content) {
+    background: rgba(100, 160, 255, 0.08);
+  }
+
+  .context-section :global(.collapsible-header.context-has-content .collapsible-title) {
+    color: #7dd3f0;
+    font-weight: 700;
   }
 
   .context-body {
@@ -137,25 +153,6 @@
   }
 
   .context-textarea:disabled {
-    cursor: not-allowed;
-  }
-
-  .save-btn {
-    padding: 2px 10px;
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    background: rgba(255, 255, 255, 0.08);
-    color: #e0e0e0;
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .save-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.15);
-  }
-
-  .save-btn:disabled {
-    opacity: 0.5;
     cursor: not-allowed;
   }
 </style>

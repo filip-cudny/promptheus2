@@ -2,6 +2,7 @@
   import type { ConversationNode } from "$lib/types/conversation";
   import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
+  import { Trash2 } from "lucide-svelte";
 
   let {
     node,
@@ -42,12 +43,14 @@
 
 <div class="user-bubble">
   <CollapsibleSection title="" bind:collapsed>
-    {#snippet actions()}
+    {#snippet headerLeft()}
       <span class="role-badge user-badge">Me</span>
       <span class="turn-number"># {messageNumber}</span>
+    {/snippet}
+    {#snippet actions()}
       {#if showDelete}
-        <button class="bubble-action-btn delete-btn" onclick={() => onDelete(node.node_id)}>
-          ✕
+        <button class="icon-btn delete-btn" onclick={() => onDelete(node.node_id)} title="Delete">
+          <Trash2 size={13} />
         </button>
       {/if}
     {/snippet}
@@ -91,20 +94,21 @@
     font-weight: 500;
   }
 
-  .bubble-action-btn {
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.5);
+  .icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
+    border: none;
     border-radius: 4px;
-    padding: 2px 6px;
-    font-size: 11px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
     cursor: pointer;
-    line-height: 1;
   }
 
-  .bubble-action-btn:hover {
+  .icon-btn:hover {
     background: rgba(255, 255, 255, 0.1);
-    color: #e0e0e0;
+    color: rgba(255, 255, 255, 0.8);
   }
 
   .delete-btn:hover {
