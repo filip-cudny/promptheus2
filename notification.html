@@ -22,7 +22,6 @@
         height: 100%;
         justify-content: flex-start;
         align-items: flex-end;
-        padding-bottom: 12px;
       }
       .toast {
         display: flex;
@@ -126,7 +125,7 @@
       }
 
       function updateWindow(n) {
-        var height = n > 0 ? n * ITEM_HEIGHT + (n - 1) * ITEM_GAP + 12 + 20 : 0;
+        var height = n > 0 ? n * ITEM_HEIGHT + (n - 1) * ITEM_GAP + 20 : 0;
         if (window.__TAURI__) {
           window.__TAURI__.core.invoke("update_notification_window", {
             count: n,

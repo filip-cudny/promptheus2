@@ -27,16 +27,15 @@ fn show_notification_window(handle: &tauri::AppHandle) -> Result<(), String> {
 
     let cursor_pos = win.cursor_position().map_err(|e| e.to_string())?;
     let monitor = find_monitor_at(handle, cursor_pos.x as i32, cursor_pos.y as i32)?;
-    let mon_pos = monitor.position();
-    let mon_size = monitor.size();
+    let work = monitor.work_area();
     let scale = monitor.scale_factor();
 
-    let margin = (40.0 * scale) as i32;
+    let margin = (20.0 * scale) as i32;
     let win_width = (380.0 * scale) as i32;
     let win_height = (100.0 * scale) as i32;
 
-    let x = mon_pos.x + mon_size.width as i32 - win_width - margin;
-    let y = mon_pos.y + mon_size.height as i32 - win_height - margin;
+    let x = work.position.x + work.size.width as i32 - win_width - margin;
+    let y = work.position.y + work.size.height as i32 - win_height - margin;
 
     win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
         .map_err(|e| e.to_string())?;
@@ -77,16 +76,15 @@ pub async fn update_notification_window(
 
     let cursor_pos = win.cursor_position().map_err(|e| e.to_string())?;
     let monitor = find_monitor_at(&app, cursor_pos.x as i32, cursor_pos.y as i32)?;
-    let mon_pos = monitor.position();
-    let mon_size = monitor.size();
+    let work = monitor.work_area();
     let scale = monitor.scale_factor();
 
-    let margin = (40.0 * scale) as i32;
+    let margin = (20.0 * scale) as i32;
     let win_width = (380.0 * scale) as i32;
     let win_height = (new_height as f64 * scale) as i32;
 
-    let x = mon_pos.x + mon_size.width as i32 - win_width - margin;
-    let y = mon_pos.y + mon_size.height as i32 - win_height - margin;
+    let x = work.position.x + work.size.width as i32 - win_width - margin;
+    let y = work.position.y + work.size.height as i32 - win_height - margin;
 
     win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
         .map_err(|e| e.to_string())?;
