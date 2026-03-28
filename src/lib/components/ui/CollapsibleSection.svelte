@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import { slide } from "svelte/transition";
   import { ChevronRight, ChevronDown } from "lucide-svelte";
+  import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
     title,
@@ -23,9 +25,9 @@
   <button class="collapsible-header {headerClass ?? ''}" onclick={() => (collapsed = !collapsed)}>
     <span class="collapse-arrow">
       {#if collapsed}
-        <ChevronRight size={14} />
+        <ChevronRight size={ICON_SIZE.md} />
       {:else}
-        <ChevronDown size={14} />
+        <ChevronDown size={ICON_SIZE.md} />
       {/if}
     </span>
     {#if headerLeft}
@@ -40,7 +42,7 @@
     {/if}
   </button>
   {#if !collapsed}
-    <div class="collapsible-content">
+    <div class="collapsible-content" transition:slide={{ duration: 150 }}>
       {@render children()}
     </div>
   {/if}
@@ -94,6 +96,6 @@
   }
 
   .collapsible-content {
-    padding: 8px 12px;
+    padding: 10px 14px;
   }
 </style>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Component, SvelteComponent } from "svelte";
+  import { ICON_SIZE } from "$lib/constants/ui";
 
   type IconComponent =
     | Component<{ size?: number | string }>
@@ -11,7 +12,7 @@
     onclick,
     title = "",
     disabled = false,
-    size = 14,
+    size = ICON_SIZE.md,
   }: {
     icon: IconComponent;
     confirmIcon?: IconComponent;
@@ -35,11 +36,9 @@
 
 <button class="action-icon-btn" {title} {disabled} onclick={handleClick}>
   {#if confirmed && confirmIcon}
-    {@const Icon = confirmIcon}
-    <Icon {size} />
+    <svelte:component this={confirmIcon} {size} />
   {:else}
-    {@const Icon = icon}
-    <Icon {size} />
+    <svelte:component this={icon} {size} />
   {/if}
 </button>
 
@@ -48,7 +47,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 3px;
+    padding: 4px;
     border: none;
     border-radius: 4px;
     background: transparent;

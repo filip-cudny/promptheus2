@@ -2,6 +2,7 @@
   import { onDestroy } from "svelte";
   import morphdom from "morphdom";
   import { renderMarkdown, extractCodeBlocks } from "$lib/utils/markdown";
+  import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
     content,
@@ -92,11 +93,14 @@
     const index = parseInt(copyBtn.dataset.copyIndex ?? "", 10);
     if (Number.isNaN(index) || index >= codeBlocks.length) return;
 
+    const s = ICON_SIZE.md;
+    const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
+    const originalHtml = copyBtn.innerHTML;
     navigator.clipboard.writeText(codeBlocks[index]);
-    copyBtn.textContent = "Copied!";
+    copyBtn.innerHTML = checkIcon;
     setTimeout(() => {
-      copyBtn.textContent = "Copy";
-    }, 1500);
+      copyBtn.innerHTML = originalHtml;
+    }, 1200);
   }
 </script>
 
@@ -181,18 +185,20 @@
   }
 
   .markdown-renderer :global(.copy-btn) {
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: rgba(255, 255, 255, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border: none;
     border-radius: 4px;
-    padding: 2px 8px;
-    font-size: 11px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
     cursor: pointer;
   }
 
   .markdown-renderer :global(.copy-btn:hover) {
     background: rgba(255, 255, 255, 0.1);
-    color: #e0e0e0;
+    color: rgba(255, 255, 255, 0.8);
   }
 
   .markdown-renderer :global(pre) {

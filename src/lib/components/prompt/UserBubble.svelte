@@ -3,6 +3,7 @@
   import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import { Trash2 } from "lucide-svelte";
+  import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
     node,
@@ -50,7 +51,7 @@
     {#snippet actions()}
       {#if showDelete}
         <button class="icon-btn delete-btn" onclick={() => onDelete(node.node_id)} title="Delete">
-          <Trash2 size={13} />
+          <Trash2 size={ICON_SIZE.md} />
         </button>
       {/if}
     {/snippet}
@@ -98,7 +99,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 3px;
+    padding: 4px;
     border: none;
     border-radius: 4px;
     background: transparent;

@@ -4,6 +4,7 @@
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
   import { Copy, Check, RefreshCw, Trash2 } from "lucide-svelte";
+  import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
     node,
@@ -93,14 +94,12 @@
         icon={RefreshCw}
         onclick={() => onRegenerate(node.node_id)}
         title="Regenerate"
-        size={13}
       />
       <ActionIconButton
         icon={Copy}
         confirmIcon={Check}
         onclick={copyContent}
         title="Copy"
-        size={13}
       />
       <button class="bubble-action-btn" class:active={rawMode} onclick={toggleRawMode}>
         {rawMode ? "Render" : "Raw"}
@@ -108,7 +107,7 @@
 
       {#if showDelete}
         <button class="icon-btn delete-btn" onclick={() => onDelete(node.node_id)} title="Delete">
-          <Trash2 size={13} />
+          <Trash2 size={ICON_SIZE.md} />
         </button>
       {/if}
     {/snippet}
@@ -212,7 +211,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 3px;
+    padding: 4px;
     border: none;
     border-radius: 4px;
     background: transparent;

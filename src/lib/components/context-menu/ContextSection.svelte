@@ -2,6 +2,7 @@
   import type { ContextItem } from "$lib/types/context";
   import { clearContext, getContextText } from "$lib/services/context";
   import { Copy, Trash2, Check, ChevronDown, ChevronRight, FileText, Image } from "lucide-svelte";
+  import { ICON_SIZE } from "$lib/constants/ui";
 
   let { items }: { items: ContextItem[] } = $props();
 
@@ -52,9 +53,9 @@
     <span class="header-label">
       <span class="toggle">
         {#if expanded}
-          <ChevronDown size={12} />
+          <ChevronDown size={ICON_SIZE.md} />
         {:else}
-          <ChevronRight size={12} />
+          <ChevronRight size={ICON_SIZE.md} />
         {/if}
       </span>
       Context
@@ -71,9 +72,9 @@
             title="Copy context text"
           >
             {#if copyConfirm}
-              <Check size={12} />
+              <Check size={ICON_SIZE.md} />
             {:else}
-              <Copy size={12} />
+              <Copy size={ICON_SIZE.md} />
             {/if}
           </button>
         {/if}
@@ -83,9 +84,9 @@
           title="Clear all context"
         >
           {#if clearConfirm}
-            <Check size={12} />
+            <Check size={ICON_SIZE.md} />
           {:else}
-            <Trash2 size={12} />
+            <Trash2 size={ICON_SIZE.md} />
           {/if}
         </button>
       </span>
@@ -100,12 +101,12 @@
         {#each items as item}
           {#if item.item_type === "text"}
             <span class="chip chip-text" title={item.content}>
-              <FileText size={12} />
+              <FileText size={ICON_SIZE.md} />
               {truncateText(item.content)}
             </span>
           {:else if item.item_type === "image"}
             <span class="chip chip-image">
-              <Image size={12} />
+              <Image size={ICON_SIZE.md} />
               {formatMediaType(item.media_type)}
             </span>
           {/if}

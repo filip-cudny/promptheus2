@@ -92,7 +92,6 @@
         onclick={saveContext}
         title="Save context"
         disabled={disabled || saving}
-        size={14}
       />
     {/snippet}
     <div class="context-body">
@@ -110,7 +109,7 @@
 <style>
   .context-section {
     flex-shrink: 0;
-    padding: 8px 12px 0;
+    padding: 8px 16px 0;
   }
 
   .context-section.disabled {

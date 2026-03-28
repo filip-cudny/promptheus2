@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Copy, Check, History } from "lucide-svelte";
+  import { ICON_SIZE } from "$lib/constants/ui";
   import { copyHistoryContent } from "$lib/services/history";
   import { info } from "@tauri-apps/plugin-log";
 
@@ -52,7 +53,7 @@
       onclick={handleHistory}
       title="View execution history"
     >
-      <History size={12} />
+      <History size={ICON_SIZE.md} />
     </button>
   </div>
 
@@ -70,9 +71,9 @@
         >
           <span class="chip-copy">
             {#if copyConfirm === chip.type}
-              <Check size={12} />
+              <Check size={ICON_SIZE.md} />
             {:else}
-              <Copy size={12} />
+              <Copy size={ICON_SIZE.md} />
             {/if}
           </span>
           <span class="chip-label">{chip.label}</span>

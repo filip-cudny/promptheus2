@@ -6,6 +6,7 @@
   import ContextSection from "./ContextSection.svelte";
   import LastInteractionSection from "./LastInteractionSection.svelte";
   import { MessageSquareShare } from "lucide-svelte";
+  import { ICON_SIZE } from "$lib/constants/ui";
   import {
     getItems,
     getSelectedIndex,
@@ -163,7 +164,7 @@
                 title="Open dialog"
                 onclick={() => openDialogForItem(globalIndex)}
               >
-                <MessageSquareShare size={14} />
+                <MessageSquareShare size={ICON_SIZE.md} />
               </button>
             {/if}
           </div>
