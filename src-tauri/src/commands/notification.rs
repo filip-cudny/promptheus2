@@ -31,7 +31,7 @@ fn show_notification_window(handle: &tauri::AppHandle) -> Result<(), String> {
     let mon_size = monitor.size();
     let scale = monitor.scale_factor();
 
-    let margin = (20.0 * scale) as i32;
+    let margin = (40.0 * scale) as i32;
     let win_width = (380.0 * scale) as i32;
     let win_height = (100.0 * scale) as i32;
 
@@ -81,7 +81,7 @@ pub async fn update_notification_window(
     let mon_size = monitor.size();
     let scale = monitor.scale_factor();
 
-    let margin = (20.0 * scale) as i32;
+    let margin = (40.0 * scale) as i32;
     let win_width = (380.0 * scale) as i32;
     let win_height = (new_height as f64 * scale) as i32;
 

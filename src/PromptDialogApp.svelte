@@ -15,8 +15,11 @@
 
   async function handleSendAndCopy() {
     const currentWindow = getCurrentWindow();
-    await currentWindow.hide();
-    await store.sendMessage();
+    const { success, result } = await store.sendMessage();
+    if (success && result) {
+      await navigator.clipboard.writeText(result);
+      await currentWindow.close();
+    }
   }
 
   onDestroy(() => {

@@ -1,5 +1,8 @@
 <script lang="ts">
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
+  import type { MessagePair } from "$lib/types/conversation";
+  import UserBubble from "./UserBubble.svelte";
+  import AssistantBubble from "./AssistantBubble.svelte";
 
   let {
     store,
@@ -18,6 +21,11 @@
     userScrolledUp = distanceFromBottom > threshold;
   }
 
+  function isLastAssistant(pair: MessagePair): boolean {
+    const pairs = store.messagePairs;
+    return pairs[pairs.length - 1] === pair;
+  }
+
   $effect(() => {
     store.messagePairs;
     store.streamedContent;
@@ -32,6 +40,32 @@
 <div class="conversation-area" bind:this={container} onscroll={handleScroll}>
   {#if store.messagePairs.length === 0}
     <div class="empty-state">Send a message to start the conversation.</div>
+  {:else}
+    <div class="top-spacer"></div>
+    {#each store.messagePairs as pair (pair.user.node_id)}
+      <UserBubble
+        node={pair.user}
+        messageNumber={pair.message_number}
+        showDelete={false}
+        onContentChange={(content) => store.updateNodeContent(pair.user.node_id, content)}
+        onDelete={() => {}}
+      />
+      {#if pair.assistant}
+        {@const assistant = pair.assistant}
+        <AssistantBubble
+          node={assistant}
+          outputNumber={pair.message_number}
+          showDelete={false}
+          isStreaming={store.isStreaming && isLastAssistant(pair)}
+          branchInfo={store.getBranchInfo(assistant.node_id)}
+          onRegenerate={() => store.regenerate(assistant.node_id)}
+          onBranchPrev={() => store.switchBranch(assistant.node_id, -1)}
+          onBranchNext={() => store.switchBranch(assistant.node_id, 1)}
+          onContentChange={(content) => store.updateNodeContent(assistant.node_id, content)}
+          onDelete={() => {}}
+        />
+      {/if}
+    {/each}
   {/if}
 </div>
 
@@ -43,6 +77,11 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
+
+  .top-spacer {
+    flex: 1;
+    min-height: 12px;
   }
 
   .empty-state {

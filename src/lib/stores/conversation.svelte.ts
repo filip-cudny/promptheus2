@@ -248,13 +248,15 @@ export function createConversationStore(
     return tabs.find((t) => t.tab_id === tabId);
   }
 
-  async function sendMessage(): Promise<void> {
+  async function sendMessage(): Promise<{ success: boolean; result: string }> {
     const tab = getTab(activeTabId);
-    if (!tab || tab.is_executing) return;
+    if (!tab || tab.is_executing)
+      return { success: false, result: "" };
 
     const text = tab.input_text.trim();
     const images = [...tab.input_images];
-    if (!text && images.length === 0) return;
+    if (!text && images.length === 0)
+      return { success: false, result: "" };
 
     const userNode = createNode(
       "user",
@@ -291,6 +293,9 @@ export function createConversationStore(
       tab.context_images,
     );
 
+    let success = false;
+    let resultText = "";
+
     const callbacks: ExecutionCallbacks = {
       onChunk: (_delta, accumulated) => {
         assistantNode.content = accumulated;
@@ -301,6 +306,8 @@ export function createConversationStore(
         tab.is_executing = false;
         tab.is_streaming = false;
         tab.streamed_content = "";
+        success = true;
+        resultText = fullText;
       },
       onError: (message) => {
         logError("Conversation execution error: " + message);
@@ -323,6 +330,12 @@ export function createConversationStore(
       tab.is_streaming = false;
       tab.streamed_content = "";
     }
+
+    if (success) {
+      await saveToHistory();
+    }
+
+    return { success, result: resultText };
   }
 
   function stopExecution(): void {
@@ -373,6 +386,8 @@ export function createConversationStore(
       tab.context_images,
     );
 
+    let regenerateSuccess = false;
+
     const callbacks: ExecutionCallbacks = {
       onChunk: (_delta, accumulated) => {
         newAssistant.content = accumulated;
@@ -383,6 +398,7 @@ export function createConversationStore(
         tab.is_executing = false;
         tab.is_streaming = false;
         tab.streamed_content = "";
+        regenerateSuccess = true;
       },
       onError: (message) => {
         logError("Regeneration error: " + message);
@@ -405,6 +421,10 @@ export function createConversationStore(
       tab.is_executing = false;
       tab.is_streaming = false;
       tab.streamed_content = "";
+    }
+
+    if (regenerateSuccess) {
+      await saveToHistory();
     }
   }
 

@@ -25,6 +25,18 @@
     store.updateInputImages(localImages);
   });
 
+  $effect(() => {
+    if (store.inputText === "" && localText !== "") {
+      localText = "";
+    }
+  });
+
+  $effect(() => {
+    if (store.inputImages.length === 0 && localImages.length > 0) {
+      localImages = [];
+    }
+  });
+
   onMount(() => {
     textarea?.focus();
   });
