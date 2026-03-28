@@ -50,6 +50,9 @@ pub struct ModelConfig {
     pub api_key_source: ApiKeySource,
 
     #[serde(default)]
+    pub provider: Provider,
+
+    #[serde(default)]
     pub api_key_env: Option<String>,
 
     #[serde(default)]
@@ -68,6 +71,15 @@ pub enum ApiKeySource {
     #[default]
     Env,
     Direct,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum Provider {
+    #[default]
+    Openai,
+    Anthropic,
+    Gemini,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

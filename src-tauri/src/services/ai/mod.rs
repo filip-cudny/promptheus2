@@ -1,0 +1,146 @@
+pub mod openai;
+pub mod provider;
+pub mod sse;
+
+use std::collections::HashMap;
+use std::pin::Pin;
+
+use futures::Stream;
+
+use crate::models::message::ProcessedMessage;
+use crate::models::settings::{ModelConfig, ModelParameters, Provider};
+
+use self::openai::OpenAiProvider;
+use self::provider::{AiProvider, CompletionRequest, StreamChunk};
+
+#[derive(Debug, thiserror::Error)]
+pub enum AiError {
+    #[error("model not found: {0}")]
+    ModelNotFound(String),
+
+    #[error("model unavailable: {0}")]
+    ModelUnavailable(String),
+
+    #[error("authentication failed: {0}")]
+    Authentication(String),
+
+    #[error("connection failed: {0}")]
+    Connection(String),
+
+    #[error("rate limit exceeded")]
+    RateLimit,
+
+    #[error("API error (status {status}): {message}")]
+    ApiStatus { status: u16, message: String },
+
+    #[error("stream error: {0}")]
+    Stream(String),
+
+    #[error("request failed: {0}")]
+    Request(String),
+}
+
+struct ProviderEntry {
+    provider: Box<dyn AiProvider>,
+    model_name: String,
+    parameters: ModelParameters,
+}
+
+pub struct AiService {
+    providers: HashMap<String, ProviderEntry>,
+    unavailable_models: HashMap<String, String>,
+}
+
+impl AiService {
+    pub fn new(models: &[ModelConfig]) -> Self {
+        let mut providers = HashMap::new();
+        let mut unavailable_models = HashMap::new();
+
+        for model in models {
+            match model.provider {
+                Provider::Openai => match OpenAiProvider::new(model) {
+                    Ok(provider) => {
+                        providers.insert(
+                            model.id.clone(),
+                            ProviderEntry {
+                                provider: Box::new(provider),
+                                model_name: model.model.clone(),
+                                parameters: model.parameters.clone().unwrap_or_default(),
+                            },
+                        );
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "model '{}' unavailable: {}",
+                            model.display_name,
+                            e
+                        );
+                        unavailable_models.insert(model.id.clone(), e.to_string());
+                    }
+                },
+                Provider::Anthropic => {
+                    unavailable_models
+                        .insert(model.id.clone(), "Anthropic provider not yet supported".into());
+                }
+                Provider::Gemini => {
+                    unavailable_models
+                        .insert(model.id.clone(), "Gemini provider not yet supported".into());
+                }
+            }
+        }
+
+        Self {
+            providers,
+            unavailable_models,
+        }
+    }
+
+    pub async fn complete(
+        &self,
+        model_id: &str,
+        messages: Vec<ProcessedMessage>,
+    ) -> Result<String, AiError> {
+        let entry = self.get_provider(model_id)?;
+        let request = CompletionRequest {
+            model: entry.model_name.clone(),
+            messages,
+            parameters: entry.parameters.clone(),
+        };
+        entry.provider.complete(request).await
+    }
+
+    pub async fn complete_stream(
+        &self,
+        model_id: &str,
+        messages: Vec<ProcessedMessage>,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk, AiError>> + Send>>, AiError> {
+        let entry = self.get_provider(model_id)?;
+        let request = CompletionRequest {
+            model: entry.model_name.clone(),
+            messages,
+            parameters: entry.parameters.clone(),
+        };
+        entry.provider.complete_stream(request).await
+    }
+
+    pub fn has_model(&self, model_id: &str) -> bool {
+        self.providers.contains_key(model_id)
+    }
+
+    pub fn get_available_models(&self) -> Vec<String> {
+        self.providers.keys().cloned().collect()
+    }
+
+    pub fn get_unavailable_models(&self) -> &HashMap<String, String> {
+        &self.unavailable_models
+    }
+
+    fn get_provider(&self, model_id: &str) -> Result<&ProviderEntry, AiError> {
+        if let Some(reason) = self.unavailable_models.get(model_id) {
+            return Err(AiError::ModelUnavailable(reason.clone()));
+        }
+        self.providers
+            .get(model_id)
+            .ok_or_else(|| AiError::ModelNotFound(model_id.to_string()))
+    }
+}

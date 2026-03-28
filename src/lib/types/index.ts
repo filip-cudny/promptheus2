@@ -1,3 +1,4 @@
+export * from "./ai";
 export * from "./menu";
 export * from "./execution";
 export * from "./context";
@@ -23,6 +24,7 @@ export interface ModelConfig {
   model: string;
   display_name: string;
   api_key_source: ApiKeySource;
+  provider: Provider;
   api_key_env: string | null;
   api_key: string | null;
   base_url: string | null;
@@ -30,6 +32,8 @@ export interface ModelConfig {
 }
 
 export type ApiKeySource = "env" | "direct";
+
+export type Provider = "openai" | "anthropic" | "gemini";
 
 export interface ModelParameters {
   temperature: number | null;

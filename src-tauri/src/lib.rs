@@ -7,6 +7,7 @@ mod services;
 mod traits;
 
 use commands::settings::AppState;
+use services::ai::AiService;
 use services::clipboard::ClipboardService;
 use services::config::ConfigService;
 use services::context::{ContextManagerService, ContextMenuProvider};
@@ -91,6 +92,7 @@ pub fn run() {
             let notification_service = NotificationService::new(app.handle().clone());
             let mut menu_coordinator = MenuCoordinator::new();
             menu_coordinator.add_provider(Box::new(ContextMenuProvider::new()));
+            let ai_service = AiService::new(&config_service.settings().models);
             let context_service = ContextManagerService::new();
             let placeholder_service = PlaceholderService::new();
             app.manage(Mutex::new(AppState {
@@ -100,10 +102,13 @@ pub fn run() {
                 menu_coordinator,
                 context: context_service,
                 placeholder: placeholder_service,
+                ai: ai_service,
             }));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::ai::complete,
+            commands::ai::complete_stream,
             commands::clipboard::get_clipboard_text,
             commands::clipboard::set_clipboard_text,
             commands::clipboard::clipboard_is_empty,

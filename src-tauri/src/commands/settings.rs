@@ -4,6 +4,7 @@ use tokio::sync::Mutex;
 use crate::models::settings::{
     KeymapGroup, ModelConfig, NotificationSettings, PromptData, Settings, SpeechToTextModel,
 };
+use crate::services::ai::AiService;
 use crate::services::clipboard::ClipboardService;
 use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
@@ -18,6 +19,7 @@ pub struct AppState {
     pub menu_coordinator: MenuCoordinator,
     pub context: ContextManagerService,
     pub placeholder: PlaceholderService,
+    pub ai: AiService,
 }
 
 fn emit_changed(app: &AppHandle) -> Result<(), String> {
