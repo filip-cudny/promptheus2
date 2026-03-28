@@ -1,10 +1,8 @@
 <script lang="ts">
-  import type { Component, SvelteComponent } from "svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
-  type IconComponent =
-    | Component<{ size?: number | string }>
-    | (new (...args: any[]) => SvelteComponent<{ size?: number | string }>);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type AnyComponent = any;
 
   let {
     icon,
@@ -14,8 +12,8 @@
     disabled = false,
     size = ICON_SIZE.md,
   }: {
-    icon: IconComponent;
-    confirmIcon?: IconComponent;
+    icon: AnyComponent;
+    confirmIcon?: AnyComponent;
     onclick: (e: MouseEvent) => void;
     title?: string;
     disabled?: boolean;
@@ -23,6 +21,7 @@
   } = $props();
 
   let confirmed = $state(false);
+  let ActiveIcon = $derived(confirmed && confirmIcon ? confirmIcon : icon);
 
   function handleClick(e: MouseEvent) {
     e.stopPropagation();
@@ -35,11 +34,7 @@
 </script>
 
 <button class="action-icon-btn" {title} {disabled} onclick={handleClick}>
-  {#if confirmed && confirmIcon}
-    <svelte:component this={confirmIcon} {size} />
-  {:else}
-    <svelte:component this={icon} {size} />
-  {/if}
+  <ActiveIcon {size} />
 </button>
 
 <style>

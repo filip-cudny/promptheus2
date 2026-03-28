@@ -16,6 +16,7 @@ services/
 ├── config.rs            # ConfigService — settings load/validate/save/mutate
 ├── context.rs           # ContextManagerService — ordered context items (text/image)
 ├── history.rs           # HistoryService — in-memory execution history tracking
+├── hotkeys.rs           # Hotkey translation and OS-filtered binding resolution
 ├── image_storage.rs     # ImageStorage — temp image file save/load for conversation history
 ├── menu_coordinator.rs  # MenuCoordinator — aggregates menu providers into ordered sections
 ├── notification.rs      # NotificationService — event-gated Tauri event emission
@@ -117,6 +118,18 @@ In-memory record of prompt executions (text and speech). Session-only — no per
 **Methods**: `new`, `add_entry`, `add_conversation_entry`, `update_conversation_entry`, `get_history`, `get_entry_by_id`, `get_last_item_by_type`, `get_conversation_data`, `clear`, `entry_count`.
 
 **Error enum**: `HistoryError` with single variant `EntryNotFound(String)`.
+
+### Hotkeys specifics
+
+Pure functions (no struct/state) for translating keymap settings into `tauri-plugin-global-shortcut`-compatible shortcut strings.
+
+**OS-aware translation**: `translate_shortcut(shortcut, os)` converts config format (`"cmd+f1"`) to plugin format (`"Command+F1"`). The `os` parameter (`"macos"`, `"linux"`, `"windows"`) affects modifier mapping — `cmd` becomes `Command` on macOS, `Super` on Linux/Windows.
+
+**OS filtering**: `get_active_bindings(settings)` returns only bindings from `KeymapGroup` entries whose `context` matches the current OS (`std::env::consts::OS`). Returns `Vec<(translated_shortcut, action_name)>`.
+
+**Validation**: shortcuts with fewer than 2 parts (no modifier) return `None` and are silently skipped.
+
+**Key translation rules**: `cmd`→`Command`/`Super`, `ctrl`→`Control`, `shift`→`Shift`, `alt`→`Alt`, `meta`/`super`→`Super`. Key names: `f1`-`f20` uppercased, single letters uppercased, named keys mapped (`space`→`Space`, `esc`→`Escape`, `up`→`ArrowUp`, etc.).
 
 ### ImageStorage specifics
 

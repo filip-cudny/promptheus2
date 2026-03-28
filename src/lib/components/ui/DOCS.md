@@ -6,6 +6,7 @@ Reusable UI primitives shared across features. See [src/DOCS.md](../../../DOCS.m
 
 ```
 ui/
+├── ActionIconButton.svelte     # Icon-only button with optional confirm feedback
 ├── CollapsibleSection.svelte   # Expandable/collapsible content container
 ├── ImageChipBar.svelte         # Horizontal row of image thumbnails with delete
 └── MarkdownRenderer.svelte     # Renders markdown to HTML with syntax highlighting
@@ -19,11 +20,32 @@ ui/
 - Scoped `<style>` blocks for all CSS — no global style leakage.
 - Custom Svelte transitions defined inline when built-in transitions (`fade`, `fly`) don't match the required animation curve (e.g., capped opacity).
 
+### Dynamic components
+
+Render dynamic components using `$derived` + direct tag syntax (Svelte 5 runes mode):
+
+```svelte
+<script>
+  let ActiveIcon = $derived(condition ? iconA : iconB);
+</script>
+<ActiveIcon size={16} />
+```
+
+`lucide-svelte` (v1.0.1) exports components that use Svelte 4 class syntax internally for broad compatibility. This works fine at runtime in Svelte 5, but their types don't match Svelte 5's `Component` type. Use `any` for prop types that accept Lucide icons dynamically.
+
+### ActionIconButton
+
+- Props: `icon` (Lucide component), optional `confirmIcon` (swaps to this icon for 1.2s after click), `onclick`, `title`, `disabled`, `size` (defaults to `ICON_SIZE.md`).
+- Borderless transparent button — no border, hover adds subtle background.
+- Use `confirmIcon={Check}` for actions where the user needs visual feedback (copy, save). Omit for actions with immediate visible effect (navigate, regenerate).
+- Icon sizes are defined in `$lib/constants/ui.ts` — never hardcode pixel values.
+
 ### CollapsibleSection
 
-- Props: `title: string`, `collapsed: boolean` (bindable), optional `actions` snippet, required `children` snippet.
+- Props: `title: string`, `collapsed: boolean` (bindable), optional `headerClass: string`, optional `headerLeft` snippet, optional `actions` snippet, required `children` snippet.
 - Uses `bind:collapsed` for two-way binding — parent controls open/closed state.
-- Header is a `<button>` with a rotating arrow indicator. The `actions` snippet renders alongside the title (e.g., save buttons) and stops click propagation to avoid toggling collapse.
+- Header uses Lucide `ChevronRight`/`ChevronDown` icons for collapse indicator. The `headerLeft` snippet renders between the chevron and title (e.g., role badges). The `actions` snippet renders on the right side and stops click propagation. `headerClass` allows conditional styling of the header (e.g., highlight when content is present).
+- Content area uses `svelte/transition` `slide` for smooth expand/collapse.
 
 ### ImageChipBar
 

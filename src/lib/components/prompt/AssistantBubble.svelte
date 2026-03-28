@@ -3,7 +3,7 @@
   import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
-  import { Copy, Check, RefreshCw, Trash2 } from "lucide-svelte";
+  import { Copy, Check, RefreshCw, Trash2, ChevronLeft, ChevronRight, Pencil } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
@@ -80,13 +80,13 @@
             class="branch-btn"
             onclick={() => onBranchPrev(node.node_id)}
             disabled={branchInfo.current <= 1}
-          >&lt;</button>
+          ><ChevronLeft size={ICON_SIZE.md} /></button>
           <span class="branch-counter">{branchInfo.current}/{branchInfo.total}</span>
           <button
             class="branch-btn"
             onclick={() => onBranchNext(node.node_id)}
             disabled={branchInfo.current >= branchInfo.total}
-          >&gt;</button>
+          ><ChevronRight size={ICON_SIZE.md} /></button>
         </span>
       {/if}
 
@@ -101,8 +101,8 @@
         onclick={copyContent}
         title="Copy"
       />
-      <button class="bubble-action-btn" class:active={rawMode} onclick={toggleRawMode}>
-        {rawMode ? "Render" : "Raw"}
+      <button class="icon-btn" class:active={rawMode} onclick={toggleRawMode} title={rawMode ? "Render" : "Raw"}>
+        <Pencil size={ICON_SIZE.md} />
       </button>
 
       {#if showDelete}
@@ -159,19 +159,20 @@
   }
 
   .branch-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.6);
-    border-radius: 3px;
-    padding: 1px 5px;
-    font-size: 11px;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    border-radius: 4px;
+    padding: 2px;
     cursor: pointer;
-    line-height: 1;
   }
 
   .branch-btn:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.1);
-    color: #e0e0e0;
+    color: rgba(255, 255, 255, 0.8);
   }
 
   .branch-btn:disabled {
@@ -184,27 +185,6 @@
     color: rgba(255, 255, 255, 0.5);
     min-width: 24px;
     text-align: center;
-  }
-
-  .bubble-action-btn {
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.5);
-    border-radius: 4px;
-    padding: 2px 6px;
-    font-size: 11px;
-    cursor: pointer;
-    line-height: 1;
-  }
-
-  .bubble-action-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #e0e0e0;
-  }
-
-  .bubble-action-btn.active {
-    background: rgba(155, 109, 204, 0.2);
-    border-color: rgba(155, 109, 204, 0.4);
   }
 
   .icon-btn {
@@ -222,6 +202,11 @@
   .icon-btn:hover {
     background: rgba(255, 255, 255, 0.1);
     color: rgba(255, 255, 255, 0.8);
+  }
+
+  .icon-btn.active {
+    background: rgba(155, 109, 204, 0.2);
+    color: #c9a5f0;
   }
 
   .delete-btn:hover {

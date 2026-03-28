@@ -48,6 +48,7 @@
         showDelete={false}
         onContentChange={(content) => store.updateNodeContent(pair.user.node_id, content)}
         onDelete={() => {}}
+        onRegenerate={() => { if (pair.assistant) store.regenerate(pair.assistant.node_id); }}
       />
       {#if pair.assistant}
         {@const assistant = pair.assistant}

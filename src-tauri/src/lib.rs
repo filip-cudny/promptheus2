@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::sync::RwLock;
+
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
@@ -9,6 +12,7 @@ mod traits;
 
 use commands::settings::AppState;
 use services::ai::AiService;
+use services::hotkeys::ShortcutActionMap;
 use services::clipboard::ClipboardService;
 use services::config::ConfigService;
 use services::context::{ContextManagerService, ContextMenuProvider};
@@ -57,6 +61,88 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
+    use services::notification::NotificationLevel;
+
+    let state = app.state::<Mutex<AppState>>();
+    match action {
+        "set_context_value" => {
+            let notification_settings = {
+                let mut s = state.lock().await;
+                let result: Result<(), String> = if s.clipboard.has_image() {
+                    s.clipboard
+                        .get_image_base64()
+                        .map(|(data, mt)| s.context.set_context_image(data, mt))
+                        .map_err(|e| e.to_string())
+                } else {
+                    s.clipboard
+                        .get_text()
+                        .map(|text| s.context.set_context(text))
+                        .map_err(|e| e.to_string())
+                };
+                if let Err(e) = result {
+                    log::error!("set_context_value hotkey failed: {}", e);
+                    return;
+                }
+                s.config.settings().notifications.clone()
+            };
+            let _ = app.emit("context-changed", ());
+            let _ = state.lock().await.notifications.notify(
+                "context_set",
+                NotificationLevel::Success,
+                "Context set",
+                None::<String>,
+                &notification_settings,
+            );
+        }
+        "append_context_value" => {
+            let notification_settings = {
+                let mut s = state.lock().await;
+                let result: Result<(), String> = if s.clipboard.has_image() {
+                    s.clipboard
+                        .get_image_base64()
+                        .map(|(data, mt)| s.context.append_context_image(data, mt))
+                        .map_err(|e| e.to_string())
+                } else {
+                    s.clipboard
+                        .get_text()
+                        .map(|text| s.context.append_context(text))
+                        .map_err(|e| e.to_string())
+                };
+                if let Err(e) = result {
+                    log::error!("append_context_value hotkey failed: {}", e);
+                    return;
+                }
+                s.config.settings().notifications.clone()
+            };
+            let _ = app.emit("context-changed", ());
+            let _ = state.lock().await.notifications.notify(
+                "context_append",
+                NotificationLevel::Success,
+                "Context appended",
+                None::<String>,
+                &notification_settings,
+            );
+        }
+        "clear_context" => {
+            let notification_settings = {
+                let mut s = state.lock().await;
+                s.context.clear();
+                s.config.settings().notifications.clone()
+            };
+            let _ = app.emit("context-changed", ());
+            let _ = state.lock().await.notifications.notify(
+                "context_cleared",
+                NotificationLevel::Success,
+                "Context cleared",
+                None::<String>,
+                &notification_settings,
+            );
+        }
+        _ => {}
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -90,6 +176,56 @@ pub fn run() {
             if config_service.settings().show_tray_icon {
                 setup_tray(app)?;
                 log::info!("system tray initialized");
+            }
+
+            let bindings = services::hotkeys::get_active_bindings(config_service.settings());
+            let mut action_map = HashMap::new();
+            for (shortcut, action) in &bindings {
+                action_map.insert(shortcut.clone(), action.clone());
+            }
+            app.manage(ShortcutActionMap(RwLock::new(action_map)));
+
+            #[cfg(desktop)]
+            {
+                use tauri_plugin_global_shortcut::ShortcutState;
+
+                let mut builder = tauri_plugin_global_shortcut::Builder::new();
+                for (shortcut_str, _) in &bindings {
+                    builder = builder.with_shortcut(shortcut_str.as_str())?;
+                }
+
+                app.handle().plugin(
+                    builder
+                        .with_handler(|app, shortcut, event| {
+                            if event.state == ShortcutState::Pressed {
+                                let shortcut_str = shortcut.into_string();
+                                let action_map = app.state::<ShortcutActionMap>();
+                                let map = action_map.0.read().unwrap();
+                                if let Some(action) = map.get(&shortcut_str) {
+                                    let action = action.clone();
+                                    drop(map);
+                                    log::info!("hotkey action: {} -> {}", shortcut_str, action);
+                                    match action.as_str() {
+                                        "set_context_value" | "append_context_value" | "clear_context" => {
+                                            let app = app.clone();
+                                            tauri::async_runtime::spawn(async move {
+                                                execute_context_action(&app, &action).await;
+                                            });
+                                        }
+                                        _ => {
+                                            let _ = app.emit("hotkey-action", &action);
+                                        }
+                                    }
+                                }
+                            }
+                        })
+                        .build(),
+                )?;
+
+                for (shortcut_str, action) in &bindings {
+                    log::info!("registered shortcut: {} -> {}", shortcut_str, action);
+                }
+                log::info!("{} global shortcuts registered", bindings.len());
             }
 
             let clipboard_service = ClipboardService::new()

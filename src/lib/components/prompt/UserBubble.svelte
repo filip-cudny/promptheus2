@@ -2,7 +2,7 @@
   import type { ConversationNode } from "$lib/types/conversation";
   import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
-  import { Trash2 } from "lucide-svelte";
+  import { Trash2, Pencil } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
@@ -11,15 +11,18 @@
     showDelete = false,
     onContentChange,
     onDelete,
+    onRegenerate,
   }: {
     node: ConversationNode;
     messageNumber: number;
     showDelete: boolean;
     onContentChange: (content: string) => void;
     onDelete: (nodeId: string) => void;
+    onRegenerate: () => void;
   } = $props();
 
   let collapsed = $state(false);
+  let editMode = $state(false);
   let textarea: HTMLTextAreaElement | undefined = $state();
 
   function autoResize() {
@@ -30,15 +33,33 @@
 
   $effect(() => {
     node.content;
-    if (textarea) {
+    if (editMode && textarea) {
       requestAnimationFrame(autoResize);
     }
   });
+
+  function toggleEditMode() {
+    editMode = !editMode;
+    if (editMode) {
+      requestAnimationFrame(() => {
+        autoResize();
+        textarea?.focus();
+      });
+    }
+  }
 
   function handleInput(e: Event) {
     const target = e.target as HTMLTextAreaElement;
     onContentChange(target.value);
     autoResize();
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      editMode = false;
+      onRegenerate();
+    }
   }
 </script>
 
@@ -49,6 +70,9 @@
       <span class="turn-number"># {messageNumber}</span>
     {/snippet}
     {#snippet actions()}
+      <button class="icon-btn" class:active={editMode} onclick={toggleEditMode} title={editMode ? "View" : "Edit"}>
+        <Pencil size={ICON_SIZE.md} />
+      </button>
       {#if showDelete}
         <button class="icon-btn delete-btn" onclick={() => onDelete(node.node_id)} title="Delete">
           <Trash2 size={ICON_SIZE.md} />
@@ -59,13 +83,18 @@
     {#if node.images.length > 0}
       <ImageChipBar images={node.images} readonly={true} />
     {/if}
-    <textarea
-      bind:this={textarea}
-      value={node.content}
-      oninput={handleInput}
-      class="bubble-textarea"
-      rows="1"
-    ></textarea>
+    {#if editMode}
+      <textarea
+        bind:this={textarea}
+        value={node.content}
+        oninput={handleInput}
+        onkeydown={handleKeydown}
+        class="bubble-textarea"
+        rows="1"
+      ></textarea>
+    {:else}
+      <div class="bubble-text">{node.content}</div>
+    {/if}
   </CollapsibleSection>
 </div>
 
@@ -112,10 +141,23 @@
     color: rgba(255, 255, 255, 0.8);
   }
 
+  .icon-btn.active {
+    background: rgba(74, 158, 187, 0.2);
+    color: #7dd3f0;
+  }
+
   .delete-btn:hover {
     background: rgba(200, 60, 60, 0.3);
     border-color: rgba(200, 60, 60, 0.5);
     color: #ff8a8a;
+  }
+
+  .bubble-text {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #e0e0e0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
   }
 
   .bubble-textarea {
