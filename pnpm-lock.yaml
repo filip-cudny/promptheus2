@@ -23,6 +23,9 @@ importers:
       marked:
         specifier: ^17.0.5
         version: 17.0.5
+      morphdom:
+        specifier: ^2.7.8
+        version: 2.7.8
     devDependencies:
       '@sveltejs/vite-plugin-svelte':
         specifier: ^5
@@ -556,6 +559,9 @@ packages:
     engines: {node: '>= 20'}
     hasBin: true
 
+  morphdom@2.7.8:
+    resolution: {integrity: sha512-D/fR4xgGUyVRbdMGU6Nejea1RFzYxYtyurG4Fbv2Fi/daKlWKuXGLOdXtl+3eIwL110cI2hz1ZojGICjjFLgTg==}
+
   mri@1.2.0:
     resolution: {integrity: sha512-tzzskb3bG8LvYGFF/mDTpq3jpI6Q9wc3LEmBaghu+DdCssd1FakN7Bc0hVNmEyGq1bq3RgfkCb3cmQLpNPOroA==}
     engines: {node: '>=4'}
@@ -1009,6 +1015,8 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   marked@17.0.5: {}
+
+  morphdom@2.7.8: {}
 
   mri@1.2.0: {}
 

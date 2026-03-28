@@ -1,20 +1,18 @@
 import { Marked, type RendererObject } from "marked";
 import hljs from "highlight.js";
 
-function createRenderer(enableHighlighting: boolean): RendererObject {
-  let blockIndex = 0;
+let blockIndex = 0;
 
+function createRenderer(): RendererObject {
   return {
     code({ text, lang }) {
       const idx = blockIndex++;
       let codeHtml: string;
 
-      if (enableHighlighting && lang && hljs.getLanguage(lang)) {
+      if (lang && hljs.getLanguage(lang)) {
         codeHtml = hljs.highlight(text, { language: lang }).value;
-      } else if (enableHighlighting) {
-        codeHtml = hljs.highlightAuto(text).value;
       } else {
-        codeHtml = escapeHtml(text);
+        codeHtml = hljs.highlightAuto(text).value;
       }
 
       return `<div class="code-block"><div class="code-block-header"><span class="code-lang">${lang ?? ""}</span><button class="copy-btn" data-copy-index="${idx}">Copy</button></div><pre><code class="hljs">${codeHtml}</code></pre></div>`;
@@ -22,21 +20,12 @@ function createRenderer(enableHighlighting: boolean): RendererObject {
   };
 }
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+const markedInstance = new Marked();
+markedInstance.use({ renderer: createRenderer() });
 
-export function renderMarkdown(
-  text: string,
-  enableHighlighting = true,
-): string {
-  const instance = new Marked();
-  instance.use({ renderer: createRenderer(enableHighlighting) });
-  return instance.parse(text, { async: false }) as string;
+export function renderMarkdown(text: string): string {
+  blockIndex = 0;
+  return markedInstance.parse(text, { async: false }) as string;
 }
 
 const CODE_BLOCK_RE = /^```[^\n]*\n([\s\S]*?)^```/gm;

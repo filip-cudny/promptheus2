@@ -1,3 +1,4 @@
+import "highlight.js/styles/night-owl.min.css";
 import PromptDialogApp from "./PromptDialogApp.svelte";
 import { mount } from "svelte";
 

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
+  import morphdom from "morphdom";
   import { renderMarkdown, extractCodeBlocks } from "$lib/utils/markdown";
 
   let {
@@ -9,9 +11,78 @@
     isStreaming: boolean;
   } = $props();
 
-  let renderedHtml = $derived(renderMarkdown(content, !isStreaming));
+  const DRAIN_FRACTION = 0.15;
+  const RENDER_EVERY_N_FRAMES = 2;
 
-  let codeBlocks = $derived(extractCodeBlocks(content));
+  let displayedLength = $state(isStreaming ? 0 : content.length);
+  let animFrameId: number | null = null;
+  let wasStreaming = isStreaming;
+  let frameCount = 0;
+  let lastRenderedHtml = "";
+
+  let displayedText = $derived(content.slice(0, displayedLength));
+  let isFullyRevealed = $derived(
+    !isStreaming && displayedLength >= content.length,
+  );
+
+  let renderedHtml = $derived(renderMarkdown(displayedText));
+
+  let codeBlocks = $derived(
+    isFullyRevealed ? extractCodeBlocks(displayedText) : [],
+  );
+
+  let markdownContainer: HTMLDivElement | undefined = $state();
+  const morphWrapper = document.createElement("div");
+
+  $effect(() => {
+    if (!markdownContainer) return;
+    const html = renderedHtml;
+    if (html === lastRenderedHtml) return;
+    lastRenderedHtml = html;
+    morphWrapper.innerHTML = html;
+    morphdom(markdownContainer, morphWrapper, { childrenOnly: true });
+  });
+
+  function animate() {
+    const remaining = content.length - displayedLength;
+
+    if (remaining <= 0) {
+      animFrameId = null;
+      return;
+    }
+
+    frameCount++;
+    if (frameCount % RENDER_EVERY_N_FRAMES === 0) {
+      displayedLength += Math.max(1, Math.ceil(remaining * DRAIN_FRACTION));
+    }
+
+    animFrameId = requestAnimationFrame(animate);
+  }
+
+  function startAnimation() {
+    if (animFrameId !== null) return;
+    animFrameId = requestAnimationFrame(animate);
+  }
+
+  $effect(() => {
+    if (isStreaming) {
+      wasStreaming = true;
+    }
+    if (content.length > displayedLength) {
+      if (wasStreaming) {
+        startAnimation();
+      } else {
+        displayedLength = content.length;
+      }
+    }
+  });
+
+  onDestroy(() => {
+    if (animFrameId !== null) {
+      cancelAnimationFrame(animFrameId);
+      animFrameId = null;
+    }
+  });
 
   function handleClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
@@ -30,9 +101,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-<div class="markdown-renderer" onclick={handleClick}>
-  {@html renderedHtml}
-</div>
+<div class="markdown-renderer" bind:this={markdownContainer} onclick={handleClick}></div>
 
 <style>
   .markdown-renderer {
