@@ -340,19 +340,8 @@ export function createConversationStore(
 
   function stopExecution(): void {
     const tab = getTab(activeTabId);
-    if (!tab || !tab.is_executing) return;
-
-    const path = tab.tree.current_path;
-    if (path.length > 0) {
-      const lastNode = tab.tree.nodes.get(path[path.length - 1]);
-      if (lastNode && lastNode.role === "assistant") {
-        lastNode.content = (lastNode.content || "") + " [cancelled]";
-      }
-    }
-
-    tab.is_executing = false;
-    tab.is_streaming = false;
-    tab.streamed_content = "";
+    if (!tab) return;
+    stopTabExecution(tab);
   }
 
   async function regenerate(nodeId: string): Promise<void> {
@@ -455,11 +444,34 @@ export function createConversationStore(
     activeTabId = newTab.tab_id;
   }
 
-  function closeTab(tabId: string): void {
-    if (tabs.length <= 1) return;
+  function stopTabExecution(tab: TabState): void {
+    if (!tab.is_executing) return;
 
+    const path = tab.tree.current_path;
+    if (path.length > 0) {
+      const lastNode = tab.tree.nodes.get(path[path.length - 1]);
+      if (lastNode && lastNode.role === "assistant") {
+        lastNode.content = (lastNode.content || "") + " [cancelled]";
+      }
+    }
+
+    tab.is_executing = false;
+    tab.is_streaming = false;
+    tab.streamed_content = "";
+  }
+
+  function closeTab(tabId: string): void {
     const idx = tabs.findIndex((t) => t.tab_id === tabId);
     if (idx === -1) return;
+
+    const closingTab = tabs[idx];
+    stopTabExecution(closingTab);
+
+    if (tabs.length <= 1) {
+      tabs[0] = createTabState("Chat 1");
+      activeTabId = tabs[0].tab_id;
+      return;
+    }
 
     tabs.splice(idx, 1);
 

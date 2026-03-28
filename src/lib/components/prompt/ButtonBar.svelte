@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
+  import TabBar from "./TabBar.svelte";
 
   let {
     store,
@@ -8,6 +9,10 @@
     store: ReturnType<typeof createConversationStore>;
     onSendAndCopy: () => void;
   } = $props();
+
+  const tabList = $derived(
+    store.tabs.map((t) => ({ id: t.tab_id, name: t.tab_name })),
+  );
 
   function handleSendShow() {
     if (store.isRegenerateMode) {
@@ -33,7 +38,12 @@
   </div>
 
   <div class="bar-center">
-    <!-- Tab bar placeholder — implemented in task 9 -->
+    <TabBar
+      tabs={tabList}
+      activeTabId={store.activeTabId}
+      onSelect={(tabId) => store.switchTab(tabId)}
+      onClose={(tabId) => store.closeTab(tabId)}
+    />
   </div>
 
   <div class="bar-right">

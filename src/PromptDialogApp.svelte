@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { createConversationStore } from "$lib/stores/conversation.svelte";
   import ContextSection from "$lib/components/prompt/ContextSection.svelte";
   import ConversationArea from "$lib/components/prompt/ConversationArea.svelte";
@@ -10,8 +11,24 @@
   const params = new URLSearchParams(window.location.search);
   const promptId = params.get("promptId") ?? "";
   const promptName = params.get("promptName") ?? "Prompt";
+  const historyEntryId = params.get("historyEntryId");
 
   const store = createConversationStore(promptId, promptName);
+
+  let unlistenRestore: UnlistenFn | undefined;
+
+  onMount(async () => {
+    if (historyEntryId) {
+      await store.restoreFromHistory(historyEntryId);
+    }
+
+    unlistenRestore = await listen<{ entry_id: string }>(
+      "restore-history",
+      (event) => {
+        store.restoreFromHistory(event.payload.entry_id);
+      },
+    );
+  });
 
   async function handleSendAndCopy() {
     const currentWindow = getCurrentWindow();
@@ -23,6 +40,7 @@
   }
 
   onDestroy(() => {
+    unlistenRestore?.();
     store.destroy();
   });
 </script>
