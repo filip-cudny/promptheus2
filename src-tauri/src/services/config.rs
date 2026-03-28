@@ -359,6 +359,7 @@ pub fn load_api_keys(settings: &mut Settings) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::settings::Provider;
     use std::fs;
     use tempfile::TempDir;
 
@@ -397,6 +398,7 @@ mod tests {
             model: "test".to_string(),
             display_name: "Test".to_string(),
             api_key_source: ApiKeySource::Env,
+            provider: Provider::default(),
             api_key_env: Some("TEST_KEY".to_string()),
             api_key: None,
             base_url: None,
@@ -450,6 +452,7 @@ mod tests {
             model: "test".to_string(),
             display_name: "Direct Test".to_string(),
             api_key_source: ApiKeySource::Direct,
+            provider: Provider::default(),
             api_key_env: None,
             api_key: Some("direct-secret".to_string()),
             base_url: None,
@@ -513,6 +516,7 @@ mod tests {
                 model: "test".to_string(),
                 display_name: "Test".to_string(),
                 api_key_source: ApiKeySource::Env,
+                provider: Provider::default(),
                 api_key_env: Some("KEY".to_string()),
                 api_key: None,
                 base_url: None,
@@ -536,6 +540,7 @@ mod tests {
             model: "gpt-5".to_string(),
             display_name: "GPT-5".to_string(),
             api_key_source: ApiKeySource::Env,
+            provider: Provider::default(),
             api_key_env: Some("KEY".to_string()),
             api_key: None,
             base_url: None,
@@ -566,6 +571,7 @@ mod tests {
             model: "test".to_string(),
             display_name: "Upsert".to_string(),
             api_key_source: ApiKeySource::Env,
+            provider: Provider::default(),
             api_key_env: Some("KEY".to_string()),
             api_key: None,
             base_url: None,
@@ -636,6 +642,7 @@ mod tests {
                 model: "test".to_string(),
                 display_name: "Test".to_string(),
                 api_key_source: ApiKeySource::Env,
+                provider: Provider::default(),
                 api_key_env: Some("KEY".to_string()),
                 api_key: None,
                 base_url: Some("ftp://invalid".to_string()),
@@ -656,6 +663,7 @@ mod tests {
                 model: "test".to_string(),
                 display_name: "Test".to_string(),
                 api_key_source: ApiKeySource::Env,
+                provider: Provider::default(),
                 api_key_env: Some("KEY".to_string()),
                 api_key: None,
                 base_url: None,
@@ -680,6 +688,7 @@ mod tests {
                 model: "".to_string(),
                 display_name: "Test".to_string(),
                 api_key_source: ApiKeySource::Env,
+                provider: Provider::default(),
                 api_key_env: Some("KEY".to_string()),
                 api_key: None,
                 base_url: None,

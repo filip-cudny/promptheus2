@@ -6,8 +6,7 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 use tokio_stream::StreamExt;
 
-use crate::models::message::ProcessedMessage;
-use crate::models::settings::{ModelConfig, ModelParameters};
+use crate::models::settings::ModelConfig;
 
 use super::provider::{AiProvider, CompletionRequest, StreamChunk};
 use super::sse::parse_sse_stream;
@@ -203,7 +202,7 @@ impl AiProvider for OpenAiProvider {
             return Err(map_http_error(status, &body_text));
         }
 
-        let sse_stream = parse_sse_stream(response.bytes_stream());
+        let sse_stream = parse_sse_stream(response);
 
         let stream = futures::stream::unfold(
             (sse_stream, String::new()),

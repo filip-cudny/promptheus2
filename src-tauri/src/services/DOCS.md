@@ -7,6 +7,11 @@ Business logic layer. Services own state and behavior; Tauri commands delegate t
 ```
 services/
 ├── mod.rs               # Module declarations
+├── ai/                  # AiService — multi-provider LLM completions (streaming + sync)
+│   ├── mod.rs           #   AiService orchestrator, AiError enum
+│   ├── provider.rs      #   AiProvider trait, CompletionRequest, StreamChunk
+│   ├── openai.rs        #   OpenAiProvider — reqwest-based OpenAI implementation
+│   └── sse.rs           #   Lightweight SSE line parser for reqwest byte streams
 ├── clipboard.rs         # ClipboardService — text and image clipboard operations
 ├── config.rs            # ConfigService — settings load/validate/save/mutate
 ├── menu_coordinator.rs  # MenuCoordinator — aggregates menu providers into ordered sections
@@ -131,6 +136,27 @@ Resolves `{{name}}` template variables in prompt messages before they are sent t
 **Validation methods**: `has_placeholders()`, `find_invalid_placeholders()` (regex-based), `get_placeholder_info()`, `get_available_placeholders()`.
 
 **Testing**: Tests use mock processors (registered via the trait) to avoid system clipboard dependency. `ContextManagerService` is used directly since it's in-memory. `ClipboardService` is passed but unused by mock processors.
+
+### AiService specifics
+
+Multi-provider LLM service. Lives in `ai/` subdirectory with one file per provider. Uses `reqwest` for HTTP (not provider-specific SDKs) so a single dependency serves all providers.
+
+**Provider trait** (`provider.rs`): `AiProvider` defines `complete(CompletionRequest) -> Result<String>` and `complete_stream(CompletionRequest) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk>>>>>`. Providers are framework-independent — no Tauri imports.
+
+**Provider registry**: `AiService::new(models)` iterates `ModelConfig` entries, matches on the `Provider` enum, and creates the appropriate provider. Models with missing API keys or unsupported providers are tracked in `unavailable_models` (graceful degradation — the app still starts).
+
+**Adding a new provider**:
+1. Create `services/ai/<provider>.rs` implementing `AiProvider`.
+2. Add a match arm in `AiService::new()` for the new `Provider` variant.
+3. Add the variant to `Provider` enum in `models/settings.rs` and `types/index.ts`.
+
+**Streaming architecture**: The `complete_stream` trait method returns an owned `Stream`. The Tauri command layer (`commands/ai.rs`) bridges this to a `tauri::ipc::Channel<StreamEvent>`. The `Mutex<AppState>` lock is released before stream iteration to avoid holding it for the duration of the HTTP response.
+
+**SSE parser** (`sse.rs`): Converts a `reqwest::Response` byte stream into parsed `data:` line payloads. Handles line buffering, comment skipping, and `[DONE]` termination. Provider-agnostic — usable by any SSE-based provider.
+
+**Error variants**: `ModelNotFound`, `ModelUnavailable`, `Authentication`, `Connection`, `RateLimit`, `ApiStatus { status, message }`, `Stream`, `Request`.
+
+**OpenAiProvider** (`openai.rs`): Sends requests to `{base_url}/chat/completions`. Default base URL: `https://api.openai.com/v1`. Supports any OpenAI-compatible endpoint via the `base_url` config field. Model parameters (temperature, max_tokens, etc.) are merged into the request body when present.
 
 ### Adding a new service
 

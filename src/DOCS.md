@@ -22,11 +22,17 @@ src/
 │   │   ├── settings.svelte.ts  # App configuration
 │   │   └── notifications.svelte.ts
 │   ├── services/               # Tauri IPC wrappers
-│   │   ├── api.ts              # invoke() wrapper with typed commands
-│   │   ├── clipboard.ts        # Clipboard read/write via Tauri
+│   │   ├── ai.ts               # AI completions (sync + streaming via Channel)
+│   │   ├── settings.ts         # Settings CRUD
+│   │   ├── context.ts          # Context items CRUD
 │   │   └── events.ts           # Tauri event listeners
 │   ├── types/                  # TypeScript type definitions
-│   │   └── index.ts            # Mirrors Rust serializable types
+│   │   ├── index.ts            # Re-exports all type modules + Settings, ModelConfig, etc.
+│   │   ├── ai.ts               # StreamEvent, ProcessedMessage, ContentPart
+│   │   ├── menu.ts             # MenuItem, MenuItemType
+│   │   ├── execution.ts        # ErrorCode
+│   │   ├── context.ts          # ContextItem
+│   │   └── history.ts          # HistoryEntry, ConversationHistoryData
 │   └── utils/                  # Helpers
 │       ├── markdown.ts         # Markdown rendering
 │       └── theme.ts            # Colors, spacing, styling tokens
@@ -65,6 +71,12 @@ Store files use `.svelte.ts` extension to enable rune syntax outside components.
 - The Rust structs use default serde field names (snake_case), so TypeScript types also use snake_case.
 - When adding a new Rust command/struct, update types here too.
 - The `$lib` alias resolves to `src/lib/` (configured in `vite.config.ts` and `tsconfig.json`).
+
+### Services (AI)
+
+- `lib/services/ai.ts` — `complete()` for one-shot completions, `completeStream()` for streaming.
+- Streaming uses Tauri 2 `Channel` from `@tauri-apps/api/core` — not global event listeners.
+- `completeStream()` accepts a callbacks object (`onChunk`, `onDone`, `onError`). The Channel dispatches `StreamEvent` messages by their `event` tag.
 
 ### Services (Settings)
 
