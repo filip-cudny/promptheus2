@@ -1,14 +1,17 @@
 <script lang="ts">
   import type { ContextItem } from "$lib/types/context";
   import { clearContext, getContextText } from "$lib/services/context";
+  import { Copy, Trash2, Check, ChevronDown, ChevronRight, FileText, Image } from "lucide-svelte";
 
   let { items }: { items: ContextItem[] } = $props();
 
   let expanded = $state(true);
+  let copyConfirm = $state(false);
+  let clearConfirm = $state(false);
 
   function truncateText(text: string, maxLength = 50): string {
     if (text.length <= maxLength) return text;
-    return text.slice(0, maxLength) + "…";
+    return text.slice(0, maxLength) + "\u2026";
   }
 
   function formatMediaType(mediaType: string): string {
@@ -16,18 +19,26 @@
     return (parts[1] ?? parts[0]).toUpperCase();
   }
 
+  function showConfirm(setter: (v: boolean) => void) {
+    setter(true);
+    setTimeout(() => setter(false), 1200);
+  }
+
   async function handleCopy() {
     const text = await getContextText();
     if (text) {
       await navigator.clipboard.writeText(text);
+      showConfirm((v) => (copyConfirm = v));
     }
   }
 
   async function handleClear() {
     await clearContext();
+    showConfirm((v) => (clearConfirm = v));
   }
 
   let hasTextItems = $derived(items.some((i) => i.item_type === "text"));
+  let isEmpty = $derived(items.length === 0);
 </script>
 
 <div class="context-section">
@@ -39,44 +50,68 @@
     onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") expanded = !expanded; }}
   >
     <span class="header-label">
-      <span class="toggle">{expanded ? "▾" : "▸"}</span>
+      <span class="toggle">
+        {#if expanded}
+          <ChevronDown size={12} />
+        {:else}
+          <ChevronRight size={12} />
+        {/if}
+      </span>
       Context
-      <span class="badge">{items.length}</span>
-    </span>
-    <span class="header-actions">
-      {#if hasTextItems}
-        <button
-          class="action-btn"
-          onclick={(e) => { e.stopPropagation(); handleCopy(); }}
-          title="Copy context text"
-        >
-          Copy
-        </button>
+      {#if !isEmpty}
+        <span class="badge">{items.length}</span>
       {/if}
-      <button
-        class="action-btn action-btn-clear"
-        onclick={(e) => { e.stopPropagation(); handleClear(); }}
-        title="Clear all context"
-      >
-        Clear
-      </button>
     </span>
+    {#if !isEmpty}
+      <span class="header-actions">
+        {#if hasTextItems}
+          <button
+            class="action-btn"
+            onclick={(e) => { e.stopPropagation(); handleCopy(); }}
+            title="Copy context text"
+          >
+            {#if copyConfirm}
+              <Check size={12} />
+            {:else}
+              <Copy size={12} />
+            {/if}
+          </button>
+        {/if}
+        <button
+          class="action-btn action-btn-clear"
+          onclick={(e) => { e.stopPropagation(); handleClear(); }}
+          title="Clear all context"
+        >
+          {#if clearConfirm}
+            <Check size={12} />
+          {:else}
+            <Trash2 size={12} />
+          {/if}
+        </button>
+      </span>
+    {/if}
   </div>
 
   {#if expanded}
-    <div class="chips">
-      {#each items as item}
-        {#if item.item_type === "text"}
-          <span class="chip chip-text" title={item.content}>
-            {truncateText(item.content)}
-          </span>
-        {:else if item.item_type === "image"}
-          <span class="chip chip-image">
-            🖼 {formatMediaType(item.media_type)}
-          </span>
-        {/if}
-      {/each}
-    </div>
+    {#if isEmpty}
+      <div class="empty-hint">No context set</div>
+    {:else}
+      <div class="chips">
+        {#each items as item}
+          {#if item.item_type === "text"}
+            <span class="chip chip-text" title={item.content}>
+              <FileText size={12} />
+              {truncateText(item.content)}
+            </span>
+          {:else if item.item_type === "image"}
+            <span class="chip chip-image">
+              <Image size={12} />
+              {formatMediaType(item.media_type)}
+            </span>
+          {/if}
+        {/each}
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -113,8 +148,9 @@
   }
 
   .toggle {
-    font-size: 10px;
-    width: 10px;
+    display: flex;
+    align-items: center;
+    width: 12px;
   }
 
   .badge {
@@ -131,12 +167,14 @@
   }
 
   .action-btn {
-    padding: 1px 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 4px;
     background: transparent;
     color: rgba(255, 255, 255, 0.5);
-    font-size: 10px;
     cursor: pointer;
   }
 
@@ -148,6 +186,13 @@
   .action-btn-clear:hover {
     border-color: rgba(255, 100, 100, 0.4);
     color: rgba(255, 100, 100, 0.8);
+  }
+
+  .empty-hint {
+    padding: 4px 12px 6px 30px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.25);
+    font-style: italic;
   }
 
   .chips {

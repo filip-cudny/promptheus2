@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { error } from "@tauri-apps/plugin-log";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { MenuItem } from "$lib/types/menu";
@@ -9,6 +10,7 @@ let _visible = $state(false);
 let numberBuffer = "";
 let numberTimer: ReturnType<typeof setTimeout> | null = null;
 let unlisten: (() => void) | null = null;
+let unlistenContextChanged: (() => void) | null = null;
 
 const NUMBER_DEBOUNCE_MS = 300;
 
@@ -115,10 +117,23 @@ function handleNumberInput(digit: string) {
   }, NUMBER_DEBOUNCE_MS);
 }
 
+async function refreshItems() {
+  if (!_visible) return;
+  try {
+    const fetched = await invoke<MenuItem[]>("get_context_menu_items");
+    _items = fetched;
+  } catch (e) {
+    error("Failed to refresh context menu: " + e);
+  }
+}
+
 async function init() {
   const win = getCurrentWebviewWindow();
   unlisten = await win.listen("show-context-menu", () => {
     openMenu();
+  });
+  unlistenContextChanged = await listen("context-changed", () => {
+    refreshItems();
   });
 }
 
@@ -126,6 +141,10 @@ function destroy() {
   if (unlisten) {
     unlisten();
     unlisten = null;
+  }
+  if (unlistenContextChanged) {
+    unlistenContextChanged();
+    unlistenContextChanged = null;
   }
 }
 

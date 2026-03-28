@@ -286,7 +286,7 @@ mod tests {
         let mut coordinator = MenuCoordinator::new();
 
         coordinator.add_provider(Box::new(TestProvider::new(
-            "ContextMenuProvider",
+            "LastInteractionMenuProvider",
             vec![],
         )));
         coordinator.add_provider(Box::new(TestProvider::new(
@@ -297,10 +297,10 @@ mod tests {
         let config = make_config_service();
         let items = coordinator.get_menu_items(&config);
 
-        let has_context = items
+        let has_last_interaction = items
             .iter()
-            .any(|i| i.section_id.as_deref() == Some("ContextMenuProvider"));
-        assert!(!has_context, "Empty provider section should be skipped");
+            .any(|i| i.section_id.as_deref() == Some("LastInteractionMenuProvider"));
+        assert!(!has_last_interaction, "Empty provider section should be skipped");
     }
 
     #[test]
@@ -391,7 +391,7 @@ mod tests {
         let mut coordinator = MenuCoordinator::new();
 
         coordinator.add_provider(Box::new(TestProvider::new(
-            "ContextMenuProvider",
+            "LastInteractionMenuProvider",
             vec![],
         )));
 

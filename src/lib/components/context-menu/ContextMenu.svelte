@@ -25,9 +25,9 @@
   };
 
   function extractContextItems(item: MenuItem): ContextItem[] | null {
-    if (item.item_type !== "context" || !item.data) return null;
-    const data = item.data as { items?: ContextItem[] };
-    return data.items && data.items.length > 0 ? data.items : null;
+    if (item.item_type !== "context") return null;
+    const data = (item.data ?? {}) as { items?: ContextItem[] };
+    return data.items ?? [];
   }
 
   let sections = $derived.by(() => {

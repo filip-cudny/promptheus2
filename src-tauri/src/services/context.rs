@@ -22,10 +22,6 @@ impl MenuItemProvider for ContextMenuProvider {
     }
 
     fn get_menu_items(&self) -> Vec<MenuItem> {
-        if self.items.is_empty() {
-            return Vec::new();
-        }
-
         vec![MenuItem {
             id: "context_section".to_string(),
             label: "Context".to_string(),
@@ -313,9 +309,15 @@ mod tests {
     }
 
     #[test]
-    fn provider_returns_empty_when_no_items() {
+    fn provider_returns_context_section_when_no_items() {
         let provider = ContextMenuProvider::new();
-        assert!(provider.get_menu_items().is_empty());
+        let items = provider.get_menu_items();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].item_type, MenuItemType::Context);
+
+        let data = items[0].data.as_ref().unwrap();
+        let context_items = data["items"].as_array().unwrap();
+        assert!(context_items.is_empty());
     }
 
     #[test]
