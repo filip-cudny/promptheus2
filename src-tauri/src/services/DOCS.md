@@ -10,6 +10,7 @@ services/
 ├── clipboard.rs         # ClipboardService — text and image clipboard operations
 ├── config.rs            # ConfigService — settings load/validate/save/mutate
 ├── menu_coordinator.rs  # MenuCoordinator — aggregates menu providers into ordered sections
+├── context.rs           # ContextManagerService — ordered context items (text/image)
 ├── notification.rs      # NotificationService — event-gated Tauri event emission
 └── DOCS.md
 ```
@@ -63,6 +64,24 @@ Uses the `arboard` crate for cross-platform clipboard access (text and images). 
 ### Testing pattern
 
 Service tests use `tempfile::TempDir` to create isolated config directories. A `setup_test_dir()` helper copies the example settings into a temp dir. Tests that touch env vars should set and remove them within the test.
+
+### ContextManagerService specifics
+
+Manages an ordered list of `ContextItem` values (text and/or images) in memory. Session-only — no persistence to disk.
+
+**No internal locking**: the struct is a plain `Vec<ContextItem>`. Thread safety is provided by the `Mutex<AppState>` wrapper in the command layer, matching the project-wide pattern.
+
+**No error enum**: all operations are infallible in-memory list manipulation.
+
+**Constructor**: `ContextManagerService::new()` — returns an empty service.
+
+**Text methods**: `set_context` (replace all), `append_context`, `get_context` (concatenates non-empty text with `\n`, returns `None` if no text), `has_context` (true if any Text items), `get_context_or_default`.
+
+**Image methods**: `set_context_image` (replace all), `append_context_image`, `has_images`.
+
+**General methods**: `clear`, `get_items` (cloned), `remove_item(index) -> bool`, `item_count`, `has_text_or_images`, `is_empty`.
+
+**Key edge case**: `has_context()` checks for Text variant existence; `get_context()` additionally filters out empty-content items. Image-only context returns `None` from `get_context()`.
 
 ### NotificationService specifics
 

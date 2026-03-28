@@ -8,7 +8,9 @@ use crate::models::menu::MenuItem;
 pub async fn get_context_menu_items(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<Vec<MenuItem>, String> {
-    let state = state.lock().await;
+    let mut state = state.lock().await;
+    let context_items = state.context.get_items();
+    state.menu_coordinator.update_context_items(context_items);
     Ok(state.menu_coordinator.get_menu_items(&state.config))
 }
 

@@ -6,6 +6,7 @@ use crate::models::settings::{
 };
 use crate::services::clipboard::ClipboardService;
 use crate::services::config::ConfigService;
+use crate::services::context::ContextManagerService;
 use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::notification::NotificationService;
 
@@ -14,6 +15,7 @@ pub struct AppState {
     pub clipboard: ClipboardService,
     pub notifications: NotificationService,
     pub menu_coordinator: MenuCoordinator,
+    pub context: ContextManagerService,
 }
 
 fn emit_changed(app: &AppHandle) -> Result<(), String> {

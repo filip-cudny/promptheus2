@@ -9,6 +9,7 @@ mod traits;
 use commands::settings::AppState;
 use services::clipboard::ClipboardService;
 use services::config::ConfigService;
+use services::context::{ContextManagerService, ContextMenuProvider};
 use services::menu_coordinator::MenuCoordinator;
 use services::notification::NotificationService;
 
@@ -87,12 +88,15 @@ pub fn run() {
             let clipboard_service = ClipboardService::new()
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             let notification_service = NotificationService::new(app.handle().clone());
-            let menu_coordinator = MenuCoordinator::new();
+            let mut menu_coordinator = MenuCoordinator::new();
+            menu_coordinator.add_provider(Box::new(ContextMenuProvider::new()));
+            let context_service = ContextManagerService::new();
             app.manage(Mutex::new(AppState {
                 config: config_service,
                 clipboard: clipboard_service,
                 notifications: notification_service,
                 menu_coordinator,
+                context: context_service,
             }));
             Ok(())
         })
@@ -116,6 +120,18 @@ pub fn run() {
             commands::settings::update_keymaps,
             commands::settings::update_menu_section_order,
             commands::settings::reload_settings,
+            commands::context::get_context_items,
+            commands::context::get_context_text,
+            commands::context::has_context,
+            commands::context::has_context_images,
+            commands::context::set_context,
+            commands::context::append_context,
+            commands::context::clear_context,
+            commands::context::remove_context_item,
+            commands::context::set_context_image,
+            commands::context::append_context_image,
+            commands::context::set_context_from_clipboard,
+            commands::context::append_context_from_clipboard,
             commands::menu::get_context_menu_items,
             commands::menu::execute_menu_item,
             commands::menu::refresh_menu_providers,

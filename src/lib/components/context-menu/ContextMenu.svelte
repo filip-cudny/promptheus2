@@ -2,6 +2,8 @@
   import { onMount, onDestroy } from "svelte";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import type { MenuItem } from "$lib/types/menu";
+  import type { ContextItem } from "$lib/types/context";
+  import ContextSection from "./ContextSection.svelte";
   import {
     getItems,
     getSelectedIndex,
@@ -21,6 +23,12 @@
     startIndex: number;
     items: { item: MenuItem; globalIndex: number }[];
   };
+
+  function extractContextItems(item: MenuItem): ContextItem[] | null {
+    if (item.item_type !== "context" || !item.data) return null;
+    const data = item.data as { items?: ContextItem[] };
+    return data.items && data.items.length > 0 ? data.items : null;
+  }
 
   let sections = $derived.by(() => {
     const allItems = getItems();
@@ -105,21 +113,26 @@
         <div class="separator"></div>
       {/if}
       {#each section.items as { item, globalIndex }}
-        <button
-          class="menu-item"
-          class:selected={globalIndex === currentSelectedIndex}
-          class:disabled={!item.enabled}
-          role="menuitem"
-          aria-disabled={!item.enabled}
-          tabindex={-1}
-          onclick={(e) => handleItemClick(globalIndex, e)}
-          onmouseenter={() => { if (item.enabled) setSelectedIndex(globalIndex); }}
-        >
-          {#if item.icon}
-            <span class="item-icon">{item.icon}</span>
-          {/if}
-          <span class="item-label">{item.label}</span>
-        </button>
+        {@const contextItems = extractContextItems(item)}
+        {#if contextItems}
+          <ContextSection items={contextItems} />
+        {:else}
+          <button
+            class="menu-item"
+            class:selected={globalIndex === currentSelectedIndex}
+            class:disabled={!item.enabled}
+            role="menuitem"
+            aria-disabled={!item.enabled}
+            tabindex={-1}
+            onclick={(e) => handleItemClick(globalIndex, e)}
+            onmouseenter={() => { if (item.enabled) setSelectedIndex(globalIndex); }}
+          >
+            {#if item.icon}
+              <span class="item-icon">{item.icon}</span>
+            {/if}
+            <span class="item-label">{item.label}</span>
+          </button>
+        {/if}
       {/each}
     {/each}
   {/if}

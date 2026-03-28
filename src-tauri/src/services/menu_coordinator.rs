@@ -1,5 +1,7 @@
+use crate::models::context::ContextItem;
 use crate::models::menu::{MenuItem, MenuItemType};
 use crate::services::config::ConfigService;
+use crate::services::context::ContextMenuProvider;
 use crate::traits::MenuItemProvider;
 
 const DYNAMIC_PROVIDERS: &[&str] = &[
@@ -55,6 +57,17 @@ impl MenuCoordinator {
         }
 
         all_items
+    }
+
+    pub fn update_context_items(&mut self, items: Vec<ContextItem>) {
+        for provider in &mut self.providers {
+            if provider.provider_name() == "ContextMenuProvider" {
+                if let Some(ctx) = provider.as_any_mut().downcast_mut::<ContextMenuProvider>() {
+                    ctx.update_items(items);
+                    return;
+                }
+            }
+        }
     }
 
     pub fn refresh_all(&mut self) {
@@ -174,6 +187,10 @@ mod tests {
         }
 
         fn refresh(&mut self) {}
+
+        fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+            self
+        }
     }
 
     fn make_item(id: &str, label: &str, item_type: MenuItemType) -> MenuItem {

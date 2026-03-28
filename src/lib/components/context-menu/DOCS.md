@@ -38,6 +38,24 @@ Defined in `src-tauri/tauri.conf.json` under `app.windows` with label `context-m
 | Escape | Close menu |
 | 1-9 | Quick-select item by position (multi-digit debounced at 300ms) |
 
-## Extending with rich item types
+## Rich item types
 
-The current shell renders all items as simple label + icon buttons. Future feature tasks (context, prompts, speech, settings) will add specialized renderers by checking `item.item_type` and `item.data` to render widgets (chips, toggles, etc.) for their specific section types.
+The item rendering loop checks `item.item_type` and delegates to specialized components:
+
+### ContextSection (`ContextSection.svelte`)
+
+Renders when `item.item_type === "context"`. Extracts `ContextItem[]` from `item.data.items`.
+
+| Element | Description |
+|---------|-------------|
+| Section header | Collapsible, shows "Context" label + item count badge |
+| Text chip | Truncated text preview (first 50 chars) |
+| Image chip | Shows format label (PNG/JPEG/etc.) derived from media type |
+| Copy button | Copies concatenated text context to clipboard (hidden when no text items) |
+| Clear button | Calls `clearContext()` to remove all context items |
+
+The context store (`$lib/stores/context.svelte.ts`) is initialized in `ContextMenuApp.svelte` so the section updates reactively via the `"context-changed"` Tauri event.
+
+### Other types
+
+Prompts, speech, settings, and other item types are rendered as simple label + icon buttons. Future tasks will add specialized renderers as needed.
