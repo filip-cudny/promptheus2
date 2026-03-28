@@ -25,6 +25,21 @@ pub struct ProcessedMessage {
     pub content: MessageContent,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConversationMessage {
+    pub role: String,
+    pub content: MessageContent,
+}
+
+impl From<ConversationMessage> for ProcessedMessage {
+    fn from(msg: ConversationMessage) -> Self {
+        Self {
+            role: msg.role,
+            content: msg.content,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

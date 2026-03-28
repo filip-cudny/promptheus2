@@ -1,5 +1,5 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
-import type { StreamEvent } from "$lib/types/ai";
+import type { StreamEvent, ProcessedMessage } from "$lib/types/ai";
 
 export interface ExecutionCallbacks {
   onChunk: (delta: string, accumulated: string) => void;
@@ -29,6 +29,40 @@ export async function executePrompt(
   return invoke("execute_prompt", {
     promptId,
     inputOverride: inputOverride ?? null,
+    onEvent,
+  });
+}
+
+export async function executeConversationTurn(
+  messages: ProcessedMessage[],
+  callbacks: ExecutionCallbacks,
+  options?: {
+    modelId?: string;
+    promptId?: string;
+    promptName?: string;
+    skipClipboardCopy?: boolean;
+  },
+): Promise<void> {
+  const onEvent = new Channel<StreamEvent>();
+  onEvent.onmessage = (event) => {
+    switch (event.event) {
+      case "chunk":
+        callbacks.onChunk(event.data.delta, event.data.accumulated);
+        break;
+      case "done":
+        callbacks.onDone(event.data.full_text);
+        break;
+      case "error":
+        callbacks.onError(event.data.message);
+        break;
+    }
+  };
+  return invoke("execute_conversation_turn", {
+    messages,
+    modelId: options?.modelId ?? null,
+    promptId: options?.promptId ?? null,
+    promptName: options?.promptName ?? null,
+    skipClipboardCopy: options?.skipClipboardCopy ?? false,
     onEvent,
   });
 }

@@ -17,3 +17,8 @@ export interface ProcessedMessage {
   role: string;
   content: MessageContent;
 }
+
+export interface ConversationMessage {
+  role: string;
+  content: MessageContent;
+}

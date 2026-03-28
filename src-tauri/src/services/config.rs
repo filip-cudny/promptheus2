@@ -229,8 +229,9 @@ impl ConfigService {
 pub fn load_env(config_dir: &Path) {
     let env_path = config_dir.join(".env");
     if env_path.exists() {
-        let _ = dotenvy::from_path(&env_path);
+        let _ = dotenvy::from_path_override(&env_path);
     }
+    let _ = dotenvy::dotenv_override();
 }
 
 pub fn validate(settings: &Settings) -> Result<(), ConfigError> {

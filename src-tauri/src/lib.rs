@@ -174,7 +174,9 @@ pub fn run() {
             commands::history::clear_history,
             commands::history::copy_history_content,
             commands::prompt_execution::execute_prompt,
+            commands::prompt_execution::execute_conversation_turn,
             commands::prompt_execution::get_execution_state,
+            commands::prompt_dialog::open_prompt_dialog,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

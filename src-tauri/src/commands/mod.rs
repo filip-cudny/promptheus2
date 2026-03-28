@@ -4,4 +4,5 @@ pub mod context;
 pub mod history;
 pub mod menu;
 pub mod prompt_execution;
+pub mod prompt_dialog;
 pub mod settings;

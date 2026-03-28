@@ -9,6 +9,7 @@ use tokio_stream::StreamExt;
 use crate::commands::settings::AppState;
 use crate::models::ai::StreamEvent;
 use crate::models::history::HistoryEntryType;
+use crate::models::message::ConversationMessage;
 use crate::services::notification::NotificationLevel;
 use crate::services::prompt_execution::PromptExecutionService;
 
@@ -225,4 +226,183 @@ pub async fn get_execution_state(
             .current_execution_id()
             .map(|s| s.to_string()),
     })
+}
+
+#[tauri::command]
+pub async fn execute_conversation_turn(
+    app: AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    messages: Vec<ConversationMessage>,
+    model_id: Option<String>,
+    prompt_id: Option<String>,
+    prompt_name: Option<String>,
+    skip_clipboard_copy: bool,
+    on_event: Channel<StreamEvent>,
+) -> Result<(), String> {
+    let start_time = Instant::now();
+
+    let (execution_id, resolved_model_id, model_display_name, processed_messages) = {
+        let mut state = state.lock().await;
+
+        let execution_id = state
+            .prompt_execution
+            .start_execution()
+            .map_err(|e| e.to_string())?;
+
+        let resolved_model_id =
+            PromptExecutionService::resolve_model(&state.config, model_id.as_deref())
+                .map_err(|e| {
+                    state.prompt_execution.finish_execution();
+                    e.to_string()
+                })?;
+
+        let model_display_name = state
+            .config
+            .settings()
+            .models
+            .iter()
+            .find(|m| m.id == resolved_model_id)
+            .map(|m| m.display_name.clone())
+            .unwrap_or_else(|| resolved_model_id.clone());
+
+        let processed_messages = messages.into_iter().map(Into::into).collect();
+
+        (execution_id, resolved_model_id, model_display_name, processed_messages)
+    };
+
+    let _ = app.emit(
+        "execution-started",
+        ExecutionStartedPayload {
+            execution_id: execution_id.clone(),
+        },
+    );
+
+    let stream_result = {
+        let stream = {
+            let state = state.lock().await;
+            state
+                .ai
+                .complete_stream(&resolved_model_id, processed_messages)
+                .await
+                .map_err(|e| e.to_string())
+        };
+
+        match stream {
+            Ok(mut stream) => {
+                let mut full_text = String::new();
+                let mut stream_error: Option<String> = None;
+
+                while let Some(result) = stream.next().await {
+                    match result {
+                        Ok(chunk) => {
+                            full_text.clone_from(&chunk.accumulated);
+                            if on_event
+                                .send(StreamEvent::Chunk {
+                                    delta: chunk.delta,
+                                    accumulated: chunk.accumulated,
+                                })
+                                .is_err()
+                            {
+                                break;
+                            }
+                        }
+                        Err(e) => {
+                            let msg = e.to_string();
+                            let _ = on_event.send(StreamEvent::Error {
+                                message: msg.clone(),
+                            });
+                            stream_error = Some(msg);
+                            break;
+                        }
+                    }
+                }
+
+                match stream_error {
+                    Some(err) => Err(err),
+                    None => {
+                        let _ = on_event.send(StreamEvent::Done {
+                            full_text: full_text.clone(),
+                        });
+                        Ok(full_text)
+                    }
+                }
+            }
+            Err(e) => Err(e),
+        }
+    };
+
+    let mut state = state.lock().await;
+
+    match stream_result {
+        Ok(full_text) => {
+            if !skip_clipboard_copy {
+                let _ = state.clipboard.set_text(&full_text);
+            }
+
+            let elapsed = start_time.elapsed();
+
+            let input_summary = "conversation turn".to_string();
+            state.history.add_entry(
+                input_summary,
+                HistoryEntryType::Text,
+                Some(full_text),
+                prompt_id,
+                true,
+                None,
+                false,
+                prompt_name.clone(),
+            );
+
+            let clipboard_note = if skip_clipboard_copy {
+                ""
+            } else {
+                " · copied to clipboard"
+            };
+            let _ = state.notifications.notify(
+                "prompt_execution_success",
+                NotificationLevel::Success,
+                "Prompt executed",
+                Some(format!(
+                    "{model_display_name} · {:.1}s{clipboard_note}",
+                    elapsed.as_secs_f64()
+                )),
+                &state.config.settings().notifications,
+            );
+
+            state.prompt_execution.finish_execution();
+
+            let _ = app.emit(
+                "execution-completed",
+                ExecutionCompletedPayload {
+                    execution_id,
+                    success: true,
+                    error: None,
+                },
+            );
+
+            Ok(())
+        }
+        Err(error) => {
+            let _ = state.notifications.notify(
+                "prompt_execution_error",
+                NotificationLevel::Error,
+                "Execution failed",
+                Some(error.as_str()),
+                &state.config.settings().notifications,
+            );
+
+            state.prompt_execution.finish_execution();
+
+            let _ = app.emit(
+                "execution-completed",
+                ExecutionCompletedPayload {
+                    execution_id,
+                    success: false,
+                    error: Some(error.clone()),
+                },
+            );
+
+            Err(error)
+        }
+    }
 }

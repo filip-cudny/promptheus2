@@ -23,6 +23,7 @@ export default defineConfig({
       input: {
         main: path.resolve("./index.html"),
         "context-menu": path.resolve("./context-menu.html"),
+        "prompt-dialog": path.resolve("./prompt-dialog.html"),
       },
     },
   },
