@@ -25,6 +25,7 @@ src/
 │   │   ├── ai.ts               # AI completions (sync + streaming via Channel)
 │   │   ├── settings.ts         # Settings CRUD
 │   │   ├── context.ts          # Context items CRUD
+│   │   ├── history.ts          # History entries CRUD
 │   │   └── events.ts           # Tauri event listeners
 │   ├── types/                  # TypeScript type definitions
 │   │   ├── index.ts            # Re-exports all type modules + Settings, ModelConfig, etc.
@@ -32,7 +33,7 @@ src/
 │   │   ├── menu.ts             # MenuItem, MenuItemType
 │   │   ├── execution.ts        # ErrorCode
 │   │   ├── context.ts          # ContextItem
-│   │   └── history.ts          # HistoryEntry, ConversationHistoryData
+│   │   └── history.ts          # HistoryEntry, ConversationHistoryData, LastInteractionData
 │   └── utils/                  # Helpers
 │       ├── markdown.ts         # Markdown rendering
 │       └── theme.ts            # Colors, spacing, styling tokens
@@ -78,8 +79,13 @@ Store files use `.svelte.ts` extension to enable rune syntax outside components.
 - Streaming uses Tauri 2 `Channel` from `@tauri-apps/api/core` — not global event listeners.
 - `completeStream()` accepts a callbacks object (`onChunk`, `onDone`, `onError`). The Channel dispatches `StreamEvent` messages by their `event` tag.
 
+### Services (History)
+
+- `lib/services/history.ts` — typed wrappers for history Tauri commands (`getHistory`, `addHistoryEntry`, `addConversationEntry`, `updateConversationEntry`, `getLastInteraction`, `clearHistory`, `copyHistoryContent`).
+- `lib/stores/history.svelte.ts` — reactive store via `getHistoryStore()`. Listens to `"history-changed"` events, exposes `entries`, `count`, `isEmpty`, `lastTextEntry`, `lastSpeechEntry`. Call `init()` on mount, `destroy()` on teardown.
+
 ### Services (Settings)
 
 - `lib/services/settings.ts` — typed wrappers for all settings Tauri commands.
-- `lib/services/events.ts` — Tauri event listener helpers (e.g., `onSettingsChanged`).
+- `lib/services/events.ts` — Tauri event listener helpers (e.g., `onSettingsChanged`, `onHistoryChanged`).
 - Invoke parameter names must match Rust command parameter names exactly (snake_case).

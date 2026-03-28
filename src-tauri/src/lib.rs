@@ -3,6 +3,7 @@ use tokio::sync::Mutex;
 
 mod commands;
 mod models;
+mod providers;
 mod services;
 mod traits;
 
@@ -16,6 +17,7 @@ use services::image_storage::ImageStorage;
 use services::menu_coordinator::MenuCoordinator;
 use services::notification::NotificationService;
 use services::placeholder::PlaceholderService;
+use providers::LastInteractionMenuProvider;
 
 fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -94,6 +96,7 @@ pub fn run() {
             let notification_service = NotificationService::new(app.handle().clone());
             let mut menu_coordinator = MenuCoordinator::new();
             menu_coordinator.add_provider(Box::new(ContextMenuProvider::new()));
+            menu_coordinator.add_provider(Box::new(LastInteractionMenuProvider::new()));
             let ai_service = AiService::new(&config_service.settings().models);
             let context_service = ContextManagerService::new();
             let placeholder_service = PlaceholderService::new();

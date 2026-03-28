@@ -31,6 +31,11 @@ export interface ConversationHistoryData {
   current_path: string[];
 }
 
+export interface LastInteractionData {
+  last_text: HistoryEntry | null;
+  last_speech: HistoryEntry | null;
+}
+
 export interface HistoryEntry {
   id: string;
   timestamp: string;
