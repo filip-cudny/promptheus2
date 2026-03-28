@@ -100,7 +100,7 @@ pub fn run() {
             let ai_service = AiService::new(&config_service.settings().models);
             let context_service = ContextManagerService::new();
             let placeholder_service = PlaceholderService::new();
-            let history_service = HistoryService::new(100);
+            let history_service = HistoryService::new(1000);
 
             let app_data_dir = app.path().app_data_dir()?;
             let image_storage = ImageStorage::new(&app_data_dir);
