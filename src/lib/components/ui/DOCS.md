@@ -31,7 +31,7 @@ Render dynamic components using `$derived` + direct tag syntax (Svelte 5 runes m
 <ActiveIcon size={16} />
 ```
 
-`lucide-svelte` (v1.0.1) exports components that use Svelte 4 class syntax internally for broad compatibility. This works fine at runtime in Svelte 5, but their types don't match Svelte 5's `Component` type. Use `any` for prop types that accept Lucide icons dynamically.
+For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconProps>>` (aliased as `LucideIcon` in `ActionIconButton`). This is the proper Svelte 5 way to type class-based components passed as props. Do not use `any` or `Component<>` — use `ComponentType<>` which handles both legacy and modern components.
 
 ### ActionIconButton
 

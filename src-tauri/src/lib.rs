@@ -179,20 +179,26 @@ pub fn run() {
             }
 
             let bindings = services::hotkeys::get_active_bindings(config_service.settings());
-            let mut action_map = HashMap::new();
-            for (shortcut, action) in &bindings {
-                action_map.insert(shortcut.clone(), action.clone());
-            }
-            app.manage(ShortcutActionMap(RwLock::new(action_map)));
 
             #[cfg(desktop)]
             {
-                use tauri_plugin_global_shortcut::ShortcutState;
+                use tauri_plugin_global_shortcut::{Shortcut, ShortcutState};
 
+                let mut action_map = HashMap::new();
                 let mut builder = tauri_plugin_global_shortcut::Builder::new();
-                for (shortcut_str, _) in &bindings {
-                    builder = builder.with_shortcut(shortcut_str.as_str())?;
+                for (shortcut_str, action) in &bindings {
+                    match shortcut_str.parse::<Shortcut>() {
+                        Ok(shortcut) => {
+                            let canonical = shortcut.into_string();
+                            action_map.insert(canonical, action.clone());
+                            builder = builder.with_shortcut(shortcut_str.as_str())?;
+                        }
+                        Err(e) => {
+                            log::warn!("invalid shortcut {}: {}", shortcut_str, e);
+                        }
+                    }
                 }
+                app.manage(ShortcutActionMap(RwLock::new(action_map)));
 
                 app.handle().plugin(
                     builder

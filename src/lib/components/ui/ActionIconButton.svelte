@@ -1,8 +1,9 @@
 <script lang="ts">
+  import type { ComponentType, SvelteComponent } from "svelte";
+  import type { IconProps } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  type AnyComponent = any;
+  type LucideIcon = ComponentType<SvelteComponent<IconProps>>;
 
   let {
     icon,
@@ -12,8 +13,8 @@
     disabled = false,
     size = ICON_SIZE.md,
   }: {
-    icon: AnyComponent;
-    confirmIcon?: AnyComponent;
+    icon: LucideIcon;
+    confirmIcon?: LucideIcon;
     onclick: (e: MouseEvent) => void;
     title?: string;
     disabled?: boolean;
