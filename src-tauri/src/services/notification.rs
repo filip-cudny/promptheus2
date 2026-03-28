@@ -1,5 +1,5 @@
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 
 use crate::models::settings::NotificationEvents;
 
@@ -56,17 +56,13 @@ impl NotificationService {
         };
 
         log::debug!(
-            "emitting notification: event={event_name} level={:?} title={}",
+            "notification: event={event_name} level={:?} title={}",
             payload.level,
             payload.title
         );
 
-        self.handle
-            .emit("notification", &payload)
-            .map_err(|e| {
-                log::error!("failed to emit notification event: {e}");
-                NotificationError::EmitFailed(e.to_string())
-            })
+        crate::commands::notification::show_notification(&self.handle, payload);
+        Ok(())
     }
 }
 

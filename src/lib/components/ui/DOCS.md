@@ -6,7 +6,6 @@ Reusable UI primitives shared across features. See [src/DOCS.md](../../../DOCS.m
 
 ```
 ui/
-├── NotificationToast.svelte    # Global toast overlay (fixed position, bottom-right)
 ├── CollapsibleSection.svelte   # Expandable/collapsible content container
 ├── ImageChipBar.svelte         # Horizontal row of image thumbnails with delete
 └── MarkdownRenderer.svelte     # Renders markdown to HTML with syntax highlighting
@@ -40,9 +39,3 @@ ui/
 - When `isStreaming` is true, syntax highlighting is skipped for performance — plain escaped code is rendered instead, and highlighting applies when streaming ends.
 - Code copy: each code block gets a "Copy" button with a `data-copy-index` attribute. Click handler uses event delegation on the container div to copy the raw code block content to clipboard.
 
-### Toast component
-
-- `NotificationToast` is a global overlay mounted once in `App.svelte` — not instantiated per-notification.
-- Notifications are driven by the `notifications` store; the component iterates the reactive array with a keyed `{#each}`.
-- Removal is triggered by the store's auto-dismiss timer; `onoutroend` calls `remove()` as a cleanup safety net after the out-transition completes.
-- Visual config (icon colors, icons, opacity) is hardcoded as constants — will be wired to the settings store when available.

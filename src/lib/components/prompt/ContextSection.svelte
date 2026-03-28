@@ -17,16 +17,19 @@
   let disabled = $state(false);
   let saving = $state(false);
 
-  let contextText = $state(store.contextText);
-  let contextImages = $state<ConversationImage[]>([...store.contextImages]);
+  let localText = $state("");
+  let localImages = $state<ConversationImage[]>([]);
 
   $effect(() => {
-    store.updateContextText(contextText);
+    store.updateContextText(localText);
   });
 
   $effect(() => {
-    store.updateContextImages(contextImages);
+    store.updateContextImages(localImages);
   });
+
+  const params = new URLSearchParams(window.location.search);
+  const promptId = params.get("promptId") ?? "";
 
   onMount(async () => {
     try {
@@ -39,37 +42,34 @@
         disabled = !usesContext;
       }
     } catch {
-      // If we can't load settings, leave context enabled
+      // leave context enabled if settings unavailable
     }
 
     try {
       const items = await getContextItems();
       for (const item of items) {
         if (item.item_type === "text") {
-          contextText = item.content;
+          localText = item.content;
         } else if (item.item_type === "image") {
-          contextImages = [
-            ...contextImages,
+          localImages = [
+            ...localImages,
             { data: item.data, media_type: item.media_type },
           ];
         }
       }
     } catch {
-      // Context load failure is non-fatal
+      // non-fatal
     }
   });
-
-  const params = new URLSearchParams(window.location.search);
-  const promptId = params.get("promptId") ?? "";
 
   async function saveContext() {
     saving = true;
     try {
       await clearContext();
-      if (contextText.trim()) {
-        await setContext(contextText);
+      if (localText.trim()) {
+        await setContext(localText);
       }
-      for (const img of contextImages) {
+      for (const img of localImages) {
         await setContextImage(img.data, img.media_type);
       }
     } finally {
@@ -86,10 +86,10 @@
       </button>
     {/snippet}
     <div class="context-body">
-      <ImageChipBar bind:images={contextImages} readonly={disabled} />
+      <ImageChipBar bind:images={localImages} readonly={disabled} />
       <textarea
         class="context-textarea"
-        bind:value={contextText}
+        bind:value={localText}
         placeholder={disabled ? "This prompt doesn't use {{context}}" : "Enter context text…"}
         {disabled}
       ></textarea>

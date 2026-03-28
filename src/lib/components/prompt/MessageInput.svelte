@@ -14,15 +14,15 @@
   } = $props();
 
   let textarea: HTMLTextAreaElement | undefined = $state();
-  let inputText = $state(store.inputText);
-  let inputImages = $state<ConversationImage[]>([...store.inputImages]);
+  let localText = $state("");
+  let localImages = $state<ConversationImage[]>([]);
 
   $effect(() => {
-    store.updateInputText(inputText);
+    store.updateInputText(localText);
   });
 
   $effect(() => {
-    store.updateInputImages(inputImages);
+    store.updateInputImages(localImages);
   });
 
   onMount(() => {
@@ -73,8 +73,8 @@
           const result = reader.result as string;
           const base64 = result.split(",")[1];
           const mediaType = item.type;
-          inputImages = [
-            ...inputImages,
+          localImages = [
+            ...localImages,
             { data: base64, media_type: mediaType },
           ];
         };
@@ -86,11 +86,11 @@
 </script>
 
 <div class="message-input">
-  <ImageChipBar bind:images={inputImages} readonly={false} />
+  <ImageChipBar bind:images={localImages} readonly={false} />
   <textarea
     bind:this={textarea}
     class="input-textarea"
-    bind:value={inputText}
+    bind:value={localText}
     placeholder="Type a message… (Enter to send, Shift+Enter for newline, Ctrl+Enter to send & copy, Esc to close)"
     onkeydown={handleKeydown}
     onpaste={handlePaste}

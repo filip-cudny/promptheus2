@@ -19,8 +19,7 @@ src/
 │   │   ├── execution.svelte.ts # Execution state, streaming
 │   │   ├── history.svelte.ts   # History entries
 │   │   ├── context.svelte.ts   # Context items (text + images)
-│   │   ├── settings.svelte.ts  # App configuration
-│   │   └── notifications.svelte.ts
+│   │   └── settings.svelte.ts  # App configuration
 │   ├── services/               # Tauri IPC wrappers
 │   │   ├── ai.ts               # AI completions (sync + streaming via Channel)
 │   │   ├── settings.ts         # Settings CRUD

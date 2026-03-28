@@ -31,10 +31,10 @@
         "resizable": false,
         "decorations": false,
         "transparent": true,
+        "shadow": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,
-        "visible": false,
-        "focus": false
+        "visible": false
       },
       {
         "label": "context-menu",

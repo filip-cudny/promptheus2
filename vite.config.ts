@@ -24,7 +24,6 @@ export default defineConfig({
         main: path.resolve("./index.html"),
         "context-menu": path.resolve("./context-menu.html"),
         "prompt-dialog": path.resolve("./prompt-dialog.html"),
-        notification: path.resolve("./notification.html"),
       },
     },
   },
