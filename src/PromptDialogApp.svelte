@@ -123,9 +123,11 @@
     width: 28px;
     height: 28px;
     border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    background: rgba(255, 255, 255, 0.06);
-    color: #aaa;
+    border: none;
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(5px);
+    -webkit-backdrop-filter: blur(5px);
+    color: rgba(255, 255, 255, 0.35);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -134,8 +136,8 @@
   }
 
   .sidebar-toggle:hover {
-    color: #e0e0e0;
-    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.1);
     border-color: rgba(255, 255, 255, 0.25);
   }
 

@@ -182,10 +182,14 @@
 <style>
   .input-area {
     flex-shrink: 0;
-    margin: 0 16px 8px;
+    position: relative;
+    z-index: 10;
+    margin: -8px 16px 8px;
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.03);
+    background: rgba(30, 30, 30, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
 
   .input-field {

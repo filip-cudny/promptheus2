@@ -43,7 +43,10 @@
 
 <aside class="sidebar" class:open>
   <div class="sidebar-header">
-    <span class="sidebar-title">Conversations</span>
+    <button class="new-tab-btn" onclick={() => store.addTab()}>
+      <Plus size={ICON_SIZE.md} />
+      <span>New Conversation</span>
+    </button>
     <button class="close-btn" onclick={onClose}>
       <X size={ICON_SIZE.md} />
     </button>
@@ -70,13 +73,6 @@
       </div>
     {/each}
   </div>
-
-  <div class="sidebar-footer">
-    <button class="new-tab-btn" onclick={() => store.addTab()}>
-      <Plus size={ICON_SIZE.md} />
-      <span>New Conversation</span>
-    </button>
-  </div>
 </aside>
 
 <style>
@@ -93,7 +89,9 @@
     left: 0;
     bottom: 0;
     width: 240px;
-    background: #2a2a2a;
+    background: rgba(5, 5, 5, 0.3);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     border-right: 1px solid rgba(255, 255, 255, 0.15);
     z-index: 200;
     display: flex;
@@ -113,14 +111,6 @@
     justify-content: space-between;
     padding: 12px 12px 8px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .sidebar-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.5);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
   }
 
   .close-btn {
@@ -206,17 +196,12 @@
     color: #e0e0e0;
   }
 
-  .sidebar-footer {
-    padding: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
   .new-tab-btn {
     display: flex;
     align-items: center;
     gap: 8px;
-    width: 100%;
-    padding: 8px 10px;
+    flex: 1;
+    padding: 6px 10px;
     border-radius: 6px;
     border: none;
     background: transparent;
