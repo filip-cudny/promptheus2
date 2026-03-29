@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
   import type { ConversationImage } from "$lib/types/conversation";
 
   let {
@@ -9,8 +10,6 @@
     readonly: boolean;
   } = $props();
 
-  let previewIndex = $state<number | null>(null);
-
   function removeImage(index: number) {
     images = images.filter((_, i) => i !== index);
   }
@@ -19,8 +18,11 @@
     return `data:${image.media_type};base64,${image.data}`;
   }
 
-  function togglePreview(idx: number) {
-    previewIndex = previewIndex === idx ? null : idx;
+  function openPreview(image: ConversationImage) {
+    invoke("open_image_preview", {
+      data: image.data,
+      mediaType: image.media_type,
+    });
   }
 </script>
 
@@ -28,20 +30,11 @@
   <div class="image-chip-bar">
     {#each images as image, idx}
       <div class="image-chip">
-        <button class="chip-thumbnail-btn" onclick={() => togglePreview(idx)}>
+        <button class="chip-thumbnail-btn" onclick={() => openPreview(image)}>
           <img src={thumbnailSrc(image)} alt="Attached image {idx + 1}" class="chip-thumbnail" />
         </button>
         {#if !readonly}
           <button class="chip-delete" onclick={() => removeImage(idx)}>✕</button>
-        {/if}
-        {#if previewIndex === idx}
-          <button class="preview-popup" onclick={() => (previewIndex = null)}>
-            <img
-              src={thumbnailSrc(image)}
-              alt="Preview"
-              class="preview-image"
-            />
-          </button>
         {/if}
       </div>
     {/each}
@@ -101,30 +94,5 @@
 
   .chip-delete:hover {
     background: rgba(255, 255, 255, 0.35);
-  }
-
-  .preview-popup {
-    position: absolute;
-    bottom: calc(100% + 6px);
-    left: 0;
-    z-index: 100;
-    width: 400px;
-    height: 400px;
-    padding: 0;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    background: rgba(30, 30, 30, 0.95);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .preview-image {
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    border-radius: 7px;
   }
 </style>

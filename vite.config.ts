@@ -28,6 +28,7 @@ export default defineConfig({
         "context-menu": path.resolve("./context-menu.html"),
         "prompt-dialog": path.resolve("./prompt-dialog.html"),
         "context-editor": path.resolve("./context-editor.html"),
+        "image-preview": path.resolve("./image-preview.html"),
       },
     },
   },

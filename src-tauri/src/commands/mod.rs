@@ -3,6 +3,7 @@ pub mod clipboard;
 pub mod context;
 pub mod context_editor;
 pub mod history;
+pub mod image_preview;
 pub mod menu;
 pub mod notification;
 pub mod prompt_execution;

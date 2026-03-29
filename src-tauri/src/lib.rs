@@ -66,6 +66,26 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
 
     notif.build()?;
 
+    let mut ip = WebviewWindowBuilder::new(
+        app,
+        "image-preview",
+        tauri::WebviewUrl::App("image-preview.html".into()),
+    )
+    .title("")
+    .inner_size(400.0, 400.0)
+    .resizable(false)
+    .decorations(false)
+    .transparent(transparent)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .visible(false);
+
+    if !transparent {
+        ip = ip.background_color(Color(0x1e, 0x1e, 0x1e, 0xff));
+    }
+
+    ip.build()?;
+
     Ok(())
 }
 
@@ -442,6 +462,7 @@ pub fn run() {
             commands::prompt_execution::process_prompt_template,
             commands::prompt_dialog::open_prompt_dialog,
             commands::context_editor::open_context_editor,
+            commands::image_preview::open_image_preview,
             commands::notification::update_notification_window,
             commands::notification::drain_pending_notifications,
         ])
