@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use serde::Serialize;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 struct PendingImage {
     data: String,
@@ -41,6 +41,9 @@ pub async fn open_image_preview(
 
     win.show().map_err(|e| e.to_string())?;
     win.set_focus().map_err(|e| e.to_string())?;
+
+    app.emit_to("image-preview", "load-image", ())
+        .map_err(|e| e.to_string())?;
 
     Ok(())
 }

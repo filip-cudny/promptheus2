@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for all windows",
-  "windows": ["main", "context-menu"],
+  "windows": ["main", "context-menu", "image-preview"],
   "permissions": [
     "core:default",
     "core:tray:default",

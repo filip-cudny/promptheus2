@@ -1,9 +1,10 @@
-use tauri::{Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 use crate::commands::settings::AppState;
 use crate::models::history::HistoryEntryType;
 use crate::models::menu::{MenuItem, MenuItemType};
+use crate::providers::SpeechMenuProvider;
 
 fn truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
@@ -24,6 +25,15 @@ pub async fn get_context_menu_items(
     let mut state = state.lock().await;
     let context_items = state.context.get_items();
     state.menu_coordinator.update_context_items(context_items);
+
+    let is_recording = state.speech.is_recording();
+    let is_executing = state.prompt_execution.is_busy();
+    for provider in state.menu_coordinator.providers_mut() {
+        if let Some(speech) = provider.as_any_mut().downcast_mut::<SpeechMenuProvider>() {
+            speech.set_recording(is_recording);
+            speech.set_action_executing(is_executing);
+        }
+    }
 
     let last_text = state.history.get_last_item_by_type(HistoryEntryType::Text);
     let last_speech = state.history.get_last_item_by_type(HistoryEntryType::Speech);
@@ -51,12 +61,45 @@ pub async fn get_context_menu_items(
 
 #[tauri::command]
 pub async fn execute_menu_item(
+    app: AppHandle,
     state: State<'_, Mutex<AppState>>,
     item_id: String,
     shift_pressed: bool,
 ) -> Result<(), String> {
-    let _state = state.lock().await;
     log::debug!("execute_menu_item: id={item_id}, shift={shift_pressed}");
+
+    if item_id == "system_speech_to_text" {
+        return super::speech::toggle_speech_recording(app, state, None).await;
+    }
+
+    if shift_pressed {
+        let is_prompt = {
+            let s = state.lock().await;
+            s.config
+                .settings()
+                .prompts
+                .iter()
+                .any(|p| p.id == item_id)
+        };
+
+        if is_prompt {
+            let mut s = state.lock().await;
+            if s.speech.is_recording() {
+                drop(s);
+                return super::speech::toggle_speech_recording(app, state, None).await;
+            }
+            s.speech.set_pending_prompt_id(Some(item_id.clone()));
+            drop(s);
+            return super::speech::toggle_speech_recording(
+                app,
+                state,
+                Some(item_id),
+            )
+            .await;
+        }
+    }
+
+    log::warn!("unhandled menu item: {item_id}");
     Ok(())
 }
 

@@ -22,7 +22,8 @@ use services::menu_coordinator::MenuCoordinator;
 use services::notification::NotificationService;
 use services::placeholder::PlaceholderService;
 use services::prompt_execution::PromptExecutionService;
-use providers::{LastInteractionMenuProvider, PromptMenuProvider};
+use services::speech::SpeechService;
+use providers::{LastInteractionMenuProvider, PromptMenuProvider, SpeechMenuProvider};
 
 fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     use tauri::webview::{Color, WebviewWindowBuilder};
@@ -66,7 +67,7 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
 
     notif.build()?;
 
-    let mut ip = WebviewWindowBuilder::new(
+    WebviewWindowBuilder::new(
         app,
         "image-preview",
         tauri::WebviewUrl::App("image-preview.html".into()),
@@ -75,16 +76,12 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     .inner_size(400.0, 400.0)
     .resizable(false)
     .decorations(false)
-    .transparent(transparent)
+    .transparent(true)
+    .shadow(false)
     .always_on_top(true)
     .skip_taskbar(true)
-    .visible(false);
-
-    if !transparent {
-        ip = ip.background_color(Color(0x1e, 0x1e, 0x1e, 0xff));
-    }
-
-    ip.build()?;
+    .visible(false)
+    .build()?;
 
     Ok(())
 }
@@ -269,7 +266,17 @@ async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
         "open_context_menu" => {
             let _ = commands::menu::show_context_menu_window(app.clone()).await;
         }
-        "execute_active_prompt" | "speech_to_text_toggle" => {
+        "speech_to_text_toggle" => {
+            let state = app.state::<Mutex<AppState>>();
+            if let Err(e) = commands::speech::toggle_speech_recording(
+                app.clone(),
+                state,
+                None,
+            ).await {
+                log::error!("speech_to_text_toggle failed: {e}");
+            }
+        }
+        "execute_active_prompt" => {
             log::warn!("hotkey action '{}' is not yet implemented", action);
         }
         _ => {
@@ -381,6 +388,7 @@ pub fn run() {
             let mut menu_coordinator = MenuCoordinator::new();
             menu_coordinator.add_provider(Box::new(ContextMenuProvider::new()));
             menu_coordinator.add_provider(Box::new(LastInteractionMenuProvider::new()));
+            menu_coordinator.add_provider(Box::new(SpeechMenuProvider::new()));
             menu_coordinator.add_provider(Box::new(PromptMenuProvider::new(
                 config_service.settings().prompts.clone(),
             )));
@@ -407,6 +415,7 @@ pub fn run() {
                 history: history_service,
                 image_storage,
                 prompt_execution: PromptExecutionService::new(),
+                speech: SpeechService::new(),
             }));
             Ok(())
         })
@@ -466,6 +475,8 @@ pub fn run() {
             commands::image_preview::get_pending_image,
             commands::notification::update_notification_window,
             commands::notification::drain_pending_notifications,
+            commands::speech::toggle_speech_recording,
+            commands::speech::get_recording_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

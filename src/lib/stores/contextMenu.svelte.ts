@@ -95,12 +95,20 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
   if (item.item_type === "prompt") {
     const data = item.data as { prompt_id: string; prompt_name: string } | null;
     if (data?.prompt_id) {
-      await closeMenu();
       if (shiftPressed) {
-        await openPromptDialog(data.prompt_id, data.prompt_name ?? item.label);
-      } else {
-        startExecution(data.prompt_id);
+        try {
+          await invoke("execute_menu_item", {
+            itemId: item.id,
+            shiftPressed: true,
+          });
+        } catch (e) {
+          error("Failed to start speech recording for prompt: " + e);
+        }
+        await closeMenu();
+        return;
       }
+      await closeMenu();
+      startExecution(data.prompt_id);
       return;
     }
   }

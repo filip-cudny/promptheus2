@@ -70,6 +70,10 @@ impl MenuCoordinator {
         }
     }
 
+    pub fn providers_mut(&mut self) -> &mut Vec<Box<dyn MenuItemProvider>> {
+        &mut self.providers
+    }
+
     pub fn refresh_all(&mut self) {
         for provider in &mut self.providers {
             provider.refresh();

@@ -8,6 +8,7 @@ let _streamedContent = $state("");
 
 let unlistenStarted: (() => void) | null = null;
 let unlistenCompleted: (() => void) | null = null;
+let unlistenAlternativeExecute: (() => void) | null = null;
 
 function isExecuting(): boolean {
   return _isExecuting;
@@ -73,6 +74,13 @@ async function init() {
     _executionId = null;
     _streamedContent = "";
   });
+
+  unlistenAlternativeExecute = await listen<{
+    prompt_id: string;
+    text: string;
+  }>("speech-alternative-execute", (event) => {
+    startExecution(event.payload.prompt_id, event.payload.text);
+  });
 }
 
 function destroy() {
@@ -83,6 +91,10 @@ function destroy() {
   if (unlistenCompleted) {
     unlistenCompleted();
     unlistenCompleted = null;
+  }
+  if (unlistenAlternativeExecute) {
+    unlistenAlternativeExecute();
+    unlistenAlternativeExecute = null;
   }
 }
 
