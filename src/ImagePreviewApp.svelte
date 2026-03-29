@@ -5,8 +5,11 @@
   import { LogicalSize } from "@tauri-apps/api/dpi";
 
   const MAX_SIZE = 400;
+  const ANIM_MS = 150;
 
   let src = $state("");
+  let visible = $state(false);
+  let hiding = false;
   const win = getCurrentWebviewWindow();
 
   async function loadImage() {
@@ -27,11 +30,18 @@
 
     await win.setSize(new LogicalSize(width, height));
     src = dataUri;
+    requestAnimationFrame(() => (visible = true));
   }
 
   function hide() {
-    src = "";
-    win.hide();
+    if (hiding) return;
+    hiding = true;
+    visible = false;
+    setTimeout(() => {
+      src = "";
+      hiding = false;
+      win.hide();
+    }, ANIM_MS);
   }
 
   onMount(() => {
@@ -59,7 +69,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="preview" onclick={hide} onkeydown={() => {}}>
   {#if src}
-    <img {src} alt="Preview" class="preview-image" />
+    <img {src} alt="Preview" class="preview-image" class:visible />
   {/if}
 </div>
 
@@ -76,5 +86,15 @@
     object-fit: contain;
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.15);
+    opacity: 0;
+    transform: scale(0.92);
+    transition:
+      opacity 150ms ease-out,
+      transform 150ms ease-out;
+  }
+
+  .preview-image.visible {
+    opacity: 1;
+    transform: scale(1);
   }
 </style>

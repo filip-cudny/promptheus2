@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { X } from "lucide-svelte";
   import type { ConversationImage } from "$lib/types/conversation";
 
   let {
@@ -34,7 +35,7 @@
           <img src={thumbnailSrc(image)} alt="Attached image {idx + 1}" class="chip-thumbnail" />
         </button>
         {#if !readonly}
-          <button class="chip-delete" onclick={() => removeImage(idx)}>✕</button>
+          <button class="chip-delete" onclick={() => removeImage(idx)}><X size={11} strokeWidth={2.5} /></button>
         {/if}
       </div>
     {/each}
@@ -75,24 +76,22 @@
 
   .chip-delete {
     position: absolute;
-    top: -2px;
-    right: -2px;
-    width: 18px;
-    height: 18px;
+    top: -3px;
+    right: -3px;
+    width: 19px;
+    height: 19px;
     border-radius: 50%;
-    border: none;
-    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid #555;
+    background: #333;
     color: #fff;
-    font-size: 10px;
-    line-height: 1;
     cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: grid;
+    place-items: center;
     padding: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   }
 
   .chip-delete:hover {
-    background: rgba(255, 255, 255, 0.35);
+    background: #444;
   }
 </style>

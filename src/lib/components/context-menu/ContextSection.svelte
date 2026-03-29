@@ -8,6 +8,7 @@
   } from "$lib/services/context";
   import { openContextEditor } from "$lib/services/contextEditor";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
+  import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import {
     FileSymlink,
     FilePlus,
@@ -16,23 +17,22 @@
     Trash2,
     Check,
     FileText,
-    Image,
   } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
   let { items }: { items: ContextItem[] } = $props();
 
   let hasTextItems = $derived(items.some((i) => i.item_type === "text"));
+  let imageItems = $derived(
+    items
+      .filter((i): i is ContextItem & { item_type: "image" } => i.item_type === "image")
+      .map((i) => ({ data: i.data, media_type: i.media_type })),
+  );
   let isEmpty = $derived(items.length === 0);
 
   function truncateText(text: string, maxLength = 50): string {
     if (text.length <= maxLength) return text;
     return text.slice(0, maxLength) + "\u2026";
-  }
-
-  function formatMediaType(mediaType: string): string {
-    const parts = mediaType.split("/");
-    return (parts[1] ?? parts[0]).toUpperCase();
   }
 
   async function handleCopy() {
@@ -98,13 +98,11 @@
             <FileText size={ICON_SIZE.md} />
             {truncateText(item.content)}
           </span>
-        {:else if item.item_type === "image"}
-          <span class="chip chip-image">
-            <Image size={ICON_SIZE.md} />
-            {formatMediaType(item.media_type)}
-          </span>
         {/if}
       {/each}
+      {#if imageItems.length > 0}
+        <ImageChipBar images={imageItems} readonly={true} />
+      {/if}
     </div>
   {/if}
 </div>
@@ -172,7 +170,4 @@
     white-space: nowrap;
   }
 
-  .chip-image {
-    color: rgba(255, 255, 255, 0.7);
-  }
 </style>
