@@ -35,16 +35,16 @@ export async function removeContextItem(index: number): Promise<boolean> {
 
 export async function setContextImage(
   data: string,
-  media_type: string,
+  mediaType: string,
 ): Promise<void> {
-  return invoke("set_context_image", { data, media_type });
+  return invoke("set_context_image", { data, mediaType });
 }
 
 export async function appendContextImage(
   data: string,
-  media_type: string,
+  mediaType: string,
 ): Promise<void> {
-  return invoke("append_context_image", { data, media_type });
+  return invoke("append_context_image", { data, mediaType });
 }
 
 export async function setContextFromClipboard(): Promise<void> {

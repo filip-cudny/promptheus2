@@ -9,7 +9,8 @@ export async function getClipboardImage(): Promise<ConversationImage | null> {
       "get_clipboard_image",
     );
     return { data: base64, media_type: mediaType };
-  } catch {
+  } catch (e) {
+    console.error("Failed to read clipboard image:", e);
     return null;
   }
 }

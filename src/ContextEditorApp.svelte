@@ -15,6 +15,7 @@
   let text = $state("");
   let images = $state<ConversationImage[]>([]);
   let saving = $state(false);
+  let errorMessage = $state("");
 
   onMount(async () => {
     const items = await getContextItems();
@@ -29,15 +30,21 @@
 
   async function save() {
     saving = true;
+    errorMessage = "";
+    const textSnapshot = text;
+    const imageSnapshot = [...images];
     try {
       await clearContext();
-      if (text.trim()) {
-        await setContext(text);
+      if (textSnapshot.trim()) {
+        await setContext(textSnapshot);
       }
-      for (const img of images) {
+      for (const img of imageSnapshot) {
         await appendContextImage(img.data, img.media_type);
       }
       await getCurrentWindow().close();
+    } catch (e) {
+      errorMessage = e instanceof Error ? e.message : String(e);
+      console.error("Failed to save context:", e);
     } finally {
       saving = false;
     }
@@ -62,6 +69,9 @@
   <div class="editor-content">
     <ContextEditor bind:text bind:images />
     <div class="button-bar">
+      {#if errorMessage}
+        <span class="save-error">{errorMessage}</span>
+      {/if}
       <ActionIconButton
         icon={Save}
         confirmIcon={Check}
@@ -117,8 +127,19 @@
 
   .button-bar {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
     flex-shrink: 0;
     padding: 6px 8px;
+    gap: 8px;
+  }
+
+  .save-error {
+    flex: 1;
+    font-size: 11px;
+    color: #e55;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>
