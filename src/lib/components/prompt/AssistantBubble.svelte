@@ -33,7 +33,7 @@
   } = $props();
 
   let collapsed = $state(false);
-  let rawMode = $state(false);
+  let editMode = $state(false);
   let textarea: HTMLTextAreaElement | undefined = $state();
 
   function autoResize() {
@@ -43,7 +43,7 @@
   }
 
   $effect(() => {
-    if (rawMode && textarea) {
+    if (editMode && textarea) {
       displayContent;
       requestAnimationFrame(autoResize);
     }
@@ -55,9 +55,9 @@
     autoResize();
   }
 
-  function toggleRawMode() {
-    rawMode = !rawMode;
-    if (rawMode) {
+  function toggleEditMode() {
+    editMode = !editMode;
+    if (editMode) {
       requestAnimationFrame(autoResize);
     }
   }
@@ -101,7 +101,7 @@
         onclick={copyContent}
         title="Copy"
       />
-      <button class="icon-btn" class:active={rawMode} onclick={toggleRawMode} title={rawMode ? "Render" : "Raw"}>
+      <button class="icon-btn" class:active={editMode} onclick={toggleEditMode} title={editMode ? "View" : "Edit"}>
         <Pencil size={ICON_SIZE.md} />
       </button>
 
@@ -112,7 +112,7 @@
       {/if}
     {/snippet}
 
-    {#if rawMode}
+    {#if editMode}
       <textarea
         bind:this={textarea}
         value={displayContent}

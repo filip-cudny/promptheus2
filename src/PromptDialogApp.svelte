@@ -125,8 +125,8 @@
     border-radius: 6px;
     border: none;
     background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(5px);
-    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     color: rgba(255, 255, 255, 0.35);
     cursor: pointer;
     display: flex;
