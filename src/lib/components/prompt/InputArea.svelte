@@ -3,7 +3,9 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import ContextSection from "./ContextSection.svelte";
   import AttachMenu from "./AttachMenu.svelte";
+  import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
+  import { SendHorizonal, RefreshCw, Square, CopyCheck } from "lucide-svelte";
   import { getClipboardImage } from "$lib/utils/paste";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
@@ -54,12 +56,6 @@
 
   onMount(() => {
     textarea?.focus();
-  });
-
-  const primaryLabel = $derived.by(() => {
-    if (store.isExecuting) return "Stop";
-    if (store.isRegenerateMode) return "Regenerate";
-    return "Send";
   });
 
   function handleSendShow() {
@@ -134,28 +130,32 @@
     </div>
 
     <div class="bar-right">
-      <button
-        class="btn btn-secondary"
+      <ActionIconButton
+        icon={CopyCheck}
         onclick={onSendAndCopy}
         disabled={!store.canSend || store.isExecuting}
-        title="Ctrl+Enter"
-      >
-        Send & Copy
-      </button>
+        title="Send & Copy (Ctrl+Enter)"
+      />
 
       {#if store.isExecuting}
-        <button class="btn btn-danger" onclick={() => store.stopExecution()}>
-          Stop
-        </button>
-      {:else}
-        <button
-          class="btn btn-primary"
+        <ActionIconButton
+          icon={Square}
+          onclick={() => store.stopExecution()}
+          title="Stop"
+        />
+      {:else if store.isRegenerateMode}
+        <ActionIconButton
+          icon={RefreshCw}
           onclick={handleSendShow}
-          disabled={!store.canSend && !store.isRegenerateMode}
-          title="Enter"
-        >
-          {primaryLabel}
-        </button>
+          title="Regenerate"
+        />
+      {:else}
+        <ActionIconButton
+          icon={SendHorizonal}
+          onclick={handleSendShow}
+          disabled={!store.canSend}
+          title="Send (Enter)"
+        />
       {/if}
     </div>
   </div>
@@ -228,48 +228,6 @@
   .bar-right {
     flex-shrink: 0;
     display: flex;
-    gap: 6px;
-  }
-
-  .btn {
-    padding: 6px 14px;
-    border-radius: 4px;
-    border: none;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .btn-primary {
-    background: rgba(100, 160, 255, 0.8);
-    color: #fff;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: rgba(100, 160, 255, 1);
-  }
-
-  .btn-secondary {
-    background: rgba(255, 255, 255, 0.1);
-    color: #e0e0e0;
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.18);
-  }
-
-  .btn-danger {
-    background: rgba(220, 60, 60, 0.8);
-    color: #fff;
-  }
-
-  .btn-danger:hover {
-    background: rgba(220, 60, 60, 1);
+    gap: 2px;
   }
 </style>

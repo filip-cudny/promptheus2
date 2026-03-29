@@ -3,7 +3,7 @@
   import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import ContextEditor from "$lib/components/ui/ContextEditor.svelte";
-  import { getContextItems, setContext, setContextImage, clearContext } from "$lib/services/context";
+  import { getContextItems, setContext, appendContextImage, clearContext } from "$lib/services/context";
   import { Save, Check, X } from "lucide-svelte";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
@@ -69,7 +69,7 @@
         await setContext(localText);
       }
       for (const img of localImages) {
-        await setContextImage(img.data, img.media_type);
+        await appendContextImage(img.data, img.media_type);
       }
     } finally {
       saving = false;

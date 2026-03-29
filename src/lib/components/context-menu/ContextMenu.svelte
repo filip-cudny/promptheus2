@@ -5,22 +5,31 @@
   import type { ContextItem } from "$lib/types/context";
   import ContextSection from "./ContextSection.svelte";
   import LastInteractionSection from "./LastInteractionSection.svelte";
-  import { MessageSquareShare } from "lucide-svelte";
+  import { MessageSquareShare, Mic, Square } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import {
     getItems,
     getSelectedIndex,
     setSelectedIndex,
     isVisible,
+    isRecording,
+    getRecordingPromptId,
     closeMenu,
     moveSelection,
     executeItem,
     executeSelected,
+    startAlternativeExecution,
     handleNumberInput,
     openDialogForItem,
     init,
     destroy,
   } from "$lib/stores/contextMenu.svelte";
+
+  function isRecordingThisPrompt(item: MenuItem): boolean {
+    if (!isRecording()) return false;
+    const data = item.data as { prompt_id: string } | null;
+    return data?.prompt_id === getRecordingPromptId();
+  }
 
   type SectionGroup = {
     sectionId: string;
@@ -110,7 +119,7 @@
 
     const win = getCurrentWebviewWindow();
     win.onFocusChanged(({ payload: focused }) => {
-      if (!focused) {
+      if (!focused && !isRecording()) {
         closeMenu();
       }
     });
@@ -153,14 +162,29 @@
               tabindex={-1}
               onclick={(e) => handleItemClick(globalIndex, e)}
             >
-              {#if item.icon}
-                <span class="item-icon">{item.icon}</span>
+              {#if item.icon === "mic"}
+                <span class="item-icon"><Mic size={ICON_SIZE.sm} /></span>
               {/if}
               <span class="item-label">{item.label}</span>
             </button>
             {#if item.item_type === "prompt"}
+              {@const recordingThis = isRecordingThisPrompt(item)}
+              {@const micDisabled = !item.enabled && !recordingThis}
               <button
-                class="dialog-btn"
+                class="action-btn mic-btn"
+                class:disabled={micDisabled}
+                title={recordingThis ? "Stop recording" : "Voice input"}
+                disabled={micDisabled}
+                onclick={() => startAlternativeExecution(globalIndex)}
+              >
+                {#if recordingThis}
+                  <Square size={ICON_SIZE.md} />
+                {:else}
+                  <Mic size={ICON_SIZE.md} />
+                {/if}
+              </button>
+              <button
+                class="action-btn dialog-btn"
                 title="Open dialog"
                 onclick={() => openDialogForItem(globalIndex)}
               >
@@ -253,14 +277,13 @@
     text-overflow: ellipsis;
   }
 
-  .dialog-btn {
+  .action-btn {
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 22px;
     height: 22px;
-    margin-right: 8px;
     padding: 0;
     border: none;
     border-radius: 4px;
@@ -269,8 +292,18 @@
     cursor: pointer;
   }
 
-  .dialog-btn:hover {
+  .action-btn.dialog-btn {
+    margin-right: 8px;
+  }
+
+  .action-btn:hover {
     background: rgba(255, 255, 255, 0.12);
     color: rgba(255, 255, 255, 0.8);
+  }
+
+  .action-btn.disabled {
+    color: rgba(255, 255, 255, 0.15);
+    cursor: default;
+    pointer-events: none;
   }
 </style>

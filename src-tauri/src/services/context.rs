@@ -79,9 +79,7 @@ impl ContextManagerService {
     }
 
     pub fn has_context(&self) -> bool {
-        self.items
-            .iter()
-            .any(|item| matches!(item, ContextItem::Text { .. }))
+        !self.items.is_empty()
     }
 
     pub fn get_context_or_default(&self, default: &str) -> String {
@@ -193,11 +191,11 @@ mod tests {
     }
 
     #[test]
-    fn has_context_returns_false_when_only_images() {
+    fn has_context_returns_true_when_only_images() {
         let mut svc = service();
         svc.append_context_image("img".into(), "image/png".into());
 
-        assert!(!svc.has_context());
+        assert!(svc.has_context());
         assert!(svc.has_images());
     }
 
@@ -234,7 +232,7 @@ mod tests {
         svc.set_context_image("new_img".into(), "image/jpeg".into());
 
         assert_eq!(svc.item_count(), 1);
-        assert!(!svc.has_context());
+        assert!(svc.has_context());
         assert!(svc.has_images());
         assert!(
             matches!(&svc.get_items()[0], ContextItem::Image { data, media_type } if data == "new_img" && media_type == "image/jpeg")

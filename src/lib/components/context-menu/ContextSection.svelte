@@ -5,6 +5,7 @@
     getContextText,
     setContextFromClipboard,
     appendContextFromClipboard,
+    removeContextItem,
   } from "$lib/services/context";
   import { openContextEditor } from "$lib/services/contextEditor";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
@@ -23,12 +24,22 @@
   let { items }: { items: ContextItem[] } = $props();
 
   let hasTextItems = $derived(items.some((i) => i.item_type === "text"));
-  let imageItems = $derived(
+  let imageItemsWithIndex = $derived(
     items
-      .filter((i): i is ContextItem & { item_type: "image" } => i.item_type === "image")
-      .map((i) => ({ data: i.data, media_type: i.media_type })),
+      .map((item, index) => ({ item, index }))
+      .filter((e): e is { item: ContextItem & { item_type: "image" }; index: number } => e.item.item_type === "image"),
+  );
+  let imageItems = $derived(
+    imageItemsWithIndex.map((e) => ({ data: e.item.data, media_type: e.item.media_type })),
   );
   let isEmpty = $derived(items.length === 0);
+
+  function handleRemoveImage(imageIndex: number) {
+    const originalIndex = imageItemsWithIndex[imageIndex]?.index;
+    if (originalIndex !== undefined) {
+      removeContextItem(originalIndex);
+    }
+  }
 
   function truncateText(text: string, maxLength = 50): string {
     if (text.length <= maxLength) return text;
@@ -101,7 +112,7 @@
         {/if}
       {/each}
       {#if imageItems.length > 0}
-        <ImageChipBar images={imageItems} readonly={true} />
+        <ImageChipBar images={imageItems} onremove={handleRemoveImage} />
       {/if}
     </div>
   {/if}
@@ -150,8 +161,9 @@
   .chips {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 4px;
-    padding: 4px 12px 6px;
+    padding: 4px 12px 2px;
   }
 
   .chip {

@@ -9,12 +9,17 @@ import { openPromptDialog } from "$lib/services/promptDialog";
 let _items = $state<MenuItem[]>([]);
 let _selectedIndex = $state(-1);
 let _visible = $state(false);
+let _isRecording = $state(false);
+let _recordingPromptId = $state<string | null>(null);
 let numberBuffer = "";
 let numberTimer: ReturnType<typeof setTimeout> | null = null;
 let unlisten: (() => void) | null = null;
 let unlistenContextChanged: (() => void) | null = null;
 let unlistenExecutionCompleted: (() => void) | null = null;
 let unlistenHistoryChanged: (() => void) | null = null;
+let unlistenRecordingStopped: (() => void) | null = null;
+let unlistenTranscriptionComplete: (() => void) | null = null;
+let unlistenSpeechError: (() => void) | null = null;
 
 const NUMBER_DEBOUNCE_MS = 300;
 
@@ -38,17 +43,53 @@ function isVisible(): boolean {
   return _visible;
 }
 
-function applyExecutionState(items: MenuItem[]): MenuItem[] {
-  if (!isExecuting()) return items;
-  return items.map((item) =>
-    item.item_type === "prompt" ? { ...item, enabled: false } : item,
-  );
+function isRecording(): boolean {
+  return _isRecording;
+}
+
+function getRecordingPromptId(): string | null {
+  return _recordingPromptId;
+}
+
+function applyItemStates(items: MenuItem[]): MenuItem[] {
+  if (isExecuting()) {
+    return items.map((item) =>
+      item.item_type === "prompt" ? { ...item, enabled: false } : item,
+    );
+  }
+  if (_isRecording && _recordingPromptId) {
+    return items.map((item) => {
+      if (item.item_type !== "prompt") return item;
+      const data = item.data as { prompt_id: string } | null;
+      if (data?.prompt_id === _recordingPromptId) return item;
+      return { ...item, enabled: false };
+    });
+  }
+  return items;
+}
+
+async function fetchRecordingState(): Promise<void> {
+  try {
+    const state = await invoke<{ is_recording: boolean; action_id: string | null }>(
+      "get_recording_state",
+    );
+    _isRecording = state.is_recording;
+    _recordingPromptId = state.action_id;
+  } catch (e) {
+    error("Failed to fetch recording state: " + e);
+  }
+}
+
+function clearRecordingState() {
+  _isRecording = false;
+  _recordingPromptId = null;
 }
 
 async function openMenu() {
   try {
+    await fetchRecordingState();
     const fetched = await invoke<MenuItem[]>("get_context_menu_items");
-    _items = applyExecutionState(fetched);
+    _items = applyItemStates(fetched);
     _selectedIndex = -1;
     numberBuffer = "";
     _visible = true;
@@ -90,28 +131,42 @@ function moveSelection(direction: 1 | -1) {
 
 async function executeItem(index: number, shiftPressed: boolean = false) {
   const item = _items[index];
-  if (!item || !item.enabled) return;
+  if (!item) return;
 
   if (item.item_type === "prompt") {
     const data = item.data as { prompt_id: string; prompt_name: string } | null;
-    if (data?.prompt_id) {
-      if (shiftPressed) {
-        try {
-          await invoke("execute_menu_item", {
-            itemId: item.id,
-            shiftPressed: true,
-          });
-        } catch (e) {
-          error("Failed to start speech recording for prompt: " + e);
-        }
-        await closeMenu();
-        return;
+    if (!data?.prompt_id) return;
+
+    const isRecordingThis = _isRecording && _recordingPromptId === data.prompt_id;
+    if (!item.enabled && !isRecordingThis) return;
+
+    if (shiftPressed) {
+      if (_isRecording && _recordingPromptId === data.prompt_id) {
+        clearRecordingState();
+      } else {
+        _isRecording = true;
+        _recordingPromptId = data.prompt_id;
+      }
+      try {
+        await invoke("execute_menu_item", {
+          itemId: item.id,
+          shiftPressed: true,
+        });
+      } catch (e) {
+        error("Failed to start speech recording for prompt: " + e);
+        clearRecordingState();
       }
       await closeMenu();
-      startExecution(data.prompt_id);
       return;
     }
+
+    if (!item.enabled) return;
+    await closeMenu();
+    startExecution(data.prompt_id);
+    return;
   }
+
+  if (!item.enabled) return;
 
   try {
     await invoke("execute_menu_item", {
@@ -129,6 +184,35 @@ async function executeSelected(shiftPressed: boolean = false) {
   if (_selectedIndex >= 0 && _selectedIndex < _items.length) {
     await executeItem(_selectedIndex, shiftPressed);
   }
+}
+
+async function startAlternativeExecution(index: number) {
+  const item = _items[index];
+  if (!item || item.item_type !== "prompt") return;
+  const data = item.data as { prompt_id: string; prompt_name: string } | null;
+  if (!data?.prompt_id) return;
+
+  const isRecordingThis = _isRecording && _recordingPromptId === data.prompt_id;
+  if (!item.enabled && !isRecordingThis) return;
+
+  if (isRecordingThis) {
+    clearRecordingState();
+  } else {
+    _isRecording = true;
+    _recordingPromptId = data.prompt_id;
+  }
+
+  try {
+    await invoke("execute_menu_item", {
+      itemId: item.id,
+      shiftPressed: true,
+    });
+  } catch (e) {
+    error("Failed to start speech recording for prompt: " + e);
+    clearRecordingState();
+  }
+
+  await refreshItems();
 }
 
 function handleNumberInput(digit: string) {
@@ -152,8 +236,9 @@ function handleNumberInput(digit: string) {
 async function refreshItems() {
   if (!_visible) return;
   try {
+    await fetchRecordingState();
     const fetched = await invoke<MenuItem[]>("get_context_menu_items");
-    _items = applyExecutionState(fetched);
+    _items = applyItemStates(fetched);
   } catch (e) {
     error("Failed to refresh context menu: " + e);
   }
@@ -171,6 +256,18 @@ async function init() {
     refreshItems();
   });
   unlistenHistoryChanged = await listen("history-changed", () => {
+    refreshItems();
+  });
+  unlistenRecordingStopped = await listen("speech-recording-stopped", () => {
+    clearRecordingState();
+    refreshItems();
+  });
+  unlistenTranscriptionComplete = await listen("speech-transcription-complete", () => {
+    clearRecordingState();
+    refreshItems();
+  });
+  unlistenSpeechError = await listen("speech-error", () => {
+    clearRecordingState();
     refreshItems();
   });
 }
@@ -192,6 +289,18 @@ function destroy() {
     unlistenHistoryChanged();
     unlistenHistoryChanged = null;
   }
+  if (unlistenRecordingStopped) {
+    unlistenRecordingStopped();
+    unlistenRecordingStopped = null;
+  }
+  if (unlistenTranscriptionComplete) {
+    unlistenTranscriptionComplete();
+    unlistenTranscriptionComplete = null;
+  }
+  if (unlistenSpeechError) {
+    unlistenSpeechError();
+    unlistenSpeechError = null;
+  }
 }
 
 async function openDialogForItem(index: number) {
@@ -208,11 +317,14 @@ export {
   getSelectedIndex,
   setSelectedIndex,
   isVisible,
+  isRecording,
+  getRecordingPromptId,
   openMenu,
   closeMenu,
   moveSelection,
   executeItem,
   executeSelected,
+  startAlternativeExecution,
   handleNumberInput,
   openDialogForItem,
   init,

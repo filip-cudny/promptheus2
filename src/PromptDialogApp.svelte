@@ -4,6 +4,7 @@
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { createConversationStore } from "$lib/stores/conversation.svelte";
   import { getSettings } from "$lib/services/settings";
+  import { hasContext } from "$lib/services/context";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { PanelLeft } from "lucide-svelte";
   import ConversationArea from "$lib/components/prompt/ConversationArea.svelte";
@@ -23,6 +24,15 @@
   let contextInitialCollapsed = $state(false);
 
   let unlistenRestore: UnlistenFn | undefined;
+  let unlistenContextChanged: UnlistenFn | undefined;
+
+  async function autoShowContextIfNeeded() {
+    if (contextDisabled || contextVisible) return;
+    if (await hasContext()) {
+      contextInitialCollapsed = true;
+      contextVisible = true;
+    }
+  }
 
   onMount(async () => {
     if (historyEntryId) {
@@ -48,6 +58,12 @@
     } catch {
       // leave context enabled if settings unavailable
     }
+
+    await autoShowContextIfNeeded();
+
+    unlistenContextChanged = await listen("context-changed", () => {
+      autoShowContextIfNeeded();
+    });
   });
 
   function handleContextAutoShow() {
@@ -82,6 +98,7 @@
 
   onDestroy(() => {
     unlistenRestore?.();
+    unlistenContextChanged?.();
     store.destroy();
   });
 </script>

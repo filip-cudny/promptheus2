@@ -6,13 +6,19 @@
   let {
     images = $bindable(),
     readonly = false,
+    onremove,
   }: {
     images: ConversationImage[];
-    readonly: boolean;
+    readonly?: boolean;
+    onremove?: (index: number) => void;
   } = $props();
 
   function removeImage(index: number) {
-    images = images.filter((_, i) => i !== index);
+    if (onremove) {
+      onremove(index);
+    } else {
+      images = images.filter((_, i) => i !== index);
+    }
   }
 
   function thumbnailSrc(image: ConversationImage): string {
@@ -47,7 +53,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    padding: 4px 0;
+    padding: 2px 0;
   }
 
   .image-chip {
