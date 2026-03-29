@@ -198,7 +198,7 @@
     transition: opacity 120ms ease;
   }
 
-  .markdown-renderer :global(.code-block:hover .copy-btn) {
+  .markdown-renderer :global(.code-block-header:hover .copy-btn) {
     opacity: 1;
   }
 

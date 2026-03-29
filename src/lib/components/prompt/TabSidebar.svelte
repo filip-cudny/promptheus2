@@ -89,6 +89,9 @@
     left: 0;
     bottom: 0;
     width: 240px;
+    background: rgba(5, 5, 5, 0.3);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     border-right: 1px solid rgba(255, 255, 255, 0.15);
     z-index: 200;
     display: flex;
@@ -96,16 +99,6 @@
     transform: translateX(-100%);
     transition: transform 0.2s ease;
     will-change: transform;
-  }
-
-  .sidebar::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: rgba(5, 5, 5, 0.3);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    z-index: -1;
   }
 
   .sidebar.open {
