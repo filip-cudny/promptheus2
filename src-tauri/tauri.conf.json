@@ -15,35 +15,7 @@
     "security": {
       "csp": null
     },
-    "windows": [
-      {
-        "label": "notification",
-        "url": "notification.html",
-        "title": "",
-        "width": 380,
-        "height": 100,
-        "resizable": true,
-        "decorations": false,
-        "transparent": true,
-        "shadow": false,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "visible": false
-      },
-      {
-        "label": "context-menu",
-        "url": "context-menu.html",
-        "title": "",
-        "width": 320,
-        "height": 400,
-        "resizable": true,
-        "decorations": false,
-        "transparent": true,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "visible": false
-      }
-    ]
+    "windows": []
   },
   "bundle": {
     "active": true,

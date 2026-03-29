@@ -194,6 +194,12 @@
     background: transparent;
     color: rgba(255, 255, 255, 0.5);
     cursor: pointer;
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+
+  .markdown-renderer :global(.code-block:hover .copy-btn) {
+    opacity: 1;
   }
 
   .markdown-renderer :global(.copy-btn:hover) {

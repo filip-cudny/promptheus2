@@ -24,6 +24,51 @@ use services::placeholder::PlaceholderService;
 use services::prompt_execution::PromptExecutionService;
 use providers::{LastInteractionMenuProvider, PromptMenuProvider};
 
+fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    use tauri::webview::{Color, WebviewWindowBuilder};
+
+    let transparent = cfg!(target_os = "macos");
+
+    let mut cm = WebviewWindowBuilder::new(
+        app,
+        "context-menu",
+        tauri::WebviewUrl::App("context-menu.html".into()),
+    )
+    .title("")
+    .inner_size(320.0, 400.0)
+    .resizable(true)
+    .decorations(false)
+    .transparent(transparent)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .visible(false);
+
+    if !transparent {
+        cm = cm.background_color(Color(0x1e, 0x1e, 0x1e, 0xff));
+    }
+
+    cm.build()?;
+
+    let notif = WebviewWindowBuilder::new(
+        app,
+        "notification",
+        tauri::WebviewUrl::App("notification.html".into()),
+    )
+    .title("")
+    .inner_size(380.0, 100.0)
+    .resizable(true)
+    .decorations(false)
+    .transparent(transparent)
+    .shadow(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .visible(false);
+
+    notif.build()?;
+
+    Ok(())
+}
+
 fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::TrayIconBuilder;
@@ -197,6 +242,8 @@ pub fn run() {
                 setup_tray(app)?;
                 log::info!("system tray initialized");
             }
+
+            create_app_windows(app)?;
 
             let bindings = services::hotkeys::get_active_bindings(config_service.settings());
 

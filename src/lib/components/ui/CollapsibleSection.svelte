@@ -10,6 +10,8 @@
     headerClass,
     headerLeft,
     actions,
+    hoverActions = false,
+    actionsVisible = false,
     children,
   }: {
     title: string;
@@ -17,6 +19,8 @@
     headerClass?: string;
     headerLeft?: Snippet;
     actions?: Snippet;
+    hoverActions?: boolean;
+    actionsVisible?: boolean;
     children: Snippet;
   } = $props();
 </script>
@@ -36,7 +40,7 @@
     <span class="collapsible-title">{title}</span>
     {#if actions}
       <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-        <span class="collapsible-actions" onclick={(e) => e.stopPropagation()}>
+        <span class="collapsible-actions" class:hover-actions={hoverActions} class:actions-visible={actionsVisible} onclick={(e) => e.stopPropagation()}>
         {@render actions()}
       </span>
     {/if}
@@ -60,7 +64,7 @@
     align-items: center;
     gap: 8px;
     width: 100%;
-    padding: 8px 12px;
+    padding: 5px 12px;
     background: rgba(255, 255, 255, 0.04);
     border: none;
     color: #e0e0e0;
@@ -93,6 +97,16 @@
     display: flex;
     gap: 4px;
     flex-shrink: 0;
+  }
+
+  .collapsible-actions.hover-actions {
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+
+  .collapsible-header:hover .collapsible-actions.hover-actions,
+  .collapsible-actions.actions-visible {
+    opacity: 1;
   }
 
   .collapsible-content {

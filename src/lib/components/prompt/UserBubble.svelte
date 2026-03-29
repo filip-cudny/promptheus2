@@ -64,7 +64,7 @@
 </script>
 
 <div class="user-bubble">
-  <CollapsibleSection title="" bind:collapsed>
+  <CollapsibleSection title="" bind:collapsed hoverActions actionsVisible={editMode}>
     {#snippet headerLeft()}
       <span class="role-badge user-badge">Me</span>
       <span class="turn-number"># {messageNumber}</span>

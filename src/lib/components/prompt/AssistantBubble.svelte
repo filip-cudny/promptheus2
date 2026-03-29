@@ -68,7 +68,7 @@
 </script>
 
 <div class="assistant-bubble">
-  <CollapsibleSection title="" bind:collapsed>
+  <CollapsibleSection title="" bind:collapsed hoverActions actionsVisible={editMode}>
     {#snippet headerLeft()}
       <span class="role-badge assistant-badge">Assistant</span>
       <span class="turn-number"># {outputNumber}</span>
