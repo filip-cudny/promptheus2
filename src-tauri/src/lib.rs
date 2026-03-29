@@ -463,6 +463,7 @@ pub fn run() {
             commands::prompt_dialog::open_prompt_dialog,
             commands::context_editor::open_context_editor,
             commands::image_preview::open_image_preview,
+            commands::image_preview::get_pending_image,
             commands::notification::update_notification_window,
             commands::notification::drain_pending_notifications,
         ])
