@@ -75,7 +75,7 @@
   .conversation-area {
     flex: 1;
     overflow-y: auto;
-    padding: 12px 16px;
+    padding: 40px 16px 12px;
     display: flex;
     flex-direction: column;
     gap: 8px;

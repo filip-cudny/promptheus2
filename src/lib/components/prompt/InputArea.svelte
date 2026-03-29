@@ -3,7 +3,6 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import ContextSection from "./ContextSection.svelte";
   import AttachMenu from "./AttachMenu.svelte";
-  import TabBar from "./TabBar.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
@@ -55,10 +54,6 @@
   onMount(() => {
     textarea?.focus();
   });
-
-  const tabList = $derived(
-    store.tabs.map((t) => ({ id: t.tab_id, name: t.tab_name })),
-  );
 
   const primaryLabel = $derived.by(() => {
     if (store.isExecuting) return "Stop";
@@ -154,16 +149,6 @@
   <div class="button-bar">
     <div class="bar-left">
       <AttachMenu onSelectContext={onToggleContext} {contextDisabled} />
-      <button class="icon-btn" onclick={() => store.addTab()} title="New tab">+</button>
-    </div>
-
-    <div class="bar-center">
-      <TabBar
-        tabs={tabList}
-        activeTabId={store.activeTabId}
-        onSelect={(tabId) => store.switchTab(tabId)}
-        onClose={(tabId) => store.closeTab(tabId)}
-      />
     </div>
 
     <div class="bar-right">
@@ -236,6 +221,7 @@
   .button-bar {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
     padding: 6px 8px;
   }
@@ -247,35 +233,10 @@
     align-items: center;
   }
 
-  .bar-center {
-    flex: 1;
-    min-width: 0;
-  }
-
   .bar-right {
     flex-shrink: 0;
     display: flex;
     gap: 6px;
-  }
-
-  .icon-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: 4px;
-    border: none;
-    background: transparent;
-    color: #aaa;
-    font-size: 16px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .icon-btn:hover {
-    color: #e0e0e0;
-    background: rgba(255, 255, 255, 0.08);
   }
 
   .btn {

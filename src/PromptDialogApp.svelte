@@ -4,8 +4,11 @@
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { createConversationStore } from "$lib/stores/conversation.svelte";
   import { getSettings } from "$lib/services/settings";
+  import { ICON_SIZE } from "$lib/constants/ui";
+  import { PanelLeft } from "lucide-svelte";
   import ConversationArea from "$lib/components/prompt/ConversationArea.svelte";
   import InputArea from "$lib/components/prompt/InputArea.svelte";
+  import TabSidebar from "$lib/components/prompt/TabSidebar.svelte";
 
   const params = new URLSearchParams(window.location.search);
   const promptId = params.get("promptId") ?? "";
@@ -14,6 +17,7 @@
 
   const store = createConversationStore(promptId, promptName);
 
+  let sidebarOpen = $state(false);
   let contextVisible = $state(false);
   let contextDisabled = $state(false);
   let contextInitialCollapsed = $state(false);
@@ -83,8 +87,19 @@
 </script>
 
 <div class="dialog-shell">
+  <button
+    class="sidebar-toggle"
+    onclick={() => sidebarOpen = !sidebarOpen}
+    title="Toggle conversations"
+  >
+    <PanelLeft size={ICON_SIZE.md} />
+    {#if store.tabs.length > 1}
+      <span class="tab-badge">{store.tabs.length}</span>
+    {/if}
+  </button>
   <ConversationArea {store} />
   <InputArea {store} {contextVisible} {contextDisabled} {contextInitialCollapsed} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
+  <TabSidebar {store} open={sidebarOpen} onClose={() => sidebarOpen = false} />
 </div>
 
 <style>
@@ -97,5 +112,47 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 13px;
     overflow: hidden;
+    position: relative;
+  }
+
+  .sidebar-toggle {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    z-index: 50;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.06);
+    color: #aaa;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .sidebar-toggle:hover {
+    color: #e0e0e0;
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  .tab-badge {
+    position: absolute;
+    top: -4px;
+    right: -6px;
+    min-width: 15px;
+    height: 15px;
+    border-radius: 8px;
+    background: rgba(100, 160, 255, 0.85);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
   }
 </style>
