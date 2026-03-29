@@ -47,8 +47,8 @@
   "models": [
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
-      "model": "gpt-4.1",
-      "display_name": "gpt-4.1",
+      "model": "gpt-5.4",
+      "display_name": "gpt-5.4",
       "api_key_source": "env",
       "api_key_env": "OPENAI_API_KEY",
       "base_url": "https://api.openai.com/v1",

@@ -1,4 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect width="1024" height="1024" rx="128" fill="#1a1a2e"/>
-  <text x="512" y="580" text-anchor="middle" font-family="sans-serif" font-size="480" font-weight="bold" fill="#e94560">P</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <g fill="#F0F4FF" stroke="#7B9FD4" stroke-width="10" stroke-linejoin="round">
+    <rect x="96" y="140" width="320" height="320" rx="44"/>
+    <rect x="156" y="72" width="200" height="92" rx="28"/>
+    <circle cx="256" cy="118" r="16" fill="none"/>
+  </g>
+  <path
+    d="M292 176 L204 306 H258 L228 424 L336 274 H282 Z"
+    fill="#4F6AFF"
+  />
 </svg>

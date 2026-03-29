@@ -192,6 +192,12 @@
     -webkit-backdrop-filter: blur(8px);
   }
 
+  :global([data-platform="linux"]) .input-area {
+    background: rgba(30, 30, 30, 0.95);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
   .input-field {
     display: flex;
     flex-direction: column;

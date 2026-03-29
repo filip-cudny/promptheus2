@@ -5,7 +5,6 @@ use tokio::sync::Mutex;
 use crate::models::history::{
     HistoryEntry, HistoryEntryType, SerializedConversationNode, SerializedConversationTurn,
 };
-use crate::services::notification::NotificationLevel;
 
 use super::settings::AppState;
 
@@ -153,16 +152,5 @@ pub async fn copy_history_content(
     state
         .clipboard
         .set_text(&content)
-        .map_err(|e| e.to_string())?;
-
-    let settings = state.config.settings();
-    let _ = state.notifications.notify(
-        "clipboard_copy",
-        NotificationLevel::Success,
-        "Copied to clipboard",
-        None::<String>,
-        &settings.notifications,
-    );
-
-    Ok(())
+        .map_err(|e| e.to_string())
 }

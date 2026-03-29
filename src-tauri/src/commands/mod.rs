@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod clipboard;
 pub mod context;
+pub mod context_editor;
 pub mod history;
 pub mod menu;
 pub mod notification;

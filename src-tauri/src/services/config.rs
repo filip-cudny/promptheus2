@@ -376,7 +376,7 @@ mod tests {
         let dir = setup_test_dir();
         let service = ConfigService::load(dir.path(), None).expect("should load example settings");
         assert!(!service.settings().models.is_empty());
-        assert_eq!(service.settings().models[0].model, "gpt-4.1");
+        assert_eq!(service.settings().models[0].model, "gpt-5.4");
         assert_eq!(service.settings().prompts.len(), 5);
     }
 
@@ -727,7 +727,7 @@ mod tests {
         let service =
             ConfigService::load(dir.path(), Some(resource_dir.path())).expect("should load");
         assert!(dir.path().join("settings.json").exists());
-        assert_eq!(service.settings().models[0].model, "gpt-4.1");
+        assert_eq!(service.settings().models[0].model, "gpt-5.4");
     }
 
     #[test]

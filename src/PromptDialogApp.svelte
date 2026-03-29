@@ -135,6 +135,12 @@
     padding: 0;
   }
 
+  :global([data-platform="linux"]) .sidebar-toggle {
+    background: rgba(255, 255, 255, 0.06);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
   .sidebar-toggle:hover {
     color: rgba(255, 255, 255, 0.8);
     background: rgba(255, 255, 255, 0.1);

@@ -328,12 +328,12 @@ mod tests {
         assert!(!settings.debug_mode);
         assert_eq!(settings.code_theme, "paraiso-dark");
         assert_eq!(settings.models.len(), 1);
-        assert_eq!(settings.models[0].model, "gpt-4.1");
+        assert_eq!(settings.models[0].model, "gpt-5.4");
         assert_eq!(settings.models[0].api_key_source, ApiKeySource::Env);
         assert_eq!(settings.keymaps.len(), 3);
         assert_eq!(settings.prompts.len(), 5);
         assert_eq!(settings.number_input_debounce_ms, 200);
-        assert_eq!(settings.default_model, Some("550e8400-e29b-41d4-a716-446655440000".to_string()));
+        assert_eq!(settings.default_model, Some("13b85c38-19cc-4387-a52d-6577478be057".to_string()));
 
         assert!(settings.notifications.events.prompt_execution_success);
         assert!(settings.notifications.monochromatic_notification_icons);

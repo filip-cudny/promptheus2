@@ -1,14 +1,29 @@
 <script lang="ts">
   import type { ContextItem } from "$lib/types/context";
-  import { clearContext, getContextText } from "$lib/services/context";
-  import { Copy, Trash2, Check, ChevronDown, ChevronRight, FileText, Image } from "lucide-svelte";
+  import {
+    clearContext,
+    getContextText,
+    setContextFromClipboard,
+    appendContextFromClipboard,
+  } from "$lib/services/context";
+  import { openContextEditor } from "$lib/services/contextEditor";
+  import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
+  import {
+    FileSymlink,
+    FilePlus,
+    Pencil,
+    Copy,
+    Trash2,
+    Check,
+    FileText,
+    Image,
+  } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
   let { items }: { items: ContextItem[] } = $props();
 
-  let expanded = $state(true);
-  let copyConfirm = $state(false);
-  let clearConfirm = $state(false);
+  let hasTextItems = $derived(items.some((i) => i.item_type === "text"));
+  let isEmpty = $derived(items.length === 0);
 
   function truncateText(text: string, maxLength = 50): string {
     if (text.length <= maxLength) return text;
@@ -20,99 +35,77 @@
     return (parts[1] ?? parts[0]).toUpperCase();
   }
 
-  function showConfirm(setter: (v: boolean) => void) {
-    setter(true);
-    setTimeout(() => setter(false), 1200);
-  }
-
   async function handleCopy() {
     const text = await getContextText();
     if (text) {
       await navigator.clipboard.writeText(text);
-      showConfirm((v) => (copyConfirm = v));
     }
   }
 
   async function handleClear() {
     await clearContext();
-    showConfirm((v) => (clearConfirm = v));
   }
-
-  let hasTextItems = $derived(items.some((i) => i.item_type === "text"));
-  let isEmpty = $derived(items.length === 0);
 </script>
 
 <div class="context-section">
-  <div
-    class="section-header"
-    role="button"
-    tabindex="-1"
-    onclick={() => (expanded = !expanded)}
-    onkeydown={(e) => { if (e.key === "Enter" || e.key === " ") expanded = !expanded; }}
-  >
+  <div class="section-header">
     <span class="header-label">
-      <span class="toggle">
-        {#if expanded}
-          <ChevronDown size={ICON_SIZE.md} />
-        {:else}
-          <ChevronRight size={ICON_SIZE.md} />
-        {/if}
-      </span>
       Context
       {#if !isEmpty}
         <span class="badge">{items.length}</span>
       {/if}
     </span>
-    {#if !isEmpty}
-      <span class="header-actions">
-        {#if hasTextItems}
-          <button
-            class="action-btn"
-            onclick={(e) => { e.stopPropagation(); handleCopy(); }}
-            title="Copy context text"
-          >
-            {#if copyConfirm}
-              <Check size={ICON_SIZE.md} />
-            {:else}
-              <Copy size={ICON_SIZE.md} />
-            {/if}
-          </button>
-        {/if}
-        <button
-          class="action-btn action-btn-clear"
-          onclick={(e) => { e.stopPropagation(); handleClear(); }}
-          title="Clear all context"
-        >
-          {#if clearConfirm}
-            <Check size={ICON_SIZE.md} />
-          {:else}
-            <Trash2 size={ICON_SIZE.md} />
-          {/if}
-        </button>
-      </span>
-    {/if}
+    <span class="header-actions">
+      <ActionIconButton
+        icon={FileSymlink}
+        confirmIcon={Check}
+        onclick={setContextFromClipboard}
+        title="Replace context with clipboard"
+      />
+      <ActionIconButton
+        icon={FilePlus}
+        confirmIcon={Check}
+        onclick={appendContextFromClipboard}
+        title="Append clipboard to context"
+      />
+      <ActionIconButton
+        icon={Pencil}
+        onclick={openContextEditor}
+        title="Edit context"
+      />
+      <ActionIconButton
+        icon={Copy}
+        confirmIcon={Check}
+        onclick={handleCopy}
+        title="Copy context text"
+        disabled={!hasTextItems}
+      />
+      <ActionIconButton
+        icon={Trash2}
+        confirmIcon={Check}
+        onclick={handleClear}
+        title="Clear all context"
+        disabled={isEmpty}
+      />
+    </span>
   </div>
 
-  {#if expanded}
-    {#if isEmpty}
-      <div class="empty-hint">No context set</div>
-    {:else}
-      <div class="chips">
-        {#each items as item}
-          {#if item.item_type === "text"}
-            <span class="chip chip-text" title={item.content}>
-              <FileText size={ICON_SIZE.md} />
-              {truncateText(item.content)}
-            </span>
-          {:else if item.item_type === "image"}
-            <span class="chip chip-image">
-              <Image size={ICON_SIZE.md} />
-              {formatMediaType(item.media_type)}
-            </span>
-          {/if}
-        {/each}
-      </div>
-    {/if}
+  {#if !isEmpty}
+    <div class="chips">
+      {#each items as item}
+        {#if item.item_type === "text"}
+          <span class="chip chip-text" title={item.content}>
+            <FileText size={ICON_SIZE.md} />
+            {truncateText(item.content)}
+          </span>
+        {:else if item.item_type === "image"}
+          <span class="chip chip-image">
+            <Image size={ICON_SIZE.md} />
+            {formatMediaType(item.media_type)}
+          </span>
+        {/if}
+      {/each}
+    </div>
   {/if}
 </div>
 
@@ -134,24 +127,13 @@
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    cursor: pointer;
     box-sizing: border-box;
-  }
-
-  .section-header:hover {
-    color: rgba(255, 255, 255, 0.8);
   }
 
   .header-label {
     display: flex;
     align-items: center;
     gap: 6px;
-  }
-
-  .toggle {
-    display: flex;
-    align-items: center;
-    width: 12px;
   }
 
   .badge {
@@ -164,36 +146,7 @@
 
   .header-actions {
     display: flex;
-    gap: 4px;
-  }
-
-  .action-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 3px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.5);
-    cursor: pointer;
-  }
-
-  .action-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.8);
-  }
-
-  .action-btn-clear:hover {
-    border-color: rgba(255, 100, 100, 0.4);
-    color: rgba(255, 100, 100, 0.8);
-  }
-
-  .empty-hint {
-    padding: 4px 12px 6px 30px;
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.25);
-    font-style: italic;
+    gap: 2px;
   }
 
   .chips {

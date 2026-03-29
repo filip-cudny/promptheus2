@@ -8,6 +8,7 @@ Reusable UI primitives shared across features. See [src/DOCS.md](../../../DOCS.m
 ui/
 ├── ActionIconButton.svelte     # Icon-only button with optional confirm feedback
 ├── CollapsibleSection.svelte   # Expandable/collapsible content container
+├── ContextEditor.svelte        # Textarea + image chips for editing context
 ├── ImageChipBar.svelte         # Horizontal row of image thumbnails with delete
 └── MarkdownRenderer.svelte     # Renders markdown to HTML with syntax highlighting
 ```
@@ -52,6 +53,13 @@ For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconPro
 - Props: `images: ConversationImage[]` (bindable), `readonly: boolean`.
 - Renders nothing when `images` is empty.
 - Each chip shows a 40×40 thumbnail from the base64 data URI. Delete button removes the image from the bound array.
+- Import `ConversationImage` from `$lib/types/conversation`.
+
+### ContextEditor
+
+- Props: `text: string` (bindable), `images: ConversationImage[]` (bindable), optional `readonly`, `disabled`, `placeholder`.
+- Pure presentational component — no IPC calls or save logic. Parents control persistence.
+- Renders `ImageChipBar` above a textarea. Used in both the prompt dialog's context section and the context menu's inline edit mode.
 - Import `ConversationImage` from `$lib/types/conversation`.
 
 ### MarkdownRenderer

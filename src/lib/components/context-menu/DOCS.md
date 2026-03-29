@@ -51,8 +51,17 @@ Renders when `item.item_type === "context"`. Extracts `ContextItem[]` from `item
 | Section header | Collapsible, shows "Context" label + item count badge |
 | Text chip | Truncated text preview (first 50 chars) |
 | Image chip | Shows format label (PNG/JPEG/etc.) derived from media type |
-| Copy button | Copies concatenated text context to clipboard (hidden when no text items) |
-| Clear button | Calls `clearContext()` to remove all context items |
+| Replace button | Replaces context with clipboard content via `setContextFromClipboard()` |
+| Append button | Appends clipboard content to context via `appendContextFromClipboard()` |
+| Edit button | Toggles inline edit mode with `ContextEditor` component |
+| Copy button | Copies concatenated text context to clipboard (disabled when no text items) |
+| Clear button | Calls `clearContext()` to remove all context items (disabled when empty) |
+
+Action buttons are always visible (not gated by empty state) since Replace/Append/Edit are useful even with no context.
+
+**Collapse behavior**: collapsed by default when empty, auto-expands when items exist. The `$effect` on `items.length` drives this.
+
+**Edit mode**: when active, replaces chips with `ContextEditor` (textarea + image chips). Save persists via `clearContext()` + `setContext()` + `setContextImage()`. The `onEditingChange` callback notifies `ContextMenu.svelte` to suppress blur-close and keyboard handling.
 
 The context store (`$lib/stores/context.svelte.ts`) is initialized in `ContextMenuApp.svelte` so the section updates reactively via the `"context-changed"` Tauri event.
 

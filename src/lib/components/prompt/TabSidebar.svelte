@@ -105,6 +105,12 @@
     transform: translateX(0);
   }
 
+  :global([data-platform="linux"]) .sidebar {
+    background: rgba(22, 22, 24, 0.92);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
   .sidebar-header {
     display: flex;
     align-items: center;

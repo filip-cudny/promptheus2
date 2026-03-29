@@ -164,9 +164,14 @@ pub async fn update_keymaps(
     state: State<'_, Mutex<AppState>>,
     keymaps: Vec<KeymapGroup>,
 ) -> Result<(), String> {
-    let mut state = state.lock().await;
-    state.config.update_keymaps(keymaps);
-    save_and_emit(&state.config, &app)
+    let settings = {
+        let mut s = state.lock().await;
+        s.config.update_keymaps(keymaps);
+        save_and_emit(&s.config, &app)?;
+        s.config.settings().clone()
+    };
+    crate::reload_shortcuts(&app, &settings);
+    Ok(())
 }
 
 #[tauri::command]
@@ -182,8 +187,14 @@ pub async fn update_menu_section_order(
 
 #[tauri::command]
 pub async fn reload_settings(
+    app: AppHandle,
     state: State<'_, Mutex<AppState>>,
 ) -> Result<(), String> {
-    let mut state = state.lock().await;
-    state.config.reload().map_err(|e| e.to_string())
+    let settings = {
+        let mut s = state.lock().await;
+        s.config.reload().map_err(|e| e.to_string())?;
+        s.config.settings().clone()
+    };
+    crate::reload_shortcuts(&app, &settings);
+    Ok(())
 }

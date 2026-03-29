@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
-  import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
+  import ContextEditor from "$lib/components/ui/ContextEditor.svelte";
   import { getContextItems, setContext, setContextImage, clearContext } from "$lib/services/context";
   import { Save, Check, X } from "lucide-svelte";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
@@ -121,15 +121,12 @@
           title="Close context"
         />
       {/snippet}
-      <div class="context-body">
-        <ImageChipBar bind:images={localImages} readonly={contextDisabled} />
-        <textarea
-          class="context-textarea"
-          bind:value={localText}
-          placeholder={contextDisabled ? "This prompt doesn't use {{context}}" : "Enter context text…"}
-          disabled={contextDisabled}
-        ></textarea>
-      </div>
+      <ContextEditor
+        bind:text={localText}
+        bind:images={localImages}
+        disabled={contextDisabled}
+        placeholder={contextDisabled ? "This prompt doesn't use {{context}}" : "Enter context text\u2026"}
+      />
     </CollapsibleSection>
   {/if}
 </div>
@@ -218,33 +215,4 @@
     background: rgba(255, 255, 255, 0.18);
   }
 
-  .context-body {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .context-textarea {
-    width: 100%;
-    min-height: 50px;
-    max-height: 120px;
-    resize: vertical;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    color: #e0e0e0;
-    font: inherit;
-    font-size: 13px;
-    padding: 8px;
-    box-sizing: border-box;
-  }
-
-  .context-textarea:focus {
-    outline: none;
-    border-color: rgba(100, 160, 255, 0.5);
-  }
-
-  .context-textarea:disabled {
-    cursor: not-allowed;
-  }
 </style>

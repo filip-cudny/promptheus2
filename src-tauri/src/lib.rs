@@ -58,7 +58,7 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     .inner_size(380.0, 100.0)
     .resizable(true)
     .decorations(false)
-    .transparent(transparent)
+    .transparent(true)
     .shadow(false)
     .always_on_top(true)
     .skip_taskbar(true)
@@ -188,6 +188,57 @@ async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
     }
 }
 
+#[cfg(desktop)]
+pub fn reload_shortcuts(app: &tauri::AppHandle, settings: &models::settings::Settings) {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+
+    let global_shortcut = app.global_shortcut();
+
+    if let Err(e) = global_shortcut.unregister_all() {
+        log::error!("failed to unregister shortcuts: {}", e);
+        return;
+    }
+
+    let bindings = services::hotkeys::get_active_bindings(settings);
+    let mut new_action_map = HashMap::new();
+
+    for (shortcut_str, action) in &bindings {
+        match shortcut_str.parse::<Shortcut>() {
+            Ok(shortcut) => {
+                let canonical = shortcut.into_string();
+                new_action_map.insert(canonical, action.clone());
+                if let Err(e) = global_shortcut.on_shortcut(shortcut_str.as_str(), |app, shortcut, event| {
+                    if event.state == ShortcutState::Pressed {
+                        let shortcut_str = shortcut.into_string();
+                        let action_map = app.state::<ShortcutActionMap>();
+                        let map = action_map.0.read().unwrap();
+                        if let Some(action) = map.get(&shortcut_str) {
+                            let action = action.clone();
+                            drop(map);
+                            log::info!("hotkey action: {} -> {}", shortcut_str, action);
+                            let app = app.clone();
+                            tauri::async_runtime::spawn(async move {
+                                execute_hotkey_action(&app, &action).await;
+                            });
+                        }
+                    }
+                }) {
+                    log::warn!("failed to register shortcut {}: {}", shortcut_str, e);
+                }
+            }
+            Err(e) => {
+                log::warn!("invalid shortcut {}: {}", shortcut_str, e);
+            }
+        }
+    }
+
+    let action_map_state = app.state::<ShortcutActionMap>();
+    let mut map = action_map_state.0.write().unwrap();
+    *map = new_action_map;
+
+    log::info!("reloaded {} global shortcuts", bindings.len());
+}
+
 async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
     match action {
         "set_context_value" | "append_context_value" | "clear_context" => {
@@ -224,6 +275,14 @@ pub fn run() {
         )
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(
+            tauri::plugin::Builder::<tauri::Wry, ()>::new("platform")
+                .js_init_script(format!(
+                    "document.documentElement.dataset.platform = '{}'",
+                    std::env::consts::OS
+                ))
+                .build(),
+        )
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
@@ -380,6 +439,7 @@ pub fn run() {
             commands::prompt_execution::get_execution_state,
             commands::prompt_execution::process_prompt_template,
             commands::prompt_dialog::open_prompt_dialog,
+            commands::context_editor::open_context_editor,
             commands::notification::update_notification_window,
             commands::notification::drain_pending_notifications,
         ])
