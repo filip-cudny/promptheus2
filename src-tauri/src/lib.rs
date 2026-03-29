@@ -81,8 +81,10 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let menu = Menu::with_items(app, &[&show_menu_i, &sep1, &settings_i, &sep2, &quit_i])?;
 
+    let tray_icon_image = tauri::image::Image::from_bytes(include_bytes!("../icons/tray_icon.png"))?;
+
     TrayIconBuilder::with_id("main-tray")
-        .icon(app.default_window_icon().cloned().unwrap())
+        .icon(tray_icon_image)
         .menu(&menu)
         .show_menu_on_left_click(true)
         .tooltip("Promptheus")
