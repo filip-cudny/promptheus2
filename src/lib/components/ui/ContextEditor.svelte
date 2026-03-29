@@ -1,5 +1,6 @@
 <script lang="ts">
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
+  import { getClipboardImage } from "$lib/utils/paste";
   import type { ConversationImage } from "$lib/types/conversation";
 
   let {
@@ -15,6 +16,14 @@
     disabled?: boolean;
     placeholder?: string;
   } = $props();
+
+  async function handlePaste() {
+    if (readonly || disabled) return;
+    const image = await getClipboardImage();
+    if (image) {
+      images = [...images, image];
+    }
+  }
 </script>
 
 <div class="context-editor">
@@ -24,6 +33,7 @@
     bind:value={text}
     {placeholder}
     disabled={disabled || readonly}
+    onpaste={handlePaste}
   ></textarea>
 </div>
 

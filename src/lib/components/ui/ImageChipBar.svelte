@@ -9,6 +9,8 @@
     readonly: boolean;
   } = $props();
 
+  let previewIndex = $state<number | null>(null);
+
   function removeImage(index: number) {
     images = images.filter((_, i) => i !== index);
   }
@@ -16,15 +18,30 @@
   function thumbnailSrc(image: ConversationImage): string {
     return `data:${image.media_type};base64,${image.data}`;
   }
+
+  function togglePreview(idx: number) {
+    previewIndex = previewIndex === idx ? null : idx;
+  }
 </script>
 
 {#if images.length > 0}
   <div class="image-chip-bar">
     {#each images as image, idx}
       <div class="image-chip">
-        <img src={thumbnailSrc(image)} alt="Attached image {idx + 1}" class="chip-thumbnail" />
+        <button class="chip-thumbnail-btn" onclick={() => togglePreview(idx)}>
+          <img src={thumbnailSrc(image)} alt="Attached image {idx + 1}" class="chip-thumbnail" />
+        </button>
         {#if !readonly}
           <button class="chip-delete" onclick={() => removeImage(idx)}>✕</button>
+        {/if}
+        {#if previewIndex === idx}
+          <button class="preview-popup" onclick={() => (previewIndex = null)}>
+            <img
+              src={thumbnailSrc(image)}
+              alt="Preview"
+              class="preview-image"
+            />
+          </button>
         {/if}
       </div>
     {/each}
@@ -44,15 +61,23 @@
     display: flex;
     align-items: center;
     border-radius: 6px;
-    overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.15);
     background: rgba(255, 255, 255, 0.05);
+  }
+
+  .chip-thumbnail-btn {
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+    display: flex;
   }
 
   .chip-thumbnail {
     width: 40px;
     height: 40px;
     object-fit: cover;
+    border-radius: 5px;
   }
 
   .chip-delete {
@@ -63,7 +88,7 @@
     height: 18px;
     border-radius: 50%;
     border: none;
-    background: rgba(200, 60, 60, 0.9);
+    background: rgba(255, 255, 255, 0.2);
     color: #fff;
     font-size: 10px;
     line-height: 1;
@@ -75,6 +100,31 @@
   }
 
   .chip-delete:hover {
-    background: rgba(220, 50, 50, 1);
+    background: rgba(255, 255, 255, 0.35);
+  }
+
+  .preview-popup {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    z-index: 100;
+    width: 400px;
+    height: 400px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    background: rgba(30, 30, 30, 0.95);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .preview-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 7px;
   }
 </style>

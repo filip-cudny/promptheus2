@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
+  import { getClipboardImage } from "$lib/utils/paste";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
 
@@ -70,29 +71,10 @@
     }
   }
 
-  function handlePaste(e: ClipboardEvent) {
-    const items = e.clipboardData?.items;
-    if (!items) return;
-
-    for (const item of items) {
-      if (item.type.startsWith("image/")) {
-        e.preventDefault();
-        const blob = item.getAsFile();
-        if (!blob) return;
-
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          const base64 = result.split(",")[1];
-          const mediaType = item.type;
-          localImages = [
-            ...localImages,
-            { data: base64, media_type: mediaType },
-          ];
-        };
-        reader.readAsDataURL(blob);
-        return;
-      }
+  async function handlePaste() {
+    const image = await getClipboardImage();
+    if (image) {
+      localImages = [...localImages, image];
     }
   }
 </script>
