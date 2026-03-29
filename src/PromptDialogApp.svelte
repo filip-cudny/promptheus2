@@ -3,10 +3,9 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { createConversationStore } from "$lib/stores/conversation.svelte";
-  import ContextSection from "$lib/components/prompt/ContextSection.svelte";
+  import { getSettings } from "$lib/services/settings";
   import ConversationArea from "$lib/components/prompt/ConversationArea.svelte";
-  import MessageInput from "$lib/components/prompt/MessageInput.svelte";
-  import ButtonBar from "$lib/components/prompt/ButtonBar.svelte";
+  import InputArea from "$lib/components/prompt/InputArea.svelte";
 
   const params = new URLSearchParams(window.location.search);
   const promptId = params.get("promptId") ?? "";
@@ -14,6 +13,10 @@
   const historyEntryId = params.get("historyEntryId");
 
   const store = createConversationStore(promptId, promptName);
+
+  let contextVisible = $state(false);
+  let contextDisabled = $state(false);
+  let contextInitialCollapsed = $state(false);
 
   let unlistenRestore: UnlistenFn | undefined;
 
@@ -28,7 +31,41 @@
         store.restoreFromHistory(event.payload.entry_id);
       },
     );
+
+    try {
+      const settings = await getSettings();
+      const prompt = settings.prompts.find((p) => p.id === promptId);
+      if (prompt) {
+        const usesContext = prompt.messages.some((m) =>
+          m.content.includes("{{context}}"),
+        );
+        contextDisabled = !usesContext;
+      }
+    } catch {
+      // leave context enabled if settings unavailable
+    }
   });
+
+  function handleContextAutoShow() {
+    if (!contextDisabled) {
+      contextInitialCollapsed = !contextVisible;
+      contextVisible = true;
+    }
+  }
+
+  function toggleContext() {
+    if (contextVisible) {
+      closeContext();
+    } else {
+      contextVisible = true;
+    }
+  }
+
+  function closeContext() {
+    contextVisible = false;
+    store.updateContextText("");
+    store.updateContextImages([]);
+  }
 
   async function handleSendAndCopy() {
     const currentWindow = getCurrentWindow();
@@ -46,10 +83,8 @@
 </script>
 
 <div class="dialog-shell">
-  <ContextSection {store} />
   <ConversationArea {store} />
-  <MessageInput {store} onSendAndCopy={handleSendAndCopy} />
-  <ButtonBar {store} onSendAndCopy={handleSendAndCopy} />
+  <InputArea {store} {contextVisible} {contextDisabled} {contextInitialCollapsed} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
 </div>
 
 <style>

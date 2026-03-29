@@ -67,6 +67,16 @@ export async function executeConversationTurn(
   });
 }
 
+export async function processPromptTemplate(
+  promptId: string,
+  contextText?: string,
+): Promise<ProcessedMessage[]> {
+  return invoke("process_prompt_template", {
+    promptId,
+    contextText: contextText ?? null,
+  });
+}
+
 export async function getExecutionState(): Promise<{
   is_executing: boolean;
   execution_id: string | null;

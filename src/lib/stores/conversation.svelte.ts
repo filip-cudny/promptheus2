@@ -3,6 +3,7 @@ import { error as logError } from "@tauri-apps/plugin-log";
 import { generateId } from "$lib/utils/id";
 import {
   executeConversationTurn,
+  processPromptTemplate,
   type ExecutionCallbacks,
 } from "$lib/services/promptExecution";
 import {
@@ -126,44 +127,41 @@ function createTabState(tabName: string): TabState {
 
 function buildMessagesFromTree(
   tree: ConversationTree,
-  contextText: string,
   contextImages: ConversationImage[],
 ): ProcessedMessage[] {
   const messages: ProcessedMessage[] = [];
+  let isFirstUser = true;
 
   for (const nodeId of tree.current_path) {
     const node = tree.nodes.get(nodeId);
     if (!node) continue;
 
     if (node.role === "user") {
-      const isFirst = messages.length === 0;
-      const parts: Array<
-        | { type: "text"; text: string }
-        | { type: "image_url"; image_url: { url: string } }
-      > = [];
+      const hasContextImages = isFirstUser && contextImages.length > 0;
+      const hasNodeImages = node.images.length > 0;
+      isFirstUser = false;
 
-      if (isFirst && contextText) {
-        parts.push({ type: "text", text: contextText });
-      }
-      if (isFirst && contextImages.length > 0) {
-        for (const img of contextImages) {
-          parts.push({
-            type: "image_url",
-            image_url: { url: `data:${img.media_type};base64,${img.data}` },
-          });
+      if (hasContextImages || hasNodeImages) {
+        const parts: Array<
+          | { type: "text"; text: string }
+          | { type: "image_url"; image_url: { url: string } }
+        > = [];
+        if (hasContextImages) {
+          for (const img of contextImages) {
+            parts.push({
+              type: "image_url",
+              image_url: {
+                url: `data:${img.media_type};base64,${img.data}`,
+              },
+            });
+          }
         }
-      }
-
-      if (node.images.length > 0) {
         for (const img of node.images) {
           parts.push({
             type: "image_url",
             image_url: { url: `data:${img.media_type};base64,${img.data}` },
           });
         }
-        parts.push({ type: "text", text: node.content });
-        messages.push({ role: "user", content: parts });
-      } else if (parts.length > 0) {
         parts.push({ type: "text", text: node.content });
         messages.push({ role: "user", content: parts });
       } else {
@@ -288,41 +286,43 @@ export function createConversationStore(
     tab.is_streaming = true;
     tab.streamed_content = "";
 
-    const messages = buildMessagesFromTree(
-      tab.tree,
-      tab.context_text,
-      tab.context_images,
-    );
-
     let success = false;
     let resultText = "";
 
-    const callbacks: ExecutionCallbacks = {
-      onChunk: (_delta, accumulated) => {
-        assistantNode.content = accumulated;
-        tab.tree.nodes.set(assistantNode.node_id, assistantNode);
-        tab.streamed_content = accumulated;
-      },
-      onDone: (fullText) => {
-        assistantNode.content = fullText;
-        tab.tree.nodes.set(assistantNode.node_id, assistantNode);
-        tab.is_executing = false;
-        tab.is_streaming = false;
-        tab.streamed_content = "";
-        success = true;
-        resultText = fullText;
-      },
-      onError: (message) => {
-        logError("Conversation execution error: " + message);
-        assistantNode.content = assistantNode.content || `[error: ${message}]`;
-        tab.tree.nodes.set(assistantNode.node_id, assistantNode);
-        tab.is_executing = false;
-        tab.is_streaming = false;
-        tab.streamed_content = "";
-      },
-    };
-
     try {
+      const templateMessages = await processPromptTemplate(
+        promptId,
+        tab.context_text || undefined,
+      );
+      const treeMessages = buildMessagesFromTree(tab.tree, tab.context_images);
+      const messages = [...templateMessages, ...treeMessages];
+
+      const callbacks: ExecutionCallbacks = {
+        onChunk: (_delta, accumulated) => {
+          assistantNode.content = accumulated;
+          tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+          tab.streamed_content = accumulated;
+        },
+        onDone: (fullText) => {
+          assistantNode.content = fullText;
+          tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+          tab.is_executing = false;
+          tab.is_streaming = false;
+          tab.streamed_content = "";
+          success = true;
+          resultText = fullText;
+        },
+        onError: (message) => {
+          logError("Conversation execution error: " + message);
+          assistantNode.content =
+            assistantNode.content || `[error: ${message}]`;
+          tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+          tab.is_executing = false;
+          tab.is_streaming = false;
+          tab.streamed_content = "";
+        },
+      };
+
       await executeConversationTurn(messages, callbacks, {
         promptId,
         promptName,
@@ -373,40 +373,41 @@ export function createConversationStore(
     tab.is_streaming = true;
     tab.streamed_content = "";
 
-    const messages = buildMessagesFromTree(
-      tab.tree,
-      tab.context_text,
-      tab.context_images,
-    );
-
     let regenerateSuccess = false;
 
-    const callbacks: ExecutionCallbacks = {
-      onChunk: (_delta, accumulated) => {
-        newAssistant.content = accumulated;
-        tab.tree.nodes.set(newAssistant.node_id, newAssistant);
-        tab.streamed_content = accumulated;
-      },
-      onDone: (fullText) => {
-        newAssistant.content = fullText;
-        tab.tree.nodes.set(newAssistant.node_id, newAssistant);
-        tab.is_executing = false;
-        tab.is_streaming = false;
-        tab.streamed_content = "";
-        regenerateSuccess = true;
-      },
-      onError: (message) => {
-        logError("Regeneration error: " + message);
-        newAssistant.content =
-          newAssistant.content || `[error: ${message}]`;
-        tab.tree.nodes.set(newAssistant.node_id, newAssistant);
-        tab.is_executing = false;
-        tab.is_streaming = false;
-        tab.streamed_content = "";
-      },
-    };
-
     try {
+      const templateMessages = await processPromptTemplate(
+        promptId,
+        tab.context_text || undefined,
+      );
+      const treeMessages = buildMessagesFromTree(tab.tree, tab.context_images);
+      const messages = [...templateMessages, ...treeMessages];
+
+      const callbacks: ExecutionCallbacks = {
+        onChunk: (_delta, accumulated) => {
+          newAssistant.content = accumulated;
+          tab.tree.nodes.set(newAssistant.node_id, newAssistant);
+          tab.streamed_content = accumulated;
+        },
+        onDone: (fullText) => {
+          newAssistant.content = fullText;
+          tab.tree.nodes.set(newAssistant.node_id, newAssistant);
+          tab.is_executing = false;
+          tab.is_streaming = false;
+          tab.streamed_content = "";
+          regenerateSuccess = true;
+        },
+        onError: (message) => {
+          logError("Regeneration error: " + message);
+          newAssistant.content =
+            newAssistant.content || `[error: ${message}]`;
+          tab.tree.nodes.set(newAssistant.node_id, newAssistant);
+          tab.is_executing = false;
+          tab.is_streaming = false;
+          tab.streamed_content = "";
+        },
+      };
+
       await executeConversationTurn(messages, callbacks, {
         promptId,
         promptName,

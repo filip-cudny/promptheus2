@@ -331,6 +331,7 @@ pub fn run() {
             commands::prompt_execution::execute_prompt,
             commands::prompt_execution::execute_conversation_turn,
             commands::prompt_execution::get_execution_state,
+            commands::prompt_execution::process_prompt_template,
             commands::prompt_dialog::open_prompt_dialog,
             commands::notification::update_notification_window,
             commands::notification::drain_pending_notifications,

@@ -8,8 +8,11 @@ use tokio_stream::StreamExt;
 
 use crate::commands::settings::AppState;
 use crate::models::ai::StreamEvent;
+use crate::models::context::ContextItem;
 use crate::models::history::HistoryEntryType;
-use crate::models::message::ConversationMessage;
+use crate::models::message::{
+    ContentPart, ConversationMessage, ImageUrlData, MessageContent, ProcessedMessage,
+};
 use crate::services::notification::NotificationLevel;
 use crate::services::prompt_execution::PromptExecutionService;
 
@@ -226,6 +229,76 @@ pub async fn get_execution_state(
             .current_execution_id()
             .map(|s| s.to_string()),
     })
+}
+
+#[tauri::command]
+pub async fn process_prompt_template(
+    state: State<'_, Mutex<AppState>>,
+    prompt_id: String,
+    context_text: Option<String>,
+) -> Result<Vec<ProcessedMessage>, String> {
+    let mut state = state.lock().await;
+
+    let prompt = PromptExecutionService::resolve_prompt(&state.config, &prompt_id)
+        .map_err(|e| e.to_string())?;
+
+    let clipboard_text = state.clipboard.get_text().unwrap_or_default();
+
+    let saved_items = state.context.get_items();
+    state.context.clear();
+    if let Some(text) = &context_text {
+        if !text.is_empty() {
+            state.context.set_context(text.clone());
+        }
+    }
+
+    let mut messages = Vec::new();
+    for (i, msg) in prompt.messages.iter().enumerate() {
+        let content_with_clipboard = msg.content.replace("{{clipboard}}", &clipboard_text);
+        let processed_text = state
+            .placeholder
+            .process_content(&content_with_clipboard, None, &state.clipboard, &state.context)
+            .unwrap_or(content_with_clipboard);
+
+        let is_last = i == prompt.messages.len() - 1;
+        let content = if is_last && state.context.has_images() {
+            let mut parts = Vec::new();
+            if !processed_text.trim().is_empty() {
+                parts.push(ContentPart::Text {
+                    text: processed_text,
+                });
+            }
+            for item in &state.context.get_items() {
+                if let ContextItem::Image { data, media_type } = item {
+                    parts.push(ContentPart::ImageUrl {
+                        image_url: ImageUrlData {
+                            url: format!("data:{media_type};base64,{data}"),
+                        },
+                    });
+                }
+            }
+            MessageContent::Parts(parts)
+        } else {
+            MessageContent::Text(processed_text)
+        };
+
+        messages.push(ProcessedMessage {
+            role: msg.role.clone(),
+            content,
+        });
+    }
+
+    state.context.clear();
+    for item in saved_items {
+        match item {
+            ContextItem::Text { content } => state.context.append_context(content),
+            ContextItem::Image { data, media_type } => {
+                state.context.append_context_image(data, media_type)
+            }
+        }
+    }
+
+    Ok(messages)
 }
 
 #[tauri::command]

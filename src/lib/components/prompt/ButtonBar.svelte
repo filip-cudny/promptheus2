@@ -1,13 +1,18 @@
 <script lang="ts">
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
+  import AttachMenu from "./AttachMenu.svelte";
   import TabBar from "./TabBar.svelte";
 
   let {
     store,
     onSendAndCopy,
+    onToggleContext,
+    contextDisabled = false,
   }: {
     store: ReturnType<typeof createConversationStore>;
     onSendAndCopy: () => void;
+    onToggleContext: () => void;
+    contextDisabled?: boolean;
   } = $props();
 
   const tabList = $derived(
@@ -34,6 +39,7 @@
 
 <div class="button-bar">
   <div class="bar-left">
+    <AttachMenu onSelectContext={onToggleContext} {contextDisabled} />
     <button class="icon-btn" onclick={() => store.addTab()} title="New tab">+</button>
   </div>
 
@@ -86,6 +92,9 @@
 
   .bar-left {
     flex-shrink: 0;
+    display: flex;
+    gap: 6px;
+    align-items: center;
   }
 
   .bar-center {

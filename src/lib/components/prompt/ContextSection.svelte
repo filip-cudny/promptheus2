@@ -4,20 +4,27 @@
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import { getContextItems, setContext, setContextImage, clearContext } from "$lib/services/context";
-  import { getSettings } from "$lib/services/settings";
-  import { Save, Check } from "lucide-svelte";
+  import { Save, Check, X } from "lucide-svelte";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
 
   let {
     store,
+    contextDisabled = false,
+    initialCollapsed = false,
+    onHasContent,
+    onClose,
   }: {
     store: ReturnType<typeof createConversationStore>;
+    contextDisabled?: boolean;
+    initialCollapsed?: boolean;
+    onHasContent?: () => void;
+    onClose?: () => void;
   } = $props();
 
-  let collapsed = $state(true);
-  let disabled = $state(false);
+  let collapsed = $state(initialCollapsed);
   let saving = $state(false);
+  let confirming = $state(false);
 
   let localText = $state("");
   let localImages = $state<ConversationImage[]>([]);
@@ -33,23 +40,7 @@
     store.updateContextImages(localImages);
   });
 
-  const params = new URLSearchParams(window.location.search);
-  const promptId = params.get("promptId") ?? "";
-
   onMount(async () => {
-    try {
-      const settings = await getSettings();
-      const prompt = settings.prompts.find((p) => p.id === promptId);
-      if (prompt) {
-        const usesContext = prompt.messages.some((m) =>
-          m.content.includes("{{context}}"),
-        );
-        disabled = !usesContext;
-      }
-    } catch {
-      // leave context enabled if settings unavailable
-    }
-
     try {
       const items = await getContextItems();
       for (const item of items) {
@@ -61,6 +52,9 @@
             { data: item.data, media_type: item.media_type },
           ];
         }
+      }
+      if (localText.trim().length > 0 || localImages.length > 0) {
+        onHasContent?.();
       }
     } catch {
       // non-fatal
@@ -81,48 +75,147 @@
       saving = false;
     }
   }
+
+  function requestClose() {
+    if (hasContent) {
+      confirming = true;
+    } else {
+      onClose?.();
+    }
+  }
+
+  function confirmClose() {
+    confirming = false;
+    localText = "";
+    localImages = [];
+    onClose?.();
+  }
+
+  function cancelClose() {
+    confirming = false;
+  }
 </script>
 
-<div class="context-section" class:disabled>
-  <CollapsibleSection title="Context" bind:collapsed headerClass={contextHeaderClass}>
-    {#snippet actions()}
-      <ActionIconButton
-        icon={Save}
-        confirmIcon={Check}
-        onclick={saveContext}
-        title="Save context"
-        disabled={disabled || saving}
-      />
-    {/snippet}
-    <div class="context-body">
-      <ImageChipBar bind:images={localImages} readonly={disabled} />
-      <textarea
-        class="context-textarea"
-        bind:value={localText}
-        placeholder={disabled ? "This prompt doesn't use {{context}}" : "Enter context text…"}
-        {disabled}
-      ></textarea>
+<div class="context-inline" class:disabled={contextDisabled}>
+  {#if confirming}
+    <div class="confirm-bar">
+      <span class="confirm-text">Clear context for this conversation?</span>
+      <div class="confirm-actions">
+        <button class="confirm-btn confirm-yes" onclick={confirmClose}>Clear</button>
+        <button class="confirm-btn confirm-no" onclick={cancelClose}>Cancel</button>
+      </div>
     </div>
-  </CollapsibleSection>
+  {:else}
+    <CollapsibleSection title="Context" bind:collapsed headerClass={contextHeaderClass}>
+      {#snippet actions()}
+        <ActionIconButton
+          icon={Save}
+          confirmIcon={Check}
+          onclick={saveContext}
+          title="Save context globally"
+          disabled={contextDisabled || saving}
+        />
+        <ActionIconButton
+          icon={X}
+          onclick={requestClose}
+          title="Close context"
+        />
+      {/snippet}
+      <div class="context-body">
+        <ImageChipBar bind:images={localImages} readonly={contextDisabled} />
+        <textarea
+          class="context-textarea"
+          bind:value={localText}
+          placeholder={contextDisabled ? "This prompt doesn't use {{context}}" : "Enter context text…"}
+          disabled={contextDisabled}
+        ></textarea>
+      </div>
+    </CollapsibleSection>
+  {/if}
 </div>
 
 <style>
-  .context-section {
-    flex-shrink: 0;
-    padding: 8px 16px 0;
+  .context-inline {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
 
-  .context-section.disabled {
+  .context-inline.disabled {
     opacity: 0.5;
   }
 
-  .context-section :global(.collapsible-header.context-has-content) {
+  .context-inline :global(.collapsible-section) {
+    border: none;
+    border-radius: 0;
+  }
+
+  .context-inline :global(.collapsible-header) {
+    background: transparent;
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .context-inline :global(.collapsible-header:hover) {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .context-inline :global(.collapsible-header.context-has-content) {
     background: rgba(100, 160, 255, 0.08);
   }
 
-  .context-section :global(.collapsible-header.context-has-content .collapsible-title) {
+  .context-inline :global(.collapsible-header.context-has-content .collapsible-title) {
     color: #7dd3f0;
     font-weight: 700;
+  }
+
+  .context-inline :global(.collapsible-content) {
+    padding: 6px 10px 8px;
+  }
+
+  .confirm-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    background: rgba(220, 60, 60, 0.08);
+  }
+
+  .confirm-text {
+    font-size: 12px;
+    color: #e0e0e0;
+  }
+
+  .confirm-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .confirm-btn {
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: none;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .confirm-yes {
+    background: rgba(220, 60, 60, 0.8);
+    color: #fff;
+  }
+
+  .confirm-yes:hover {
+    background: rgba(220, 60, 60, 1);
+  }
+
+  .confirm-no {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e0e0e0;
+  }
+
+  .confirm-no:hover {
+    background: rgba(255, 255, 255, 0.18);
   }
 
   .context-body {
@@ -133,8 +226,8 @@
 
   .context-textarea {
     width: 100%;
-    min-height: 60px;
-    max-height: 150px;
+    min-height: 50px;
+    max-height: 120px;
     resize: vertical;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
