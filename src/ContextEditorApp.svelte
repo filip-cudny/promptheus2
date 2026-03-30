@@ -7,7 +7,7 @@
   import {
     getContextItems,
     clearContext,
-    setContext,
+    appendContext,
     appendContextImage,
   } from "$lib/services/context";
   import type { ConversationImage } from "$lib/types/conversation";
@@ -16,6 +16,7 @@
   let images = $state<ConversationImage[]>([]);
   let saving = $state(false);
   let errorMessage = $state("");
+  let confirmed = $state(false);
 
   onMount(async () => {
     const items = await getContextItems();
@@ -35,13 +36,12 @@
     const imageSnapshot = [...images];
     try {
       await clearContext();
-      if (textSnapshot.trim()) {
-        await setContext(textSnapshot);
-      }
       for (const img of imageSnapshot) {
         await appendContextImage(img.data, img.media_type);
       }
-      await getCurrentWindow().close();
+      if (textSnapshot.trim()) {
+        await appendContext(textSnapshot);
+      }
     } catch (e) {
       errorMessage = e instanceof Error ? e.message : String(e);
       console.error("Failed to save context:", e);
@@ -58,7 +58,11 @@
     }
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      if (!saving) save();
+      if (!saving) {
+        save();
+        confirmed = true;
+        setTimeout(() => (confirmed = false), 1200);
+      }
     }
   }
 </script>
@@ -76,8 +80,9 @@
         icon={Save}
         confirmIcon={Check}
         onclick={save}
-        title="Save and close (Ctrl+Enter)"
+        title="Save (Ctrl+Enter)"
         disabled={saving}
+        bind:confirmed
       />
     </div>
   </div>
@@ -111,18 +116,20 @@
   .editor-content :global(.context-editor) {
     flex: 1;
     padding: 8px 8px 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .editor-content :global(.context-editor:focus-within) {
+    border-color: transparent;
   }
 
   .editor-content :global(.context-textarea) {
     flex: 1;
     max-height: none;
     min-height: 100px;
-    background: transparent;
-    border: none;
-  }
-
-  .editor-content :global(.context-textarea:focus) {
-    border-color: transparent;
+    resize: none;
   }
 
   .button-bar {

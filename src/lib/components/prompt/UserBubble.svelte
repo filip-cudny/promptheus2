@@ -2,7 +2,8 @@
   import type { ConversationNode } from "$lib/types/conversation";
   import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
-  import { Trash2, Pencil } from "lucide-svelte";
+  import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
+  import { Trash2, Pencil, Copy, Check } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
@@ -54,6 +55,10 @@
     autoResize();
   }
 
+  async function copyContent() {
+    await navigator.clipboard.writeText(node.content);
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -70,6 +75,12 @@
       <span class="turn-number"># {messageNumber}</span>
     {/snippet}
     {#snippet actions()}
+      <ActionIconButton
+        icon={Copy}
+        confirmIcon={Check}
+        onclick={copyContent}
+        title="Copy text"
+      />
       <button class="icon-btn" class:active={editMode} onclick={toggleEditMode} title={editMode ? "View" : "Edit"}>
         <Pencil size={ICON_SIZE.md} />
       </button>
@@ -80,19 +91,24 @@
       {/if}
     {/snippet}
 
-    {#if node.images.length > 0}
-      <ImageChipBar images={node.images} readonly={true} />
-    {/if}
     {#if editMode}
-      <textarea
-        bind:this={textarea}
-        value={node.content}
-        oninput={handleInput}
-        onkeydown={handleKeydown}
-        class="bubble-textarea"
-        rows="1"
-      ></textarea>
+      <div class="bubble-edit-field">
+        {#if node.images.length > 0}
+          <ImageChipBar images={node.images} readonly={true} />
+        {/if}
+        <textarea
+          bind:this={textarea}
+          value={node.content}
+          oninput={handleInput}
+          onkeydown={handleKeydown}
+          class="bubble-textarea"
+          rows="1"
+        ></textarea>
+      </div>
     {:else}
+      {#if node.images.length > 0}
+        <ImageChipBar images={node.images} readonly={true} />
+      {/if}
       <div class="bubble-text">{node.content}</div>
     {/if}
   </CollapsibleSection>
@@ -160,16 +176,29 @@
     word-wrap: break-word;
   }
 
+  .bubble-edit-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 8px 8px 0;
+  }
+
+  .bubble-edit-field:focus-within {
+    border-color: rgba(74, 158, 187, 0.4);
+  }
+
   .bubble-textarea {
     width: 100%;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 4px;
+    background: transparent;
+    border: none;
     color: #e0e0e0;
     font-family: inherit;
     font-size: 14px;
     line-height: 1.5;
-    padding: 8px;
+    padding: 4px 0 8px;
     resize: none;
     overflow: hidden;
     box-sizing: border-box;
@@ -177,6 +206,5 @@
 
   .bubble-textarea:focus {
     outline: none;
-    border-color: rgba(74, 158, 187, 0.4);
   }
 </style>

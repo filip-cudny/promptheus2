@@ -57,13 +57,19 @@ function applyItemStates(items: MenuItem[]): MenuItem[] {
       item.item_type === "prompt" ? { ...item, enabled: false } : item,
     );
   }
-  if (_isRecording && _recordingPromptId) {
-    return items.map((item) => {
-      if (item.item_type !== "prompt") return item;
-      const data = item.data as { prompt_id: string } | null;
-      if (data?.prompt_id === _recordingPromptId) return item;
-      return { ...item, enabled: false };
-    });
+  if (_isRecording) {
+    if (_recordingPromptId) {
+      return items.map((item) => {
+        if (item.item_type === "speech") return { ...item, enabled: false };
+        if (item.item_type !== "prompt") return item;
+        const data = item.data as { prompt_id: string } | null;
+        if (data?.prompt_id === _recordingPromptId) return item;
+        return { ...item, enabled: false };
+      });
+    }
+    return items.map((item) =>
+      item.item_type === "prompt" ? { ...item, enabled: false } : item,
+    );
   }
   return items;
 }
@@ -163,6 +169,30 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
     if (!item.enabled) return;
     await closeMenu();
     startExecution(data.prompt_id);
+    return;
+  }
+
+  if (item.item_type === "speech") {
+    if (!item.enabled) return;
+    if (_isRecording && !_recordingPromptId) {
+      clearRecordingState();
+      try {
+        await invoke("execute_menu_item", { itemId: item.id, shiftPressed: false });
+      } catch (e) {
+        error("Failed to stop speech recording: " + e);
+      }
+      await closeMenu();
+    } else if (!_isRecording) {
+      _isRecording = true;
+      _recordingPromptId = null;
+      try {
+        await invoke("execute_menu_item", { itemId: item.id, shiftPressed: false });
+      } catch (e) {
+        error("Failed to start speech recording: " + e);
+        clearRecordingState();
+      }
+      await refreshItems();
+    }
     return;
   }
 

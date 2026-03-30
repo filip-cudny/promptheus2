@@ -113,13 +113,15 @@
     {/snippet}
 
     {#if editMode}
-      <textarea
-        bind:this={textarea}
-        value={displayContent}
-        oninput={handleInput}
-        class="bubble-textarea"
-        rows="1"
-      ></textarea>
+      <div class="bubble-edit-field">
+        <textarea
+          bind:this={textarea}
+          value={displayContent}
+          oninput={handleInput}
+          class="bubble-textarea"
+          rows="1"
+        ></textarea>
+      </div>
     {:else}
       <MarkdownRenderer content={displayContent} {isStreaming} />
     {/if}
@@ -215,16 +217,29 @@
     color: #ff8a8a;
   }
 
+  .bubble-edit-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 8px 8px 0;
+  }
+
+  .bubble-edit-field:focus-within {
+    border-color: rgba(155, 109, 204, 0.4);
+  }
+
   .bubble-textarea {
     width: 100%;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 4px;
+    background: transparent;
+    border: none;
     color: #e0e0e0;
     font-family: "Fira Code", "Cascadia Code", monospace;
     font-size: 14px;
     line-height: 1.5;
-    padding: 8px;
+    padding: 4px 0 8px;
     resize: none;
     overflow: hidden;
     box-sizing: border-box;
@@ -232,6 +247,5 @@
 
   .bubble-textarea:focus {
     outline: none;
-    border-color: rgba(155, 109, 204, 0.4);
   }
 </style>

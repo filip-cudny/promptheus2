@@ -12,6 +12,7 @@
     title = "",
     disabled = false,
     size = ICON_SIZE.md,
+    confirmed = $bindable(false),
   }: {
     icon: LucideIcon;
     confirmIcon?: LucideIcon;
@@ -19,9 +20,8 @@
     title?: string;
     disabled?: boolean;
     size?: number;
+    confirmed?: boolean;
   } = $props();
-
-  let confirmed = $state(false);
   let ActiveIcon = $derived(confirmed && confirmIcon ? confirmIcon : icon);
 
   function handleClick(e: MouseEvent) {

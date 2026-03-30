@@ -9,6 +9,7 @@
   } from "$lib/services/context";
   import { openContextEditor } from "$lib/services/contextEditor";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
+  import Chip from "$lib/components/ui/Chip.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import {
     FileSymlink,
@@ -18,28 +19,14 @@
     Trash2,
     Check,
     FileText,
+    X,
   } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
   let { items }: { items: ContextItem[] } = $props();
 
   let hasTextItems = $derived(items.some((i) => i.item_type === "text"));
-  let imageItemsWithIndex = $derived(
-    items
-      .map((item, index) => ({ item, index }))
-      .filter((e): e is { item: ContextItem & { item_type: "image" }; index: number } => e.item.item_type === "image"),
-  );
-  let imageItems = $derived(
-    imageItemsWithIndex.map((e) => ({ data: e.item.data, media_type: e.item.media_type })),
-  );
   let isEmpty = $derived(items.length === 0);
-
-  function handleRemoveImage(imageIndex: number) {
-    const originalIndex = imageItemsWithIndex[imageIndex]?.index;
-    if (originalIndex !== undefined) {
-      removeContextItem(originalIndex);
-    }
-  }
 
   function truncateText(text: string, maxLength = 50): string {
     if (text.length <= maxLength) return text;
@@ -103,17 +90,22 @@
 
   {#if !isEmpty}
     <div class="chips">
-      {#each items as item}
+      {#each items as item, idx}
         {#if item.item_type === "text"}
-          <span class="chip chip-text" title={item.content}>
+          <Chip title={item.content}>
             <FileText size={ICON_SIZE.md} />
             {truncateText(item.content)}
-          </span>
+            <button class="chip-remove" onclick={() => removeContextItem(idx)}>
+              <X size={11} strokeWidth={2.5} />
+            </button>
+          </Chip>
+        {:else if item.item_type === "image"}
+          <ImageChipBar
+            images={[{ data: item.data, media_type: item.media_type }]}
+            onremove={() => removeContextItem(idx)}
+          />
         {/if}
       {/each}
-      {#if imageItems.length > 0}
-        <ImageChipBar images={imageItems} onremove={handleRemoveImage} />
-      {/if}
     </div>
   {/if}
 </div>
@@ -166,20 +158,22 @@
     padding: 4px 12px 2px;
   }
 
-  .chip {
-    display: inline-flex;
+  .chip-remove {
+    display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    background: #3a3a3a;
-    border: 1px solid #555;
-    border-radius: 12px;
-    font-size: 12px;
-    color: #f0f0f0;
-    max-width: 200px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 2px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+  }
+
+  .chip-remove:hover {
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.8);
   }
 
 </style>

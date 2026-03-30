@@ -41,7 +41,15 @@
   .context-editor {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    padding: 8px 8px 0;
+  }
+
+  .context-editor:focus-within {
+    border-color: rgba(100, 160, 255, 0.5);
   }
 
   .context-textarea {
@@ -49,19 +57,17 @@
     min-height: 50px;
     max-height: 120px;
     resize: vertical;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
+    background: transparent;
+    border: none;
     color: #e0e0e0;
     font: inherit;
     font-size: 13px;
-    padding: 8px;
+    padding: 4px 0 8px;
     box-sizing: border-box;
   }
 
   .context-textarea:focus {
     outline: none;
-    border-color: rgba(100, 160, 255, 0.5);
   }
 
   .context-textarea:disabled {

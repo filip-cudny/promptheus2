@@ -36,6 +36,7 @@ impl MenuItemProvider for SpeechMenuProvider {
         };
 
         let enabled = self.is_recording || !self.is_action_executing;
+        let icon = if self.is_recording { "square" } else { "mic" };
 
         vec![MenuItem {
             id: "system_speech_to_text".to_string(),
@@ -47,7 +48,7 @@ impl MenuItemProvider for SpeechMenuProvider {
             style: None,
             tooltip: None,
             submenu_items: None,
-            icon: Some("mic".to_string()),
+            icon: Some(icon.to_string()),
             section_id: None,
         }]
     }
@@ -87,6 +88,7 @@ mod tests {
         provider.set_recording(true);
         let items = provider.get_menu_items();
         assert_eq!(items[0].label, "Stop Recording");
+        assert_eq!(items[0].icon.as_deref(), Some("square"));
         assert!(items[0].enabled);
     }
 

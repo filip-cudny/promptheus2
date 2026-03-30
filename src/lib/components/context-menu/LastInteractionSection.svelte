@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Copy, Check, History } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import Chip from "$lib/components/ui/Chip.svelte";
   import { copyHistoryContent } from "$lib/services/history";
   import { info } from "@tauri-apps/plugin-log";
 
@@ -18,8 +19,7 @@
 
   let copyConfirm = $state<string | null>(null);
 
-  async function handleCopy(e: MouseEvent, chipType: string, content: string | undefined | null) {
-    e.stopPropagation();
+  async function handleCopy(chipType: string, content: string | undefined | null) {
     if (!content) return;
     await copyHistoryContent(content);
     copyConfirm = chipType;
@@ -30,9 +30,9 @@
     info("History button clicked — history dialog not yet implemented");
   }
 
-  type Chip = { type: string; label: string; content: string | null };
+  type ChipEntry = { type: string; label: string; content: string | null };
 
-  let chips = $derived<Chip[]>([
+  let chips = $derived<ChipEntry[]>([
     { type: "input", label: "Input", content: data?.input?.content ?? null },
     { type: "output", label: "Output", content: data?.output?.content ?? null },
     { type: "transcription", label: "Transcription", content: data?.transcription?.content ?? null },
@@ -56,12 +56,10 @@
   {#if hasAnyContent}
     <div class="chips">
       {#each chips as chip}
-        <button
-          class="chip"
-          class:chip-disabled={!chip.content}
+        <Chip
+          onclick={() => handleCopy(chip.type, chip.content)}
           disabled={!chip.content}
           title={chip.content ?? "No content"}
-          onclick={(e: MouseEvent) => handleCopy(e, chip.type, chip.content)}
         >
           <span class="chip-copy">
             {#if copyConfirm === chip.type}
@@ -71,7 +69,7 @@
             {/if}
           </span>
           <span class="chip-label">{chip.label}</span>
-        </button>
+        </Chip>
       {/each}
     </div>
   {/if}
@@ -122,32 +120,6 @@
     flex-wrap: wrap;
     gap: 4px;
     padding: 4px 12px 6px;
-  }
-
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    background: #3a3a3a;
-    border: 1px solid #555;
-    border-radius: 12px;
-    font-size: 12px;
-    color: #f0f0f0;
-    cursor: pointer;
-    white-space: nowrap;
-    font-family: inherit;
-  }
-
-  .chip:hover:not(.chip-disabled) {
-    background: #454545;
-  }
-
-  .chip-disabled {
-    background: #2a2a2a;
-    border-color: #444;
-    color: #666;
-    cursor: default;
   }
 
   .chip-copy {

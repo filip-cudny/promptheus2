@@ -162,7 +162,9 @@
               tabindex={-1}
               onclick={(e) => handleItemClick(globalIndex, e)}
             >
-              {#if item.icon === "mic"}
+              {#if item.icon === "square"}
+                <span class="item-icon"><Square size={ICON_SIZE.sm} /></span>
+              {:else if item.icon === "mic"}
                 <span class="item-icon"><Mic size={ICON_SIZE.sm} /></span>
               {/if}
               <span class="item-label">{item.label}</span>
