@@ -31,6 +31,8 @@ impl ConfigService {
             Self::initialize_defaults(config_dir, resource_dir)?;
         }
 
+        let _ = Self::initialize_input_format_guide(config_dir);
+
         let content = std::fs::read_to_string(&settings_path)?;
         let mut settings: Settings = serde_json::from_str(&content)?;
 
@@ -74,7 +76,17 @@ impl ConfigService {
         }
 
         Self::initialize_env(config_dir)?;
+        Self::initialize_input_format_guide(config_dir)?;
 
+        Ok(())
+    }
+
+    fn initialize_input_format_guide(config_dir: &Path) -> Result<(), ConfigError> {
+        let guide_path = config_dir.join("input_format_guide.md");
+        if !guide_path.exists() {
+            let default_guide = include_str!("../../resources/input_format_guide.md");
+            std::fs::write(&guide_path, default_guide)?;
+        }
         Ok(())
     }
 
@@ -206,6 +218,11 @@ impl ConfigService {
 
     pub fn update_skills_order(&mut self, order: Vec<String>) {
         self.settings.skills_order = order;
+    }
+
+    pub fn input_format_guide(&self) -> String {
+        let guide_path = self.config_dir.join("input_format_guide.md");
+        std::fs::read_to_string(&guide_path).unwrap_or_default()
     }
 
     pub fn config_dir(&self) -> &Path {

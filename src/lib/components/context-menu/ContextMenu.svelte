@@ -6,7 +6,8 @@
   import type { ContextItem } from "$lib/types/context";
   import ContextSection from "./ContextSection.svelte";
   import LastInteractionSection from "./LastInteractionSection.svelte";
-  import { Info, MessageSquareShare, Mic, Square } from "lucide-svelte";
+  import { Info, MessageSquare, MessageSquareShare, Mic, Square } from "lucide-svelte";
+  import { openPromptDialog } from "$lib/services/promptDialog";
   import { ICON_SIZE } from "$lib/constants/ui";
   import {
     getItems,
@@ -173,6 +174,17 @@
       {#if sectionIdx > 0}
         <div class="separator"></div>
       {/if}
+      {#if section.sectionId === "prompts"}
+        <button
+          class="chat-button"
+          role="menuitem"
+          onclick={async () => { await closeMenu(); await openPromptDialog("", "Chat"); }}
+        >
+          <MessageSquare size={ICON_SIZE.md} />
+          <span>Chat</span>
+        </button>
+        <div class="separator"></div>
+      {/if}
       {#each section.items as { item, globalIndex }}
         {@const contextItems = extractContextItems(item)}
         {@const lastInteractionData = extractLastInteractionData(item)}
@@ -270,6 +282,30 @@
     color: rgba(255, 255, 255, 0.4);
     text-align: center;
     font-style: italic;
+  }
+
+  .chat-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 12px;
+    border: none;
+    background: transparent;
+    color: #e0e0e0;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+    outline: none;
+  }
+
+  .chat-button:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .chat-button:active {
+    background: rgba(255, 255, 255, 0.15);
   }
 
   .separator {

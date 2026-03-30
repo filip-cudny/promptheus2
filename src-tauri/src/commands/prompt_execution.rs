@@ -273,9 +273,13 @@ pub async fn execute_skill(
             })?,
         };
 
-        let system_prompt = &state.config.settings().system_prompt;
+        let system_prompt = format!(
+            "{}\n\n{}",
+            state.config.settings().system_prompt,
+            state.config.input_format_guide()
+        );
         let messages = skill_execution::prepare_skill_messages(
-            system_prompt,
+            &system_prompt,
             &skill,
             &input_content,
             &state.context,
@@ -451,12 +455,14 @@ pub async fn get_system_prompt(
 ) -> Result<Vec<ProcessedMessage>, String> {
     let state = state.lock().await;
 
+    let input_format_guide = state.config.input_format_guide();
     let system_prompt = state.config.settings().system_prompt.clone();
+    let base_prompt = format!("{system_prompt}\n\n{input_format_guide}");
     let system_content = match &context_text {
         Some(text) if !text.is_empty() => {
-            format!("{system_prompt}\n\n<context>\n{text}\n</context>")
+            format!("{base_prompt}\n\n<context>\n{text}\n</context>")
         }
-        _ => system_prompt,
+        _ => base_prompt,
     };
 
     Ok(vec![ProcessedMessage {
@@ -486,7 +492,11 @@ pub async fn process_skill_template(
         }
     }
 
-    let system_prompt = state.config.settings().system_prompt.clone();
+    let system_prompt = format!(
+        "{}\n\n{}",
+        state.config.settings().system_prompt,
+        state.config.input_format_guide()
+    );
     let messages = skill_execution::prepare_skill_messages(
         &system_prompt,
         &skill,
