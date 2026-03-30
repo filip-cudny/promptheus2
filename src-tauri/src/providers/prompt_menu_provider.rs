@@ -1,18 +1,18 @@
 use crate::models::menu::{MenuItem, MenuItemType};
-use crate::models::settings::PromptData;
+use crate::models::skill::SkillSummary;
 use crate::traits::MenuItemProvider;
 
 pub struct PromptMenuProvider {
-    prompts: Vec<PromptData>,
+    skills: Vec<SkillSummary>,
 }
 
 impl PromptMenuProvider {
-    pub fn new(prompts: Vec<PromptData>) -> Self {
-        Self { prompts }
+    pub fn new(skills: Vec<SkillSummary>) -> Self {
+        Self { skills }
     }
 
-    pub fn update_prompts(&mut self, prompts: Vec<PromptData>) {
-        self.prompts = prompts;
+    pub fn update_skills(&mut self, skills: Vec<SkillSummary>) {
+        self.skills = skills;
     }
 }
 
@@ -22,20 +22,20 @@ impl MenuItemProvider for PromptMenuProvider {
     }
 
     fn get_menu_items(&self) -> Vec<MenuItem> {
-        self.prompts
+        self.skills
             .iter()
-            .map(|prompt| MenuItem {
-                id: prompt.id.clone(),
-                label: prompt.name.clone(),
+            .map(|skill| MenuItem {
+                id: skill.name.clone(),
+                label: skill.display_name.clone(),
                 item_type: MenuItemType::Prompt,
                 data: Some(serde_json::json!({
-                    "prompt_id": prompt.id,
-                    "prompt_name": prompt.name,
+                    "prompt_id": skill.name,
+                    "prompt_name": skill.display_name,
                 })),
                 enabled: true,
                 separator_after: false,
                 style: None,
-                tooltip: prompt.description.clone(),
+                tooltip: skill.description.clone(),
                 submenu_items: None,
                 icon: None,
                 section_id: None,
@@ -54,49 +54,48 @@ impl MenuItemProvider for PromptMenuProvider {
 mod tests {
     use super::*;
 
-    fn make_prompt(id: &str, name: &str) -> PromptData {
-        PromptData {
-            id: id.to_string(),
+    fn make_skill(name: &str, display_name: &str) -> SkillSummary {
+        SkillSummary {
             name: name.to_string(),
+            display_name: display_name.to_string(),
             description: None,
-            messages: Vec::new(),
         }
     }
 
     #[test]
-    fn test_get_menu_items_maps_prompts() {
+    fn test_get_menu_items_maps_skills() {
         let provider = PromptMenuProvider::new(vec![
-            make_prompt("p1", "Summarize"),
-            make_prompt("p2", "Translate"),
+            make_skill("summarize", "Summarize"),
+            make_skill("translate", "Translate"),
         ]);
 
         let items = provider.get_menu_items();
         assert_eq!(items.len(), 2);
 
-        assert_eq!(items[0].id, "p1");
+        assert_eq!(items[0].id, "summarize");
         assert_eq!(items[0].label, "Summarize");
         assert_eq!(items[0].item_type, MenuItemType::Prompt);
         assert!(items[0].enabled);
 
         let data = items[0].data.as_ref().unwrap();
-        assert_eq!(data["prompt_id"], "p1");
+        assert_eq!(data["prompt_id"], "summarize");
         assert_eq!(data["prompt_name"], "Summarize");
     }
 
     #[test]
-    fn test_empty_prompts() {
+    fn test_empty_skills() {
         let provider = PromptMenuProvider::new(Vec::new());
         assert!(provider.get_menu_items().is_empty());
     }
 
     #[test]
-    fn test_update_prompts() {
-        let mut provider = PromptMenuProvider::new(vec![make_prompt("p1", "Old")]);
+    fn test_update_skills() {
+        let mut provider = PromptMenuProvider::new(vec![make_skill("p1", "Old")]);
         assert_eq!(provider.get_menu_items().len(), 1);
 
-        provider.update_prompts(vec![
-            make_prompt("p2", "New1"),
-            make_prompt("p3", "New2"),
+        provider.update_skills(vec![
+            make_skill("p2", "New1"),
+            make_skill("p3", "New2"),
         ]);
         let items = provider.get_menu_items();
         assert_eq!(items.len(), 2);

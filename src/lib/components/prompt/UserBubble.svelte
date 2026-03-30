@@ -23,6 +23,29 @@
     onRegenerate: () => void;
   } = $props();
 
+  function escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function formatUserContent(content: string): string {
+    return content
+      .split("\n")
+      .map((line) => {
+        const match = line.match(/^(\/[a-z0-9-]+)(\s.*)?$/);
+        if (match) {
+          const badge = `<span class="skill-badge">${escapeHtml(match[1])}</span>`;
+          const rest = match[2] ? escapeHtml(match[2]) : "";
+          return badge + rest;
+        }
+        return escapeHtml(line);
+      })
+      .join("\n");
+  }
+
   let collapsed = $state(false);
   let editMode = $state(false);
   let textarea: HTMLTextAreaElement | undefined = $state();
@@ -104,7 +127,7 @@
       {#if node.images.length > 0}
         <ImageChipBar images={node.images} readonly={true} />
       {/if}
-      <div class="bubble-text">{node.content}</div>
+      <div class="bubble-text">{@html formatUserContent(node.content)}</div>
     {/if}
   </CollapsibleSection>
 </div>
@@ -169,6 +192,16 @@
     color: #e0e0e0;
     white-space: pre-wrap;
     word-wrap: break-word;
+  }
+
+  .bubble-text :global(.skill-badge) {
+    display: inline;
+    color: inherit;
+    font-weight: 600;
+    background: rgba(100, 160, 255, 0.12);
+    border-radius: 3px;
+    border-bottom: 2px solid rgba(100, 160, 255, 0.5);
+    padding: 0 2px;
   }
 
   .bubble-edit-field {

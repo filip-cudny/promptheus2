@@ -18,6 +18,8 @@ export interface Settings {
   models: ModelConfig[];
   keymaps: KeymapGroup[];
   prompts: PromptData[];
+  system_prompt: string;
+  skills_order: string[];
 }
 
 export interface ModelConfig {
@@ -97,6 +99,16 @@ export interface NotificationColors {
   error: string;
   info: string;
   warning: string;
+}
+
+export interface SkillSummary {
+  name: string;
+  display_name: string;
+  description: string | null;
+}
+
+export interface Skill extends SkillSummary {
+  body: string;
 }
 
 export interface DescriptionGenerator {

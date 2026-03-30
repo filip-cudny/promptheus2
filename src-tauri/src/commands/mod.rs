@@ -9,4 +9,5 @@ pub mod notification;
 pub mod prompt_execution;
 pub mod prompt_dialog;
 pub mod settings;
+pub mod skills;
 pub mod speech;

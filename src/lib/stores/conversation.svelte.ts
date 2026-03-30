@@ -3,7 +3,7 @@ import { error as logError } from "@tauri-apps/plugin-log";
 import { generateId } from "$lib/utils/id";
 import {
   executeConversationTurn,
-  processPromptTemplate,
+  processSkillTemplate,
   type ExecutionCallbacks,
 } from "$lib/services/promptExecution";
 import {
@@ -11,6 +11,13 @@ import {
   updateConversationEntry,
   getHistoryEntry,
 } from "$lib/services/history";
+import { getSkillBody } from "$lib/services/skills";
+import {
+  parseInputForSkills,
+  composeSkillMessage,
+  hasSkillReferences,
+  type ResolvedSkillSegment,
+} from "$lib/utils/skillComposer";
 import type {
   ConversationNode,
   ConversationImage,
@@ -247,6 +254,44 @@ export function createConversationStore(
     return tabs.find((t) => t.tab_id === tabId);
   }
 
+  async function resolveSkillSegments(
+    text: string,
+  ): Promise<ResolvedSkillSegment[] | null> {
+    if (!hasSkillReferences(text)) return null;
+
+    const segments = parseInputForSkills(text);
+    const hasAnySkill = segments.some((s) => s.skillName !== null);
+    if (!hasAnySkill) return null;
+
+    const resolved: ResolvedSkillSegment[] = [];
+    for (const seg of segments) {
+      if (seg.skillName) {
+        try {
+          const body = await getSkillBody(seg.skillName);
+          resolved.push({
+            skillName: seg.skillName,
+            skillBody: body,
+            input: seg.input,
+          });
+        } catch {
+          resolved.push({
+            skillName: seg.skillName,
+            skillBody: "",
+            input: seg.input,
+          });
+        }
+      } else if (seg.input) {
+        resolved.push({
+          skillName: promptId,
+          skillBody: "",
+          input: seg.input,
+        });
+      }
+    }
+
+    return resolved.length > 0 ? resolved : null;
+  }
+
   async function sendMessage(): Promise<{ success: boolean; result: string }> {
     const tab = getTab(activeTabId);
     if (!tab || tab.is_executing)
@@ -256,6 +301,8 @@ export function createConversationStore(
     const images = [...tab.input_images];
     if (!text && images.length === 0)
       return { success: false, result: "" };
+
+    const skillSegments = await resolveSkillSegments(text);
 
     const userNode = createNode(
       "user",
@@ -290,12 +337,25 @@ export function createConversationStore(
     let resultText = "";
 
     try {
-      const templateMessages = await processPromptTemplate(
+      const templateMessages = await processSkillTemplate(
         promptId,
         tab.context_text || undefined,
       );
       const treeMessages = buildMessagesFromTree(tab.tree, tab.context_images);
-      const messages = [...templateMessages, ...treeMessages];
+
+      let messages: ProcessedMessage[];
+      if (skillSegments) {
+        const composedContent = composeSkillMessage(skillSegments);
+        const updatedTreeMessages = treeMessages.map((msg, idx) =>
+          msg.role === "user" && idx === treeMessages.length - 1
+            ? { ...msg, content: composedContent }
+            : msg,
+        );
+        const systemOnly = templateMessages.length > 0 ? [templateMessages[0]] : [];
+        messages = [...systemOnly, ...updatedTreeMessages];
+      } else {
+        messages = [...templateMessages, ...treeMessages];
+      }
 
       const callbacks: ExecutionCallbacks = {
         onChunk: (_delta, accumulated) => {
@@ -376,7 +436,7 @@ export function createConversationStore(
     let regenerateSuccess = false;
 
     try {
-      const templateMessages = await processPromptTemplate(
+      const templateMessages = await processSkillTemplate(
         promptId,
         tab.context_text || undefined,
       );

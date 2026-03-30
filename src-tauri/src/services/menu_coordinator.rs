@@ -132,24 +132,12 @@ impl MenuCoordinator {
             })
             .collect();
 
-        let prompt_options: Vec<serde_json::Value> = settings
-            .prompts
-            .iter()
-            .map(|p| {
-                serde_json::json!({
-                    "id": p.id,
-                    "name": p.name,
-                })
-            })
-            .collect();
-
         vec![MenuItem {
             id: "settings_section".to_string(),
             label: "Settings".to_string(),
             item_type: MenuItemType::SettingsSection,
             data: Some(serde_json::json!({
                 "model_options": model_options,
-                "prompt_options": prompt_options,
                 "current_model": default_model_display,
             })),
             enabled: true,
@@ -354,7 +342,6 @@ mod tests {
 
         let data = settings_items[0].data.as_ref().unwrap();
         assert!(data.get("model_options").is_some());
-        assert!(data.get("prompt_options").is_some());
         assert!(data.get("current_model").is_some());
     }
 

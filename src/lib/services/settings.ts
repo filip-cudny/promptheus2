@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   Settings,
   ModelConfig,
-  PromptData,
   NotificationSettings,
   SpeechToTextModel,
   KeymapGroup,
@@ -32,25 +31,6 @@ export async function updateModel(
 
 export async function deleteModel(modelId: string): Promise<void> {
   return invoke("delete_model", { model_id: modelId });
-}
-
-export async function addPrompt(prompt: PromptData): Promise<void> {
-  return invoke("add_prompt", { prompt });
-}
-
-export async function updatePrompt(
-  promptId: string,
-  prompt: PromptData,
-): Promise<void> {
-  return invoke("update_prompt", { prompt_id: promptId, prompt });
-}
-
-export async function deletePrompt(promptId: string): Promise<void> {
-  return invoke("delete_prompt", { prompt_id: promptId });
-}
-
-export async function reorderPrompts(promptIds: string[]): Promise<void> {
-  return invoke("reorder_prompts", { prompt_ids: promptIds });
 }
 
 export async function updateNotifications(

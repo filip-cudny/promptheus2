@@ -73,16 +73,12 @@ pub async fn execute_menu_item(
     }
 
     if shift_pressed {
-        let is_prompt = {
+        let is_skill = {
             let s = state.lock().await;
-            s.config
-                .settings()
-                .prompts
-                .iter()
-                .any(|p| p.id == item_id)
+            s.skill_service.get_skill(&item_id).is_some()
         };
 
-        if is_prompt {
+        if is_skill {
             let mut s = state.lock().await;
             if s.speech.is_recording() {
                 drop(s);

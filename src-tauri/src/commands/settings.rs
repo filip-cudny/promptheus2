@@ -2,7 +2,7 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 use crate::models::settings::{
-    KeymapGroup, ModelConfig, NotificationSettings, PromptData, Settings, SpeechToTextModel,
+    KeymapGroup, ModelConfig, NotificationSettings, Settings, SpeechToTextModel,
 };
 use crate::services::ai::AiService;
 use crate::services::clipboard::ClipboardService;
@@ -14,6 +14,7 @@ use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::notification::NotificationService;
 use crate::services::placeholder::PlaceholderService;
 use crate::services::prompt_execution::PromptExecutionService;
+use crate::services::skill::SkillService;
 use crate::services::speech::SpeechService;
 
 pub struct AppState {
@@ -27,6 +28,7 @@ pub struct AppState {
     pub history: HistoryService,
     pub image_storage: ImageStorage,
     pub prompt_execution: PromptExecutionService,
+    pub skill_service: SkillService,
     pub speech: SpeechService,
 }
 
@@ -97,51 +99,6 @@ pub async fn delete_model(
     let mut state = state.lock().await;
     state.config.delete_model(&model_id);
     rebuild_ai(&mut state);
-    save_and_emit(&state.config, &app)
-}
-
-#[tauri::command]
-pub async fn add_prompt(
-    app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
-    prompt: PromptData,
-) -> Result<(), String> {
-    let mut state = state.lock().await;
-    state.config.add_prompt(prompt);
-    save_and_emit(&state.config, &app)
-}
-
-#[tauri::command]
-pub async fn update_prompt(
-    app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
-    prompt_id: String,
-    prompt: PromptData,
-) -> Result<(), String> {
-    let mut state = state.lock().await;
-    state.config.update_prompt(&prompt_id, prompt);
-    save_and_emit(&state.config, &app)
-}
-
-#[tauri::command]
-pub async fn delete_prompt(
-    app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
-    prompt_id: String,
-) -> Result<(), String> {
-    let mut state = state.lock().await;
-    state.config.delete_prompt(&prompt_id);
-    save_and_emit(&state.config, &app)
-}
-
-#[tauri::command]
-pub async fn reorder_prompts(
-    app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
-    prompt_ids: Vec<String>,
-) -> Result<(), String> {
-    let mut state = state.lock().await;
-    state.config.reorder_prompts(&prompt_ids);
     save_and_emit(&state.config, &app)
 }
 

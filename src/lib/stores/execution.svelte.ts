@@ -1,6 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { error as logError } from "@tauri-apps/plugin-log";
-import { executePrompt } from "$lib/services/promptExecution";
+import { executeSkill } from "$lib/services/promptExecution";
 
 let _isExecuting = $state(false);
 let _executionId = $state<string | null>(null);
@@ -23,14 +23,14 @@ function getStreamedContent(): string {
 }
 
 async function startExecution(
-  promptId: string,
+  skillName: string,
   inputOverride?: string,
 ): Promise<void> {
   _streamedContent = "";
 
   try {
-    await executePrompt(
-      promptId,
+    await executeSkill(
+      skillName,
       {
         onChunk: (_delta, accumulated) => {
           _streamedContent = accumulated;

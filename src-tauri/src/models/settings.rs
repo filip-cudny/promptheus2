@@ -38,6 +38,12 @@ pub struct Settings {
 
     #[serde(default)]
     pub prompts: Vec<PromptData>,
+
+    #[serde(default = "default_system_prompt")]
+    pub system_prompt: String,
+
+    #[serde(default)]
+    pub skills_order: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -225,6 +231,10 @@ fn default_menu_section_order() -> Vec<String> {
     ]
 }
 
+fn default_system_prompt() -> String {
+    "You are a helpful assistant.".to_string()
+}
+
 fn default_debounce_ms() -> u32 {
     200
 }
@@ -248,6 +258,8 @@ impl Default for Settings {
             models: Vec::new(),
             keymaps: Vec::new(),
             prompts: Vec::new(),
+            system_prompt: default_system_prompt(),
+            skills_order: Vec::new(),
         }
     }
 }

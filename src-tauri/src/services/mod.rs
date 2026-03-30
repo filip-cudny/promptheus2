@@ -9,4 +9,6 @@ pub mod notification;
 pub mod placeholder;
 pub mod hotkeys;
 pub mod prompt_execution;
+pub mod skill;
+pub mod skill_execution;
 pub mod speech;

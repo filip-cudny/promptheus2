@@ -3,8 +3,8 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { createConversationStore } from "$lib/stores/conversation.svelte";
-  import { getSettings } from "$lib/services/settings";
   import { hasContext } from "$lib/services/context";
+  import { getSkill } from "$lib/services/skills";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { PanelLeft } from "lucide-svelte";
   import ConversationArea from "$lib/components/prompt/ConversationArea.svelte";
@@ -47,16 +47,11 @@
     );
 
     try {
-      const settings = await getSettings();
-      const prompt = settings.prompts.find((p) => p.id === promptId);
-      if (prompt) {
-        const usesContext = prompt.messages.some((m) =>
-          m.content.includes("{{context}}"),
-        );
-        contextDisabled = !usesContext;
-      }
+      const skill = await getSkill(promptId);
+      const usesContext = skill.name === "process-with-context";
+      contextDisabled = !usesContext;
     } catch {
-      // leave context enabled if settings unavailable
+      // leave context enabled if skill unavailable
     }
 
     await autoShowContextIfNeeded();

@@ -173,7 +173,7 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
 
     if (!item.enabled) return;
     await closeMenu();
-    startExecution(data.prompt_id);
+    startExecution(data.prompt_id); // prompt_id contains skill name
     return;
   }
 

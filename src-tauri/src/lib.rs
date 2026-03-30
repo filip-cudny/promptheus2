@@ -22,6 +22,7 @@ use services::menu_coordinator::MenuCoordinator;
 use services::notification::NotificationService;
 use services::placeholder::PlaceholderService;
 use services::prompt_execution::PromptExecutionService;
+use services::skill::SkillService;
 use services::speech::SpeechService;
 use providers::{LastInteractionMenuProvider, PromptMenuProvider, SpeechMenuProvider};
 
@@ -321,7 +322,7 @@ pub fn run() {
                 app.path()
                     .resolve("", tauri::path::BaseDirectory::Resource)?;
             services::config::load_env(&config_dir);
-            let config_service =
+            let mut config_service =
                 ConfigService::load(&config_dir, Some(&resource_dir))
                     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             log::info!("config loaded from {}", config_dir.display());
@@ -382,6 +383,42 @@ pub fn run() {
                 log::info!("{} global shortcuts registered", bindings.len());
             }
 
+            let skills_dir = config_dir.join("skills");
+            let mut skill_service = SkillService::load(
+                &skills_dir,
+                Some(&resource_dir),
+                &config_service.settings().skills_order,
+            )
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
+            if !config_service.settings().prompts.is_empty() {
+                let prompts = config_service.settings().prompts.clone();
+                let order = config_service.settings().skills_order.clone();
+                match skill_service.migrate_from_prompts(&prompts, &order) {
+                    Ok(migrated) => {
+                        if !migrated.is_empty() {
+                            log::info!("migrated {} prompts to skills", migrated.len());
+                            config_service.settings_mut().prompts.clear();
+                            let mut new_order = config_service.settings().skills_order.clone();
+                            for name in &migrated {
+                                if !new_order.contains(name) {
+                                    new_order.push(name.clone());
+                                }
+                            }
+                            config_service.update_skills_order(new_order);
+                            let _ = config_service.save();
+                        }
+                    }
+                    Err(e) => log::warn!("prompt migration failed: {e}"),
+                }
+            }
+
+            log::info!(
+                "loaded {} skills from {}",
+                skill_service.list_skills().len(),
+                skills_dir.display()
+            );
+
             let clipboard_service = ClipboardService::new()
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             let notification_service = NotificationService::new(app.handle().clone());
@@ -389,9 +426,18 @@ pub fn run() {
             menu_coordinator.add_provider(Box::new(ContextMenuProvider::new()));
             menu_coordinator.add_provider(Box::new(LastInteractionMenuProvider::new()));
             menu_coordinator.add_provider(Box::new(SpeechMenuProvider::new()));
-            menu_coordinator.add_provider(Box::new(PromptMenuProvider::new(
-                config_service.settings().prompts.clone(),
-            )));
+
+            let skill_summaries: Vec<_> = skill_service
+                .list_skills()
+                .iter()
+                .map(|s| crate::models::skill::SkillSummary {
+                    name: s.name.clone(),
+                    display_name: s.display_name.clone(),
+                    description: s.description.clone(),
+                })
+                .collect();
+            menu_coordinator.add_provider(Box::new(PromptMenuProvider::new(skill_summaries)));
+
             let ai_service = AiService::new(&config_service.settings().models);
             let context_service = ContextManagerService::new();
             let placeholder_service = PlaceholderService::new();
@@ -415,6 +461,7 @@ pub fn run() {
                 history: history_service,
                 image_storage,
                 prompt_execution: PromptExecutionService::new(),
+                skill_service,
                 speech: SpeechService::new(),
             }));
             Ok(())
@@ -432,10 +479,6 @@ pub fn run() {
             commands::settings::add_model,
             commands::settings::update_model,
             commands::settings::delete_model,
-            commands::settings::add_prompt,
-            commands::settings::update_prompt,
-            commands::settings::delete_prompt,
-            commands::settings::reorder_prompts,
             commands::settings::update_notifications,
             commands::settings::update_speech_model,
             commands::settings::update_keymaps,
@@ -465,11 +508,15 @@ pub fn run() {
             commands::history::get_last_interaction,
             commands::history::clear_history,
             commands::history::copy_history_content,
-            commands::prompt_execution::execute_prompt,
+            commands::prompt_execution::execute_skill,
             commands::prompt_execution::execute_conversation_turn,
             commands::prompt_execution::get_execution_state,
-            commands::prompt_execution::process_prompt_template,
+            commands::prompt_execution::process_skill_template,
             commands::prompt_dialog::open_prompt_dialog,
+            commands::skills::list_skills,
+            commands::skills::get_skill,
+            commands::skills::get_skill_body,
+            commands::skills::reload_skills,
             commands::context_editor::open_context_editor,
             commands::image_preview::open_image_preview,
             commands::image_preview::get_pending_image,

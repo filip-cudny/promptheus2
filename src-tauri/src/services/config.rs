@@ -1,8 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::models::settings::{
-    ApiKeySource, KeymapGroup, ModelConfig, NotificationSettings, PromptData, Settings,
-    SpeechToTextModel,
+    ApiKeySource, KeymapGroup, ModelConfig, NotificationSettings, Settings, SpeechToTextModel,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -185,30 +184,6 @@ impl ConfigService {
         self.settings.models.retain(|m| m.id != model_id);
     }
 
-    pub fn add_prompt(&mut self, prompt: PromptData) {
-        self.settings.prompts.push(prompt);
-    }
-
-    pub fn update_prompt(&mut self, prompt_id: &str, prompt: PromptData) {
-        if let Some(existing) = self.settings.prompts.iter_mut().find(|p| p.id == prompt_id) {
-            *existing = prompt;
-        }
-    }
-
-    pub fn delete_prompt(&mut self, prompt_id: &str) {
-        self.settings.prompts.retain(|p| p.id != prompt_id);
-    }
-
-    pub fn reorder_prompts(&mut self, prompt_ids: &[String]) {
-        let mut reordered = Vec::with_capacity(prompt_ids.len());
-        for id in prompt_ids {
-            if let Some(pos) = self.settings.prompts.iter().position(|p| &p.id == id) {
-                reordered.push(self.settings.prompts[pos].clone());
-            }
-        }
-        self.settings.prompts = reordered;
-    }
-
     pub fn update_notifications(&mut self, config: NotificationSettings) {
         self.settings.notifications = config;
     }
@@ -223,6 +198,18 @@ impl ConfigService {
 
     pub fn update_menu_section_order(&mut self, order: Vec<String>) {
         self.settings.menu_section_order = order;
+    }
+
+    pub fn update_system_prompt(&mut self, prompt: String) {
+        self.settings.system_prompt = prompt;
+    }
+
+    pub fn update_skills_order(&mut self, order: Vec<String>) {
+        self.settings.skills_order = order;
+    }
+
+    pub fn config_dir(&self) -> &Path {
+        &self.config_dir
     }
 }
 
@@ -589,46 +576,6 @@ mod tests {
             .models
             .iter()
             .all(|m| m.id != "upsert-model"));
-
-
-        let prompt = PromptData {
-            id: "test-prompt".to_string(),
-            name: "Test".to_string(),
-            description: None,
-            messages: vec![],
-        };
-        let prompt_count = service.settings().prompts.len();
-        service.add_prompt(prompt.clone());
-        assert_eq!(service.settings().prompts.len(), prompt_count + 1);
-
-
-        let mut updated_prompt = prompt;
-        updated_prompt.name = "Updated Test".to_string();
-        service.update_prompt("test-prompt", updated_prompt);
-        assert_eq!(
-            service
-                .settings()
-                .prompts
-                .iter()
-                .find(|p| p.id == "test-prompt")
-                .unwrap()
-                .name,
-            "Updated Test"
-        );
-
-
-        service.delete_prompt("test-prompt");
-        assert!(service
-            .settings()
-            .prompts
-            .iter()
-            .all(|p| p.id != "test-prompt"));
-
-
-        let ids: Vec<String> = service.settings().prompts.iter().rev().map(|p| p.id.clone()).collect();
-        let first_id_before = service.settings().prompts.last().unwrap().id.clone();
-        service.reorder_prompts(&ids);
-        assert_eq!(service.settings().prompts[0].id, first_id_before);
 
 
         service.update_setting("debug_mode", serde_json::Value::Bool(true));
