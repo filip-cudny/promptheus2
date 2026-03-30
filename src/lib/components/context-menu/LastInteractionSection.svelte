@@ -88,7 +88,7 @@
     padding: 4px 12px;
     color: rgba(255, 255, 255, 0.6);
     font-size: 11px;
-    text-transform: uppercase;
+    text-transform: capitalize;
     letter-spacing: 0.5px;
     box-sizing: border-box;
   }

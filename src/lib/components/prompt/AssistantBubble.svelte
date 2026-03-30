@@ -3,6 +3,7 @@
   import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
+  import { resizeTextarea } from "$lib/utils/autoResize";
   import { Copy, Check, RefreshCw, Trash2, ChevronLeft, ChevronRight, Pencil } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
@@ -36,29 +37,23 @@
   let editMode = $state(false);
   let textarea: HTMLTextAreaElement | undefined = $state();
 
-  function autoResize() {
-    if (!textarea) return;
-    textarea.style.height = "auto";
-    textarea.style.height = textarea.scrollHeight + "px";
-  }
-
   $effect(() => {
     if (editMode && textarea) {
       displayContent;
-      requestAnimationFrame(autoResize);
+      requestAnimationFrame(() => resizeTextarea(textarea!));
     }
   });
 
   function handleInput(e: Event) {
     const target = e.target as HTMLTextAreaElement;
     onContentChange(target.value);
-    autoResize();
+    resizeTextarea(target);
   }
 
   function toggleEditMode() {
     editMode = !editMode;
-    if (editMode) {
-      requestAnimationFrame(autoResize);
+    if (editMode && textarea) {
+      requestAnimationFrame(() => resizeTextarea(textarea!));
     }
   }
 

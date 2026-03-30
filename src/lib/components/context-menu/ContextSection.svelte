@@ -126,7 +126,7 @@
     color: rgba(255, 255, 255, 0.6);
     font: inherit;
     font-size: 11px;
-    text-transform: uppercase;
+    text-transform: capitalize;
     letter-spacing: 0.5px;
     box-sizing: border-box;
   }

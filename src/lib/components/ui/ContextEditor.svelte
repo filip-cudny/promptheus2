@@ -1,6 +1,7 @@
 <script lang="ts">
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
-  import { getClipboardImage } from "$lib/utils/paste";
+  import { getImageFromPasteEvent } from "$lib/utils/paste";
+  import { autoResize, resizeTextarea } from "$lib/utils/autoResize";
   import type { ConversationImage } from "$lib/types/conversation";
 
   let {
@@ -17,9 +18,16 @@
     placeholder?: string;
   } = $props();
 
-  async function handlePaste() {
+  let textarea: HTMLTextAreaElement | undefined = $state();
+
+  $effect(() => {
+    text;
+    if (textarea) requestAnimationFrame(() => resizeTextarea(textarea!));
+  });
+
+  async function handlePaste(e: ClipboardEvent) {
     if (readonly || disabled) return;
-    const image = await getClipboardImage();
+    const image = await getImageFromPasteEvent(e);
     if (image) {
       images = [...images, image];
     }
@@ -29,8 +37,11 @@
 <div class="context-editor">
   <ImageChipBar bind:images readonly={readonly || disabled} />
   <textarea
+    bind:this={textarea}
     class="context-textarea"
     bind:value={text}
+    use:autoResize={"20vh"}
+    rows="1"
     {placeholder}
     disabled={disabled || readonly}
     onpaste={handlePaste}
@@ -54,9 +65,6 @@
 
   .context-textarea {
     width: 100%;
-    min-height: 50px;
-    max-height: 120px;
-    resize: vertical;
     background: transparent;
     border: none;
     color: #e0e0e0;

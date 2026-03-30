@@ -6,7 +6,8 @@
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import { SendHorizonal, RefreshCw, Square, CopyCheck } from "lucide-svelte";
-  import { getClipboardImage } from "$lib/utils/paste";
+  import { getImageFromPasteEvent } from "$lib/utils/paste";
+  import { autoResize, resizeTextarea } from "$lib/utils/autoResize";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
 
@@ -58,6 +59,11 @@
     textarea?.focus();
   });
 
+  $effect(() => {
+    localText;
+    if (textarea) requestAnimationFrame(() => resizeTextarea(textarea!));
+  });
+
   function handleSendShow() {
     if (store.isRegenerateMode) {
       const path = store.tree.current_path;
@@ -98,8 +104,8 @@
     }
   }
 
-  async function handlePaste() {
-    const image = await getClipboardImage();
+  async function handlePaste(e: ClipboardEvent) {
+    const image = await getImageFromPasteEvent(e);
     if (image) {
       localImages = [...localImages, image];
     }
@@ -117,7 +123,9 @@
       bind:this={textarea}
       class="input-textarea"
       bind:value={localText}
-      placeholder="Type a message… (Enter to send, Shift+Enter for newline, Ctrl+Enter to send & copy, Esc to close)"
+      use:autoResize={"40vh"}
+      rows="1"
+      placeholder="Type a message…"
       onkeydown={handleKeydown}
       onpaste={handlePaste}
       disabled={store.isExecuting}
@@ -189,9 +197,7 @@
 
   .input-textarea {
     width: 100%;
-    min-height: 60px;
-    max-height: 200px;
-    resize: vertical;
+    min-height: 0;
     background: transparent;
     border: none;
     color: #e0e0e0;

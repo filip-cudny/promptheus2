@@ -39,6 +39,10 @@ fn save_and_emit(config: &ConfigService, app: &AppHandle) -> Result<(), String> 
     emit_changed(app)
 }
 
+fn rebuild_ai(state: &mut AppState) {
+    state.ai = AiService::new(&state.config.settings().models);
+}
+
 #[tauri::command]
 pub async fn get_settings(
     state: State<'_, Mutex<AppState>>,
@@ -67,6 +71,7 @@ pub async fn add_model(
 ) -> Result<(), String> {
     let mut state = state.lock().await;
     state.config.add_model(config);
+    rebuild_ai(&mut state);
     save_and_emit(&state.config, &app)
 }
 
@@ -79,6 +84,7 @@ pub async fn update_model(
 ) -> Result<(), String> {
     let mut state = state.lock().await;
     state.config.update_model(&model_id, config);
+    rebuild_ai(&mut state);
     save_and_emit(&state.config, &app)
 }
 
@@ -90,6 +96,7 @@ pub async fn delete_model(
 ) -> Result<(), String> {
     let mut state = state.lock().await;
     state.config.delete_model(&model_id);
+    rebuild_ai(&mut state);
     save_and_emit(&state.config, &app)
 }
 
@@ -195,6 +202,7 @@ pub async fn reload_settings(
     let settings = {
         let mut s = state.lock().await;
         s.config.reload().map_err(|e| e.to_string())?;
+        rebuild_ai(&mut s);
         s.config.settings().clone()
     };
     crate::reload_shortcuts(&app, &settings);

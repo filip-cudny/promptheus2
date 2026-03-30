@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+  import { LogicalSize } from "@tauri-apps/api/dpi";
   import type { MenuItem } from "$lib/types/menu";
   import type { ContextItem } from "$lib/types/context";
   import ContextSection from "./ContextSection.svelte";
   import LastInteractionSection from "./LastInteractionSection.svelte";
-  import { MessageSquareShare, Mic, Square } from "lucide-svelte";
+  import { Info, MessageSquareShare, Mic, Square } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import {
     getItems,
@@ -65,6 +66,26 @@
     return (item.data ?? null) as LastInteractionData | null;
   }
 
+  let menuEl: HTMLDivElement | undefined = $state();
+  let expandedDescriptionId = $state("");
+
+  const MENU_WIDTH = 320;
+
+  async function resizeWindowToContent() {
+    await tick();
+    if (!menuEl) return;
+    const height = menuEl.scrollHeight;
+    const win = getCurrentWebviewWindow();
+    await win.setSize(new LogicalSize(MENU_WIDTH, height));
+  }
+
+  $effect(() => {
+    void expandedDescriptionId;
+    if (menuVisible && menuItems.length > 0) {
+      resizeWindowToContent();
+    }
+  });
+
   let sections = $derived.by(() => {
     const allItems = getItems();
     const groups: SectionGroup[] = [];
@@ -86,6 +107,7 @@
   });
 
   let menuVisible = $derived(isVisible());
+  $effect(() => { if (!menuVisible) expandedDescriptionId = ""; });
   let menuItems = $derived(getItems());
   let promptItems = $derived(getPromptItems());
   let currentSelectedIndex = $derived(getSelectedIndex());
@@ -148,7 +170,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="context-menu" role="menu">
+<div class="context-menu" role="menu" bind:this={menuEl}>
   {#if menuItems.length === 0}
     <div class="empty-state" role="menuitem">No items available</div>
   {:else}
@@ -191,6 +213,14 @@
               {/if}
               <span class="item-label">{item.label}</span>
             </button>
+            {#if item.item_type === "prompt" && item.tooltip}
+              <button
+                class="action-btn info-btn"
+                onclick={(e) => { e.stopPropagation(); expandedDescriptionId = expandedDescriptionId === item.id ? "" : item.id; }}
+              >
+                <Info size={ICON_SIZE.sm} />
+              </button>
+            {/if}
             {#if item.item_type === "prompt"}
               {@const recordingThis = isRecordingThisPrompt(item)}
               {@const micDisabled = !item.enabled && !recordingThis}
@@ -216,6 +246,9 @@
               </button>
             {/if}
           </div>
+          {#if expandedDescriptionId === item.id && item.tooltip}
+            <div class="description-row">{item.tooltip}</div>
+          {/if}
         {/if}
       {/each}
     {/each}
@@ -231,9 +264,7 @@
     border-radius: 8px;
     padding: 4px 0;
     width: 100%;
-    height: 100%;
     box-sizing: border-box;
-    overflow-y: auto;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 13px;
     color: #e0e0e0;
@@ -291,7 +322,9 @@
   .item-icon {
     flex-shrink: 0;
     width: 16px;
-    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .prompt-number {
@@ -338,5 +371,18 @@
     color: rgba(255, 255, 255, 0.15);
     cursor: default;
     pointer-events: none;
+  }
+
+  .info-btn {
+    color: rgba(255, 255, 255, 0.15);
+    width: 18px;
+    height: 18px;
+  }
+
+  .description-row {
+    padding: 2px 12px 6px 40px;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 12px;
+    line-height: 1.3;
   }
 </style>

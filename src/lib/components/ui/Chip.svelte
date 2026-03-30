@@ -30,11 +30,11 @@
     align-items: center;
     gap: 4px;
     padding: 2px 8px;
-    background: #3a3a3a;
-    border: 1px solid #555;
+    background: #363636;
+    border: 1px solid #4e4e4e;
     border-radius: 12px;
     font-size: 12px;
-    color: #f0f0f0;
+    color: rgba(255, 255, 255, 0.78);
     white-space: nowrap;
     font-family: inherit;
   }
@@ -44,7 +44,7 @@
   }
 
   .clickable:hover {
-    background: #454545;
+    background: #383838;
   }
 
   .chip-disabled {

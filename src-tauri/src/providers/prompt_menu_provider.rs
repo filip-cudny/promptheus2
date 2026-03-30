@@ -35,7 +35,7 @@ impl MenuItemProvider for PromptMenuProvider {
                 enabled: true,
                 separator_after: false,
                 style: None,
-                tooltip: None,
+                tooltip: prompt.description.clone(),
                 submenu_items: None,
                 icon: None,
                 section_id: None,

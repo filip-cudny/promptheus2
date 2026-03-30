@@ -128,7 +128,8 @@ function moveSelection(direction: 1 | -1) {
 
   let nextNavIndex: number;
   if (currentNavIndex === -1) {
-    nextNavIndex = direction === 1 ? 0 : _navigableItems.length - 1;
+    const firstPrompt = _navigableItems.find((item) => item.item_type === "prompt");
+    nextNavIndex = firstPrompt ? _navigableItems.indexOf(firstPrompt) : 0;
   } else {
     nextNavIndex =
       (currentNavIndex + direction + _navigableItems.length) %
