@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import { getImageFromPasteEvent } from "$lib/utils/paste";
   import { autoResize, resizeTextarea } from "$lib/utils/autoResize";
@@ -49,12 +48,6 @@
   });
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      getCurrentWindow().close();
-      return;
-    }
-
     if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       if (store.isRegenerateMode) {

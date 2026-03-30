@@ -128,11 +128,6 @@
         e.preventDefault();
         executeSelected(e.shiftKey);
         break;
-      case "Escape":
-        e.preventDefault();
-        clearNumberBuffer();
-        closeMenu();
-        break;
       default: {
         if (e.key >= "0" && e.key <= "9") {
           e.preventDefault();

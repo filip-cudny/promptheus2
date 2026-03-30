@@ -84,6 +84,21 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     .visible(false)
     .build()?;
 
+    WebviewWindowBuilder::new(
+        app,
+        "text-preview",
+        tauri::WebviewUrl::App("text-preview.html".into()),
+    )
+    .title("Text Preview")
+    .inner_size(500.0, 400.0)
+    .resizable(true)
+    .decorations(true)
+    .transparent(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .visible(false)
+    .build()?;
+
     Ok(())
 }
 
@@ -512,6 +527,7 @@ pub fn run() {
             commands::prompt_execution::execute_conversation_turn,
             commands::prompt_execution::get_execution_state,
             commands::prompt_execution::process_skill_template,
+            commands::prompt_execution::get_system_prompt,
             commands::prompt_dialog::open_prompt_dialog,
             commands::skills::list_skills,
             commands::skills::get_skill,
@@ -520,6 +536,8 @@ pub fn run() {
             commands::context_editor::open_context_editor,
             commands::image_preview::open_image_preview,
             commands::image_preview::get_pending_image,
+            commands::text_preview::open_text_preview,
+            commands::text_preview::get_pending_text,
             commands::notification::update_notification_window,
             commands::notification::drain_pending_notifications,
             commands::speech::toggle_speech_recording,

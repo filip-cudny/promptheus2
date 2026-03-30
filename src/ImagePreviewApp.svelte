@@ -53,15 +53,9 @@
       if (!focused) hide();
     });
 
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") hide();
-    };
-    window.addEventListener("keydown", handleKey);
-
     return () => {
       unlistenLoad.then((fn) => fn());
       unlistenFocus.then((fn) => fn());
-      window.removeEventListener("keydown", handleKey);
     };
   });
 </script>

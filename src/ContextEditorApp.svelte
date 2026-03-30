@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
   import ContextEditor from "$lib/components/ui/ContextEditor.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import { Save, Check } from "lucide-svelte";
@@ -51,11 +50,6 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      getCurrentWindow().close();
-      return;
-    }
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       if (!saving) {

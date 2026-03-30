@@ -1,13 +1,15 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import ContextSection from "./ContextSection.svelte";
   import AttachMenu from "./AttachMenu.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
+  import TextChipBar from "$lib/components/ui/TextChipBar.svelte";
   import { SendHorizonal, RefreshCw, Square, CopyCheck } from "lucide-svelte";
-  import { getImageFromPasteEvent } from "$lib/utils/paste";
-  import { autoResize, resizeTextarea } from "$lib/utils/autoResize";
+  import { getImageFromPasteEvent, extractTextAttachment } from "$lib/utils/paste";
+  import { TEXT_ATTACHMENT_CHAR_THRESHOLD } from "$lib/constants/ui";
+  import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { listSkills } from "$lib/services/skills";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
@@ -33,15 +35,18 @@
     onToggleContext: () => void;
   } = $props();
 
-  let textarea: HTMLTextAreaElement | undefined = $state();
+  let editable: HTMLDivElement | undefined = $state();
   let localText = $state("");
   let localImages = $state<ConversationImage[]>([]);
+  let localTextAttachments = $state<string[]>([]);
 
   let allSkills = $state<SkillSummary[]>([]);
   let showAutocomplete = $state(false);
   let autocompleteItems = $state<SkillSummary[]>([]);
   let autocompleteIndex = $state(0);
   let slashStart = $state(-1);
+
+  let lastSkillPattern = "";
 
   $effect(() => {
     store.updateInputText(localText);
@@ -52,8 +57,26 @@
   });
 
   $effect(() => {
-    if (store.inputText === "" && localText !== "") {
+    store.updateInputTextAttachments(localTextAttachments);
+  });
+
+  $effect(() => {
+    const storeText = store.inputText;
+    if (storeText === "" && localText !== "") {
       localText = "";
+      if (editable) {
+        editable.innerHTML = "";
+      }
+    } else if (storeText !== "" && localText === "" && editable) {
+      localText = storeText;
+      lastSkillPattern = "";
+      editable.innerHTML = buildHighlightedHtml(storeText);
+      requestAnimationFrame(() => {
+        if (editable) {
+          restoreCursorOffset(storeText.length);
+          editable.focus();
+        }
+      });
     }
   });
 
@@ -63,44 +86,151 @@
     }
   });
 
+  $effect(() => {
+    if (store.inputTextAttachments.length === 0 && localTextAttachments.length > 0) {
+      localTextAttachments = [];
+    }
+  });
+
+  let unlistenTextUpdate: (() => void) | null = null;
+
   onMount(async () => {
-    textarea?.focus();
+    editable?.focus();
     try {
       allSkills = await listSkills();
     } catch {
       allSkills = [];
     }
+
+    const win = getCurrentWebviewWindow();
+    unlistenTextUpdate = await win.listen<{ text: string; index: number }>(
+      "text-attachment-updated",
+      (event) => {
+        const { text, index } = event.payload;
+        if (index >= 0 && index < localTextAttachments.length) {
+          localTextAttachments = localTextAttachments.map((t, i) =>
+            i === index ? text : t,
+          );
+        }
+      },
+    );
   });
 
-  $effect(() => {
-    localText;
-    if (textarea) requestAnimationFrame(() => resizeTextarea(textarea!));
+  onDestroy(() => {
+    unlistenTextUpdate?.();
   });
 
-  function highlightInput(text: string): string {
-    if (!text) return "\n";
+  function getPlainText(): string {
+    if (!editable) return "";
+    const clone = editable.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll("br").forEach((br) => {
+      br.replaceWith("\n");
+    });
+    clone.querySelectorAll("div, p").forEach((block, i) => {
+      if (i > 0 || block.previousSibling) {
+        block.insertBefore(document.createTextNode("\n"), block.firstChild);
+      }
+    });
+    return (clone.textContent ?? "").replace(/^\n/, "");
+  }
+
+  function saveCursorOffset(): number {
+    if (!editable) return 0;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return 0;
+    const range = sel.getRangeAt(0);
+    const pre = document.createRange();
+    pre.selectNodeContents(editable);
+    pre.setEnd(range.startContainer, range.startOffset);
+    return pre.toString().length;
+  }
+
+  function restoreCursorOffset(offset: number) {
+    if (!editable) return;
+    const sel = window.getSelection();
+    if (!sel) return;
+
+    let remaining = offset;
+    const walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
+    let node: Text | null;
+
+    while ((node = walker.nextNode() as Text | null)) {
+      if (remaining <= node.length) {
+        const range = document.createRange();
+        range.setStart(node, remaining);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return;
+      }
+      remaining -= node.length;
+    }
+
+    const range = document.createRange();
+    range.selectNodeContents(editable);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function buildHighlightedHtml(text: string): string {
+    if (!text) return "";
     return text
       .split("\n")
       .map((line) => {
         const match = line.match(/^(\/[a-z0-9-]+)(\s.*)?$/);
         if (match) {
-          const badge = `<span class="hl-skill">${match[1]}</span>`;
-          const rest = match[2] ?? "";
-          return badge + rest;
+          return `<span class="hl-skill">${escapeHtml(match[1])}</span>${escapeHtml(match[2] ?? "")}`;
         }
-        return line;
+        return escapeHtml(line);
       })
-      .join("\n") + "\n";
+      .join("<br>");
+  }
+
+  function getSkillPattern(text: string): string {
+    const matches: string[] = [];
+    for (const line of text.split("\n")) {
+      const m = line.match(/^(\/[a-z0-9-]+)/);
+      if (m) matches.push(m[1]);
+    }
+    return matches.join("|");
+  }
+
+  function applyHighlighting() {
+    if (!editable) return;
+    const text = getPlainText();
+    const pattern = getSkillPattern(text);
+
+    if (pattern === lastSkillPattern) return;
+    lastSkillPattern = pattern;
+
+    const offset = saveCursorOffset();
+    editable.innerHTML = buildHighlightedHtml(text);
+    restoreCursorOffset(offset);
+  }
+
+  function handleEditableInput() {
+    const text = getPlainText();
+    localText = text;
+    applyHighlighting();
+    detectSlashCommand();
   }
 
   function detectSlashCommand() {
-    if (!textarea) {
+    if (!editable) {
       closeAutocomplete();
       return;
     }
 
-    const pos = textarea.selectionStart;
-    const textBefore = localText.slice(0, pos);
+    const offset = saveCursorOffset();
+    const textBefore = localText.slice(0, offset);
     const lastNewline = textBefore.lastIndexOf("\n");
     const lineStart = lastNewline + 1;
     const lineText = textBefore.slice(lineStart);
@@ -133,21 +263,21 @@
   }
 
   function insertSkill(skill: SkillSummary) {
-    if (!textarea || slashStart < 0) return;
+    if (!editable || slashStart < 0) return;
 
-    const pos = textarea.selectionStart;
-    const before = localText.slice(0, slashStart);
-    const after = localText.slice(pos);
-    localText = `${before}/${skill.name} ${after}`;
+    const text = localText;
+    const cursorOffset = saveCursorOffset();
+    const before = text.slice(0, slashStart);
+    const after = text.slice(cursorOffset);
+    const newText = `${before}/${skill.name} ${after}`;
+    localText = newText;
+    lastSkillPattern = "";
+    editable.innerHTML = buildHighlightedHtml(newText);
+
+    const newOffset = slashStart + skill.name.length + 2;
+    restoreCursorOffset(newOffset);
     closeAutocomplete();
-
-    requestAnimationFrame(() => {
-      if (!textarea) return;
-      const newPos = slashStart + skill.name.length + 2;
-      textarea.selectionStart = newPos;
-      textarea.selectionEnd = newPos;
-      textarea.focus();
-    });
+    editable.focus();
   }
 
   function handleSendShow() {
@@ -162,14 +292,9 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Escape") {
-      if (showAutocomplete) {
-        e.preventDefault();
-        closeAutocomplete();
-        return;
-      }
+    if (e.key === "Escape" && showAutocomplete) {
       e.preventDefault();
-      getCurrentWindow().close();
+      closeAutocomplete();
       return;
     }
 
@@ -217,14 +342,22 @@
     }
   }
 
-  function handleInput() {
-    detectSlashCommand();
-  }
-
   async function handlePaste(e: ClipboardEvent) {
+    const textAttachment = extractTextAttachment(e, TEXT_ATTACHMENT_CHAR_THRESHOLD);
+    if (textAttachment) {
+      localTextAttachments = [...localTextAttachments, textAttachment];
+      return;
+    }
+
     const image = await getImageFromPasteEvent(e);
     if (image) {
       localImages = [...localImages, image];
+      return;
+    }
+    const text = e.clipboardData?.getData("text/plain");
+    if (text) {
+      e.preventDefault();
+      document.execCommand("insertText", false, text);
     }
   }
 </script>
@@ -235,21 +368,21 @@
   {/if}
 
   <div class="input-field">
+    <TextChipBar bind:textAttachments={localTextAttachments} readonly={false} />
     <ImageChipBar bind:images={localImages} readonly={false} />
     <div class="textarea-wrapper">
-      <div class="input-highlight" aria-hidden="true">{@html highlightInput(localText)}</div>
-      <textarea
-        bind:this={textarea}
-        class="input-textarea"
-        bind:value={localText}
-        use:autoResize={"40vh"}
-        rows="1"
-        placeholder="Type a message… (use /skill-name for skills)"
+      <div
+        bind:this={editable}
+        class="input-editable"
+        contenteditable="true"
+        role="textbox"
+        tabindex="0"
+        aria-multiline="true"
+        data-placeholder="Type a message… (use /skill-name for skills)"
+        oninput={handleEditableInput}
         onkeydown={handleKeydown}
-        oninput={handleInput}
         onpaste={handlePaste}
-        disabled={store.isExecuting}
-      ></textarea>
+      ></div>
 
       {#if showAutocomplete && autocompleteItems.length > 0}
         <div class="autocomplete-dropdown">
@@ -331,10 +464,11 @@
     padding: 8px 8px 0;
   }
 
-  .input-textarea {
-    position: relative;
+  .input-editable {
     width: 100%;
-    min-height: 0;
+    min-height: 1.5em;
+    max-height: 40vh;
+    overflow-y: auto;
     background: transparent;
     border: none;
     color: #e0e0e0;
@@ -342,16 +476,20 @@
     font-size: 13px;
     padding: 4px 2px;
     box-sizing: border-box;
-    z-index: 1;
-  }
-
-  .input-textarea:focus {
+    white-space: pre-wrap;
+    word-wrap: break-word;
     outline: none;
   }
 
-  .input-textarea:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  .input-editable:empty::before {
+    content: attr(data-placeholder);
+    color: rgba(255, 255, 255, 0.3);
+    pointer-events: none;
+  }
+
+  .input-editable :global(.hl-skill) {
+    font-weight: 600;
+    color: rgba(100, 160, 255, 0.9);
   }
 
   .button-bar {
@@ -377,29 +515,6 @@
 
   .textarea-wrapper {
     position: relative;
-  }
-
-  .input-highlight {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    padding: 4px 2px;
-    font: inherit;
-    font-size: 13px;
-    line-height: normal;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    color: transparent;
-    pointer-events: none;
-    overflow: hidden;
-  }
-
-  .input-highlight :global(.hl-skill) {
-    color: transparent;
-    background: rgba(100, 160, 255, 0.12);
-    border-radius: 3px;
-    border-bottom: 2px solid rgba(100, 160, 255, 0.5);
   }
 
   .autocomplete-dropdown {
@@ -444,5 +559,4 @@
     font-family: monospace;
     flex-shrink: 0;
   }
-
 </style>

@@ -63,3 +63,13 @@ function hasTextInClipboardData(e: ClipboardEvent): boolean {
   }
   return false;
 }
+
+export function extractTextAttachment(
+  e: ClipboardEvent,
+  threshold: number,
+): string | null {
+  const text = e.clipboardData?.getData("text/plain");
+  if (!text || text.length < threshold) return null;
+  e.preventDefault();
+  return text;
+}

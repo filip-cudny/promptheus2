@@ -1,48 +1,46 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { X } from "lucide-svelte";
-  import type { ConversationImage } from "$lib/types/conversation";
+  import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+  import { X, FileText } from "lucide-svelte";
 
   let {
-    images = $bindable(),
+    textAttachments = $bindable(),
     readonly = false,
     onremove,
   }: {
-    images: ConversationImage[];
+    textAttachments: string[];
     readonly?: boolean;
     onremove?: (index: number) => void;
   } = $props();
 
-  function removeImage(index: number) {
+  function removeAttachment(index: number) {
     if (onremove) {
       onremove(index);
     } else {
-      images = images.filter((_, i) => i !== index);
+      textAttachments = textAttachments.filter((_, i) => i !== index);
     }
   }
 
-  function thumbnailSrc(image: ConversationImage): string {
-    return `data:${image.media_type};base64,${image.data}`;
-  }
-
-  function openPreview(image: ConversationImage) {
-    invoke("open_image_preview", {
-      data: image.data,
-      mediaType: image.media_type,
-    });
+  function openPreview(text: string, index: number) {
+    const sourceWindow = getCurrentWebviewWindow().label;
+    invoke("open_text_preview", { text, index, sourceWindow });
   }
 </script>
 
-{#if images.length > 0}
-  <div class="image-chip-bar">
-    {#each images as image, idx}
-      <div class="image-chip">
-        <button class="chip-thumbnail-btn" onclick={() => openPreview(image)}>
-          <img src={thumbnailSrc(image)} alt="Attached image {idx + 1}" class="chip-thumbnail" />
-          <span class="chip-label">Image #{idx + 1}</span>
+{#if textAttachments.length > 0}
+  <div class="text-chip-bar">
+    {#each textAttachments as text, idx}
+      <div class="text-chip">
+        <button class="chip-thumbnail-btn" onclick={() => openPreview(text, idx)}>
+          <div class="chip-icon">
+            <FileText size={18} strokeWidth={1.5} />
+            <span class="chip-label">Text #{idx + 1}</span>
+          </div>
         </button>
         {#if !readonly}
-          <button class="chip-delete" onclick={() => removeImage(idx)}><X size={11} strokeWidth={2.5} /></button>
+          <button class="chip-delete" onclick={() => removeAttachment(idx)}>
+            <X size={11} strokeWidth={2.5} />
+          </button>
         {/if}
       </div>
     {/each}
@@ -50,14 +48,14 @@
 {/if}
 
 <style>
-  .image-chip-bar {
+  .text-chip-bar {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
     padding: 2px 0;
   }
 
-  .image-chip {
+  .text-chip {
     position: relative;
     display: flex;
     align-items: center;
@@ -72,23 +70,25 @@
     background: none;
     cursor: pointer;
     display: flex;
-    flex-direction: column;
-    align-items: center;
   }
 
-  .chip-thumbnail {
+  .chip-icon {
     width: 40px;
     height: 40px;
-    object-fit: cover;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    color: rgba(255, 255, 255, 0.5);
     border-radius: 5px;
   }
 
   .chip-label {
     font-size: 8px;
     font-weight: 600;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.5px;
     color: rgba(255, 255, 255, 0.4);
-    padding: 1px 0;
   }
 
   .chip-delete {

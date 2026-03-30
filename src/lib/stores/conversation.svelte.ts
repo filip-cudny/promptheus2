@@ -3,7 +3,7 @@ import { error as logError } from "@tauri-apps/plugin-log";
 import { generateId } from "$lib/utils/id";
 import {
   executeConversationTurn,
-  processSkillTemplate,
+  getSystemPrompt,
   type ExecutionCallbacks,
 } from "$lib/services/promptExecution";
 import {
@@ -42,6 +42,7 @@ export function createNode(
   content: string,
   parentId: string | null,
   images: ConversationImage[] = [],
+  textAttachments: string[] = [],
 ): ConversationNode {
   return {
     node_id: generateId(),
@@ -49,6 +50,7 @@ export function createNode(
     role,
     content,
     images,
+    text_attachments: textAttachments,
     timestamp: new Date().toISOString(),
     children: [],
   };
@@ -124,6 +126,7 @@ function createTabState(tabName: string): TabState {
     context_images: [],
     input_text: "",
     input_images: [],
+    input_text_attachments: [],
     is_executing: false,
     is_streaming: false,
     streamed_content: "",
@@ -148,13 +151,25 @@ function buildMessagesFromTree(
       const hasNodeImages = node.images.length > 0;
       isFirstUser = false;
 
+      let textContent = node.content;
+      if (node.text_attachments.length > 0) {
+        const wrappedAttachments = node.text_attachments
+          .map((t, i) => `<pasted-text name="Text #${i + 1}">\n${t}\n</pasted-text>`)
+          .join("\n\n");
+        textContent = textContent
+          ? `${wrappedAttachments}\n\n${textContent}`
+          : wrappedAttachments;
+      }
+
       if (hasContextImages || hasNodeImages) {
         const parts: Array<
           | { type: "text"; text: string }
           | { type: "image_url"; image_url: { url: string } }
         > = [];
+        let imageIndex = 1;
         if (hasContextImages) {
           for (const img of contextImages) {
+            parts.push({ type: "text", text: `[Image #${imageIndex++}]` });
             parts.push({
               type: "image_url",
               image_url: {
@@ -164,15 +179,16 @@ function buildMessagesFromTree(
           }
         }
         for (const img of node.images) {
+          parts.push({ type: "text", text: `[Image #${imageIndex++}]` });
           parts.push({
             type: "image_url",
             image_url: { url: `data:${img.media_type};base64,${img.data}` },
           });
         }
-        parts.push({ type: "text", text: node.content });
+        parts.push({ type: "text", text: textContent });
         messages.push({ role: "user", content: parts });
       } else {
-        messages.push({ role: "user", content: node.content });
+        messages.push({ role: "user", content: textContent });
       }
     } else {
       messages.push({ role: "assistant", content: node.content });
@@ -191,6 +207,7 @@ function serializeNodes(
     role: node.role,
     content: node.content,
     image_paths: [],
+    text_attachments: node.text_attachments,
     timestamp: node.timestamp,
     children: node.children,
   }));
@@ -227,10 +244,15 @@ export function createConversationStore(
   const contextImages = $derived(activeTab.context_images);
   const inputText = $derived(activeTab.input_text);
   const inputImages = $derived(activeTab.input_images);
+  const inputTextAttachments = $derived(activeTab.input_text_attachments);
 
   const canSend = $derived.by(() => {
     if (activeTab.is_executing) return false;
-    if (!activeTab.input_text.trim() && activeTab.input_images.length === 0)
+    if (
+      !activeTab.input_text.trim() &&
+      activeTab.input_images.length === 0 &&
+      activeTab.input_text_attachments.length === 0
+    )
       return false;
     const pairs = getMessagePairs(activeTab.tree);
     for (const pair of pairs) {
@@ -247,7 +269,11 @@ export function createConversationStore(
     if (path.length === 0) return false;
     const lastNode = activeTab.tree.nodes.get(path[path.length - 1]);
     if (!lastNode || lastNode.role !== "assistant") return false;
-    return !activeTab.input_text.trim() && activeTab.input_images.length === 0;
+    return (
+      !activeTab.input_text.trim() &&
+      activeTab.input_images.length === 0 &&
+      activeTab.input_text_attachments.length === 0
+    );
   });
 
   function getTab(tabId: string): TabState | undefined {
@@ -299,7 +325,8 @@ export function createConversationStore(
 
     const text = tab.input_text.trim();
     const images = [...tab.input_images];
-    if (!text && images.length === 0)
+    const textAttachments = [...tab.input_text_attachments];
+    if (!text && images.length === 0 && textAttachments.length === 0)
       return { success: false, result: "" };
 
     const skillSegments = await resolveSkillSegments(text);
@@ -311,6 +338,7 @@ export function createConversationStore(
         ? tab.tree.current_path[tab.tree.current_path.length - 1]
         : null,
       images,
+      textAttachments,
     );
     tab.tree.nodes.set(userNode.node_id, userNode);
 
@@ -329,6 +357,7 @@ export function createConversationStore(
 
     tab.input_text = "";
     tab.input_images = [];
+    tab.input_text_attachments = [];
     tab.is_executing = true;
     tab.is_streaming = true;
     tab.streamed_content = "";
@@ -337,8 +366,7 @@ export function createConversationStore(
     let resultText = "";
 
     try {
-      const templateMessages = await processSkillTemplate(
-        promptId,
+      const systemMessages = await getSystemPrompt(
         tab.context_text || undefined,
       );
       const treeMessages = buildMessagesFromTree(tab.tree, tab.context_images);
@@ -351,10 +379,9 @@ export function createConversationStore(
             ? { ...msg, content: composedContent }
             : msg,
         );
-        const systemOnly = templateMessages.length > 0 ? [templateMessages[0]] : [];
-        messages = [...systemOnly, ...updatedTreeMessages];
+        messages = [...systemMessages, ...updatedTreeMessages];
       } else {
-        messages = [...templateMessages, ...treeMessages];
+        messages = [...systemMessages, ...treeMessages];
       }
 
       const callbacks: ExecutionCallbacks = {
@@ -436,12 +463,11 @@ export function createConversationStore(
     let regenerateSuccess = false;
 
     try {
-      const templateMessages = await processSkillTemplate(
-        promptId,
+      const systemMessages = await getSystemPrompt(
         tab.context_text || undefined,
       );
       const treeMessages = buildMessagesFromTree(tab.tree, tab.context_images);
-      const messages = [...templateMessages, ...treeMessages];
+      const messages = [...systemMessages, ...treeMessages];
 
       const callbacks: ExecutionCallbacks = {
         onChunk: (_delta, accumulated) => {
@@ -582,6 +608,11 @@ export function createConversationStore(
     if (tab) tab.input_images = images;
   }
 
+  function updateInputTextAttachments(attachments: string[]): void {
+    const tab = getTab(activeTabId);
+    if (tab) tab.input_text_attachments = attachments;
+  }
+
   async function saveToHistory(): Promise<void> {
     const tab = getTab(activeTabId);
     if (!tab) return;
@@ -648,6 +679,7 @@ export function createConversationStore(
           role: serialized.role as "user" | "assistant",
           content: serialized.content,
           images: [],
+          text_attachments: serialized.text_attachments ?? [],
           timestamp: serialized.timestamp,
           children: serialized.children,
         });
@@ -705,6 +737,9 @@ export function createConversationStore(
     get inputImages() {
       return inputImages;
     },
+    get inputTextAttachments() {
+      return inputTextAttachments;
+    },
     sendMessage,
     stopExecution,
     regenerate,
@@ -718,6 +753,7 @@ export function createConversationStore(
     updateContextImages,
     updateInputText,
     updateInputImages,
+    updateInputTextAttachments,
     saveToHistory,
     restoreFromHistory,
     destroy,

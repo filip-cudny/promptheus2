@@ -25,16 +25,7 @@
     store.closeTab(tabId);
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (open && e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
-    }
-  }
 </script>
-
-<svelte:window onkeydown={handleKeydown} />
 
 {#if open}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->

@@ -4,6 +4,7 @@ export interface ConversationNode {
   role: "user" | "assistant";
   content: string;
   images: ConversationImage[];
+  text_attachments: string[];
   timestamp: string;
   children: string[];
 }
@@ -33,6 +34,7 @@ export interface TabState {
   context_images: ConversationImage[];
   input_text: string;
   input_images: ConversationImage[];
+  input_text_attachments: string[];
   is_executing: boolean;
   is_streaming: boolean;
   streamed_content: string;

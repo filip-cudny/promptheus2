@@ -2,6 +2,7 @@
   import type { ConversationNode } from "$lib/types/conversation";
   import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
+  import TextChipBar from "$lib/components/ui/TextChipBar.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import { resizeTextarea } from "$lib/utils/autoResize";
   import { Trash2, Pencil, Copy, Check } from "lucide-svelte";
@@ -111,6 +112,9 @@
 
     {#if editMode}
       <div class="bubble-edit-field">
+        {#if node.text_attachments.length > 0}
+          <TextChipBar textAttachments={node.text_attachments} readonly={true} />
+        {/if}
         {#if node.images.length > 0}
           <ImageChipBar images={node.images} readonly={true} />
         {/if}
@@ -124,6 +128,9 @@
         ></textarea>
       </div>
     {:else}
+      {#if node.text_attachments.length > 0}
+        <TextChipBar textAttachments={node.text_attachments} readonly={true} />
+      {/if}
       {#if node.images.length > 0}
         <ImageChipBar images={node.images} readonly={true} />
       {/if}
@@ -196,12 +203,8 @@
 
   .bubble-text :global(.skill-badge) {
     display: inline;
-    color: inherit;
     font-weight: 600;
-    background: rgba(100, 160, 255, 0.12);
-    border-radius: 3px;
-    border-bottom: 2px solid rgba(100, 160, 255, 0.5);
-    padding: 0 2px;
+    color: rgba(100, 160, 255, 0.9);
   }
 
   .bubble-edit-field {

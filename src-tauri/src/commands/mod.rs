@@ -11,3 +11,4 @@ pub mod prompt_dialog;
 pub mod settings;
 pub mod skills;
 pub mod speech;
+pub mod text_preview;

@@ -16,6 +16,7 @@ export interface SerializedConversationNode {
   role: string;
   content: string;
   image_paths: string[];
+  text_attachments: string[];
   timestamp: string;
   children: string[];
 }

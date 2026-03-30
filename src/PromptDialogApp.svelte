@@ -4,7 +4,6 @@
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { createConversationStore } from "$lib/stores/conversation.svelte";
   import { hasContext } from "$lib/services/context";
-  import { getSkill } from "$lib/services/skills";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { PanelLeft } from "lucide-svelte";
   import ConversationArea from "$lib/components/prompt/ConversationArea.svelte";
@@ -37,6 +36,8 @@
   onMount(async () => {
     if (historyEntryId) {
       await store.restoreFromHistory(historyEntryId);
+    } else if (promptId) {
+      store.updateInputText(`/${promptId} `);
     }
 
     unlistenRestore = await listen<{ entry_id: string }>(
@@ -45,14 +46,6 @@
         store.restoreFromHistory(event.payload.entry_id);
       },
     );
-
-    try {
-      const skill = await getSkill(promptId);
-      const usesContext = skill.name === "process-with-context";
-      contextDisabled = !usesContext;
-    } catch {
-      // leave context enabled if skill unavailable
-    }
 
     await autoShowContextIfNeeded();
 

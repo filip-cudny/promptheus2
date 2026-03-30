@@ -174,21 +174,18 @@ pub async fn execute_conversation_turn(
                 prompt_name.clone(),
             );
 
-            let clipboard_note = if skip_clipboard_copy {
-                ""
-            } else {
-                " · copied to clipboard"
-            };
-            let _ = state.notifications.notify(
-                "prompt_execution_success",
-                NotificationLevel::Success,
-                "Prompt executed",
-                Some(format!(
-                    "{model_display_name} · {:.1}s{clipboard_note}",
-                    elapsed.as_secs_f64()
-                )),
-                &state.config.settings().notifications,
-            );
+            if !skip_clipboard_copy {
+                let _ = state.notifications.notify(
+                    "prompt_execution_success",
+                    NotificationLevel::Success,
+                    "Prompt executed",
+                    Some(format!(
+                        "{model_display_name} · {:.1}s · copied to clipboard",
+                        elapsed.as_secs_f64()
+                    )),
+                    &state.config.settings().notifications,
+                );
+            }
 
             state.prompt_execution.finish_execution();
 
@@ -445,6 +442,27 @@ pub async fn execute_skill(
             Err(error)
         }
     }
+}
+
+#[tauri::command]
+pub async fn get_system_prompt(
+    state: State<'_, Mutex<AppState>>,
+    context_text: Option<String>,
+) -> Result<Vec<ProcessedMessage>, String> {
+    let state = state.lock().await;
+
+    let system_prompt = state.config.settings().system_prompt.clone();
+    let system_content = match &context_text {
+        Some(text) if !text.is_empty() => {
+            format!("{system_prompt}\n\n<context>\n{text}\n</context>")
+        }
+        _ => system_prompt,
+    };
+
+    Ok(vec![ProcessedMessage {
+        role: "system".to_string(),
+        content: crate::models::message::MessageContent::Text(system_content),
+    }])
 }
 
 #[tauri::command]

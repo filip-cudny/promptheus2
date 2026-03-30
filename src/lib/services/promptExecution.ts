@@ -77,6 +77,14 @@ export async function processSkillTemplate(
   });
 }
 
+export async function getSystemPrompt(
+  contextText?: string,
+): Promise<ProcessedMessage[]> {
+  return invoke("get_system_prompt", {
+    contextText: contextText ?? null,
+  });
+}
+
 export async function getExecutionState(): Promise<{
   is_executing: boolean;
   execution_id: string | null;
