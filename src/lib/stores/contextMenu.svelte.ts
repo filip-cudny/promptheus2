@@ -21,10 +21,14 @@ let unlistenRecordingStopped: (() => void) | null = null;
 let unlistenTranscriptionComplete: (() => void) | null = null;
 let unlistenSpeechError: (() => void) | null = null;
 
-const NUMBER_DEBOUNCE_MS = 300;
+const NUMBER_DEBOUNCE_MS = 200;
 
 const _navigableItems = $derived(
   _items.filter((item) => item.enabled),
+);
+
+const _promptItems = $derived(
+  _items.filter((item) => item.item_type === "prompt" && item.enabled),
 );
 
 function getItems(): MenuItem[] {
@@ -245,7 +249,7 @@ async function startAlternativeExecution(index: number) {
   await refreshItems();
 }
 
-function handleNumberInput(digit: string) {
+function handleNumberInput(digit: string, isAlternative: boolean) {
   if (numberTimer) clearTimeout(numberTimer);
 
   numberBuffer += digit;
@@ -254,13 +258,26 @@ function handleNumberInput(digit: string) {
     const num = parseInt(numberBuffer, 10);
     numberBuffer = "";
 
-    if (num >= 1 && num <= _navigableItems.length) {
-      const targetItem = _navigableItems[num - 1];
+    if (num >= 1 && num <= _promptItems.length) {
+      const targetItem = _promptItems[num - 1];
       const targetIndex = _items.indexOf(targetItem);
       _selectedIndex = targetIndex;
-      executeItem(targetIndex);
+      if (isAlternative) {
+        startAlternativeExecution(targetIndex);
+      } else {
+        executeItem(targetIndex);
+      }
     }
   }, NUMBER_DEBOUNCE_MS);
+}
+
+function clearNumberBuffer() {
+  if (numberTimer) clearTimeout(numberTimer);
+  numberBuffer = "";
+}
+
+function getPromptItems(): MenuItem[] {
+  return _promptItems;
 }
 
 async function refreshItems() {
@@ -356,6 +373,8 @@ export {
   executeSelected,
   startAlternativeExecution,
   handleNumberInput,
+  clearNumberBuffer,
+  getPromptItems,
   openDialogForItem,
   init,
   destroy,

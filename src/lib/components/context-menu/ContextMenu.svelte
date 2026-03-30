@@ -20,10 +20,17 @@
     executeSelected,
     startAlternativeExecution,
     handleNumberInput,
+    clearNumberBuffer,
+    getPromptItems,
     openDialogForItem,
     init,
     destroy,
   } from "$lib/stores/contextMenu.svelte";
+
+  const SHIFTED_CHAR_TO_DIGIT: Record<string, string> = {
+    "!": "1", "@": "2", "#": "3", "$": "4", "%": "5",
+    "^": "6", "&": "7", "*": "8", "(": "9", ")": "0",
+  };
 
   function isRecordingThisPrompt(item: MenuItem): boolean {
     if (!isRecording()) return false;
@@ -80,6 +87,7 @@
 
   let menuVisible = $derived(isVisible());
   let menuItems = $derived(getItems());
+  let promptItems = $derived(getPromptItems());
   let currentSelectedIndex = $derived(getSelectedIndex());
 
   function handleKeydown(e: KeyboardEvent) {
@@ -100,13 +108,21 @@
         break;
       case "Escape":
         e.preventDefault();
+        clearNumberBuffer();
         closeMenu();
         break;
-      default:
-        if (e.key >= "1" && e.key <= "9") {
+      default: {
+        if (e.key >= "0" && e.key <= "9") {
           e.preventDefault();
-          handleNumberInput(e.key);
+          handleNumberInput(e.key, e.shiftKey);
+          return;
         }
+        const mappedDigit = SHIFTED_CHAR_TO_DIGIT[e.key];
+        if (mappedDigit) {
+          e.preventDefault();
+          handleNumberInput(mappedDigit, true);
+        }
+      }
     }
   }
 
@@ -165,7 +181,13 @@
               {#if item.icon === "square"}
                 <span class="item-icon"><Square size={ICON_SIZE.sm} /></span>
               {:else if item.icon === "mic"}
-                <span class="item-icon"><Mic size={ICON_SIZE.sm} /></span>
+                <span class="item-icon"><Mic size={ICON_SIZE.md} /></span>
+              {/if}
+              {#if item.item_type === "prompt"}
+                {@const promptIndex = promptItems.indexOf(item)}
+                {#if promptIndex >= 0}
+                  <span class="prompt-number">{promptIndex + 1}.</span>
+                {/if}
               {/if}
               <span class="item-label">{item.label}</span>
             </button>
@@ -270,6 +292,15 @@
     flex-shrink: 0;
     width: 16px;
     text-align: center;
+  }
+
+  .prompt-number {
+    flex-shrink: 0;
+    min-width: 20px;
+    text-align: right;
+    color: rgba(255, 255, 255, 0.25);
+    font-size: 12px;
+    margin-left: -4px;
   }
 
   .item-label {
