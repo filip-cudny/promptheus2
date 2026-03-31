@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
-  import { X } from "lucide-svelte";
+  import AttachmentChip from "./AttachmentChip.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
 
   let {
@@ -33,82 +33,18 @@
   }
 </script>
 
-{#if images.length > 0}
-  <div class="image-chip-bar">
-    {#each images as image, idx}
-      <div class="image-chip">
-        <button class="chip-thumbnail-btn" onclick={() => openPreview(image)}>
-          <img src={thumbnailSrc(image)} alt="Attached image {idx + 1}" class="chip-thumbnail" />
-          <span class="chip-label">Image #{idx + 1}</span>
-        </button>
-        {#if !readonly}
-          <button class="chip-delete" onclick={() => removeImage(idx)}><X size={11} strokeWidth={2.5} /></button>
-        {/if}
-      </div>
-    {/each}
-  </div>
-{/if}
+{#each images as image, idx}
+  <AttachmentChip label="Image #{idx + 1}" {readonly} onclick={() => openPreview(image)} onremove={() => removeImage(idx)}>
+    {#snippet content()}
+      <img src={thumbnailSrc(image)} alt="Attached image {idx + 1}" class="chip-thumbnail" />
+    {/snippet}
+  </AttachmentChip>
+{/each}
 
 <style>
-  .image-chip-bar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 2px 0;
-  }
-
-  .image-chip {
-    position: relative;
-    display: flex;
-    align-items: center;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .chip-thumbnail-btn {
-    padding: 0;
-    border: none;
-    background: none;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-
   .chip-thumbnail {
-    width: 40px;
-    height: 40px;
+    width: 100%;
+    height: 100%;
     object-fit: cover;
-    border-radius: 5px;
-  }
-
-  .chip-label {
-    font-size: 8px;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-    color: rgba(255, 255, 255, 0.4);
-    padding: 1px 0;
-  }
-
-  .chip-delete {
-    position: absolute;
-    top: -3px;
-    right: -3px;
-    width: 19px;
-    height: 19px;
-    border-radius: 50%;
-    border: 1px solid #555;
-    background: #333;
-    color: #fff;
-    cursor: pointer;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-  }
-
-  .chip-delete:hover {
-    background: #444;
   }
 </style>

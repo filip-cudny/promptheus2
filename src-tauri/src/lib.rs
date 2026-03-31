@@ -19,6 +19,7 @@ use services::context::{ContextManagerService, ContextMenuProvider};
 use services::history::HistoryService;
 use services::image_storage::ImageStorage;
 use services::menu_coordinator::MenuCoordinator;
+use services::dock::DockManager;
 use services::notification::NotificationService;
 use services::placeholder::PlaceholderService;
 use services::prompt_execution::PromptExecutionService;
@@ -399,6 +400,8 @@ pub fn run() {
                 log::info!("{} global shortcuts registered", bindings.len());
             }
 
+            app.manage(DockManager::new());
+
             let skills_dir = config_dir.join("skills");
             let mut skill_service = SkillService::load(
                 &skills_dir,
@@ -454,6 +457,9 @@ pub fn run() {
                 .collect();
             menu_coordinator.add_provider(Box::new(PromptMenuProvider::new(skill_summaries)));
 
+            let ui_state_service = services::ui_state::UiStateService::load(&config_dir)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+
             let ai_service = AiService::new(&config_service.settings().models);
             let context_service = ContextManagerService::new();
             let placeholder_service = PlaceholderService::new();
@@ -479,6 +485,7 @@ pub fn run() {
                 prompt_execution: PromptExecutionService::new(),
                 skill_service,
                 speech: SpeechService::new(),
+                ui_state: ui_state_service,
             }));
             Ok(())
         })
@@ -539,10 +546,13 @@ pub fn run() {
             commands::image_preview::get_pending_image,
             commands::text_preview::open_text_preview,
             commands::text_preview::get_pending_text,
+            commands::dock::hide_dialog_window,
             commands::notification::update_notification_window,
             commands::notification::drain_pending_notifications,
             commands::speech::toggle_speech_recording,
             commands::speech::get_recording_state,
+            commands::ui_state::get_ui_state,
+            commands::ui_state::set_ui_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

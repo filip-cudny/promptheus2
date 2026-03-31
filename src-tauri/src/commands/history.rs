@@ -43,7 +43,7 @@ pub async fn add_history_entry(
     prompt_id: Option<String>,
     success: bool,
     error: Option<String>,
-    is_conversation: bool,
+    is_multi_turn: bool,
     prompt_name: Option<String>,
 ) -> Result<(), String> {
     let mut state = state.lock().await;
@@ -54,7 +54,7 @@ pub async fn add_history_entry(
         prompt_id,
         success,
         error,
-        is_conversation,
+        is_multi_turn,
         prompt_name,
     );
     emit_history_changed(&app)

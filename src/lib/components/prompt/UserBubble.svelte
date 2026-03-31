@@ -4,9 +4,11 @@
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import TextChipBar from "$lib/components/ui/TextChipBar.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
-  import { resizeTextarea } from "$lib/utils/autoResize";
+  import SkillEditable from "$lib/components/ui/SkillEditable.svelte";
   import { Trash2, Pencil, Copy, Check } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import { listSkills } from "$lib/services/skills";
+  import { onMount } from "svelte";
 
   let {
     node,
@@ -24,6 +26,17 @@
     onRegenerate: () => void;
   } = $props();
 
+  let allSkillNames = $state<Set<string>>(new Set());
+
+  onMount(async () => {
+    try {
+      const skills = await listSkills();
+      allSkillNames = new Set(skills.map((s) => s.name));
+    } catch {
+      allSkillNames = new Set();
+    }
+  });
+
   function escapeHtml(text: string): string {
     return text
       .replace(/&/g, "&amp;")
@@ -32,12 +45,16 @@
       .replace(/"/g, "&quot;");
   }
 
+  function isKnownSkill(name: string): boolean {
+    return allSkillNames.has(name.slice(1));
+  }
+
   function formatUserContent(content: string): string {
     return content
       .split("\n")
       .map((line) => {
         const match = line.match(/^(\/[a-z0-9-]+)(\s.*)?$/);
-        if (match) {
+        if (match && isKnownSkill(match[1])) {
           const badge = `<span class="skill-badge">${escapeHtml(match[1])}</span>`;
           const rest = match[2] ? escapeHtml(match[2]) : "";
           return badge + rest;
@@ -49,33 +66,25 @@
 
   let collapsed = $state(false);
   let editMode = $state(false);
-  let textarea: HTMLTextAreaElement | undefined = $state();
-
-  $effect(() => {
-    node.content;
-    if (editMode && textarea) {
-      requestAnimationFrame(() => resizeTextarea(textarea!));
-    }
-  });
+  let editText = $state("");
+  let skillEditable: ReturnType<typeof SkillEditable> | undefined = $state();
 
   function toggleEditMode() {
     editMode = !editMode;
     if (editMode) {
+      editText = node.content;
       requestAnimationFrame(() => {
-        if (textarea) resizeTextarea(textarea!);
-        textarea?.focus();
+        if (skillEditable) {
+          skillEditable.setTextAndHighlight(node.content);
+          skillEditable.focus();
+          skillEditable.restoreCursor(node.content.length);
+        }
       });
     }
   }
 
-  function handleInput(e: Event) {
-    const target = e.target as HTMLTextAreaElement;
-    onContentChange(target.value);
-    resizeTextarea(target);
-  }
-
-  async function copyContent() {
-    await navigator.clipboard.writeText(node.content);
+  function handleEditInput() {
+    onContentChange(editText);
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -85,9 +94,13 @@
       onRegenerate();
     }
   }
+
+  async function copyContent() {
+    await navigator.clipboard.writeText(node.content);
+  }
 </script>
 
-<div class="user-bubble">
+<div class="user-bubble" class:editing={editMode}>
   <CollapsibleSection title="" bind:collapsed hoverActions actionsVisible={editMode}>
     {#snippet headerLeft()}
       <span class="role-badge user-badge">Me</span>
@@ -112,27 +125,26 @@
 
     {#if editMode}
       <div class="bubble-edit-field">
-        {#if node.text_attachments.length > 0}
-          <TextChipBar textAttachments={node.text_attachments} readonly={true} />
+        {#if node.text_attachments.length > 0 || node.images.length > 0}
+          <div class="attachment-row">
+            <TextChipBar textAttachments={node.text_attachments} readonly={true} />
+            <ImageChipBar images={node.images} readonly={true} />
+          </div>
         {/if}
-        {#if node.images.length > 0}
-          <ImageChipBar images={node.images} readonly={true} />
-        {/if}
-        <textarea
-          bind:this={textarea}
-          value={node.content}
-          oninput={handleInput}
+        <SkillEditable
+          bind:this={skillEditable}
+          bind:text={editText}
+          editableClass="bubble-editable"
+          oninput={handleEditInput}
           onkeydown={handleKeydown}
-          class="bubble-textarea"
-          rows="1"
-        ></textarea>
+        />
       </div>
     {:else}
-      {#if node.text_attachments.length > 0}
-        <TextChipBar textAttachments={node.text_attachments} readonly={true} />
-      {/if}
-      {#if node.images.length > 0}
-        <ImageChipBar images={node.images} readonly={true} />
+      {#if node.text_attachments.length > 0 || node.images.length > 0}
+        <div class="attachment-row">
+          <TextChipBar textAttachments={node.text_attachments} readonly={true} />
+          <ImageChipBar images={node.images} readonly={true} />
+        </div>
       {/if}
       <div class="bubble-text">{@html formatUserContent(node.content)}</div>
     {/if}
@@ -140,9 +152,20 @@
 </div>
 
 <style>
+  .attachment-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 2px 0;
+  }
+
   .user-bubble {
     border-left: 3.5px solid #4a9ebb;
     border-radius: 6px;
+  }
+
+  .user-bubble.editing :global(.collapsible-section) {
+    overflow: visible;
   }
 
   .role-badge {
@@ -221,21 +244,17 @@
     border-color: rgba(74, 158, 187, 0.4);
   }
 
-  .bubble-textarea {
-    width: 100%;
-    background: transparent;
-    border: none;
-    color: #e0e0e0;
-    font-family: inherit;
+  .bubble-edit-field :global(.bubble-editable) {
     font-size: 14px;
     line-height: 1.5;
+    max-height: 40vh;
     padding: 4px 0 8px;
-    resize: none;
-    overflow: hidden;
-    box-sizing: border-box;
   }
 
-  .bubble-textarea:focus {
-    outline: none;
+  .bubble-edit-field :global(.autocomplete-dropdown) {
+    bottom: auto;
+    top: 100%;
+    margin-bottom: 0;
+    margin-top: 4px;
   }
 </style>

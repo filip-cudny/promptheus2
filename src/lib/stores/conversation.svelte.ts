@@ -657,32 +657,69 @@ export function createConversationStore(
   async function restoreFromHistory(entryId: string): Promise<void> {
     try {
       const entry = await getHistoryEntry(entryId);
-      if (!entry?.conversation_data) return;
+      if (!entry) return;
 
-      const data = entry.conversation_data;
       const newTab = createTabState(
         entry.prompt_name ?? `Restored`,
       );
       newTab.history_entry_id = entryId;
-      newTab.context_text = data.context_text;
 
       const restoredTree: ConversationTree = {
         nodes: new SvelteMap(),
-        root_node_id: data.root_node_id,
-        current_path: data.current_path,
+        root_node_id: null,
+        current_path: [],
       };
 
-      for (const serialized of data.nodes) {
-        restoredTree.nodes.set(serialized.node_id, {
-          node_id: serialized.node_id,
-          parent_id: serialized.parent_id,
-          role: serialized.role as "user" | "assistant",
-          content: serialized.content,
+      if (entry.conversation_data) {
+        const data = entry.conversation_data;
+        newTab.context_text = data.context_text;
+        restoredTree.root_node_id = data.root_node_id;
+        restoredTree.current_path = data.current_path;
+
+        for (const serialized of data.nodes) {
+          restoredTree.nodes.set(serialized.node_id, {
+            node_id: serialized.node_id,
+            parent_id: serialized.parent_id,
+            role: serialized.role as "user" | "assistant",
+            content: serialized.content,
+            images: [],
+            text_attachments: serialized.text_attachments ?? [],
+            timestamp: serialized.timestamp,
+            children: serialized.children,
+          });
+        }
+      } else if (entry.input_content) {
+        const userNodeId = `restored-user-${generateId()}`;
+        const assistantNodeId = `restored-asst-${generateId()}`;
+        const now = entry.timestamp;
+
+        restoredTree.root_node_id = userNodeId;
+        restoredTree.current_path = [userNodeId];
+
+        restoredTree.nodes.set(userNodeId, {
+          node_id: userNodeId,
+          parent_id: null,
+          role: "user",
+          content: entry.input_content,
           images: [],
-          text_attachments: serialized.text_attachments ?? [],
-          timestamp: serialized.timestamp,
-          children: serialized.children,
+          text_attachments: [],
+          timestamp: now,
+          children: entry.output_content ? [assistantNodeId] : [],
         });
+
+        if (entry.output_content) {
+          restoredTree.current_path.push(assistantNodeId);
+          restoredTree.nodes.set(assistantNodeId, {
+            node_id: assistantNodeId,
+            parent_id: userNodeId,
+            role: "assistant",
+            content: entry.output_content,
+            images: [],
+            text_attachments: [],
+            timestamp: now,
+            children: [],
+          });
+        }
       }
 
       newTab.tree = restoredTree;

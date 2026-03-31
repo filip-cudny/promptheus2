@@ -6,11 +6,21 @@ import type { MenuItem } from "$lib/types/menu";
 import { startExecution, isExecuting } from "$lib/stores/execution.svelte";
 import { openPromptDialog } from "$lib/services/promptDialog";
 
+interface WorkArea {
+  cursorX: number;
+  cursorY: number;
+  workX: number;
+  workY: number;
+  workWidth: number;
+  workHeight: number;
+}
+
 let _items = $state<MenuItem[]>([]);
 let _selectedIndex = $state(-1);
 let _visible = $state(false);
 let _isRecording = $state(false);
 let _recordingPromptId = $state<string | null>(null);
+let _workArea: WorkArea | null = null;
 let numberBuffer = "";
 let numberTimer: ReturnType<typeof setTimeout> | null = null;
 let unlisten: (() => void) | null = null;
@@ -95,17 +105,19 @@ function clearRecordingState() {
   _recordingPromptId = null;
 }
 
-async function openMenu() {
+function getWorkArea(): WorkArea | null {
+  return _workArea;
+}
+
+async function openMenu(workArea: WorkArea | null) {
   try {
+    _workArea = workArea;
     await fetchRecordingState();
     const fetched = await invoke<MenuItem[]>("get_context_menu_items");
     _items = applyItemStates(fetched);
     _selectedIndex = -1;
     numberBuffer = "";
     _visible = true;
-
-    const win = getCurrentWebviewWindow();
-    await win.setFocus();
   } catch (e) {
     error("Failed to open context menu: " + e);
   }
@@ -297,8 +309,23 @@ async function refreshItems() {
 
 async function init() {
   const win = getCurrentWebviewWindow();
-  unlisten = await win.listen("show-context-menu", () => {
-    openMenu();
+  unlisten = await win.listen<{
+    cursor_x: number;
+    cursor_y: number;
+    work_x: number;
+    work_y: number;
+    work_width: number;
+    work_height: number;
+  }>("show-context-menu", (event) => {
+    const p = event.payload;
+    openMenu({
+      cursorX: p.cursor_x,
+      cursorY: p.cursor_y,
+      workX: p.work_x,
+      workY: p.work_y,
+      workWidth: p.work_width,
+      workHeight: p.work_height,
+    });
   });
   unlistenContextChanged = await listen("context-changed", () => {
     refreshItems();
@@ -373,6 +400,7 @@ export {
   isVisible,
   isRecording,
   getRecordingPromptId,
+  getWorkArea,
   openMenu,
   closeMenu,
   moveSelection,

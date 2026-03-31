@@ -12,9 +12,9 @@ export async function getHistory(): Promise<HistoryEntry[]> {
 }
 
 export async function getHistoryEntry(
-  entry_id: string,
+  entryId: string,
 ): Promise<HistoryEntry | null> {
-  return invoke("get_history_entry", { entry_id });
+  return invoke("get_history_entry", { entryId });
 }
 
 export async function addHistoryEntry(params: {
@@ -24,7 +24,7 @@ export async function addHistoryEntry(params: {
   prompt_id: string | null;
   success: boolean;
   error: string | null;
-  is_conversation: boolean;
+  is_multi_turn: boolean;
   prompt_name: string | null;
 }): Promise<void> {
   return invoke("add_history_entry", params);

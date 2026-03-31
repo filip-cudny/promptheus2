@@ -1,3 +1,4 @@
+use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
@@ -5,6 +6,17 @@ use crate::commands::settings::AppState;
 use crate::models::history::HistoryEntryType;
 use crate::models::menu::{MenuItem, MenuItemType};
 use crate::providers::SpeechMenuProvider;
+use crate::services::monitor::find_monitor_at;
+
+#[derive(Serialize, Clone)]
+struct ShowMenuPayload {
+    cursor_x: f64,
+    cursor_y: f64,
+    work_x: f64,
+    work_y: f64,
+    work_width: f64,
+    work_height: f64,
+}
 
 fn truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
@@ -51,6 +63,13 @@ pub async fn get_context_menu_items(
                 }),
                 "transcription": last_speech.as_ref().and_then(|e| {
                     e.output_content.as_ref().map(|c| serde_json::json!({ "content": truncate(c, 200) }))
+                }),
+                "last_text_entry": last_text.as_ref().map(|e| {
+                    serde_json::json!({
+                        "id": e.id,
+                        "prompt_id": e.prompt_id,
+                        "prompt_name": e.prompt_name,
+                    })
                 }),
             }));
         }
@@ -105,26 +124,36 @@ pub async fn show_context_menu_window(app: tauri::AppHandle) -> Result<(), Strin
         .get_webview_window("context-menu")
         .ok_or("context-menu window not found")?;
 
-    if let Ok(pos) = win.cursor_position() {
-        log::debug!("positioning context menu at ({}, {})", pos.x, pos.y);
-        let _ = win.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-            x: pos.x as i32,
-            y: pos.y as i32,
-        }));
-    }
+    let cursor_pos = win.cursor_position().map_err(|e| e.to_string())?;
+    let monitor = find_monitor_at(&app, cursor_pos.x as i32, cursor_pos.y as i32)?;
+    let work = monitor.work_area();
+    let scale = monitor.scale_factor();
 
-    app.emit_to("context-menu", "show-context-menu", ())
+    let payload = ShowMenuPayload {
+        cursor_x: cursor_pos.x / scale,
+        cursor_y: cursor_pos.y / scale,
+        work_x: work.position.x as f64 / scale,
+        work_y: work.position.y as f64 / scale,
+        work_width: work.size.width as f64 / scale,
+        work_height: work.size.height as f64 / scale,
+    };
+
+    log::debug!(
+        "show context menu: cursor=({}, {}), work_area=({}, {}, {}x{})",
+        payload.cursor_x, payload.cursor_y,
+        payload.work_x, payload.work_y, payload.work_width, payload.work_height,
+    );
+
+    app.emit_to("context-menu", "show-context-menu", payload)
         .map_err(|e| e.to_string())?;
 
     #[cfg(target_os = "macos")]
-    app.show().map_err(|e| e.to_string())?;
-
-    win.show().map_err(|e| e.to_string())?;
-
-    #[cfg(target_os = "linux")]
-    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-
-    win.set_focus().map_err(|e| e.to_string())?;
+    {
+        let dock = app.state::<crate::services::dock::DockManager>();
+        if !dock.has_open_dialogs() {
+            app.show().map_err(|e| e.to_string())?;
+        }
+    }
 
     Ok(())
 }

@@ -40,7 +40,7 @@
     setTimeout(() => {
       src = "";
       hiding = false;
-      win.hide();
+      invoke("hide_dialog_window", { label: "image-preview" });
     }, ANIM_MS);
   }
 

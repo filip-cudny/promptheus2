@@ -38,7 +38,7 @@
 
   function hide() {
     emitTo(sourceWindow, "text-attachment-updated", { text, index });
-    win.hide();
+    invoke("hide_dialog_window", { label: "text-preview" });
   }
 
   function handleInput(e: Event) {

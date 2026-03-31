@@ -1,18 +1,27 @@
 <script lang="ts">
-  import { Copy, Check, History } from "lucide-svelte";
+  import { Copy, Check, History, SquareArrowOutUpRight } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import Chip from "$lib/components/ui/Chip.svelte";
   import { copyHistoryContent } from "$lib/services/history";
+  import { openPromptDialog } from "$lib/services/promptDialog";
+  import { closeMenu } from "$lib/stores/contextMenu.svelte";
   import { info } from "@tauri-apps/plugin-log";
 
   interface ChipData {
     content: string;
   }
 
+  interface LastTextEntryRef {
+    id: string;
+    prompt_id: string | null;
+    prompt_name: string | null;
+  }
+
   interface LastInteractionData {
     input: ChipData | null;
     output: ChipData | null;
     transcription: ChipData | null;
+    last_text_entry: LastTextEntryRef | null;
   }
 
   let { data }: { data: LastInteractionData | null } = $props();
@@ -24,6 +33,13 @@
     await copyHistoryContent(content);
     copyConfirm = chipType;
     setTimeout(() => (copyConfirm = null), 1200);
+  }
+
+  async function handleOpenLastInteraction() {
+    const entry = data?.last_text_entry;
+    if (!entry) return;
+    await closeMenu();
+    await openPromptDialog(entry.prompt_id ?? "", entry.prompt_name ?? "Chat", entry.id);
   }
 
   function handleHistory() {
@@ -44,13 +60,23 @@
 <div class="last-interaction-section">
   <div class="section-header">
     <span class="header-label">Last interaction</span>
-    <button
-      class="action-btn history-btn"
-      onclick={handleHistory}
-      title="View execution history"
-    >
-      <History size={ICON_SIZE.md} />
-    </button>
+    <div class="header-actions">
+      <button
+        class="action-btn"
+        onclick={handleOpenLastInteraction}
+        disabled={!data?.last_text_entry}
+        title="Open last interaction"
+      >
+        <SquareArrowOutUpRight size={ICON_SIZE.md} />
+      </button>
+      <button
+        class="action-btn"
+        onclick={handleHistory}
+        title="View execution history"
+      >
+        <History size={ICON_SIZE.md} />
+      </button>
+    </div>
   </div>
 
   {#if hasAnyContent}
@@ -110,9 +136,20 @@
     cursor: pointer;
   }
 
-  .action-btn:hover {
+  .action-btn:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.1);
     color: rgba(255, 255, 255, 0.8);
+  }
+
+  .action-btn:disabled {
+    color: rgba(255, 255, 255, 0.15);
+    cursor: default;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
   }
 
   .chips {

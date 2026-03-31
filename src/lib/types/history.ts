@@ -46,7 +46,7 @@ export interface HistoryEntry {
   prompt_id: string | null;
   success: boolean;
   error: string | null;
-  is_conversation: boolean;
+  is_multi_turn: boolean;
   prompt_name: string | null;
   conversation_data: ConversationHistoryData | null;
   created_at: string | null;

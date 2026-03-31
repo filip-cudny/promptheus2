@@ -67,8 +67,8 @@ pub struct HistoryEntry {
     #[serde(default = "default_true")]
     pub success: bool,
     pub error: Option<String>,
-    #[serde(default)]
-    pub is_conversation: bool,
+    #[serde(default, alias = "is_conversation")]
+    pub is_multi_turn: bool,
     pub prompt_name: Option<String>,
     pub conversation_data: Option<ConversationHistoryData>,
     pub created_at: Option<String>,
@@ -91,7 +91,7 @@ mod tests {
             prompt_id: Some("prompt-1".into()),
             success: true,
             error: None,
-            is_conversation: false,
+            is_multi_turn: false,
             prompt_name: Some("Test Prompt".into()),
             conversation_data: None,
             created_at: Some("2026-01-01T00:00:00Z".into()),
@@ -104,7 +104,7 @@ mod tests {
         assert_eq!(deserialized.id, "entry-1");
         assert_eq!(deserialized.entry_type, HistoryEntryType::Text);
         assert!(deserialized.success);
-        assert!(!deserialized.is_conversation);
+        assert!(!deserialized.is_multi_turn);
         assert!(deserialized.conversation_data.is_none());
     }
 
@@ -119,7 +119,7 @@ mod tests {
             prompt_id: Some("prompt-2".into()),
             success: true,
             error: None,
-            is_conversation: true,
+            is_multi_turn: true,
             prompt_name: Some("Chat Prompt".into()),
             conversation_data: Some(ConversationHistoryData {
                 context_text: "Some context".into(),
@@ -166,7 +166,7 @@ mod tests {
         let deserialized: HistoryEntry = serde_json::from_str(&json).unwrap();
 
         assert_eq!(deserialized.entry_type, HistoryEntryType::Speech);
-        assert!(deserialized.is_conversation);
+        assert!(deserialized.is_multi_turn);
 
         let conv = deserialized.conversation_data.unwrap();
         assert_eq!(conv.turns.len(), 1);
@@ -190,7 +190,7 @@ mod tests {
         assert_eq!(entry.id, "entry-3");
         assert_eq!(entry.entry_type, HistoryEntryType::Text);
         assert!(entry.success);
-        assert!(!entry.is_conversation);
+        assert!(!entry.is_multi_turn);
         assert!(entry.output_content.is_none());
         assert!(entry.prompt_id.is_none());
         assert!(entry.error.is_none());

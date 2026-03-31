@@ -3,6 +3,8 @@ use std::sync::Mutex;
 use serde::Serialize;
 use tauri::{Emitter, Manager};
 
+use crate::services::dock::DockManager;
+
 struct PendingText {
     text: String,
     index: usize,
@@ -40,6 +42,12 @@ pub async fn open_text_preview(
             x: pos.x as i32,
             y: pos.y as i32,
         }));
+    }
+
+    let already_visible = win.is_visible().unwrap_or(false);
+    if !already_visible {
+        let dock = app.state::<DockManager>();
+        dock.dialog_opened(&app);
     }
 
     #[cfg(target_os = "macos")]

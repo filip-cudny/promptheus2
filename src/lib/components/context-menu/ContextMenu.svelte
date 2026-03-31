@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from "svelte";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-  import { LogicalSize } from "@tauri-apps/api/dpi";
+  import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
   import type { MenuItem } from "$lib/types/menu";
   import type { ContextItem } from "$lib/types/context";
   import ContextSection from "./ContextSection.svelte";
@@ -25,6 +25,7 @@
     clearNumberBuffer,
     getPromptItems,
     openDialogForItem,
+    getWorkArea,
     init,
     destroy,
   } from "$lib/stores/contextMenu.svelte";
@@ -56,10 +57,17 @@
     content: string;
   }
 
+  interface LastTextEntryRef {
+    id: string;
+    prompt_id: string | null;
+    prompt_name: string | null;
+  }
+
   interface LastInteractionData {
     input: LastInteractionChipData | null;
     output: LastInteractionChipData | null;
     transcription: LastInteractionChipData | null;
+    last_text_entry: LastTextEntryRef | null;
   }
 
   function extractLastInteractionData(item: MenuItem): LastInteractionData | null {
@@ -69,21 +77,54 @@
 
   let menuEl: HTMLDivElement | undefined = $state();
   let expandedDescriptionId = $state("");
+  let hoverEnabled = $state(false);
 
   const MENU_WIDTH = 320;
 
-  async function resizeWindowToContent() {
+  function getPromptsSectionOffset(): number {
+    if (!menuEl) return 0;
+    const anchor = menuEl.querySelector("[data-section='prompts-anchor']");
+    if (!anchor) return 0;
+    return (anchor as HTMLElement).offsetTop;
+  }
+
+  async function resizeAndPositionWindow() {
     await tick();
     if (!menuEl) return;
     const height = menuEl.scrollHeight + 2;
     const win = getCurrentWebviewWindow();
     await win.setSize(new LogicalSize(MENU_WIDTH, height));
+
+    const wa = getWorkArea();
+    if (wa) {
+      const anchorOffset = getPromptsSectionOffset();
+      const EDGE_INSET = 10;
+      let x = wa.cursorX - EDGE_INSET;
+      let y = wa.cursorY - anchorOffset;
+
+      const rightEdge = wa.workX + wa.workWidth;
+      const bottomEdge = wa.workY + wa.workHeight;
+      if (x + MENU_WIDTH > rightEdge) x = rightEdge - MENU_WIDTH;
+      if (y + height > bottomEdge) y = bottomEdge - height;
+      if (x < wa.workX) x = wa.workX;
+      if (y < wa.workY) y = wa.workY;
+
+      await win.setPosition(new LogicalPosition(x, y));
+    }
+
+    hoverEnabled = false;
+    await win.show();
+    await win.setFocus();
+  }
+
+  function handleMouseMove() {
+    if (!hoverEnabled) hoverEnabled = true;
   }
 
   $effect(() => {
     void expandedDescriptionId;
     if (menuVisible && menuItems.length > 0) {
-      resizeWindowToContent();
+      resizeAndPositionWindow();
     }
   });
 
@@ -174,7 +215,8 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class="context-menu" role="menu" bind:this={menuEl}>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div class="context-menu" role="menu" bind:this={menuEl} onmousemove={handleMouseMove}>
   {#if menuItems.length === 0}
     <div class="empty-state" role="menuitem">No items available</div>
   {:else}
@@ -192,6 +234,7 @@
           <span>Chat</span>
         </button>
         <div class="separator"></div>
+        <div data-section="prompts-anchor"></div>
       {/if}
       {#each section.items as { item, globalIndex }}
         {@const contextItems = extractContextItems(item)}
@@ -205,7 +248,7 @@
           <div
             class="menu-item-row"
             class:selected={globalIndex === currentSelectedIndex}
-            onmouseenter={() => { if (item.enabled) setSelectedIndex(globalIndex); }}
+            onmouseenter={() => { if (hoverEnabled && item.enabled) setSelectedIndex(globalIndex); }}
           >
             <button
               class="menu-item"

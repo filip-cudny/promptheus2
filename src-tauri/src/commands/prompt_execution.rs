@@ -360,9 +360,11 @@ pub async fn execute_skill(
             let user_node_id = format!("skill-user-{}", uuid::Uuid::new_v4());
             let assistant_node_id = format!("skill-asst-{}", uuid::Uuid::new_v4());
 
+            let user_display_text = format!("/{skill_name} {input_content}");
+
             let turn = SerializedConversationTurn {
                 turn_number: 1,
-                message_text: input_content,
+                message_text: user_display_text.clone(),
                 message_image_paths: vec![],
                 output_text: Some(full_text.clone()),
                 is_complete: true,
@@ -374,7 +376,7 @@ pub async fn execute_skill(
                 node_id: user_node_id.clone(),
                 parent_id: None,
                 role: "user".to_string(),
-                content: turn.message_text.clone(),
+                content: user_display_text,
                 image_paths: vec![],
                 timestamp: now.clone(),
                 children: vec![assistant_node_id.clone()],

@@ -1,7 +1,9 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-  import { X, FileText } from "lucide-svelte";
+  import AttachmentChip from "./AttachmentChip.svelte";
+
+  const PREVIEW_MAX_CHARS = 200;
 
   let {
     textAttachments = $bindable(),
@@ -25,90 +27,29 @@
     const sourceWindow = getCurrentWebviewWindow().label;
     invoke("open_text_preview", { text, index, sourceWindow });
   }
+
+  function truncate(text: string): string {
+    if (text.length <= PREVIEW_MAX_CHARS) return text;
+    return text.slice(0, PREVIEW_MAX_CHARS) + "…";
+  }
 </script>
 
-{#if textAttachments.length > 0}
-  <div class="text-chip-bar">
-    {#each textAttachments as text, idx}
-      <div class="text-chip">
-        <button class="chip-thumbnail-btn" onclick={() => openPreview(text, idx)}>
-          <div class="chip-icon">
-            <FileText size={18} strokeWidth={1.5} />
-            <span class="chip-label">Text #{idx + 1}</span>
-          </div>
-        </button>
-        {#if !readonly}
-          <button class="chip-delete" onclick={() => removeAttachment(idx)}>
-            <X size={11} strokeWidth={2.5} />
-          </button>
-        {/if}
-      </div>
-    {/each}
-  </div>
-{/if}
+{#each textAttachments as text, idx}
+  <AttachmentChip label="Text #{idx + 1}" {readonly} onclick={() => openPreview(text, idx)} onremove={() => removeAttachment(idx)}>
+    {#snippet content()}
+      <span class="chip-preview">{truncate(text)}</span>
+    {/snippet}
+  </AttachmentChip>
+{/each}
 
 <style>
-  .text-chip-bar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 2px 0;
-  }
-
-  .text-chip {
-    position: relative;
-    display: flex;
-    align-items: center;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .chip-thumbnail-btn {
-    padding: 0;
-    border: none;
-    background: none;
-    cursor: pointer;
-    display: flex;
-  }
-
-  .chip-icon {
-    width: 40px;
-    height: 40px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1px;
-    color: rgba(255, 255, 255, 0.5);
-    border-radius: 5px;
-  }
-
-  .chip-label {
-    font-size: 8px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-    color: rgba(255, 255, 255, 0.4);
-  }
-
-  .chip-delete {
-    position: absolute;
-    top: -3px;
-    right: -3px;
-    width: 19px;
-    height: 19px;
-    border-radius: 50%;
-    border: 1px solid #555;
-    background: #333;
-    color: #fff;
-    cursor: pointer;
-    display: grid;
-    place-items: center;
-    padding: 0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
-  }
-
-  .chip-delete:hover {
-    background: #444;
+  .chip-preview {
+    font-size: 9px;
+    line-height: 1.3;
+    color: rgba(255, 255, 255, 0.55);
+    overflow: hidden;
+    word-break: break-word;
+    padding: 6px 6px 0;
+    height: 100%;
   }
 </style>
