@@ -30,15 +30,14 @@
         padding: 12px 24px 12px 12px;
         border-radius: 8px;
         background: #ffffff;
-        border: 1px solid rgba(200, 200, 200, 0.7);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        border: 1px solid rgba(200, 200, 200, 0.9);
         max-width: 360px;
         min-width: 240px;
         opacity: 0;
         transition: opacity 0.3s ease-out;
       }
       .toast.visible {
-        opacity: 0.8;
+        opacity: 1;
       }
       .toast-icon {
         width: 24px;
@@ -109,12 +108,17 @@
 
         var duration = DURATIONS[level] || 2000;
         setTimeout(function() {
-          el.addEventListener("transitionend", function() {
+          el.classList.remove("visible");
+          var removed = false;
+          function removeToast() {
+            if (removed) return;
+            removed = true;
             if (el.parentNode) el.parentNode.removeChild(el);
             count--;
             updateWindow(count);
-          }, { once: true });
-          el.classList.remove("visible");
+          }
+          el.addEventListener("transitionend", removeToast, { once: true });
+          setTimeout(removeToast, 500);
         }, duration);
       }
 
@@ -125,7 +129,9 @@
       }
 
       function updateWindow(n) {
-        var height = n > 0 ? n * ITEM_HEIGHT + (n - 1) * ITEM_GAP + 20 : 0;
+        var gap = ITEM_GAP;
+        var pad = 20;
+        var height = n > 0 ? n * ITEM_HEIGHT + (n - 1) * gap + pad : 0;
         if (window.__TAURI__) {
           window.__TAURI__.core.invoke("update_notification_window", {
             count: n,

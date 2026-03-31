@@ -120,6 +120,10 @@ pub async fn show_context_menu_window(app: tauri::AppHandle) -> Result<(), Strin
     app.show().map_err(|e| e.to_string())?;
 
     win.show().map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "linux")]
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
     win.set_focus().map_err(|e| e.to_string())?;
 
     Ok(())

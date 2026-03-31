@@ -56,6 +56,8 @@ Run from `promptheus-tauri/src-tauri/`:
 - `pnpm check` does **not** exist — use `npx svelte-check`.
 - `cargo` commands must run from `src-tauri/`, not the project root.
 - `pnpm` commands run from the project root (`promptheus-tauri/`).
+- Every HTML window **must** be listed in `vite.config.ts` → `rollupOptions.input`. Dev mode serves files from disk so missing entries still work, but production builds only include listed inputs — an unlisted window loads as an empty white rectangle.
+- **CSS opacity does not work on transparent WebKitGTK windows on Linux.** Neither `opacity`, `rgba()` backgrounds, `filter: opacity()`, `will-change: opacity`, nor `@keyframes` animations produce visible transparency on elements inside a `.transparent(true)` window. Only the fade-out CSS transition briefly shows transparency (WebKitGTK uses a GPU composite path during transitions but reverts to an opaque CPU paint path for static renders). The **only working approach** is GTK-level window opacity via `gtk_window().set_opacity()` in Rust (see `notification.rs`). This sets `_NET_WM_WINDOW_OPACITY` at the compositor level, bypassing WebKitGTK entirely.
 
 ## References
 

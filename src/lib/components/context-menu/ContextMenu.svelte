@@ -75,7 +75,7 @@
   async function resizeWindowToContent() {
     await tick();
     if (!menuEl) return;
-    const height = menuEl.scrollHeight;
+    const height = menuEl.scrollHeight + 2;
     const win = getCurrentWebviewWindow();
     await win.setSize(new LogicalSize(MENU_WIDTH, height));
   }
@@ -112,6 +112,14 @@
   let menuItems = $derived(getItems());
   let promptItems = $derived(getPromptItems());
   let currentSelectedIndex = $derived(getSelectedIndex());
+
+  $effect(() => {
+    if (menuVisible && menuEl) {
+      const _idx = currentSelectedIndex;
+      const selected = menuEl.querySelector(".menu-item-row.selected");
+      selected?.scrollIntoView({ block: "nearest" });
+    }
+  });
 
   function handleKeydown(e: KeyboardEvent) {
     if (!menuVisible) return;
@@ -275,6 +283,7 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 13px;
     color: #e0e0e0;
+    overflow-y: hidden;
   }
 
   .empty-state {

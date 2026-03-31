@@ -43,6 +43,15 @@ fn show_notification_window(handle: &tauri::AppHandle) -> Result<(), String> {
     win.eval("drainPending()").map_err(|e| e.to_string())?;
 
     win.show().map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::prelude::WidgetExt;
+        if let Ok(gtk_win) = win.gtk_window() {
+            gtk_win.set_opacity(0.8);
+        }
+    }
+
     Ok(())
 }
 

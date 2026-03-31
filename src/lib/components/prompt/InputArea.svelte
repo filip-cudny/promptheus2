@@ -47,6 +47,15 @@
   let slashStart = $state(-1);
 
   let lastSkillPattern = "";
+  let dropdownEl: HTMLDivElement | undefined = $state();
+
+  $effect(() => {
+    if (showAutocomplete && dropdownEl) {
+      const _idx = autocompleteIndex;
+      const selected = dropdownEl.querySelector(".autocomplete-item.selected");
+      selected?.scrollIntoView({ block: "nearest" });
+    }
+  });
 
   $effect(() => {
     store.updateInputText(localText);
@@ -385,7 +394,7 @@
       ></div>
 
       {#if showAutocomplete && autocompleteItems.length > 0}
-        <div class="autocomplete-dropdown">
+        <div class="autocomplete-dropdown" bind:this={dropdownEl}>
           {#each autocompleteItems as item, i}
             <button
               class="autocomplete-item"

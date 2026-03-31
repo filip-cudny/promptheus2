@@ -58,12 +58,13 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     )
     .title("")
     .inner_size(380.0, 100.0)
-    .resizable(true)
+    .resizable(false)
     .decorations(false)
     .transparent(true)
     .shadow(false)
     .always_on_top(true)
     .skip_taskbar(true)
+    .focusable(false)
     .visible(false);
 
     notif.build()?;

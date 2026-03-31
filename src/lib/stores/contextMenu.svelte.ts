@@ -103,6 +103,9 @@ async function openMenu() {
     _selectedIndex = -1;
     numberBuffer = "";
     _visible = true;
+
+    const win = getCurrentWebviewWindow();
+    await win.setFocus();
   } catch (e) {
     error("Failed to open context menu: " + e);
   }
@@ -318,6 +321,9 @@ async function init() {
     clearRecordingState();
     refreshItems();
   });
+
+  const prefetched = await invoke<MenuItem[]>("get_context_menu_items");
+  _items = prefetched;
 }
 
 function destroy() {
