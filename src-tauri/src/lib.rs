@@ -542,6 +542,7 @@ pub fn run() {
             commands::skills::get_skill_body,
             commands::skills::reload_skills,
             commands::context_editor::open_context_editor,
+            commands::history_dialog::open_history_dialog,
             commands::image_preview::open_image_preview,
             commands::image_preview::get_pending_image,
             commands::text_preview::open_text_preview,

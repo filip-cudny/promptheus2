@@ -14,6 +14,7 @@
   const promptId = params.get("promptId") ?? "";
   const promptName = params.get("promptName") ?? "Prompt";
   const historyEntryId = params.get("historyEntryId");
+  const lastInteractionOnly = params.get("lastInteractionOnly") === "true";
 
   const store = createConversationStore(promptId, promptName);
 
@@ -35,15 +36,15 @@
 
   onMount(async () => {
     if (historyEntryId) {
-      await store.restoreFromHistory(historyEntryId);
+      await store.restoreFromHistory(historyEntryId, lastInteractionOnly);
     } else if (promptId) {
       store.updateInputText(`/${promptId} `);
     }
 
-    unlistenRestore = await listen<{ entry_id: string }>(
+    unlistenRestore = await listen<{ entry_id: string; last_interaction_only?: boolean }>(
       "restore-history",
       (event) => {
-        store.restoreFromHistory(event.payload.entry_id);
+        store.restoreFromHistory(event.payload.entry_id, event.payload.last_interaction_only);
       },
     );
 

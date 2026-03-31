@@ -4,6 +4,7 @@ pub mod context;
 pub mod context_editor;
 pub mod dock;
 pub mod history;
+pub mod history_dialog;
 pub mod image_preview;
 pub mod menu;
 pub mod notification;

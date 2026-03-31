@@ -5,7 +5,7 @@
   import { copyHistoryContent } from "$lib/services/history";
   import { openPromptDialog } from "$lib/services/promptDialog";
   import { closeMenu } from "$lib/stores/contextMenu.svelte";
-  import { info } from "@tauri-apps/plugin-log";
+  import { openHistoryDialog } from "$lib/services/historyDialog";
 
   interface ChipData {
     content: string;
@@ -39,11 +39,12 @@
     const entry = data?.last_text_entry;
     if (!entry) return;
     await closeMenu();
-    await openPromptDialog(entry.prompt_id ?? "", entry.prompt_name ?? "Chat", entry.id);
+    await openPromptDialog(entry.prompt_id ?? "", entry.prompt_name ?? "Chat", entry.id, true);
   }
 
-  function handleHistory() {
-    info("History button clicked — history dialog not yet implemented");
+  async function handleHistory() {
+    await closeMenu();
+    await openHistoryDialog();
   }
 
   type ChipEntry = { type: string; label: string; content: string | null };

@@ -5,13 +5,13 @@ use super::settings::AppState;
 use crate::services::dock::DockManager;
 use crate::services::ui_state::WindowGeometry;
 
-const GEOMETRY_KEY: &str = "context-editor";
-const DEFAULT_WIDTH: f64 = 500.0;
-const DEFAULT_HEIGHT: f64 = 400.0;
+const GEOMETRY_KEY: &str = "history-dialog";
+const DEFAULT_WIDTH: f64 = 600.0;
+const DEFAULT_HEIGHT: f64 = 500.0;
 
 #[tauri::command]
-pub async fn open_context_editor(app: tauri::AppHandle) -> Result<(), String> {
-    let label = "context-editor";
+pub async fn open_history_dialog(app: tauri::AppHandle) -> Result<(), String> {
+    let label = "history-dialog";
 
     if let Some(existing) = app.get_webview_window(label) {
         existing.set_focus().map_err(|e| e.to_string())?;
@@ -29,9 +29,9 @@ pub async fn open_context_editor(app: tauri::AppHandle) -> Result<(), String> {
     let mut builder = tauri::WebviewWindowBuilder::new(
         &app,
         label,
-        tauri::WebviewUrl::App("context-editor.html".into()),
+        tauri::WebviewUrl::App("history-dialog.html".into()),
     )
-    .title("Edit Context")
+    .title("Execution History")
     .inner_size(width, height)
     .resizable(true)
     .decorations(true);
@@ -63,7 +63,7 @@ pub async fn open_context_editor(app: tauri::AppHandle) -> Result<(), String> {
                     let state = app.state::<Mutex<AppState>>();
                     let mut s = state.lock().await;
                     if let Err(e) = s.ui_state.set_geometry(GEOMETRY_KEY, geom) {
-                        log::warn!("failed to save context editor geometry: {e}");
+                        log::warn!("failed to save history dialog geometry: {e}");
                     }
                 });
             }

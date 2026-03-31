@@ -654,7 +654,7 @@ export function createConversationStore(
     }
   }
 
-  async function restoreFromHistory(entryId: string): Promise<void> {
+  async function restoreFromHistory(entryId: string, lastInteractionOnly?: boolean): Promise<void> {
     try {
       const entry = await getHistoryEntry(entryId);
       if (!entry) return;
@@ -670,7 +670,7 @@ export function createConversationStore(
         current_path: [],
       };
 
-      if (entry.conversation_data) {
+      if (entry.conversation_data && !lastInteractionOnly) {
         const data = entry.conversation_data;
         newTab.context_text = data.context_text;
         restoredTree.root_node_id = data.root_node_id;
