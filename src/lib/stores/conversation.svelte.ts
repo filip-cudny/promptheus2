@@ -3,12 +3,14 @@ import { error as logError } from "@tauri-apps/plugin-log";
 import { generateId } from "$lib/utils/id";
 import {
   executeConversationTurn,
+  generateConversationTitle,
   getSystemPrompt,
   type ExecutionCallbacks,
 } from "$lib/services/promptExecution";
 import {
   addConversationEntry,
   updateConversationEntry,
+  updateHistoryEntryTitle,
   getHistoryEntry,
 } from "$lib/services/history";
 import { getSkillBody } from "$lib/services/skills";
@@ -362,6 +364,21 @@ export function createConversationStore(
     tab.is_streaming = true;
     tab.streamed_content = "";
 
+    const isFirstMessage = getMessagePairs(tab.tree).length === 1;
+    const hasDefaultTabName = /^Chat \d+$/.test(tab.tab_name);
+    if (isFirstMessage && hasDefaultTabName && text) {
+      generateConversationTitle(text)
+        .then((title) => {
+          if (title && hasDefaultTabName) {
+            tab.tab_name = title;
+            if (tab.history_entry_id) {
+              updateHistoryEntryTitle(tab.history_entry_id, title).catch(() => {});
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
     let success = false;
     let resultText = "";
 
@@ -648,6 +665,9 @@ export function createConversationStore(
           currentPath: tab.tree.current_path,
         });
         tab.history_entry_id = entryId;
+        if (!/^Chat \d+$/.test(tab.tab_name)) {
+          updateHistoryEntryTitle(entryId, tab.tab_name).catch(() => {});
+        }
       }
     } catch (e) {
       logError("Failed to save conversation to history: " + e);

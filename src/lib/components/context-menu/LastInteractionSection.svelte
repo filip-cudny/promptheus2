@@ -9,6 +9,7 @@
 
   interface ChipData {
     content: string;
+    preview: string;
   }
 
   interface LastTextEntryRef {
@@ -47,12 +48,12 @@
     await openHistoryDialog();
   }
 
-  type ChipEntry = { type: string; label: string; content: string | null };
+  type ChipEntry = { type: string; label: string; content: string | null; preview: string | null };
 
   let chips = $derived<ChipEntry[]>([
-    { type: "input", label: "Input", content: data?.input?.content ?? null },
-    { type: "output", label: "Output", content: data?.output?.content ?? null },
-    { type: "transcription", label: "Transcription", content: data?.transcription?.content ?? null },
+    { type: "input", label: "Input", content: data?.input?.content ?? null, preview: data?.input?.preview ?? null },
+    { type: "output", label: "Output", content: data?.output?.content ?? null, preview: data?.output?.preview ?? null },
+    { type: "transcription", label: "Transcription", content: data?.transcription?.content ?? null, preview: data?.transcription?.preview ?? null },
   ]);
 
   let hasAnyContent = $derived(chips.some((c) => c.content !== null));
@@ -86,7 +87,7 @@
         <Chip
           onclick={() => handleCopy(chip.type, chip.content)}
           disabled={!chip.content}
-          title={chip.content ?? "No content"}
+          title={chip.preview ?? "No content"}
         >
           <span class="chip-copy">
             {#if copyConfirm === chip.type}

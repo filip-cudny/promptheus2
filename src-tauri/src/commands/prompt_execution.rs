@@ -12,7 +12,7 @@ use crate::models::context::ContextItem;
 use crate::models::history::{
     HistoryEntryType, SerializedConversationNode, SerializedConversationTurn,
 };
-use crate::models::message::{ConversationMessage, ProcessedMessage};
+use crate::models::message::{ConversationMessage, MessageContent, ProcessedMessage};
 use crate::services::notification::NotificationLevel;
 use crate::services::prompt_execution::PromptExecutionService;
 use crate::services::skill_execution;
@@ -504,4 +504,45 @@ pub async fn process_skill_template(
     }
 
     Ok(messages)
+}
+
+#[tauri::command]
+pub async fn generate_conversation_title(
+    state: State<'_, Mutex<AppState>>,
+    user_message: String,
+) -> Result<String, String> {
+    let (model_id, prompt) = {
+        let state = state.lock().await;
+        let settings = state.config.settings();
+
+        let model_id = if !settings.conversation_title_model.is_empty() {
+            settings.conversation_title_model.clone()
+        } else if let Some(ref default) = settings.default_model {
+            default.clone()
+        } else {
+            return Err("No model configured for title generation".to_string());
+        };
+
+        (model_id, settings.conversation_title_prompt.clone())
+    };
+
+    let messages = vec![
+        ProcessedMessage {
+            role: "system".to_string(),
+            content: MessageContent::Text(prompt),
+        },
+        ProcessedMessage {
+            role: "user".to_string(),
+            content: MessageContent::Text(user_message),
+        },
+    ];
+
+    let state = state.lock().await;
+    let title = state
+        .ai
+        .complete(&model_id, messages)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(title.trim().to_string())
 }

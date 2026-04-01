@@ -61,6 +61,13 @@ export async function getLastInteraction(): Promise<LastInteractionData> {
   return invoke("get_last_interaction");
 }
 
+export async function updateHistoryEntryTitle(
+  entryId: string,
+  title: string,
+): Promise<void> {
+  return invoke("update_history_entry_title", { entryId, title });
+}
+
 export async function clearHistory(): Promise<void> {
   return invoke("clear_history");
 }

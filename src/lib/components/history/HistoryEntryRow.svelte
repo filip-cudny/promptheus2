@@ -32,7 +32,7 @@
   );
 
   let displayName = $derived(
-    entry.prompt_name ?? (entry.entry_type === "speech" ? "Transcription" : "Unknown"),
+    entry.title ?? entry.prompt_name ?? (entry.entry_type === "speech" ? "Transcription" : "Unknown"),
   );
 
   let inputPreview = $derived(truncate(entry.input_content, 120));

@@ -20,6 +20,8 @@ export interface Settings {
   prompts: PromptData[];
   system_prompt: string;
   skills_order: string[];
+  conversation_title_model: string;
+  conversation_title_prompt: string;
 }
 
 export interface ModelConfig {

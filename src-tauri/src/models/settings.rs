@@ -44,6 +44,12 @@ pub struct Settings {
 
     #[serde(default)]
     pub skills_order: Vec<String>,
+
+    #[serde(default)]
+    pub conversation_title_model: String,
+
+    #[serde(default = "default_conversation_title_prompt")]
+    pub conversation_title_prompt: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -239,6 +245,10 @@ fn default_debounce_ms() -> u32 {
     200
 }
 
+fn default_conversation_title_prompt() -> String {
+    "Generate a short conversation title based on the user's first message. Return only the title, 2-6 words, no emoji, no quotes, no trailing punctuation. Match the user's language when possible.".to_string()
+}
+
 fn default_white() -> String {
     "#FFFFFF".to_string()
 }
@@ -260,6 +270,8 @@ impl Default for Settings {
             prompts: Vec::new(),
             system_prompt: default_system_prompt(),
             skills_order: Vec::new(),
+            conversation_title_model: String::new(),
+            conversation_title_prompt: default_conversation_title_prompt(),
         }
     }
 }

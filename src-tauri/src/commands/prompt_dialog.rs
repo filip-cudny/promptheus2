@@ -16,6 +16,8 @@ pub async fn open_prompt_dialog(
     prompt_name: String,
     history_entry_id: Option<String>,
     last_interaction_only: Option<bool>,
+    initial_input: Option<String>,
+    auto_send_input: Option<bool>,
 ) -> Result<(), String> {
     let sanitized_id: String = prompt_id
         .chars()
@@ -36,6 +38,17 @@ pub async fn open_prompt_dialog(
             )
             .map_err(|e| e.to_string())?;
         }
+        if let Some(input) = &initial_input {
+            app.emit_to(
+                &label,
+                "voice-input",
+                serde_json::json!({
+                    "text": input,
+                    "auto_send": auto_send_input.unwrap_or(false),
+                }),
+            )
+            .map_err(|e| e.to_string())?;
+        }
         return Ok(());
     }
 
@@ -49,6 +62,12 @@ pub async fn open_prompt_dialog(
     }
     if last_interaction_only.unwrap_or(false) {
         url.push_str("&lastInteractionOnly=true");
+    }
+    if let Some(input) = &initial_input {
+        url.push_str(&format!("&initialInput={}", urlencoding::encode(input)));
+        if auto_send_input.unwrap_or(false) {
+            url.push_str("&autoSendInput=true");
+        }
     }
 
     let state = app.state::<Mutex<AppState>>();

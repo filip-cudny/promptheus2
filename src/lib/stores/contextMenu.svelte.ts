@@ -39,8 +39,12 @@ const _navigableItems = $derived(
   _items.filter((item) => item.enabled),
 );
 
+const _allPromptItems = $derived(
+  _items.filter((item) => item.item_type === "prompt"),
+);
+
 const _promptItems = $derived(
-  _items.filter((item) => item.item_type === "prompt" && item.enabled),
+  _allPromptItems.filter((item) => item.enabled),
 );
 
 function getItems(): MenuItem[] {
@@ -185,13 +189,23 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
     const isRecordingThis = _isRecording && _recordingPromptId === data.prompt_id;
     if (!item.enabled && !isRecordingThis) return;
 
-    if (shiftPressed) {
-      if (_isRecording && _recordingPromptId === data.prompt_id) {
-        clearRecordingState();
-      } else {
-        _isRecording = true;
-        _recordingPromptId = data.prompt_id;
+    if (isRecordingThis) {
+      clearRecordingState();
+      try {
+        await invoke("execute_menu_item", {
+          itemId: item.id,
+          shiftPressed: true,
+        });
+      } catch (e) {
+        error("Failed to stop speech recording for prompt: " + e);
       }
+      await closeMenu();
+      return;
+    }
+
+    if (shiftPressed) {
+      _isRecording = true;
+      _recordingPromptId = data.prompt_id;
       try {
         await invoke("execute_menu_item", {
           itemId: item.id,
@@ -201,13 +215,13 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
         error("Failed to start speech recording for prompt: " + e);
         clearRecordingState();
       }
-      await closeMenu();
+      await refreshItems();
       return;
     }
 
     if (!item.enabled) return;
     await closeMenu();
-    startExecution(data.prompt_id); // prompt_id contains skill name
+    startExecution(data.prompt_id);
     return;
   }
 
@@ -266,11 +280,20 @@ async function startAlternativeExecution(index: number) {
 
   if (isRecordingThis) {
     clearRecordingState();
-  } else {
-    _isRecording = true;
-    _recordingPromptId = data.prompt_id;
+    try {
+      await invoke("execute_menu_item", {
+        itemId: item.id,
+        shiftPressed: true,
+      });
+    } catch (e) {
+      error("Failed to stop speech recording for prompt: " + e);
+    }
+    await closeMenu();
+    return;
   }
 
+  _isRecording = true;
+  _recordingPromptId = data.prompt_id;
   try {
     await invoke("execute_menu_item", {
       itemId: item.id,
@@ -280,7 +303,6 @@ async function startAlternativeExecution(index: number) {
     error("Failed to start speech recording for prompt: " + e);
     clearRecordingState();
   }
-
   await refreshItems();
 }
 
@@ -293,8 +315,9 @@ function handleNumberInput(digit: string, isAlternative: boolean) {
     const num = parseInt(numberBuffer, 10);
     numberBuffer = "";
 
-    if (num >= 1 && num <= _promptItems.length) {
-      const targetItem = _promptItems[num - 1];
+    if (num >= 1 && num <= _allPromptItems.length) {
+      const targetItem = _allPromptItems[num - 1];
+      if (!targetItem.enabled && !(_isRecording && _recordingPromptId === (targetItem.data as { prompt_id: string } | null)?.prompt_id)) return;
       const targetIndex = _items.indexOf(targetItem);
       _selectedIndex = targetIndex;
       if (isAlternative) {
@@ -309,6 +332,45 @@ function handleNumberInput(digit: string, isAlternative: boolean) {
 function clearNumberBuffer() {
   if (numberTimer) clearTimeout(numberTimer);
   numberBuffer = "";
+}
+
+const CHAT_RECORDING_ID = "__chat__";
+
+function isRecordingChat(): boolean {
+  return _isRecording && _recordingPromptId === CHAT_RECORDING_ID;
+}
+
+async function toggleChatRecording() {
+  if (isRecordingChat()) {
+    clearRecordingState();
+    try {
+      await invoke("execute_menu_item", {
+        itemId: CHAT_RECORDING_ID,
+        shiftPressed: true,
+      });
+    } catch (e) {
+      error("Failed to stop chat speech recording: " + e);
+    }
+    await closeMenu();
+    return;
+  }
+
+  _isRecording = true;
+  _recordingPromptId = CHAT_RECORDING_ID;
+  try {
+    await invoke("execute_menu_item", {
+      itemId: CHAT_RECORDING_ID,
+      shiftPressed: true,
+    });
+  } catch (e) {
+    error("Failed to start chat speech recording: " + e);
+    clearRecordingState();
+  }
+  await refreshItems();
+}
+
+function getAllPromptItems(): MenuItem[] {
+  return _allPromptItems;
 }
 
 function getPromptItems(): MenuItem[] {
@@ -432,7 +494,10 @@ export {
   startAlternativeExecution,
   handleNumberInput,
   clearNumberBuffer,
+  getAllPromptItems,
   getPromptItems,
+  isRecordingChat,
+  toggleChatRecording,
   openDialogForItem,
   init,
   destroy,

@@ -176,6 +176,16 @@ impl ConfigService {
                     self.settings.number_input_debounce_ms = v as u32;
                 }
             }
+            "conversation_title_model" => {
+                if let Some(v) = value.as_str() {
+                    self.settings.conversation_title_model = v.to_string();
+                }
+            }
+            "conversation_title_prompt" => {
+                if let Some(v) = value.as_str() {
+                    self.settings.conversation_title_prompt = v.to_string();
+                }
+            }
             _ => {}
         }
     }

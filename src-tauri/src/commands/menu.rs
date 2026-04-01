@@ -69,13 +69,13 @@ pub async fn get_context_menu_items(
             item.data = Some(serde_json::json!({
                 "input": last_text.as_ref().map(|e| {
                     let raw_input = strip_skill_prefix(&e.input_content, &state.skill_service);
-                    serde_json::json!({ "content": truncate(raw_input, 200) })
+                    serde_json::json!({ "content": raw_input, "preview": truncate(raw_input, 200) })
                 }),
                 "output": last_text.as_ref().and_then(|e| {
-                    e.output_content.as_ref().map(|c| serde_json::json!({ "content": truncate(c, 200) }))
+                    e.output_content.as_ref().map(|c| serde_json::json!({ "content": c, "preview": truncate(c, 200) }))
                 }),
                 "transcription": last_speech.as_ref().and_then(|e| {
-                    e.output_content.as_ref().map(|c| serde_json::json!({ "content": truncate(c, 200) }))
+                    e.output_content.as_ref().map(|c| serde_json::json!({ "content": c, "preview": truncate(c, 200) }))
                 }),
                 "last_text_entry": last_text.as_ref().map(|e| {
                     serde_json::json!({
@@ -105,18 +105,20 @@ pub async fn execute_menu_item(
     }
 
     if shift_pressed {
-        let is_skill = {
+        let display_name = if item_id == "__chat__" {
+            Some("Chat".to_string())
+        } else {
             let s = state.lock().await;
-            s.skill_service.get_skill(&item_id).is_some()
+            s.skill_service.get_skill(&item_id).map(|sk| sk.display_name.clone())
         };
 
-        if is_skill {
+        if let Some(display_name) = display_name {
             let mut s = state.lock().await;
             if s.speech.is_recording() {
                 drop(s);
                 return super::speech::toggle_speech_recording(app, state, None).await;
             }
-            s.speech.set_pending_prompt_id(Some(item_id.clone()));
+            s.speech.set_pending_prompt(Some(item_id.clone()), Some(display_name));
             drop(s);
             return super::speech::toggle_speech_recording(
                 app,

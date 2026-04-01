@@ -136,6 +136,21 @@ pub async fn get_last_interaction(
 }
 
 #[tauri::command]
+pub async fn update_history_entry_title(
+    app: AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    entry_id: String,
+    title: String,
+) -> Result<(), String> {
+    let mut state = state.lock().await;
+    state
+        .history
+        .update_entry_title(&entry_id, title)
+        .map_err(|e| e.to_string())?;
+    emit_history_changed(&app)
+}
+
+#[tauri::command]
 pub async fn clear_history(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,

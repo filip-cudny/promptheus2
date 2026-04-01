@@ -7,6 +7,7 @@
   import SkillEditable from "$lib/components/ui/SkillEditable.svelte";
   import { Trash2, Pencil, Copy, Check } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import { highlightSkills } from "$lib/utils/skillHighlight";
   import { listSkills } from "$lib/services/skills";
   import { onMount } from "svelte";
 
@@ -37,31 +38,12 @@
     }
   });
 
-  function escapeHtml(text: string): string {
-    return text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-  }
-
   function isKnownSkill(name: string): boolean {
     return allSkillNames.has(name.slice(1));
   }
 
   function formatUserContent(content: string): string {
-    return content
-      .split("\n")
-      .map((line) => {
-        const match = line.match(/^(\/[a-z0-9-]+)(\s.*)?$/);
-        if (match && isKnownSkill(match[1])) {
-          const badge = `<span class="skill-badge">${escapeHtml(match[1])}</span>`;
-          const rest = match[2] ? escapeHtml(match[2]) : "";
-          return badge + rest;
-        }
-        return escapeHtml(line);
-      })
-      .join("\n");
+    return highlightSkills(content, isKnownSkill, "skill-badge", "\n");
   }
 
   let collapsed = $state(false);

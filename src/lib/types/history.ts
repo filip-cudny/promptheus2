@@ -52,4 +52,5 @@ export interface HistoryEntry {
   created_at: string | null;
   updated_at: string | null;
   quick_action: boolean;
+  title: string | null;
 }

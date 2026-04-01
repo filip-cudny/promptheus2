@@ -85,6 +85,12 @@ export async function getSystemPrompt(
   });
 }
 
+export async function generateConversationTitle(
+  userMessage: string,
+): Promise<string> {
+  return invoke("generate_conversation_title", { userMessage });
+}
+
 export async function getExecutionState(): Promise<{
   is_executing: boolean;
   execution_id: string | null;

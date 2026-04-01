@@ -1,6 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { error as logError } from "@tauri-apps/plugin-log";
 import { executeSkill } from "$lib/services/promptExecution";
+import { openPromptDialog } from "$lib/services/promptDialog";
 
 let _isExecuting = $state(false);
 let _executionId = $state<string | null>(null);
@@ -77,9 +78,19 @@ async function init() {
 
   unlistenAlternativeExecute = await listen<{
     prompt_id: string;
+    prompt_name: string;
     text: string;
   }>("speech-alternative-execute", (event) => {
-    startExecution(event.payload.prompt_id, event.payload.text);
+    const { prompt_id, prompt_name, text } = event.payload;
+    const isChat = prompt_id === "__chat__";
+    openPromptDialog(
+      isChat ? "" : prompt_id,
+      prompt_name || prompt_id,
+      undefined,
+      undefined,
+      text,
+      !isChat,
+    ).catch((e) => logError("Failed to open dialog for voice input: " + e));
   });
 }
 

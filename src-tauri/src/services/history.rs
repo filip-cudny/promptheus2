@@ -51,6 +51,7 @@ impl HistoryService {
             created_at: Some(now),
             updated_at: None,
             quick_action,
+            title: None,
         };
         self.entries.push(entry);
         self.enforce_max_entries();
@@ -102,6 +103,7 @@ impl HistoryService {
             created_at: Some(now),
             updated_at: None,
             quick_action,
+            title: None,
         };
         self.entries.push(entry);
         self.enforce_max_entries();
@@ -186,6 +188,20 @@ impl HistoryService {
             .iter()
             .find(|e| e.id == entry_id)
             .and_then(|e| e.conversation_data.clone())
+    }
+
+    pub fn update_entry_title(
+        &mut self,
+        entry_id: &str,
+        title: String,
+    ) -> Result<(), HistoryError> {
+        let entry = self
+            .entries
+            .iter_mut()
+            .find(|e| e.id == entry_id)
+            .ok_or_else(|| HistoryError::EntryNotFound(entry_id.to_string()))?;
+        entry.title = Some(title);
+        Ok(())
     }
 
     pub fn clear(&mut self) {
@@ -363,6 +379,7 @@ mod tests {
                 created_at: Some(ts),
                 updated_at: None,
                 quick_action: false,
+                title: None,
             });
             svc.enforce_max_entries();
         }

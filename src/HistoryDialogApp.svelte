@@ -40,7 +40,7 @@
   });
 
   async function handleOpen(entry: HistoryEntry) {
-    await openPromptDialog(entry.prompt_id ?? "", entry.prompt_name ?? "Chat", entry.id);
+    await openPromptDialog(entry.prompt_id ?? "", entry.title ?? entry.prompt_name ?? "Chat", entry.id);
   }
 
   async function changePageSize(size: number) {

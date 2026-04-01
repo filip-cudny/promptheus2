@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { listSkills } from "$lib/services/skills";
+  import { highlightSkills } from "$lib/utils/skillHighlight";
   import type { SkillSummary } from "$lib/types";
 
   let {
@@ -124,45 +125,34 @@
     sel.addRange(range);
   }
 
-  function escapeHtml(t: string): string {
-    return t
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-  }
-
   function isKnownSkill(token: string): boolean {
     return allSkills.some((s) => s.name === token.slice(1));
   }
 
   function buildHighlightedHtml(t: string): string {
-    if (!t) return "";
-    return t
-      .split("\n")
-      .map((line) => {
-        const match = line.match(/^(\/[a-z0-9-]+)(\s.*)?$/);
-        if (match && isKnownSkill(match[1])) {
-          return `<span class="hl-skill">${escapeHtml(match[1])}</span>${escapeHtml(match[2] ?? "")}`;
-        }
-        return escapeHtml(line);
-      })
-      .join("<br>");
+    return highlightSkills(t, isKnownSkill, "hl-skill", "<br>");
   }
 
   function getSkillPattern(t: string): string {
     const matches: string[] = [];
     for (const line of t.split("\n")) {
-      const m = line.match(/^(\/[a-z0-9-]+)(\s|$)/);
-      if (m && isKnownSkill(m[1])) matches.push(m[1]);
+      for (const m of line.matchAll(/(^|\s)(\/[a-z0-9-]+)(\s|$)/g)) {
+        if (isKnownSkill(m[2])) matches.push(m[2]);
+      }
     }
     return matches.join("|");
+  }
+
+  function hasBrowserStyledSpans(): boolean {
+    if (!editable) return false;
+    return editable.querySelector("span:not(.hl-skill)") !== null;
   }
 
   function applyHighlighting() {
     if (!editable) return;
     const t = getPlainText();
     const pattern = getSkillPattern(t);
-    if (pattern === lastSkillPattern) return;
+    if (pattern === lastSkillPattern && !hasBrowserStyledSpans()) return;
     lastSkillPattern = pattern;
     const offset = saveCursorOffset();
     editable.innerHTML = buildHighlightedHtml(t);
@@ -172,7 +162,14 @@
   function handleInput() {
     const t = getPlainText();
     text = t;
-    applyHighlighting();
+
+    if (!t && editable) {
+      editable.innerHTML = "";
+      lastSkillPattern = "";
+    } else {
+      applyHighlighting();
+    }
+
     detectSlashCommand();
     oninput?.();
   }
@@ -185,14 +182,12 @@
 
     const offset = saveCursorOffset();
     const textBefore = text.slice(0, offset);
-    const lastNewline = textBefore.lastIndexOf("\n");
-    const lineStart = lastNewline + 1;
-    const lineText = textBefore.slice(lineStart);
+    const match = textBefore.match(/(^|\s)(\/[a-z0-9-]*)$/);
 
-    const match = lineText.match(/^\/([a-z0-9-]*)$/);
-    if (match && match[1] !== undefined) {
-      const query = match[1];
-      slashStart = lineStart;
+    if (match) {
+      const slashToken = match[2];
+      const query = slashToken.slice(1);
+      slashStart = offset - slashToken.length;
       const filtered = allSkills.filter(
         (s) =>
           s.name.includes(query) ||
@@ -325,6 +320,7 @@
     font-weight: 600;
     color: rgba(100, 160, 255, 0.9);
   }
+
 
   .autocomplete-dropdown {
     position: absolute;

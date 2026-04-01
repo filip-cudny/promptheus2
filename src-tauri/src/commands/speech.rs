@@ -22,6 +22,7 @@ struct SpeechErrorEvent {
 #[derive(Clone, Serialize)]
 struct AlternativeExecutePayload {
     prompt_id: String,
+    prompt_name: String,
     text: String,
 }
 
@@ -116,13 +117,14 @@ pub async fn toggle_speech_recording(
                         );
 
                         let mut s = state_inner.lock().await;
-                        let pending_prompt = s.speech.take_pending_prompt_id();
+                        let (pending_id, pending_name) = s.speech.take_pending_prompt();
 
-                        if let Some(prompt_id) = pending_prompt {
+                        if let Some(prompt_id) = pending_id {
                             let _ = app_clone.emit(
                                 "speech-alternative-execute",
                                 AlternativeExecutePayload {
                                     prompt_id,
+                                    prompt_name: pending_name.unwrap_or_default(),
                                     text: text.clone(),
                                 },
                             );
@@ -164,7 +166,7 @@ pub async fn toggle_speech_recording(
                         );
 
                         let mut s = state_inner.lock().await;
-                        let had_pending = s.speech.take_pending_prompt_id().is_some();
+                        let had_pending = s.speech.take_pending_prompt().0.is_some();
 
                         let title = if had_pending {
                             "Speech Execution Cancelled"
@@ -196,7 +198,7 @@ pub async fn toggle_speech_recording(
                         );
 
                         let mut s = state_inner.lock().await;
-                        s.speech.set_pending_prompt_id(None);
+                        s.speech.set_pending_prompt(None, None);
 
                         let notification_settings = s.config.settings().notifications.clone();
                         let _ = s.notifications.notify(

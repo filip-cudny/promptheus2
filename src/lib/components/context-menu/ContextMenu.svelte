@@ -29,7 +29,10 @@
     startAlternativeExecution,
     handleNumberInput,
     clearNumberBuffer,
+    getAllPromptItems,
     getPromptItems,
+    isRecordingChat,
+    toggleChatRecording,
     openDialogForItem,
     getWorkArea,
     init,
@@ -61,6 +64,7 @@
 
   interface LastInteractionChipData {
     content: string;
+    preview: string;
   }
 
   interface LastTextEntryRef {
@@ -84,6 +88,47 @@
   let menuEl: HTMLDivElement | undefined = $state();
   let expandedDescriptionId = $state("");
   let hoverEnabled = $state(false);
+  let shiftHeld = $state(false);
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === "Shift") shiftHeld = true;
+    if (!menuVisible) return;
+
+    switch (e.key) {
+      case "Escape":
+        e.preventDefault();
+        closeMenu();
+        break;
+      case "ArrowDown":
+        e.preventDefault();
+        moveSelection(1);
+        break;
+      case "ArrowUp":
+        e.preventDefault();
+        moveSelection(-1);
+        break;
+      case "Enter":
+        e.preventDefault();
+        executeSelected(e.shiftKey);
+        break;
+      default: {
+        if (e.key >= "0" && e.key <= "9") {
+          e.preventDefault();
+          handleNumberInput(e.key, e.shiftKey);
+          return;
+        }
+        const mappedDigit = SHIFTED_CHAR_TO_DIGIT[e.key];
+        if (mappedDigit) {
+          e.preventDefault();
+          handleNumberInput(mappedDigit, true);
+        }
+      }
+    }
+  }
+
+  function handleKeyup(e: KeyboardEvent) {
+    if (e.key === "Shift") shiftHeld = false;
+  }
 
   const MENU_WIDTH = 320;
 
@@ -163,6 +208,7 @@
   let menuVisible = $derived(isVisible());
   $effect(() => { if (!menuVisible) expandedDescriptionId = ""; });
   let menuItems = $derived(getItems());
+  let allPromptItems = $derived(getAllPromptItems());
   let promptItems = $derived(getPromptItems());
   let currentSelectedIndex = $derived(getSelectedIndex());
 
@@ -173,41 +219,6 @@
       selected?.scrollIntoView({ block: "nearest" });
     }
   });
-
-  function handleKeydown(e: KeyboardEvent) {
-    if (!menuVisible) return;
-
-    switch (e.key) {
-      case "Escape":
-        e.preventDefault();
-        closeMenu();
-        break;
-      case "ArrowDown":
-        e.preventDefault();
-        moveSelection(1);
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        moveSelection(-1);
-        break;
-      case "Enter":
-        e.preventDefault();
-        executeSelected(e.shiftKey);
-        break;
-      default: {
-        if (e.key >= "0" && e.key <= "9") {
-          e.preventDefault();
-          handleNumberInput(e.key, e.shiftKey);
-          return;
-        }
-        const mappedDigit = SHIFTED_CHAR_TO_DIGIT[e.key];
-        if (mappedDigit) {
-          e.preventDefault();
-          handleNumberInput(mappedDigit, true);
-        }
-      }
-    }
-  }
 
   function handleItemClick(index: number, e: MouseEvent) {
     executeItem(index, e.shiftKey);
@@ -233,7 +244,7 @@
   });
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} onkeyup={handleKeyup} />
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="context-menu" role="menu" bind:this={menuEl} onmousemove={handleMouseMove}>
@@ -285,27 +296,30 @@
                 <span class="item-icon"><Mic size={ICON_SIZE.md} /></span>
               {/if}
               {#if item.item_type === "prompt"}
-                {@const promptIndex = promptItems.indexOf(item)}
+                {@const promptIndex = allPromptItems.indexOf(item)}
                 {#if promptIndex >= 0}
                   <span class="prompt-number">{promptIndex + 1}.</span>
                 {/if}
               {/if}
               <span class="item-label">{item.label}</span>
             </button>
-            {#if item.item_type === "prompt" && item.tooltip}
-              <button
-                class="action-btn info-btn"
-                onclick={(e) => { e.stopPropagation(); expandedDescriptionId = expandedDescriptionId === item.id ? "" : item.id; }}
-              >
-                <Info size={ICON_SIZE.sm} />
-              </button>
-            {/if}
             {#if item.item_type === "prompt"}
               {@const recordingThis = isRecordingThisPrompt(item)}
               {@const micDisabled = !item.enabled && !recordingThis}
+              {#if item.tooltip}
+                <button
+                  class="action-btn info-btn"
+                  class:hidden-placeholder={recordingThis}
+                  disabled={recordingThis}
+                  onclick={(e) => { e.stopPropagation(); expandedDescriptionId = expandedDescriptionId === item.id ? "" : item.id; }}
+                >
+                  <Info size={ICON_SIZE.sm} />
+                </button>
+              {/if}
               <button
                 class="action-btn mic-btn"
                 class:disabled={micDisabled}
+                class:shift-accent={shiftHeld && !micDisabled && !recordingThis}
                 title={recordingThis ? "Stop recording" : "Voice input"}
                 disabled={micDisabled}
                 onclick={() => startAlternativeExecution(globalIndex)}
@@ -318,6 +332,8 @@
               </button>
               <button
                 class="action-btn dialog-btn"
+                class:hidden-placeholder={recordingThis}
+                disabled={recordingThis}
                 title="Open dialog"
                 onclick={() => openDialogForItem(globalIndex)}
               >
@@ -475,6 +491,15 @@
     color: rgba(255, 255, 255, 0.15);
     cursor: default;
     pointer-events: none;
+  }
+
+  .action-btn.hidden-placeholder {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .mic-btn.shift-accent {
+    color: rgba(255, 255, 255, 0.6);
   }
 
   .info-btn {

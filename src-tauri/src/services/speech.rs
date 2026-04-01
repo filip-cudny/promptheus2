@@ -36,6 +36,7 @@ pub struct SpeechService {
     is_recording: bool,
     recording_action_id: Option<String>,
     pending_prompt_id: Option<String>,
+    pending_prompt_name: Option<String>,
     audio_buffer: Arc<Mutex<Vec<i16>>>,
     sample_rate: u32,
     stop_sender: Option<mpsc::Sender<()>>,
@@ -47,6 +48,7 @@ impl SpeechService {
             is_recording: false,
             recording_action_id: None,
             pending_prompt_id: None,
+            pending_prompt_name: None,
             audio_buffer: Arc::new(Mutex::new(Vec::new())),
             sample_rate: 16000,
             stop_sender: None,
@@ -139,12 +141,13 @@ impl SpeechService {
         self.recording_action_id.as_deref()
     }
 
-    pub fn set_pending_prompt_id(&mut self, id: Option<String>) {
+    pub fn set_pending_prompt(&mut self, id: Option<String>, name: Option<String>) {
         self.pending_prompt_id = id;
+        self.pending_prompt_name = name;
     }
 
-    pub fn take_pending_prompt_id(&mut self) -> Option<String> {
-        self.pending_prompt_id.take()
+    pub fn take_pending_prompt(&mut self) -> (Option<String>, Option<String>) {
+        (self.pending_prompt_id.take(), self.pending_prompt_name.take())
     }
 }
 
@@ -390,15 +393,14 @@ mod tests {
     }
 
     #[test]
-    fn pending_prompt_id_lifecycle() {
+    fn pending_prompt_lifecycle() {
         let mut service = SpeechService::new();
-        assert!(service.take_pending_prompt_id().is_none());
+        assert_eq!(service.take_pending_prompt(), (None, None));
 
-        service.set_pending_prompt_id(Some("prompt-1".to_string()));
-        assert_eq!(
-            service.take_pending_prompt_id(),
-            Some("prompt-1".to_string())
-        );
-        assert!(service.take_pending_prompt_id().is_none());
+        service.set_pending_prompt(Some("prompt-1".to_string()), Some("Prompt One".to_string()));
+        let (id, name) = service.take_pending_prompt();
+        assert_eq!(id, Some("prompt-1".to_string()));
+        assert_eq!(name, Some("Prompt One".to_string()));
+        assert_eq!(service.take_pending_prompt(), (None, None));
     }
 }

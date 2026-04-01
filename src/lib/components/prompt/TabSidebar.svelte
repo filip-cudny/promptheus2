@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { X, Plus, MessageSquare } from "lucide-svelte";
+  import { X, MessageSquare } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
 
@@ -34,10 +34,7 @@
 
 <aside class="sidebar" class:open>
   <div class="sidebar-header">
-    <button class="new-tab-btn" onclick={() => store.addTab()}>
-      <Plus size={ICON_SIZE.md} />
-      <span>New Conversation</span>
-    </button>
+    <span class="sidebar-title">Conversations</span>
     <button class="close-btn" onclick={onClose}>
       <X size={ICON_SIZE.md} />
     </button>
@@ -129,8 +126,17 @@
     background: rgba(255, 255, 255, 0.08);
   }
 
+  .sidebar-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.45);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+
   .tab-list {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: 8px;
     display: flex;
@@ -149,6 +155,7 @@
     cursor: pointer;
     white-space: nowrap;
     overflow: hidden;
+    flex-shrink: 0;
   }
 
   .tab-item:hover {
@@ -193,23 +200,4 @@
     color: #e0e0e0;
   }
 
-  .new-tab-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 1;
-    padding: 6px 10px;
-    border-radius: 6px;
-    border: none;
-    background: transparent;
-    color: #aaa;
-    font: inherit;
-    font-size: 13px;
-    cursor: pointer;
-  }
-
-  .new-tab-btn:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: #e0e0e0;
-  }
 </style>
