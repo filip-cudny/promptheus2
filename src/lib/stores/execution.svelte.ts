@@ -83,14 +83,15 @@ async function init() {
   }>("speech-alternative-execute", (event) => {
     const { prompt_id, prompt_name, text } = event.payload;
     const isChat = prompt_id === "__chat__";
-    openPromptDialog(
-      isChat ? "" : prompt_id,
-      prompt_name || prompt_id,
-      undefined,
-      undefined,
-      text,
-      !isChat,
-    ).catch((e) => logError("Failed to open dialog for voice input: " + e));
+    if (isChat) {
+      openPromptDialog("", prompt_name || prompt_id, undefined, undefined, text, false).catch(
+        (e) => logError("Failed to open dialog for voice input: " + e),
+      );
+    } else {
+      startExecution(prompt_id, text).catch((e) =>
+        logError("Failed to execute prompt from voice input: " + e),
+      );
+    }
   });
 }
 

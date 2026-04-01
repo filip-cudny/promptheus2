@@ -10,6 +10,15 @@ const DYNAMIC_PROVIDERS: &[&str] = &[
     "SpeechMenuProvider",
 ];
 
+fn resolve_provider_name(section_id: &str) -> &str {
+    match section_id {
+        "speech" => "SpeechMenuProvider",
+        "lastInteraction" => "LastInteractionMenuProvider",
+        "context" => "ContextMenuProvider",
+        other => other,
+    }
+}
+
 pub struct MenuCoordinator {
     providers: Vec<Box<dyn MenuItemProvider>>,
 }
@@ -34,6 +43,7 @@ impl MenuCoordinator {
             let is_last_section = section_index == total_sections - 1;
 
             let mut section_items = match section_id.as_str() {
+                "chat" => self.build_chat_items(),
                 "prompts" => self.build_prompt_items(),
                 "settings" => self.build_settings_items(config),
                 _ => self.build_provider_items(section_id),
@@ -80,9 +90,10 @@ impl MenuCoordinator {
         }
     }
 
-    fn build_provider_items(&self, provider_class_name: &str) -> Vec<MenuItem> {
+    fn build_provider_items(&self, section_id: &str) -> Vec<MenuItem> {
+        let provider_name = resolve_provider_name(section_id);
         for provider in &self.providers {
-            if provider.provider_name() == provider_class_name {
+            if provider.provider_name() == provider_name {
                 let items = provider.get_menu_items();
                 if !items.is_empty() {
                     return items;
@@ -90,6 +101,22 @@ impl MenuCoordinator {
             }
         }
         Vec::new()
+    }
+
+    fn build_chat_items(&self) -> Vec<MenuItem> {
+        vec![MenuItem {
+            id: "__chat__".to_string(),
+            label: "Chat".to_string(),
+            item_type: MenuItemType::Chat,
+            data: None,
+            enabled: true,
+            separator_after: false,
+            style: None,
+            tooltip: None,
+            submenu_items: None,
+            icon: None,
+            section_id: None,
+        }]
     }
 
     fn build_prompt_items(&self) -> Vec<MenuItem> {

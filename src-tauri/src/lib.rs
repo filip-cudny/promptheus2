@@ -227,7 +227,7 @@ async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
 
 #[cfg(desktop)]
 pub fn reload_shortcuts(app: &tauri::AppHandle, settings: &models::settings::Settings) {
-    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
     let global_shortcut = app.global_shortcut();
 
@@ -243,24 +243,9 @@ pub fn reload_shortcuts(app: &tauri::AppHandle, settings: &models::settings::Set
         match shortcut_str.parse::<Shortcut>() {
             Ok(shortcut) => {
                 let canonical = shortcut.into_string();
-                new_action_map.insert(canonical, action.clone());
-                if let Err(e) = global_shortcut.on_shortcut(shortcut_str.as_str(), |app, shortcut, event| {
-                    if event.state == ShortcutState::Pressed {
-                        let shortcut_str = shortcut.into_string();
-                        let action_map = app.state::<ShortcutActionMap>();
-                        let map = action_map.0.read().unwrap();
-                        if let Some(action) = map.get(&shortcut_str) {
-                            let action = action.clone();
-                            drop(map);
-                            log::info!("hotkey action: {} -> {}", shortcut_str, action);
-                            let app = app.clone();
-                            tauri::async_runtime::spawn(async move {
-                                execute_hotkey_action(&app, &action).await;
-                            });
-                        }
-                    }
-                }) {
-                    log::warn!("failed to register shortcut {}: {}", shortcut_str, e);
+                new_action_map.insert(canonical.clone(), action.clone());
+                if let Err(e) = global_shortcut.register(shortcut) {
+                    log::warn!("failed to register shortcut {} ({}): {}", shortcut_str, canonical, e);
                 }
             }
             Err(e) => {
@@ -282,7 +267,9 @@ async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
             execute_context_action(app, action).await;
         }
         "open_context_menu" => {
-            let _ = commands::menu::show_context_menu_window(app.clone()).await;
+            if let Err(e) = commands::menu::show_context_menu_window(app.clone()).await {
+                log::error!("open_context_menu failed: {e}");
+            }
         }
         "speech_to_text_toggle" => {
             let state = app.state::<Mutex<AppState>>();
@@ -388,6 +375,8 @@ pub fn run() {
                                     tauri::async_runtime::spawn(async move {
                                         execute_hotkey_action(&app, &action).await;
                                     });
+                                } else {
+                                    log::warn!("hotkey pressed but no action found: {}", shortcut_str);
                                 }
                             }
                         })

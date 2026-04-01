@@ -11,6 +11,7 @@ pub enum MenuItemType {
     Context,
     LastInteraction,
     SettingsSection,
+    Chat,
 }
 
 fn default_true() -> bool {

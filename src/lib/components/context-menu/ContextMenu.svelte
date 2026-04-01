@@ -10,6 +10,7 @@
   import LastInteractionSection from "./LastInteractionSection.svelte";
   import { Info, MessageSquare, MessageSquareShare, Mic, Square } from "lucide-svelte";
   import { openPromptDialog } from "$lib/services/promptDialog";
+  import { isExecuting } from "$lib/stores/execution.svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import {
     getItems,
@@ -255,17 +256,44 @@
       {#if sectionIdx > 0}
         <div class="separator"></div>
       {/if}
+      {#if section.sectionId === "chat"}
+        {@const chatRecording = isRecordingChat()}
+        {@const chatDisabled = (isRecording() && !chatRecording) || isExecuting()}
+        <div class="chat-row" role="menuitem">
+          <button
+            class="chat-button"
+            class:disabled={chatDisabled}
+            onclick={async () => {
+              if (chatDisabled) return;
+              if (chatRecording) {
+                await toggleChatRecording();
+              } else {
+                await closeMenu();
+                await openPromptDialog("", "Chat");
+              }
+            }}
+            onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}
+          >
+            <MessageSquare size={ICON_SIZE.md} />
+            <span>Chat</span>
+          </button>
+          <button
+            class="action-btn mic-btn"
+            class:disabled={chatDisabled}
+            class:shift-accent={shiftHeld && !chatDisabled && !chatRecording}
+            title={chatRecording ? "Stop recording" : "Voice input for chat"}
+            disabled={chatDisabled}
+            onclick={() => toggleChatRecording()}
+          >
+            {#if chatRecording}
+              <Square size={ICON_SIZE.md} />
+            {:else}
+              <Mic size={ICON_SIZE.md} />
+            {/if}
+          </button>
+        </div>
+      {/if}
       {#if section.sectionId === "prompts"}
-        <button
-          class="chat-button"
-          role="menuitem"
-          onclick={async () => { await closeMenu(); await openPromptDialog("", "Chat"); }}
-          onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}
-        >
-          <MessageSquare size={ICON_SIZE.md} />
-          <span>Chat</span>
-        </button>
-        <div class="separator"></div>
         <div data-section="prompts-anchor"></div>
       {/if}
       {#each section.items as { item, globalIndex }}
@@ -373,11 +401,17 @@
     font-style: italic;
   }
 
+  .chat-row {
+    display: flex;
+    align-items: center;
+  }
+
   .chat-button {
     display: flex;
     align-items: center;
     gap: 8px;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     padding: 6px 12px;
     border: none;
     background: transparent;
@@ -389,7 +423,12 @@
     outline: none;
   }
 
-  .chat-button:hover {
+  .chat-button.disabled {
+    color: rgba(255, 255, 255, 0.3);
+    cursor: default;
+  }
+
+  .chat-button:hover:not(.disabled) {
     background: rgba(255, 255, 255, 0.1);
   }
 

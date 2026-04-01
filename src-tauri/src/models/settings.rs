@@ -229,10 +229,11 @@ fn default_code_theme() -> String {
 
 fn default_menu_section_order() -> Vec<String> {
     vec![
-        "ContextMenuProvider".to_string(),
-        "LastInteractionMenuProvider".to_string(),
+        "chat".to_string(),
         "prompts".to_string(),
-        "SpeechMenuProvider".to_string(),
+        "speech".to_string(),
+        "lastInteraction".to_string(),
+        "context".to_string(),
         "settings".to_string(),
     ]
 }
@@ -338,7 +339,7 @@ mod tests {
         assert!(!settings.debug_mode);
         assert_eq!(settings.code_theme, "paraiso-dark");
         assert_eq!(settings.number_input_debounce_ms, 200);
-        assert_eq!(settings.menu_section_order.len(), 5);
+        assert_eq!(settings.menu_section_order.len(), 6);
         assert!(settings.models.is_empty());
         assert!(settings.prompts.is_empty());
     }

@@ -159,7 +159,7 @@
     left: 6px;
     z-index: 201;
     display: flex;
-    gap: 2px;
+    gap: 4px;
     transition: transform 0.2s ease;
   }
 
@@ -169,13 +169,14 @@
 
   .sidebar-toggle {
     width: 28px;
-    overflow: hidden;
+    overflow: visible;
     transition: width 0.2s ease, opacity 0.2s ease;
   }
 
   .sidebar-toggle.hidden {
     width: 0;
     opacity: 0;
+    overflow: hidden;
     pointer-events: none;
   }
 
@@ -209,8 +210,8 @@
 
   .tab-badge {
     position: absolute;
-    top: -4px;
-    right: -6px;
+    top: -5px;
+    right: -2px;
     min-width: 15px;
     height: 15px;
     border-radius: 8px;

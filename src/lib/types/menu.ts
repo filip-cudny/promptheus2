@@ -6,7 +6,8 @@ export type MenuItemType =
   | "speech"
   | "context"
   | "last_interaction"
-  | "settings_section";
+  | "settings_section"
+  | "chat";
 
 export interface MenuItem {
   id: string;
