@@ -56,6 +56,7 @@ pub async fn add_history_entry(
         error,
         is_multi_turn,
         prompt_name,
+        false,
     );
     emit_history_changed(&app)
 }
@@ -87,6 +88,7 @@ pub async fn add_conversation_entry(
         nodes,
         root_node_id,
         current_path,
+        false,
     );
     emit_history_changed(&app)?;
     Ok(id)
@@ -126,10 +128,10 @@ pub async fn get_last_interaction(
 ) -> Result<LastInteractionData, String> {
     let state = state.lock().await;
     Ok(LastInteractionData {
-        last_text: state.history.get_last_item_by_type(HistoryEntryType::Text),
+        last_text: state.history.get_last_quick_action(HistoryEntryType::Text),
         last_speech: state
             .history
-            .get_last_item_by_type(HistoryEntryType::Speech),
+            .get_last_quick_action(HistoryEntryType::Speech),
     })
 }
 

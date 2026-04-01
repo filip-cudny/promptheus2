@@ -73,6 +73,8 @@ pub struct HistoryEntry {
     pub conversation_data: Option<ConversationHistoryData>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
+    #[serde(default)]
+    pub quick_action: bool,
 }
 
 #[cfg(test)]
@@ -96,6 +98,7 @@ mod tests {
             conversation_data: None,
             created_at: Some("2026-01-01T00:00:00Z".into()),
             updated_at: None,
+            quick_action: false,
         };
 
         let json = serde_json::to_string(&entry).unwrap();
@@ -160,6 +163,7 @@ mod tests {
             }),
             created_at: Some("2026-01-01T12:00:00Z".into()),
             updated_at: Some("2026-01-01T12:00:01Z".into()),
+            quick_action: false,
         };
 
         let json = serde_json::to_string(&entry).unwrap();

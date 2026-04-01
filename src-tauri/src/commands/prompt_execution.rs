@@ -158,23 +158,8 @@ pub async fn execute_conversation_turn(
         Ok(full_text) => {
             if !skip_clipboard_copy {
                 let _ = state.clipboard.set_text(&full_text);
-            }
 
-            let elapsed = start_time.elapsed();
-
-            let input_summary = "conversation turn".to_string();
-            state.history.add_entry(
-                input_summary,
-                HistoryEntryType::Text,
-                Some(full_text),
-                prompt_id,
-                true,
-                None,
-                false,
-                prompt_name.clone(),
-            );
-
-            if !skip_clipboard_copy {
+                let elapsed = start_time.elapsed();
                 let _ = state.notifications.notify(
                     "prompt_execution_success",
                     NotificationLevel::Success,
@@ -403,7 +388,9 @@ pub async fn execute_skill(
                 vec![user_node, assistant_node],
                 Some(user_node_id.clone()),
                 vec![user_node_id, assistant_node_id],
+                true,
             );
+            let _ = app.emit("history-changed", ());
 
             let _ = state.notifications.notify(
                 "prompt_execution_success",

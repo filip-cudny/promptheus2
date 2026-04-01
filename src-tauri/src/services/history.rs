@@ -33,6 +33,7 @@ impl HistoryService {
         error: Option<String>,
         is_multi_turn: bool,
         prompt_name: Option<String>,
+        quick_action: bool,
     ) {
         let now = Self::now_timestamp();
         let entry = HistoryEntry {
@@ -49,6 +50,7 @@ impl HistoryService {
             conversation_data: None,
             created_at: Some(now),
             updated_at: None,
+            quick_action,
         };
         self.entries.push(entry);
         self.enforce_max_entries();
@@ -66,6 +68,7 @@ impl HistoryService {
         nodes: Vec<crate::models::history::SerializedConversationNode>,
         root_node_id: Option<String>,
         current_path: Vec<String>,
+        quick_action: bool,
     ) -> String {
         let now = Self::now_timestamp();
         let id = Self::generate_id();
@@ -98,6 +101,7 @@ impl HistoryService {
             conversation_data: Some(conv_data),
             created_at: Some(now),
             updated_at: None,
+            quick_action,
         };
         self.entries.push(entry);
         self.enforce_max_entries();
@@ -166,6 +170,14 @@ impl HistoryService {
             .iter()
             .rev()
             .find(|e| e.entry_type == entry_type)
+            .cloned()
+    }
+
+    pub fn get_last_quick_action(&self, entry_type: HistoryEntryType) -> Option<HistoryEntry> {
+        self.entries
+            .iter()
+            .rev()
+            .find(|e| e.entry_type == entry_type && e.quick_action)
             .cloned()
     }
 
@@ -307,6 +319,7 @@ mod tests {
             None,
             false,
             None,
+            false,
         );
         svc.entries.last_mut().unwrap().created_at = Some("2026-01-01 00:00:01".into());
 
@@ -319,6 +332,7 @@ mod tests {
             None,
             false,
             None,
+            false,
         );
         svc.entries.last_mut().unwrap().created_at = Some("2026-01-01 00:00:02".into());
 
@@ -348,6 +362,7 @@ mod tests {
                 conversation_data: None,
                 created_at: Some(ts),
                 updated_at: None,
+                quick_action: false,
             });
             svc.enforce_max_entries();
         }
@@ -371,6 +386,7 @@ mod tests {
             None,
             false,
             None,
+            false,
         );
 
         let entry = svc.get_history().into_iter().next().unwrap();
@@ -391,6 +407,7 @@ mod tests {
             None,
             false,
             None,
+            false,
         );
         svc.add_entry(
             "speech1".into(),
@@ -401,6 +418,7 @@ mod tests {
             None,
             false,
             None,
+            false,
         );
         svc.add_entry(
             "text2".into(),
@@ -411,6 +429,7 @@ mod tests {
             None,
             false,
             None,
+            false,
         );
 
         let last_text = svc.get_last_item_by_type(HistoryEntryType::Text).unwrap();
@@ -438,6 +457,7 @@ mod tests {
             vec![],
             None,
             vec![],
+            false,
         );
 
         let updated_turns = vec![
@@ -485,6 +505,7 @@ mod tests {
             None,
             false,
             None,
+            false,
         );
         assert_eq!(svc.entry_count(), 1);
 
@@ -512,6 +533,7 @@ mod tests {
             vec![],
             None,
             vec![],
+            false,
         );
 
         let entry = svc.get_entry_by_id(&id).unwrap();
@@ -554,6 +576,7 @@ mod tests {
             nodes,
             Some("root".into()),
             vec!["root".into()],
+            false,
         );
 
         let conv = svc.get_conversation_data(&id).unwrap();

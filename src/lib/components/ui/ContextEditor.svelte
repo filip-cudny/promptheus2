@@ -35,12 +35,16 @@
 </script>
 
 <div class="context-editor">
-  <ImageChipBar bind:images readonly={readonly || disabled} />
+  {#if images.length > 0}
+    <div class="chip-row">
+      <ImageChipBar bind:images readonly={readonly || disabled} />
+    </div>
+  {/if}
   <textarea
     bind:this={textarea}
     class="context-textarea"
     bind:value={text}
-    use:autoResize={"20vh"}
+    use:autoResize={"none"}
     rows="1"
     {placeholder}
     disabled={disabled || readonly}
@@ -59,6 +63,12 @@
     padding: 8px 8px 0;
   }
 
+  .chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
   .context-editor:focus-within {
     border-color: rgba(100, 160, 255, 0.5);
   }
@@ -72,6 +82,7 @@
     font-size: 13px;
     padding: 4px 0 8px;
     box-sizing: border-box;
+    overflow: hidden;
   }
 
   .context-textarea:focus {

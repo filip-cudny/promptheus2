@@ -16,11 +16,11 @@
       }
       .stack {
         display: flex;
-        flex-direction: column-reverse;
+        flex-direction: column;
         gap: 8px;
         width: 100%;
         height: 100%;
-        justify-content: flex-start;
+        justify-content: flex-end;
         align-items: flex-end;
       }
       .toast {
@@ -84,10 +84,27 @@
       };
       var ITEM_HEIGHT = 64;
       var ITEM_GAP = 8;
+      var ENTRANCE_STAGGER = 80;
+      var REMOVAL_STAGGER = 300;
       var stack = document.getElementById("stack");
-      var count = 0;
 
-      function addNotification(level, title, message) {
+      var registry = {};
+      var draining = false;
+      var removalQueue = [];
+      var removalTimer = null;
+      var resizeTimer = null;
+
+      function activeCount() {
+        var n = 0;
+        var ids = Object.keys(registry);
+        for (var i = 0; i < ids.length; i++) {
+          var s = registry[ids[i]].state;
+          if (s === "entering" || s === "visible") n++;
+        }
+        return n;
+      }
+
+      function createToastElement(level, title, message) {
         var el = document.createElement("div");
         el.className = "toast";
         el.innerHTML =
@@ -96,30 +113,7 @@
             '<span class="toast-title">' + escapeHtml(title) + '</span>' +
             (message ? '<span class="toast-message">' + escapeHtml(message) + '</span>' : '') +
           '</div>';
-        stack.appendChild(el);
-        count++;
-        updateWindow(count);
-
-        requestAnimationFrame(function() {
-          requestAnimationFrame(function() {
-            el.classList.add("visible");
-          });
-        });
-
-        var duration = DURATIONS[level] || 2000;
-        setTimeout(function() {
-          el.classList.remove("visible");
-          var removed = false;
-          function removeToast() {
-            if (removed) return;
-            removed = true;
-            if (el.parentNode) el.parentNode.removeChild(el);
-            count--;
-            updateWindow(count);
-          }
-          el.addEventListener("transitionend", removeToast, { once: true });
-          setTimeout(removeToast, 500);
-        }, duration);
+        return el;
       }
 
       function escapeHtml(str) {
@@ -128,24 +122,129 @@
         return d.innerHTML;
       }
 
+      function cleanupZombies() {
+        var ids = Object.keys(registry);
+        for (var i = 0; i < ids.length; i++) {
+          var entry = registry[ids[i]];
+          if (entry.state === "exiting" || entry.state === "removed") {
+            if (entry.timerId) clearTimeout(entry.timerId);
+            if (entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
+            delete registry[ids[i]];
+          }
+        }
+      }
+
+      function fadeIn(el) {
+        requestAnimationFrame(function() {
+          requestAnimationFrame(function() {
+            el.classList.add("visible");
+          });
+        });
+      }
+
+      function scheduleDismissal(id, level) {
+        var duration = DURATIONS[level] || 2000;
+        var timerId = setTimeout(function() {
+          queueRemoval(id);
+        }, duration);
+        if (registry[id]) registry[id].timerId = timerId;
+      }
+
+      function queueRemoval(id) {
+        if (!registry[id] || registry[id].state !== "visible") return;
+        removalQueue.push(id);
+        if (!removalTimer) processRemovalQueue();
+      }
+
+      function processRemovalQueue() {
+        if (removalQueue.length === 0) {
+          removalTimer = null;
+          return;
+        }
+        var id = removalQueue.shift();
+        removeNotification(id);
+        removalTimer = setTimeout(processRemovalQueue, REMOVAL_STAGGER);
+      }
+
+      function removeNotification(id) {
+        var entry = registry[id];
+        if (!entry || entry.state === "exiting" || entry.state === "removed") return;
+        entry.state = "exiting";
+        if (entry.timerId) {
+          clearTimeout(entry.timerId);
+          entry.timerId = null;
+        }
+        entry.el.classList.remove("visible");
+
+        var cleaned = false;
+        function cleanup() {
+          if (cleaned) return;
+          cleaned = true;
+          if (entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
+          delete registry[id];
+          debouncedResize();
+        }
+        entry.el.addEventListener("transitionend", cleanup, { once: true });
+        setTimeout(cleanup, 500);
+      }
+
+      function debouncedResize() {
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function() {
+          resizeTimer = null;
+          updateWindow(activeCount());
+        }, 50);
+      }
+
       function updateWindow(n) {
-        var gap = ITEM_GAP;
-        var pad = 20;
-        var height = n > 0 ? n * ITEM_HEIGHT + (n - 1) * gap + pad : 0;
+        var height = n > 0 ? n * ITEM_HEIGHT + (n - 1) * ITEM_GAP + 20 : 0;
         if (window.__TAURI__) {
-          window.__TAURI__.core.invoke("update_notification_window", {
+          return window.__TAURI__.core.invoke("update_notification_window", {
             count: n,
             height: Math.ceil(height)
           });
         }
+        return Promise.resolve();
       }
 
       function drainPending() {
-        if (!window.__TAURI__) return;
+        if (!window.__TAURI__ || draining) return;
+        draining = true;
         window.__TAURI__.core.invoke("drain_pending_notifications").then(function(pending) {
-          for (var i = 0; i < pending.length; i++) {
-            addNotification(pending[i].level, pending[i].title, pending[i].message);
+          if (pending.length === 0) {
+            draining = false;
+            return;
           }
+
+          cleanupZombies();
+
+          var entries = [];
+          for (var i = 0; i < pending.length; i++) {
+            var n = pending[i];
+            var el = createToastElement(n.level, n.title, n.message);
+            el.dataset.notifId = n.id;
+            stack.appendChild(el);
+            registry[n.id] = { el: el, timerId: null, state: "entering" };
+            entries.push({ id: n.id, level: n.level, el: el });
+          }
+
+          updateWindow(activeCount()).then(function() {
+            for (var i = 0; i < entries.length; i++) {
+              (function(entry, delay) {
+                setTimeout(function() {
+                  if (!registry[entry.id] || registry[entry.id].state !== "entering") return;
+                  fadeIn(entry.el);
+                  registry[entry.id].state = "visible";
+                  scheduleDismissal(entry.id, entry.level);
+                }, delay);
+              })(entries[i], i * ENTRANCE_STAGGER);
+            }
+            draining = false;
+          }).catch(function() {
+            draining = false;
+          });
+        }).catch(function() {
+          draining = false;
         });
       }
 

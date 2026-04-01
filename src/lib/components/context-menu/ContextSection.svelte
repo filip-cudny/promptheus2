@@ -27,6 +27,7 @@
 
   let hasTextItems = $derived(items.some((i) => i.item_type === "text"));
   let isEmpty = $derived(items.length === 0);
+  let copyConfirm = $state<number | null>(null);
 
   function truncateText(text: string, maxLength = 50): string {
     if (text.length <= maxLength) return text;
@@ -38,6 +39,12 @@
     if (text) {
       await navigator.clipboard.writeText(text);
     }
+  }
+
+  async function handleChipCopy(idx: number, content: string) {
+    await navigator.clipboard.writeText(content);
+    copyConfirm = idx;
+    setTimeout(() => (copyConfirm = null), 1200);
   }
 
   async function handleClear() {
@@ -92,16 +99,23 @@
     <div class="chips">
       {#each items as item, idx}
         {#if item.item_type === "text"}
-          <Chip title={item.content}>
-            <FileText size={ICON_SIZE.md} />
-            {truncateText(item.content)}
-            <button class="chip-remove" onclick={() => removeContextItem(idx)}>
+          <Chip title={item.content} onclick={() => handleChipCopy(idx, item.content)}>
+            <span class="chip-copy">
+              {#if copyConfirm === idx}
+                <Check size={ICON_SIZE.md} />
+              {:else}
+                <Copy size={ICON_SIZE.md} />
+              {/if}
+            </span>
+            <span class="chip-text">{truncateText(item.content)}</span>
+            <button class="chip-remove" onclick={(e) => { e.stopPropagation(); removeContextItem(idx); }}>
               <X size={11} strokeWidth={2.5} />
             </button>
           </Chip>
         {:else if item.item_type === "image"}
           <ImageChipBar
             images={[{ data: item.data, media_type: item.media_type }]}
+            variant="small"
             onremove={() => removeContextItem(idx)}
           />
         {/if}
@@ -156,6 +170,24 @@
     align-items: center;
     gap: 4px;
     padding: 4px 12px 2px;
+    overflow: hidden;
+  }
+
+  .chips :global(.chip) {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chip-copy {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .chip-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .chip-remove {

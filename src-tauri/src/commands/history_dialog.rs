@@ -31,7 +31,7 @@ pub async fn open_history_dialog(app: tauri::AppHandle) -> Result<(), String> {
         label,
         tauri::WebviewUrl::App("history-dialog.html".into()),
     )
-    .title("Execution History")
+    .title("History")
     .inner_size(width, height)
     .resizable(true)
     .decorations(true);

@@ -4,7 +4,7 @@
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import ContextEditor from "$lib/components/ui/ContextEditor.svelte";
   import { getContextItems, appendContext, appendContextImage, clearContext } from "$lib/services/context";
-  import { Save, Check, X } from "lucide-svelte";
+  import { Save, Check, X, Trash2 } from "lucide-svelte";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
 
@@ -24,7 +24,7 @@
 
   let collapsed = $state(initialCollapsed);
   let saving = $state(false);
-  let confirming = $state(false);
+  let confirming = $state<"close" | "clear" | false>(false);
 
   let localText = $state("");
   let localImages = $state<ConversationImage[]>([]);
@@ -78,20 +78,30 @@
 
   function requestClose() {
     if (hasContent) {
-      confirming = true;
+      confirming = "close";
     } else {
       onClose?.();
     }
   }
 
-  function confirmClose() {
-    confirming = false;
-    localText = "";
-    localImages = [];
-    onClose?.();
+  function requestClear() {
+    confirming = "clear";
   }
 
-  function cancelClose() {
+  function confirmAction() {
+    if (confirming === "close") {
+      localText = "";
+      localImages = [];
+      confirming = false;
+      onClose?.();
+    } else if (confirming === "clear") {
+      localText = "";
+      localImages = [];
+      confirming = false;
+    }
+  }
+
+  function cancelConfirm() {
     confirming = false;
   }
 </script>
@@ -99,15 +109,23 @@
 <div class="context-inline" class:disabled={contextDisabled}>
   {#if confirming}
     <div class="confirm-bar">
-      <span class="confirm-text">Clear context for this conversation?</span>
+      <span class="confirm-text">
+        {confirming === "close" ? "Clear context and close?" : "Clear context for this conversation?"}
+      </span>
       <div class="confirm-actions">
-        <button class="confirm-btn confirm-yes" onclick={confirmClose}>Clear</button>
-        <button class="confirm-btn confirm-no" onclick={cancelClose}>Cancel</button>
+        <button class="confirm-btn confirm-yes" onclick={confirmAction}>Clear</button>
+        <button class="confirm-btn confirm-no" onclick={cancelConfirm}>Cancel</button>
       </div>
     </div>
   {:else}
     <CollapsibleSection title="Context" bind:collapsed headerClass={contextHeaderClass}>
       {#snippet actions()}
+        <ActionIconButton
+          icon={Trash2}
+          onclick={requestClear}
+          title="Clear context"
+          disabled={contextDisabled || !hasContent}
+        />
         <ActionIconButton
           icon={Save}
           confirmIcon={Check}
@@ -133,7 +151,7 @@
 
 <style>
   .context-inline {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   }
 
   .context-inline.disabled {
@@ -166,6 +184,8 @@
 
   .context-inline :global(.collapsible-content) {
     padding: 6px 10px 8px;
+    max-height: 35vh;
+    overflow-y: auto;
   }
 
   .confirm-bar {

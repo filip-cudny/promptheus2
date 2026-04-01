@@ -51,4 +51,5 @@ export interface HistoryEntry {
   conversation_data: ConversationHistoryData | null;
   created_at: string | null;
   updated_at: string | null;
+  quick_action: boolean;
 }

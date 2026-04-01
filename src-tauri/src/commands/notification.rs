@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use tauri::Manager;
@@ -6,6 +7,15 @@ use crate::services::monitor::find_monitor_at;
 use crate::services::notification::NotificationPayload;
 
 static PENDING: Mutex<Vec<NotificationPayload>> = Mutex::new(Vec::new());
+static SHOW_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+
+struct AnchorPosition {
+    work_right: i32,
+    work_bottom: i32,
+    scale: f64,
+}
+
+static ANCHOR: Mutex<Option<AnchorPosition>> = Mutex::new(None);
 
 pub fn show_notification(handle: &tauri::AppHandle, payload: NotificationPayload) {
     PENDING
@@ -13,10 +23,29 @@ pub fn show_notification(handle: &tauri::AppHandle, payload: NotificationPayload
         .unwrap_or_else(|e| e.into_inner())
         .push(payload);
 
+    if SHOW_IN_FLIGHT
+        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
+        .is_err()
+    {
+        return;
+    }
+
     let handle = handle.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = show_notification_window(&handle) {
-            log::error!("show_notification failed: {e}");
+        loop {
+            if let Err(e) = show_notification_window(&handle) {
+                log::error!("show_notification failed: {e}");
+            }
+
+            let pending_empty = PENDING
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty();
+
+            if pending_empty {
+                SHOW_IN_FLIGHT.store(false, Ordering::Release);
+                break;
+            }
         }
     });
 }
@@ -31,12 +60,21 @@ fn show_notification_window(handle: &tauri::AppHandle) -> Result<(), String> {
     let work = monitor.work_area();
     let scale = monitor.scale_factor();
 
+    let work_right = work.position.x + work.size.width as i32;
+    let work_bottom = work.position.y + work.size.height as i32;
+
+    *ANCHOR.lock().unwrap_or_else(|e| e.into_inner()) = Some(AnchorPosition {
+        work_right,
+        work_bottom,
+        scale,
+    });
+
     let margin = (20.0 * scale) as i32;
     let win_width = (380.0 * scale) as i32;
     let win_height = (100.0 * scale) as i32;
 
-    let x = work.position.x + work.size.width as i32 - win_width - margin;
-    let y = work.position.y + work.size.height as i32 - win_height - margin;
+    let x = work_right - win_width - margin;
+    let y = work_bottom - win_height - margin;
 
     win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
         .map_err(|e| e.to_string())?;
@@ -74,8 +112,17 @@ pub async fn update_notification_window(
 
     if count == 0 {
         win.hide().map_err(|e| e.to_string())?;
+        *ANCHOR.lock().unwrap_or_else(|e| e.into_inner()) = None;
         return Ok(());
     }
+
+    let anchor = ANCHOR
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .map(|a| (a.work_right, a.work_bottom, a.scale));
+
+    let (work_right, work_bottom, scale) = anchor.ok_or("no anchor position cached")?;
 
     let new_height = height.max(60);
     win.set_size(tauri::Size::Logical(tauri::LogicalSize {
@@ -84,17 +131,12 @@ pub async fn update_notification_window(
     }))
     .map_err(|e| e.to_string())?;
 
-    let cursor_pos = win.cursor_position().map_err(|e| e.to_string())?;
-    let monitor = find_monitor_at(&app, cursor_pos.x as i32, cursor_pos.y as i32)?;
-    let work = monitor.work_area();
-    let scale = monitor.scale_factor();
-
     let margin = (20.0 * scale) as i32;
     let win_width = (380.0 * scale) as i32;
     let win_height = (new_height as f64 * scale) as i32;
 
-    let x = work.position.x + work.size.width as i32 - win_width - margin;
-    let y = work.position.y + work.size.height as i32 - win_height - margin;
+    let x = work_right - win_width - margin;
+    let y = work_bottom - win_height - margin;
 
     win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
         .map_err(|e| e.to_string())?;

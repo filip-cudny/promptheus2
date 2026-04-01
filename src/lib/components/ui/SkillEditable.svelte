@@ -44,8 +44,10 @@
     }
 
     if (text && editable) {
+      const offset = saveCursorOffset();
       lastSkillPattern = "";
       editable.innerHTML = buildHighlightedHtml(text);
+      restoreCursorOffset(offset);
     }
   });
 

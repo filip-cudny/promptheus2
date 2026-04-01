@@ -1,17 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ConversationImage } from "$lib/types/conversation";
 
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(",")[1];
-      resolve(base64);
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
+async function readFileAsBase64(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
 }
 
 function getImageFromClipboardData(
@@ -27,8 +24,6 @@ function getImageFromClipboardData(
 
 async function getImageViaArboard(): Promise<ConversationImage | null> {
   try {
-    const hasImage = await invoke<boolean>("clipboard_has_image");
-    if (!hasImage) return null;
     const [base64, mediaType] = await invoke<[string, string]>(
       "get_clipboard_image",
     );
@@ -54,6 +49,7 @@ export async function getImageFromPasteEvent(
 
   return getImageViaArboard();
 }
+
 
 function hasTextInClipboardData(e: ClipboardEvent): boolean {
   const items = e.clipboardData?.items;

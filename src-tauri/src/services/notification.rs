@@ -1,7 +1,11 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use serde::Serialize;
 use tauri::AppHandle;
 
 use crate::models::settings::NotificationEvents;
+
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -14,6 +18,7 @@ pub enum NotificationLevel {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct NotificationPayload {
+    pub id: String,
     pub level: NotificationLevel,
     pub title: String,
     pub message: Option<String>,
@@ -49,7 +54,9 @@ impl NotificationService {
             return Ok(());
         }
 
+        let id = format!("n-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
         let payload = NotificationPayload {
+            id,
             level,
             title: title.into(),
             message: message.map(|m| m.into()),
@@ -168,21 +175,25 @@ mod tests {
     #[test]
     fn test_notification_payload_serialization() {
         let payload = NotificationPayload {
+            id: "n-1".to_string(),
             level: NotificationLevel::Success,
             title: "Done".to_string(),
             message: Some("Task completed".to_string()),
         };
         let json: serde_json::Value = serde_json::to_value(&payload).unwrap();
+        assert_eq!(json["id"], "n-1");
         assert_eq!(json["level"], "success");
         assert_eq!(json["title"], "Done");
         assert_eq!(json["message"], "Task completed");
 
         let payload_no_msg = NotificationPayload {
+            id: "n-2".to_string(),
             level: NotificationLevel::Error,
             title: "Failed".to_string(),
             message: None,
         };
         let json: serde_json::Value = serde_json::to_value(&payload_no_msg).unwrap();
+        assert_eq!(json["id"], "n-2");
         assert_eq!(json["level"], "error");
         assert_eq!(json["title"], "Failed");
         assert!(json["message"].is_null());

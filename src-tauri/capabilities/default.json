@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for all windows",
-  "windows": ["main", "context-menu", "context-editor", "image-preview", "text-preview", "prompt-dialog-*"],
+  "windows": ["main", "context-menu", "context-editor", "image-preview", "text-preview", "prompt-dialog-*", "history-dialog", "notification"],
   "permissions": [
     "core:default",
     "core:tray:default",

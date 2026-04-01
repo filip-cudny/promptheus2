@@ -55,7 +55,7 @@
     {#each pageEntries as entry (entry.id)}
       <HistoryEntryRow {entry} onOpen={handleOpen} />
     {:else}
-      <div class="empty-state">No execution history yet</div>
+      <div class="empty-state">No history yet</div>
     {/each}
   </div>
 

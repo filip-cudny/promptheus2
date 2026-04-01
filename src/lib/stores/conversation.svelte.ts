@@ -626,26 +626,26 @@ export function createConversationStore(
     try {
       if (tab.history_entry_id) {
         await updateConversationEntry({
-          entry_id: tab.history_entry_id,
+          entryId: tab.history_entry_id,
           turns,
-          context_text: tab.context_text,
-          context_image_paths: [],
+          contextText: tab.context_text,
+          contextImagePaths: [],
           nodes,
-          root_node_id: tab.tree.root_node_id,
-          current_path: tab.tree.current_path,
+          rootNodeId: tab.tree.root_node_id,
+          currentPath: tab.tree.current_path,
         });
       } else {
         const entryId = await addConversationEntry({
           turns,
-          context_text: tab.context_text,
-          context_image_paths: [],
-          prompt_id: promptId,
-          prompt_name: promptName,
+          contextText: tab.context_text,
+          contextImagePaths: [],
+          promptId,
+          promptName,
           success: true,
           error: null,
           nodes,
-          root_node_id: tab.tree.root_node_id,
-          current_path: tab.tree.current_path,
+          rootNodeId: tab.tree.root_node_id,
+          currentPath: tab.tree.current_path,
         });
         tab.history_entry_id = entryId;
       }

@@ -18,41 +18,41 @@ export async function getHistoryEntry(
 }
 
 export async function addHistoryEntry(params: {
-  input_content: string;
-  entry_type: HistoryEntryType;
-  output_content: string | null;
-  prompt_id: string | null;
+  inputContent: string;
+  entryType: HistoryEntryType;
+  outputContent: string | null;
+  promptId: string | null;
   success: boolean;
   error: string | null;
-  is_multi_turn: boolean;
-  prompt_name: string | null;
+  isMultiTurn: boolean;
+  promptName: string | null;
 }): Promise<void> {
   return invoke("add_history_entry", params);
 }
 
 export async function addConversationEntry(params: {
   turns: SerializedConversationTurn[];
-  context_text: string;
-  context_image_paths: string[];
-  prompt_id: string | null;
-  prompt_name: string | null;
+  contextText: string;
+  contextImagePaths: string[];
+  promptId: string | null;
+  promptName: string | null;
   success: boolean;
   error: string | null;
   nodes: SerializedConversationNode[];
-  root_node_id: string | null;
-  current_path: string[];
+  rootNodeId: string | null;
+  currentPath: string[];
 }): Promise<string> {
   return invoke("add_conversation_entry", params);
 }
 
 export async function updateConversationEntry(params: {
-  entry_id: string;
+  entryId: string;
   turns: SerializedConversationTurn[];
-  context_text: string;
-  context_image_paths: string[];
+  contextText: string;
+  contextImagePaths: string[];
   nodes: SerializedConversationNode[];
-  root_node_id: string | null;
-  current_path: string[];
+  rootNodeId: string | null;
+  currentPath: string[];
 }): Promise<void> {
   return invoke("update_conversation_entry", params);
 }

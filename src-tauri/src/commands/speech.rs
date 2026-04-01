@@ -140,6 +140,7 @@ pub async fn toggle_speech_recording(
                                 None,
                                 false,
                                 None,
+                                true,
                             );
 
                             let notification_settings = s.config.settings().notifications.clone();

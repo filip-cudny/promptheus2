@@ -3435,6 +3435,7 @@ dependencies = [
  "cpal",
  "dotenvy",
  "futures",
+ "gdkx11",
  "gtk",
  "hound",
  "image",

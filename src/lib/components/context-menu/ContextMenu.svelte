@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+  import { debug as logDebug } from "@tauri-apps/plugin-log";
   import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
   import type { MenuItem } from "$lib/types/menu";
   import type { ContextItem } from "$lib/types/context";
@@ -14,9 +16,13 @@
     getSelectedIndex,
     setSelectedIndex,
     isVisible,
+    getOpenTrigger,
     isRecording,
     getRecordingPromptId,
     closeMenu,
+    suppressClose,
+    isSuppressed,
+    resumeClose,
     moveSelection,
     executeItem,
     executeSelected,
@@ -91,16 +97,15 @@
   async function resizeAndPositionWindow() {
     await tick();
     if (!menuEl) return;
+
     const height = menuEl.scrollHeight + 2;
     const win = getCurrentWebviewWindow();
-    await win.setSize(new LogicalSize(MENU_WIDTH, height));
-
     const wa = getWorkArea();
+    let x = 0, y = 0;
     if (wa) {
       const anchorOffset = getPromptsSectionOffset();
-      const EDGE_INSET = 10;
-      let x = wa.cursorX - EDGE_INSET;
-      let y = wa.cursorY - anchorOffset;
+      x = wa.cursorX;
+      y = wa.cursorY - anchorOffset;
 
       const rightEdge = wa.workX + wa.workWidth;
       const bottomEdge = wa.workY + wa.workHeight;
@@ -108,13 +113,19 @@
       if (y + height > bottomEdge) y = bottomEdge - height;
       if (x < wa.workX) x = wa.workX;
       if (y < wa.workY) y = wa.workY;
-
-      await win.setPosition(new LogicalPosition(x, y));
     }
 
     hoverEnabled = false;
+    suppressClose();
+    await win.hide();
+    await win.setSize(new LogicalSize(MENU_WIDTH, height));
+    if (wa) {
+      await win.setPosition(new LogicalPosition(x, y));
+    }
     await win.show();
-    await win.setFocus();
+    await invoke("focus_context_menu");
+    resumeClose();
+    logDebug(`[ctx-menu] opened at (${x}, ${y}), size ${MENU_WIDTH}x${height}`);
   }
 
   function handleMouseMove() {
@@ -123,6 +134,7 @@
 
   $effect(() => {
     void expandedDescriptionId;
+    void getOpenTrigger();
     if (menuVisible && menuItems.length > 0) {
       resizeAndPositionWindow();
     }
@@ -166,6 +178,10 @@
     if (!menuVisible) return;
 
     switch (e.key) {
+      case "Escape":
+        e.preventDefault();
+        closeMenu();
+        break;
       case "ArrowDown":
         e.preventDefault();
         moveSelection(1);
@@ -203,6 +219,10 @@
     const win = getCurrentWebviewWindow();
     win.onFocusChanged(({ payload: focused }) => {
       if (!focused && !isRecording()) {
+        if (isSuppressed()) {
+          resumeClose();
+          return;
+        }
         closeMenu();
       }
     });
@@ -229,6 +249,7 @@
           class="chat-button"
           role="menuitem"
           onclick={async () => { await closeMenu(); await openPromptDialog("", "Chat"); }}
+          onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}
         >
           <MessageSquare size={ICON_SIZE.md} />
           <span>Chat</span>
@@ -398,7 +419,7 @@
     cursor: default;
   }
 
-  .menu-item:not(.disabled):active {
+  .menu-item-row.selected:active {
     background: rgba(255, 255, 255, 0.15);
   }
 

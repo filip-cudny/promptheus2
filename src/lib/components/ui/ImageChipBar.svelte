@@ -2,14 +2,19 @@
   import { invoke } from "@tauri-apps/api/core";
   import AttachmentChip from "./AttachmentChip.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
+  import { suppressClose } from "$lib/stores/contextMenu.svelte";
+
+  type Variant = "default" | "small";
 
   let {
     images = $bindable(),
     readonly = false,
+    variant = "default" as Variant,
     onremove,
   }: {
     images: ConversationImage[];
     readonly?: boolean;
+    variant?: Variant;
     onremove?: (index: number) => void;
   } = $props();
 
@@ -26,6 +31,7 @@
   }
 
   function openPreview(image: ConversationImage) {
+    suppressClose();
     invoke("open_image_preview", {
       data: image.data,
       mediaType: image.media_type,
@@ -34,7 +40,7 @@
 </script>
 
 {#each images as image, idx}
-  <AttachmentChip label="Image #{idx + 1}" {readonly} onclick={() => openPreview(image)} onremove={() => removeImage(idx)}>
+  <AttachmentChip label="Image #{idx + 1}" {readonly} {variant} onclick={() => openPreview(image)} onremove={() => removeImage(idx)}>
     {#snippet content()}
       <img src={thumbnailSrc(image)} alt="Attached image {idx + 1}" class="chip-thumbnail" />
     {/snippet}

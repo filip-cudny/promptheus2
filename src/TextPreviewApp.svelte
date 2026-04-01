@@ -5,7 +5,7 @@
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
   import { resizeTextarea } from "$lib/utils/autoResize";
-  import { Pencil, Eye } from "lucide-svelte";
+  import EditorToolbar from "$lib/components/ui/EditorToolbar.svelte";
 
   const win = getCurrentWebviewWindow();
 
@@ -14,6 +14,10 @@
   let sourceWindow = $state("");
   let editMode = $state(false);
   let textarea: HTMLTextAreaElement | undefined = $state();
+
+  let lineCount = $derived(text ? text.split("\n").length : 0);
+  let originalText = $state("");
+  let isDirty = $derived(text !== originalText);
 
   $effect(() => {
     text;
@@ -31,6 +35,7 @@
     if (!payload) return;
 
     text = payload.text;
+    originalText = payload.text;
     index = payload.index;
     sourceWindow = payload.source_window;
     editMode = false;
@@ -63,26 +68,7 @@
 </script>
 
 <div class="text-preview">
-  <div class="toolbar">
-    <button
-      class="mode-btn"
-      class:active={!editMode}
-      onclick={() => (editMode = false)}
-    >
-      <Eye size={14} />
-      <span>View</span>
-    </button>
-    <button
-      class="mode-btn"
-      class:active={editMode}
-      onclick={() => (editMode = true)}
-    >
-      <Pencil size={14} />
-      <span>Edit</span>
-    </button>
-    <div class="spacer"></div>
-    <button class="done-btn" onclick={hide}>Done</button>
-  </div>
+  <EditorToolbar {lineCount} bind:editMode saveDisabled={!isDirty} onsave={hide} />
 
   <div class="content">
     {#if editMode}
@@ -108,56 +94,6 @@
     background: #1e1e1e;
   }
 
-  .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 6px 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    flex-shrink: 0;
-  }
-
-  .mode-btn {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    border: none;
-    border-radius: 4px;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .mode-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.8);
-  }
-
-  .mode-btn.active {
-    background: rgba(74, 158, 187, 0.2);
-    color: #7dd3f0;
-  }
-
-  .spacer {
-    flex: 1;
-  }
-
-  .done-btn {
-    padding: 4px 12px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
-    background: rgba(74, 158, 187, 0.2);
-    color: #7dd3f0;
-    font-size: 12px;
-    cursor: pointer;
-  }
-
-  .done-btn:hover {
-    background: rgba(74, 158, 187, 0.3);
-  }
-
   .content {
     flex: 1;
     overflow-y: auto;
@@ -170,10 +106,14 @@
     color: #e0e0e0;
   }
 
+  .content:has(.edit-textarea) {
+    display: flex;
+    flex-direction: column;
+  }
+
   .edit-textarea {
     width: 100%;
-    height: 100%;
-    min-height: 200px;
+    flex: 1;
     background: transparent;
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 4px;

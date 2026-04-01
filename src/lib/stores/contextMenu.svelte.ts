@@ -19,7 +19,9 @@ let _items = $state<MenuItem[]>([]);
 let _selectedIndex = $state(-1);
 let _visible = $state(false);
 let _isRecording = $state(false);
+let _suppressClose = $state(false);
 let _recordingPromptId = $state<string | null>(null);
+let _openTrigger = $state(0);
 let _workArea: WorkArea | null = null;
 let numberBuffer = "";
 let numberTimer: ReturnType<typeof setTimeout> | null = null;
@@ -57,8 +59,24 @@ function isVisible(): boolean {
   return _visible;
 }
 
+function getOpenTrigger(): number {
+  return _openTrigger;
+}
+
 function isRecording(): boolean {
   return _isRecording;
+}
+
+function suppressClose() {
+  _suppressClose = true;
+}
+
+function isSuppressed(): boolean {
+  return _suppressClose;
+}
+
+function resumeClose() {
+  _suppressClose = false;
 }
 
 function getRecordingPromptId(): string | null {
@@ -118,6 +136,7 @@ async function openMenu(workArea: WorkArea | null) {
     _selectedIndex = -1;
     numberBuffer = "";
     _visible = true;
+    _openTrigger++;
   } catch (e) {
     error("Failed to open context menu: " + e);
   }
@@ -401,8 +420,12 @@ export {
   isRecording,
   getRecordingPromptId,
   getWorkArea,
+  getOpenTrigger,
   openMenu,
   closeMenu,
+  suppressClose,
+  isSuppressed,
+  resumeClose,
   moveSelection,
   executeItem,
   executeSelected,

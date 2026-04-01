@@ -39,7 +39,7 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     )
     .title("")
     .inner_size(320.0, 400.0)
-    .resizable(true)
+    .resizable(false)
     .decorations(false)
     .transparent(transparent)
     .always_on_top(true)
@@ -523,6 +523,7 @@ pub fn run() {
             commands::menu::execute_menu_item,
             commands::menu::refresh_menu_providers,
             commands::menu::show_context_menu_window,
+            commands::menu::focus_context_menu,
             commands::history::get_history,
             commands::history::get_history_entry,
             commands::history::add_history_entry,

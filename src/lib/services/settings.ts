@@ -26,11 +26,11 @@ export async function updateModel(
   modelId: string,
   config: ModelConfig,
 ): Promise<void> {
-  return invoke("update_model", { model_id: modelId, config });
+  return invoke("update_model", { modelId, config });
 }
 
 export async function deleteModel(modelId: string): Promise<void> {
-  return invoke("delete_model", { model_id: modelId });
+  return invoke("delete_model", { modelId });
 }
 
 export async function updateNotifications(

@@ -64,8 +64,8 @@
       localText = storeText;
       skillEditable.setTextAndHighlight(storeText);
       requestAnimationFrame(() => {
-        skillEditable?.restoreCursor(storeText.length);
         skillEditable?.focus();
+        skillEditable?.restoreCursor(storeText.length);
       });
     }
   });
@@ -112,13 +112,13 @@
     window.removeEventListener("keyup", onKeyUp);
   });
 
-  function handleSendShow() {
+  function sendOrRegenerate() {
     if (store.isRegenerateMode) {
       const path = store.tree.current_path;
       if (path.length > 0) {
         store.regenerate(path[path.length - 1]);
       }
-    } else {
+    } else if (store.canSend) {
       store.sendMessage();
     }
   }
@@ -126,14 +126,7 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
-      if (store.isRegenerateMode) {
-        const path = store.tree.current_path;
-        if (path.length > 0) {
-          store.regenerate(path[path.length - 1]);
-        }
-      } else if (store.canSend) {
-        store.sendMessage();
-      }
+      sendOrRegenerate();
       return;
     }
 
@@ -155,21 +148,16 @@
       return;
     }
 
-    const hasClipboardImage = e.clipboardData?.types.includes("Files") &&
-      Array.from(e.clipboardData.items).some((item) => item.type.startsWith("image/"));
-    if (hasClipboardImage) {
-      e.preventDefault();
-    }
+    const plainText = e.clipboardData?.getData("text/plain") ?? "";
+    e.preventDefault();
 
     const image = await getImageFromPasteEvent(e);
     if (image) {
       localImages = [...localImages, image];
       return;
     }
-    const text = e.clipboardData?.getData("text/plain");
-    if (text) {
-      e.preventDefault();
-      document.execCommand("insertText", false, text);
+    if (plainText) {
+      document.execCommand("insertText", false, plainText);
     }
   }
 </script>
@@ -218,13 +206,13 @@
       {:else if store.isRegenerateMode}
         <ActionIconButton
           icon={RefreshCw}
-          onclick={handleSendShow}
+          onclick={sendOrRegenerate}
           title="Regenerate"
         />
       {:else}
         <ActionIconButton
           icon={SendHorizonal}
-          onclick={handleSendShow}
+          onclick={sendOrRegenerate}
           disabled={!store.canSend}
           title="Send (Enter)"
         />
@@ -264,11 +252,14 @@
     flex-wrap: wrap;
     gap: 6px;
     padding: 2px 0;
+    max-height: 15vh;
+    overflow-y: auto;
   }
 
   .input-field :global(.input-editable) {
     font-size: 13px;
-    max-height: 40vh;
+    max-height: 35vh;
+    overflow-y: auto;
     padding: 4px 2px;
   }
 

@@ -18,6 +18,18 @@ struct ShowMenuPayload {
     work_height: f64,
 }
 
+fn strip_skill_prefix<'a>(s: &'a str, skill_service: &crate::services::skill::SkillService) -> &'a str {
+    if let Some(rest) = s.strip_prefix('/') {
+        if let Some(space_idx) = rest.find(' ') {
+            let name = &rest[..space_idx];
+            if skill_service.get_skill(name).is_some() {
+                return &rest[space_idx + 1..];
+            }
+        }
+    }
+    s
+}
+
 fn truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
@@ -47,8 +59,8 @@ pub async fn get_context_menu_items(
         }
     }
 
-    let last_text = state.history.get_last_item_by_type(HistoryEntryType::Text);
-    let last_speech = state.history.get_last_item_by_type(HistoryEntryType::Speech);
+    let last_text = state.history.get_last_quick_action(HistoryEntryType::Text);
+    let last_speech = state.history.get_last_quick_action(HistoryEntryType::Speech);
 
     let mut items = state.menu_coordinator.get_menu_items(&state.config);
 
@@ -56,7 +68,8 @@ pub async fn get_context_menu_items(
         if item.item_type == MenuItemType::LastInteraction {
             item.data = Some(serde_json::json!({
                 "input": last_text.as_ref().map(|e| {
-                    serde_json::json!({ "content": truncate(&e.input_content, 200) })
+                    let raw_input = strip_skill_prefix(&e.input_content, &state.skill_service);
+                    serde_json::json!({ "content": truncate(raw_input, 200) })
                 }),
                 "output": last_text.as_ref().and_then(|e| {
                     e.output_content.as_ref().map(|c| serde_json::json!({ "content": truncate(c, 200) }))
@@ -156,6 +169,33 @@ pub async fn show_context_menu_window(app: tauri::AppHandle) -> Result<(), Strin
     }
 
     Ok(())
+}
+
+#[tauri::command]
+pub async fn focus_context_menu(app: tauri::AppHandle) -> Result<(), String> {
+    let win = app
+        .get_webview_window("context-menu")
+        .ok_or("context-menu window not found")?;
+
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::glib::object::Cast;
+        use gtk::prelude::GtkWindowExt;
+        use gtk::prelude::WidgetExt;
+
+        if let Ok(gtk_win) = win.gtk_window() {
+            if let Some(gdk_win) = gtk_win.window() {
+                if let Ok(x11_win) = gdk_win.downcast::<gdkx11::X11Window>() {
+                    let timestamp = gdkx11::functions::x11_get_server_time(&x11_win);
+                    log::debug!("focus_context_menu: present_with_time({})", timestamp);
+                    gtk_win.present_with_time(timestamp);
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    win.set_focus().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
