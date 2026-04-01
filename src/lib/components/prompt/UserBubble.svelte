@@ -8,8 +8,7 @@
   import { Trash2, Pencil, Copy, Check } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { highlightSkills } from "$lib/utils/skillHighlight";
-  import { listSkills } from "$lib/services/skills";
-  import { onMount } from "svelte";
+  import { getSkillsStore } from "$lib/stores/skills.svelte";
 
   let {
     node,
@@ -27,19 +26,10 @@
     onRegenerate: () => void;
   } = $props();
 
-  let allSkillNames = $state<Set<string>>(new Set());
-
-  onMount(async () => {
-    try {
-      const skills = await listSkills();
-      allSkillNames = new Set(skills.map((s) => s.name));
-    } catch {
-      allSkillNames = new Set();
-    }
-  });
+  const skillsStore = getSkillsStore();
 
   function isKnownSkill(name: string): boolean {
-    return allSkillNames.has(name.slice(1));
+    return skillsStore.nameSet.has(name.slice(1));
   }
 
   function formatUserContent(content: string): string {

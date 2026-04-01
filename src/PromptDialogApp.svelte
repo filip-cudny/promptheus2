@@ -6,9 +6,12 @@
   import { hasContext } from "$lib/services/context";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { PanelLeft, SquarePen } from "lucide-svelte";
+  import { getSkillsStore } from "$lib/stores/skills.svelte";
   import ConversationArea from "$lib/components/prompt/ConversationArea.svelte";
   import InputArea from "$lib/components/prompt/InputArea.svelte";
   import TabSidebar from "$lib/components/prompt/TabSidebar.svelte";
+
+  const skillsStore = getSkillsStore();
 
   const params = new URLSearchParams(window.location.search);
   const promptId = params.get("promptId") ?? "";
@@ -50,6 +53,8 @@
   }
 
   onMount(async () => {
+    skillsStore.init();
+
     if (historyEntryId) {
       await store.restoreFromHistory(historyEntryId, lastInteractionOnly);
     } else if (initialInput) {

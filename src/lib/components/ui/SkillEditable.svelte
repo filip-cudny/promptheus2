@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { listSkills } from "$lib/services/skills";
+  import { getSkillsStore } from "$lib/stores/skills.svelte";
   import { highlightSkills } from "$lib/utils/skillHighlight";
   import type { SkillSummary } from "$lib/types";
 
@@ -21,7 +21,7 @@
   } = $props();
 
   let editable: HTMLDivElement | undefined = $state();
-  let allSkills = $state<SkillSummary[]>([]);
+  const skillsStore = getSkillsStore();
   let showAutocomplete = $state(false);
   let autocompleteItems = $state<SkillSummary[]>([]);
   let autocompleteIndex = $state(0);
@@ -37,13 +37,7 @@
     }
   });
 
-  onMount(async () => {
-    try {
-      allSkills = await listSkills();
-    } catch {
-      allSkills = [];
-    }
-
+  onMount(() => {
     if (text && editable) {
       const offset = saveCursorOffset();
       lastSkillPattern = "";
@@ -126,7 +120,7 @@
   }
 
   function isKnownSkill(token: string): boolean {
-    return allSkills.some((s) => s.name === token.slice(1));
+    return skillsStore.nameSet.has(token.slice(1));
   }
 
   function buildHighlightedHtml(t: string): string {
@@ -188,7 +182,7 @@
       const slashToken = match[2];
       const query = slashToken.slice(1);
       slashStart = offset - slashToken.length;
-      const filtered = allSkills.filter(
+      const filtered = skillsStore.items.filter(
         (s) =>
           s.name.includes(query) ||
           s.display_name.toLowerCase().includes(query),
