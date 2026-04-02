@@ -170,10 +170,10 @@ function buildMessagesFromTree(
           | { type: "text"; text: string }
           | { type: "image_url"; image_url: { url: string } }
         > = [];
-        let imageIndex = 1;
         if (hasContextImages) {
+          let contextIndex = 1;
           for (const img of contextImages) {
-            parts.push({ type: "text", text: `[Image #${imageIndex++}]` });
+            parts.push({ type: "text", text: `[Context Image #${contextIndex++}]` });
             parts.push({
               type: "image_url",
               image_url: {
@@ -182,6 +182,7 @@ function buildMessagesFromTree(
             });
           }
         }
+        let imageIndex = 1;
         for (const img of node.images) {
           parts.push({ type: "text", text: `[Image #${imageIndex++}]` });
           parts.push({

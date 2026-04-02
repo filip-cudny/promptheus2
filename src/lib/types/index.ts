@@ -19,6 +19,8 @@ export interface Settings {
   keymaps: KeymapGroup[];
   prompts: PromptData[];
   system_prompt: string;
+  about_me: string | null;
+  context_section: string | null;
   skills_order: string[];
   conversation_title_model: string;
   conversation_title_prompt: string;

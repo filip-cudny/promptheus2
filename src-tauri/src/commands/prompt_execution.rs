@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
 
 use crate::commands::settings::AppState;
+use crate::services::config::ConfigService;
 use crate::models::ai::StreamEvent;
 use crate::models::context::ContextItem;
 use crate::models::history::{
@@ -256,11 +257,7 @@ pub async fn execute_skill(
             })?,
         };
 
-        let system_prompt = format!(
-            "{}\n\n{}",
-            state.config.settings().system_prompt,
-            state.config.input_format_guide()
-        );
+        let system_prompt = build_system_prompt_base(&state.config, None);
         let messages = skill_execution::prepare_skill_messages(
             &system_prompt,
             &skill,
@@ -433,16 +430,35 @@ pub async fn execute_skill(
     }
 }
 
+#[derive(Clone, Serialize)]
+pub struct SystemPromptResult {
+    pub messages: Vec<ProcessedMessage>,
+    pub time_update: Option<String>,
+}
+
 #[tauri::command]
 pub async fn get_system_prompt(
     state: State<'_, Mutex<AppState>>,
     context_text: Option<String>,
-) -> Result<Vec<ProcessedMessage>, String> {
-    let state = state.lock().await;
+    tab_id: Option<String>,
+) -> Result<SystemPromptResult, String> {
+    let mut state = state.lock().await;
 
-    let input_format_guide = state.config.input_format_guide();
-    let system_prompt = state.config.settings().system_prompt.clone();
-    let base_prompt = format!("{system_prompt}\n\n{input_format_guide}");
+    let resolved_context_section = match &tab_id {
+        Some(id) => {
+            if !state.conversation_context.has(id) {
+                let resolved = resolve_context_section_template(&state.config);
+                state.conversation_context.insert(id.clone(), resolved);
+            }
+            state.conversation_context.get(id).unwrap().to_string()
+        }
+        None => resolve_context_section_template(&state.config),
+    };
+
+    let base_prompt = build_system_prompt_base(
+        &state.config,
+        Some(&resolved_context_section),
+    );
     let system_content = match &context_text {
         Some(text) if !text.is_empty() => {
             format!("{base_prompt}\n\n<context>\n{text}\n</context>")
@@ -450,10 +466,17 @@ pub async fn get_system_prompt(
         _ => base_prompt,
     };
 
-    Ok(vec![ProcessedMessage {
-        role: "system".to_string(),
-        content: crate::models::message::MessageContent::Text(system_content),
-    }])
+    let time_update = tab_id
+        .as_deref()
+        .and_then(|id| state.conversation_context.time_update_if_stale(id));
+
+    Ok(SystemPromptResult {
+        messages: vec![ProcessedMessage {
+            role: "system".to_string(),
+            content: MessageContent::Text(system_content),
+        }],
+        time_update,
+    })
 }
 
 #[tauri::command]
@@ -477,11 +500,7 @@ pub async fn process_skill_template(
         }
     }
 
-    let system_prompt = format!(
-        "{}\n\n{}",
-        state.config.settings().system_prompt,
-        state.config.input_format_guide()
-    );
+    let system_prompt = build_system_prompt_base(&state.config, None);
     let messages = skill_execution::prepare_skill_messages(
         &system_prompt,
         &skill,
@@ -539,4 +558,53 @@ pub async fn generate_conversation_title(
         .map_err(|e| e.to_string())?;
 
     Ok(title.trim().to_string())
+}
+
+fn resolve_context_section_template(config: &ConfigService) -> String {
+    let template = config.context_section_template();
+    if template.is_empty() {
+        return String::new();
+    }
+
+    let now = chrono::Local::now();
+    template
+        .replace("{{date}}", &now.format("%Y-%m-%d").to_string())
+        .replace("{{time}}", &now.format("%H:%M").to_string())
+        .replace("{{timezone}}", &now.format("%Z").to_string())
+        .replace("{{os}}", std::env::consts::OS)
+        .replace("{{active_app}}", "")
+}
+
+fn build_system_prompt_base(config: &ConfigService, resolved_context_section: Option<&str>) -> String {
+    let system_prompt = &config.settings().system_prompt;
+    let input_format_guide = config.input_format_guide();
+    let about_me = config.about_me();
+
+    let context_section = resolved_context_section
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| resolve_context_section_template(config));
+
+    if context_section.is_empty() {
+        format!("{system_prompt}\n\n---\n\n{input_format_guide}\n\n---\n\n{about_me}")
+    } else {
+        format!("{system_prompt}\n\n---\n\n{context_section}\n\n---\n\n{input_format_guide}\n\n---\n\n{about_me}")
+    }
+}
+
+#[tauri::command]
+pub async fn resolve_context_section(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<String, String> {
+    let state = state.lock().await;
+    Ok(resolve_context_section_template(&state.config))
+}
+
+#[tauri::command]
+pub async fn release_conversation_context(
+    state: State<'_, Mutex<AppState>>,
+    tab_id: String,
+) -> Result<(), String> {
+    let mut state = state.lock().await;
+    state.conversation_context.remove(&tab_id);
+    Ok(())
 }

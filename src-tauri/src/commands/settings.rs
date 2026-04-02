@@ -16,6 +16,7 @@ use crate::services::placeholder::PlaceholderService;
 use crate::services::prompt_execution::PromptExecutionService;
 use crate::services::skill::SkillService;
 use crate::services::speech::SpeechService;
+use crate::services::conversation_context::ConversationContextCache;
 use crate::services::ui_state::UiStateService;
 
 pub struct AppState {
@@ -32,6 +33,7 @@ pub struct AppState {
     pub skill_service: SkillService,
     pub speech: SpeechService,
     pub ui_state: UiStateService,
+    pub conversation_context: ConversationContextCache,
 }
 
 fn emit_changed(app: &AppHandle) -> Result<(), String> {

@@ -52,9 +52,13 @@ pub fn prepare_skill_messages(
 
     if context.has_images() {
         let mut parts = Vec::new();
-        parts.push(ContentPart::Text { text: user_text });
+        let mut img_index = 1;
         for item in &context.get_items() {
             if let ContextItem::Image { data, media_type } = item {
+                parts.push(ContentPart::Text {
+                    text: format!("[Context Image #{img_index}]"),
+                });
+                img_index += 1;
                 parts.push(ContentPart::ImageUrl {
                     image_url: ImageUrlData {
                         url: format!("data:{media_type};base64,{data}"),
@@ -62,6 +66,7 @@ pub fn prepare_skill_messages(
                 });
             }
         }
+        parts.push(ContentPart::Text { text: user_text });
         messages.push(ProcessedMessage {
             role: "user".to_string(),
             content: MessageContent::Parts(parts),

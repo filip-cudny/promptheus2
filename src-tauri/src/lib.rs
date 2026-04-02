@@ -475,6 +475,7 @@ pub fn run() {
                 skill_service,
                 speech: SpeechService::new(),
                 ui_state: ui_state_service,
+                conversation_context: crate::services::conversation_context::ConversationContextCache::new(),
             }));
             Ok(())
         })
@@ -527,6 +528,8 @@ pub fn run() {
             commands::prompt_execution::get_execution_state,
             commands::prompt_execution::process_skill_template,
             commands::prompt_execution::get_system_prompt,
+            commands::prompt_execution::resolve_context_section,
+            commands::prompt_execution::release_conversation_context,
             commands::prompt_execution::generate_conversation_title,
             commands::prompt_dialog::open_prompt_dialog,
             commands::skills::list_skills,

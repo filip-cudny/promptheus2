@@ -104,6 +104,8 @@
   ],
   "prompts": [],
   "system_prompt": "You are a helpful assistant.",
+  "about_me": "about_me.md",
+  "context_section": "context_section.md",
   "skills_order": [
     "prompt-refine",
     "prompt-execute",

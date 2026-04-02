@@ -77,12 +77,25 @@ export async function processSkillTemplate(
   });
 }
 
+export interface SystemPromptResult {
+  messages: ProcessedMessage[];
+  time_update: string | null;
+}
+
 export async function getSystemPrompt(
   contextText?: string,
-): Promise<ProcessedMessage[]> {
+  tabId?: string,
+): Promise<SystemPromptResult> {
   return invoke("get_system_prompt", {
     contextText: contextText ?? null,
+    tabId: tabId ?? null,
   });
+}
+
+export async function releaseConversationContext(
+  tabId: string,
+): Promise<void> {
+  return invoke("release_conversation_context", { tabId });
 }
 
 export async function generateConversationTitle(

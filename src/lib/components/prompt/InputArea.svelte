@@ -39,46 +39,48 @@
   let localTextAttachments = $state<string[]>([]);
   let shiftHeld = $state(false);
   let skillEditable: ReturnType<typeof SkillEditable> | undefined = $state();
+  let syncedTabId = $state("");
 
   $effect(() => {
-    store.updateInputText(localText);
+    if (store.activeTabId === syncedTabId) {
+      store.updateInputText(localText);
+    }
   });
 
   $effect(() => {
-    store.updateInputImages(localImages);
+    if (store.activeTabId === syncedTabId) {
+      store.updateInputImages(localImages);
+    }
   });
 
   $effect(() => {
-    store.updateInputTextAttachments(localTextAttachments);
+    if (store.activeTabId === syncedTabId) {
+      store.updateInputTextAttachments(localTextAttachments);
+    }
   });
 
   $effect(() => {
+    const tabId = store.activeTabId;
     const storeText = store.inputText;
-    if (storeText === "" && localText !== "") {
-      localText = "";
-      const el = skillEditable?.getElement();
-      if (el) {
-        el.innerHTML = "";
+    const storeImages = store.inputImages;
+    const storeAttachments = store.inputTextAttachments;
+
+    localText = storeText;
+    localImages = storeImages;
+    localTextAttachments = storeAttachments;
+    syncedTabId = tabId;
+
+    if (skillEditable) {
+      if (storeText === "") {
+        const el = skillEditable.getElement();
+        if (el) el.innerHTML = "";
+      } else {
+        skillEditable.setTextAndHighlight(storeText);
+        requestAnimationFrame(() => {
+          skillEditable?.focus();
+          skillEditable?.restoreCursor(storeText.length);
+        });
       }
-    } else if (storeText !== "" && localText === "" && skillEditable) {
-      localText = storeText;
-      skillEditable.setTextAndHighlight(storeText);
-      requestAnimationFrame(() => {
-        skillEditable?.focus();
-        skillEditable?.restoreCursor(storeText.length);
-      });
-    }
-  });
-
-  $effect(() => {
-    if (store.inputImages.length === 0 && localImages.length > 0) {
-      localImages = [];
-    }
-  });
-
-  $effect(() => {
-    if (store.inputTextAttachments.length === 0 && localTextAttachments.length > 0) {
-      localTextAttachments = [];
     }
   });
 

@@ -32,6 +32,8 @@ impl ConfigService {
         }
 
         let _ = Self::initialize_input_format_guide(config_dir);
+        let _ = Self::initialize_about_me(config_dir);
+        let _ = Self::initialize_context_section(config_dir);
 
         let content = std::fs::read_to_string(&settings_path)?;
         let mut settings: Settings = serde_json::from_str(&content)?;
@@ -77,6 +79,8 @@ impl ConfigService {
 
         Self::initialize_env(config_dir)?;
         Self::initialize_input_format_guide(config_dir)?;
+        Self::initialize_about_me(config_dir)?;
+        Self::initialize_context_section(config_dir)?;
 
         Ok(())
     }
@@ -86,6 +90,24 @@ impl ConfigService {
         if !guide_path.exists() {
             let default_guide = include_str!("../../resources/input_format_guide.md");
             std::fs::write(&guide_path, default_guide)?;
+        }
+        Ok(())
+    }
+
+    fn initialize_about_me(config_dir: &Path) -> Result<(), ConfigError> {
+        let about_me_path = config_dir.join("about_me.md");
+        if !about_me_path.exists() {
+            let default_about_me = include_str!("../../resources/about_me.md");
+            std::fs::write(&about_me_path, default_about_me)?;
+        }
+        Ok(())
+    }
+
+    fn initialize_context_section(config_dir: &Path) -> Result<(), ConfigError> {
+        let path = config_dir.join("context_section.md");
+        if !path.exists() {
+            let default = include_str!("../../resources/context_section.md");
+            std::fs::write(&path, default)?;
         }
         Ok(())
     }
@@ -233,6 +255,26 @@ impl ConfigService {
     pub fn input_format_guide(&self) -> String {
         let guide_path = self.config_dir.join("input_format_guide.md");
         std::fs::read_to_string(&guide_path).unwrap_or_default()
+    }
+
+    pub fn about_me(&self) -> String {
+        let filename = self
+            .settings
+            .about_me
+            .as_deref()
+            .unwrap_or("about_me.md");
+        let path = self.config_dir.join(filename);
+        std::fs::read_to_string(&path).unwrap_or_default()
+    }
+
+    pub fn context_section_template(&self) -> String {
+        let filename = self
+            .settings
+            .context_section
+            .as_deref()
+            .unwrap_or("context_section.md");
+        let path = self.config_dir.join(filename);
+        std::fs::read_to_string(&path).unwrap_or_default()
     }
 
     pub fn config_dir(&self) -> &Path {

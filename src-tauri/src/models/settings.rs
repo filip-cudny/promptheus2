@@ -43,6 +43,12 @@ pub struct Settings {
     pub system_prompt: String,
 
     #[serde(default)]
+    pub about_me: Option<String>,
+
+    #[serde(default)]
+    pub context_section: Option<String>,
+
+    #[serde(default)]
     pub skills_order: Vec<String>,
 
     #[serde(default)]
@@ -270,6 +276,8 @@ impl Default for Settings {
             keymaps: Vec::new(),
             prompts: Vec::new(),
             system_prompt: default_system_prompt(),
+            about_me: None,
+            context_section: None,
             skills_order: Vec::new(),
             conversation_title_model: String::new(),
             conversation_title_prompt: default_conversation_title_prompt(),

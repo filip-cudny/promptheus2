@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod clipboard;
 pub mod config;
+pub mod conversation_context;
 pub mod context;
 pub mod dock;
 pub mod history;
