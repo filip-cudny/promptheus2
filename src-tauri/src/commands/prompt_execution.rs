@@ -62,7 +62,7 @@ pub async fn execute_conversation_turn(
 ) -> Result<(), String> {
     let start_time = Instant::now();
 
-    let (execution_id, resolved_model_id, model_display_name, processed_messages) = {
+    let (execution_id, resolved_model_id, model_display_name, processed_messages, ai) = {
         let mut state = state.lock().await;
 
         let execution_id = state
@@ -88,7 +88,9 @@ pub async fn execute_conversation_turn(
 
         let processed_messages = messages.into_iter().map(Into::into).collect();
 
-        (execution_id, resolved_model_id, model_display_name, processed_messages)
+        let ai = state.ai.clone();
+
+        (execution_id, resolved_model_id, model_display_name, processed_messages, ai)
     };
 
     let _ = app.emit(
@@ -99,14 +101,10 @@ pub async fn execute_conversation_turn(
     );
 
     let stream_result = {
-        let stream = {
-            let state = state.lock().await;
-            state
-                .ai
-                .complete_stream(&resolved_model_id, processed_messages)
-                .await
-                .map_err(|e| e.to_string())
-        };
+        let stream = ai
+            .complete_stream(&resolved_model_id, processed_messages)
+            .await
+            .map_err(|e| e.to_string());
 
         match stream {
             Ok(mut stream) => {
@@ -220,7 +218,7 @@ pub async fn execute_skill(
 ) -> Result<(), String> {
     let start_time = Instant::now();
 
-    let (execution_id, model_id, model_display_name, skill_display_name, input_content, messages) = {
+    let (execution_id, model_id, model_display_name, skill_display_name, input_content, messages, ai) = {
         let mut state = state.lock().await;
 
         let execution_id = state
@@ -270,7 +268,9 @@ pub async fn execute_skill(
             &state.context,
         );
 
-        (execution_id, model_id, model_display_name, skill_display_name, input_content, messages)
+        let ai = state.ai.clone();
+
+        (execution_id, model_id, model_display_name, skill_display_name, input_content, messages, ai)
     };
 
     let _ = app.emit(
@@ -281,14 +281,10 @@ pub async fn execute_skill(
     );
 
     let stream_result = {
-        let stream = {
-            let state = state.lock().await;
-            state
-                .ai
-                .complete_stream(&model_id, messages)
-                .await
-                .map_err(|e| e.to_string())
-        };
+        let stream = ai
+            .complete_stream(&model_id, messages)
+            .await
+            .map_err(|e| e.to_string());
 
         match stream {
             Ok(mut stream) => {
@@ -511,7 +507,7 @@ pub async fn generate_conversation_title(
     state: State<'_, Mutex<AppState>>,
     user_message: String,
 ) -> Result<String, String> {
-    let (model_id, prompt) = {
+    let (model_id, prompt, ai) = {
         let state = state.lock().await;
         let settings = state.config.settings();
 
@@ -523,7 +519,7 @@ pub async fn generate_conversation_title(
             return Err("No model configured for title generation".to_string());
         };
 
-        (model_id, settings.conversation_title_prompt.clone())
+        (model_id, settings.conversation_title_prompt.clone(), state.ai.clone())
     };
 
     let messages = vec![
@@ -537,9 +533,7 @@ pub async fn generate_conversation_title(
         },
     ];
 
-    let state = state.lock().await;
-    let title = state
-        .ai
+    let title = ai
         .complete(&model_id, messages)
         .await
         .map_err(|e| e.to_string())?;

@@ -31,6 +31,7 @@
   let unlistenRestore: UnlistenFn | undefined;
   let unlistenContextChanged: UnlistenFn | undefined;
   let unlistenVoiceInput: UnlistenFn | undefined;
+  let unlistenOpenForSkill: UnlistenFn | undefined;
 
   async function autoShowContextIfNeeded() {
     if (contextDisabled || contextVisible) return;
@@ -61,6 +62,7 @@
       handleVoiceInput(initialInput, autoSendInput);
     } else if (promptId) {
       store.updateInputText(`/${promptId} `);
+      store.setPristineInput(`/${promptId} `);
     }
 
     unlistenRestore = await listen<{ entry_id: string; last_interaction_only?: boolean }>(
@@ -72,6 +74,10 @@
 
     unlistenVoiceInput = await listen<{ text: string; auto_send: boolean }>("voice-input", (event) => {
       handleVoiceInput(event.payload.text, event.payload.auto_send);
+    });
+
+    unlistenOpenForSkill = await listen<{ prompt_id: string; prompt_name: string }>("open-for-skill", (event) => {
+      store.openForSkill(event.payload.prompt_id, event.payload.prompt_name);
     });
 
     await autoShowContextIfNeeded();
@@ -115,6 +121,7 @@
     unlistenRestore?.();
     unlistenContextChanged?.();
     unlistenVoiceInput?.();
+    unlistenOpenForSkill?.();
     store.destroy();
   });
 </script>

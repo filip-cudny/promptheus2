@@ -20,6 +20,7 @@ import {
   hasSkillReferences,
   type ResolvedSkillSegment,
 } from "$lib/utils/skillComposer";
+import { isSkillXml, extractSkillDisplayText } from "$lib/utils/skillDisplay";
 import type {
   ConversationNode,
   ConversationImage,
@@ -134,6 +135,7 @@ function createTabState(tabName: string): TabState {
     streamed_content: "",
     execution_id: null,
     history_entry_id: null,
+    pristine_input: null,
   };
 }
 
@@ -218,7 +220,9 @@ function serializeNodes(
 function serializeTurns(pairs: MessagePair[]): SerializedConversationTurn[] {
   return pairs.map((pair) => ({
     turn_number: pair.message_number,
-    message_text: pair.user.content,
+    message_text: isSkillXml(pair.user.content)
+      ? extractSkillDisplayText(pair.user.content)
+      : pair.user.content,
     message_image_paths: [],
     output_text: pair.assistant?.content ?? null,
     is_complete: pair.assistant !== null,
@@ -332,10 +336,13 @@ export function createConversationStore(
       return { success: false, result: "" };
 
     const skillSegments = await resolveSkillSegments(text);
+    const storedContent = skillSegments
+      ? composeSkillMessage(skillSegments)
+      : text;
 
     const userNode = createNode(
       "user",
-      text,
+      storedContent,
       tab.tree.current_path.length > 0
         ? tab.tree.current_path[tab.tree.current_path.length - 1]
         : null,
@@ -387,19 +394,7 @@ export function createConversationStore(
         tab.context_text || undefined,
       );
       const treeMessages = buildMessagesFromTree(tab.tree, tab.context_images);
-
-      let messages: ProcessedMessage[];
-      if (skillSegments) {
-        const composedContent = composeSkillMessage(skillSegments);
-        const updatedTreeMessages = treeMessages.map((msg, idx) =>
-          msg.role === "user" && idx === treeMessages.length - 1
-            ? { ...msg, content: composedContent }
-            : msg,
-        );
-        messages = [...systemMessages, ...updatedTreeMessages];
-      } else {
-        messages = [...systemMessages, ...treeMessages];
-      }
+      const messages = [...systemMessages, ...treeMessages];
 
       const callbacks: ExecutionCallbacks = {
         onChunk: (_delta, accumulated) => {
@@ -458,6 +453,15 @@ export function createConversationStore(
 
     const node = tab.tree.nodes.get(nodeId);
     if (!node || node.role !== "assistant" || !node.parent_id) return;
+
+    const parentUser = tab.tree.nodes.get(node.parent_id);
+    if (parentUser?.role === "user" && hasSkillReferences(parentUser.content)) {
+      const segments = await resolveSkillSegments(parentUser.content);
+      if (segments) {
+        parentUser.content = composeSkillMessage(segments);
+        tab.tree.nodes.set(parentUser.node_id, parentUser);
+      }
+    }
 
     const newAssistant = createNode("assistant", "", node.parent_id);
     tab.tree.nodes.set(newAssistant.node_id, newAssistant);
@@ -547,6 +551,38 @@ export function createConversationStore(
 
     const { siblings, index } = getSiblings(tab.tree, nodeId);
     return { current: index + 1, total: siblings.length };
+  }
+
+  function isTabClean(tab: TabState): boolean {
+    if (tab.tree.current_path.length > 0) return false;
+    if (tab.input_text === "") return true;
+    return tab.pristine_input !== null && tab.input_text === tab.pristine_input;
+  }
+
+  function skillInputPrefix(skillId: string): string {
+    return skillId ? `/${skillId} ` : "";
+  }
+
+  function openForSkill(skillId: string, skillName: string): void {
+    const tab = getTab(activeTabId);
+    const prefix = skillInputPrefix(skillId);
+
+    if (tab && isTabClean(tab)) {
+      tab.input_text = prefix;
+      tab.pristine_input = prefix || null;
+      tab.tab_name = skillName || "Chat";
+    } else {
+      const newTab = createTabState(skillName || `Chat ${tabs.length + 1}`);
+      newTab.input_text = prefix;
+      newTab.pristine_input = prefix || null;
+      tabs.push(newTab);
+      activeTabId = newTab.tab_id;
+    }
+  }
+
+  function setPristineInput(text: string): void {
+    const tab = getTab(activeTabId);
+    if (tab) tab.pristine_input = text || null;
   }
 
   function addTab(): void {
@@ -676,6 +712,12 @@ export function createConversationStore(
 
   async function restoreFromHistory(entryId: string, lastInteractionOnly?: boolean): Promise<void> {
     try {
+      const existing = tabs.find((t) => t.history_entry_id === entryId);
+      if (existing) {
+        activeTabId = existing.tab_id;
+        return;
+      }
+
       const entry = await getHistoryEntry(entryId);
       if (!entry) return;
 
@@ -802,6 +844,8 @@ export function createConversationStore(
     regenerate,
     switchBranch,
     getBranchInfo,
+    openForSkill,
+    setPristineInput,
     addTab,
     closeTab,
     switchTab,

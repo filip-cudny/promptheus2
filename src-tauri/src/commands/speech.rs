@@ -29,6 +29,7 @@ struct AlternativeExecutePayload {
 #[derive(Serialize)]
 pub struct RecordingState {
     is_recording: bool,
+    is_transcribing: bool,
     action_id: Option<String>,
 }
 
@@ -58,16 +59,16 @@ pub async fn toggle_speech_recording(
 
     if !was_recording {
         let _ = app.emit("speech-recording-started", ());
-        let notification_settings = {
-            state.lock().await.config.settings().notifications.clone()
-        };
-        let _ = state.lock().await.notifications.notify(
-            "speech_recording_start",
-            NotificationLevel::Info,
-            "Recording Started",
-            Some("Click Speech to Text again to stop."),
-            &notification_settings,
-        );
+        {
+            let s = state.lock().await;
+            let _ = s.notifications.notify(
+                "speech_recording_start",
+                NotificationLevel::Info,
+                "Recording Started",
+                Some("Click Speech to Text again to stop."),
+                &s.config.settings().notifications,
+            );
+        }
         return Ok(());
     }
 
@@ -76,21 +77,21 @@ pub async fn toggle_speech_recording(
 
     match stop_result {
         Ok((wav_bytes, _sample_rate)) => {
-            let notification_settings = {
-                state.lock().await.config.settings().notifications.clone()
-            };
-            let _ = state.lock().await.notifications.notify(
-                "speech_recording_stop",
-                NotificationLevel::Info,
-                "Processing Audio",
-                Some("Transcribing your speech to text"),
-                &notification_settings,
-            );
-
             let speech_config = {
-                let s = state.lock().await;
+                let mut s = state.lock().await;
+                let _ = s.notifications.notify(
+                    "speech_recording_stop",
+                    NotificationLevel::Info,
+                    "Processing Audio",
+                    Some("Transcribing your speech to text"),
+                    &s.config.settings().notifications,
+                );
+
                 match s.config.settings().speech_to_text_model.clone() {
-                    Some(config) => config,
+                    Some(config) => {
+                        s.speech.set_transcribing(true);
+                        config
+                    }
                     None => {
                         let _ = app.emit("speech-error", SpeechErrorEvent {
                             message: "Speech-to-text model not configured".into(),
@@ -117,6 +118,7 @@ pub async fn toggle_speech_recording(
                         );
 
                         let mut s = state_inner.lock().await;
+                        s.speech.set_transcribing(false);
                         let (pending_id, pending_name) = s.speech.take_pending_prompt();
 
                         if let Some(prompt_id) = pending_id {
@@ -166,6 +168,7 @@ pub async fn toggle_speech_recording(
                         );
 
                         let mut s = state_inner.lock().await;
+                        s.speech.set_transcribing(false);
                         let had_pending = s.speech.take_pending_prompt().0.is_some();
 
                         let title = if had_pending {
@@ -198,6 +201,7 @@ pub async fn toggle_speech_recording(
                         );
 
                         let mut s = state_inner.lock().await;
+                        s.speech.set_transcribing(false);
                         s.speech.set_pending_prompt(None, None);
 
                         let notification_settings = s.config.settings().notifications.clone();
@@ -228,6 +232,7 @@ pub async fn get_recording_state(
     let s = state.lock().await;
     Ok(RecordingState {
         is_recording: s.speech.is_recording(),
+        is_transcribing: s.speech.is_transcribing(),
         action_id: s.speech.recording_action_id().map(String::from),
     })
 }

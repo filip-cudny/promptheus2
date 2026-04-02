@@ -19,6 +19,7 @@ let _items = $state<MenuItem[]>([]);
 let _selectedIndex = $state(-1);
 let _visible = $state(false);
 let _isRecording = $state(false);
+let _isTranscribing = $state(false);
 let _suppressClose = $state(false);
 let _recordingPromptId = $state<string | null>(null);
 let _openTrigger = $state(0);
@@ -107,15 +108,25 @@ function applyItemStates(items: MenuItem[]): MenuItem[] {
       item.item_type === "prompt" ? { ...item, enabled: false } : item,
     );
   }
+  if (_isTranscribing) {
+    return items.map((item) =>
+      item.item_type === "prompt" || item.item_type === "speech"
+        ? { ...item, enabled: false }
+        : item,
+    );
+  }
   return items;
 }
 
 async function fetchRecordingState(): Promise<void> {
   try {
-    const state = await invoke<{ is_recording: boolean; action_id: string | null }>(
-      "get_recording_state",
-    );
+    const state = await invoke<{
+      is_recording: boolean;
+      is_transcribing: boolean;
+      action_id: string | null;
+    }>("get_recording_state");
     _isRecording = state.is_recording;
+    _isTranscribing = state.is_transcribing;
     _recordingPromptId = state.action_id;
   } catch (e) {
     error("Failed to fetch recording state: " + e);
@@ -124,6 +135,7 @@ async function fetchRecordingState(): Promise<void> {
 
 function clearRecordingState() {
   _isRecording = false;
+  _isTranscribing = false;
   _recordingPromptId = null;
 }
 
@@ -418,7 +430,9 @@ async function init() {
     refreshItems();
   });
   unlistenRecordingStopped = await listen("speech-recording-stopped", () => {
-    clearRecordingState();
+    _isRecording = false;
+    _recordingPromptId = null;
+    _isTranscribing = true;
     refreshItems();
   });
   unlistenTranscriptionComplete = await listen("speech-transcription-complete", () => {

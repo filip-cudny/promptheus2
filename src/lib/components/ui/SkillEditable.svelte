@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
   import { highlightSkills } from "$lib/utils/skillHighlight";
   import type { SkillSummary } from "$lib/types";
@@ -37,13 +36,11 @@
     }
   });
 
-  onMount(() => {
-    if (text && editable) {
-      const offset = saveCursorOffset();
-      lastSkillPattern = "";
-      editable.innerHTML = buildHighlightedHtml(text);
-      restoreCursorOffset(offset);
-    }
+  $effect(() => {
+    if (!editable || !text) return;
+    const _nameSet = skillsStore.nameSet;
+    lastSkillPattern = "";
+    applyHighlighting();
   });
 
   export function focus() {
@@ -211,10 +208,7 @@
     const cursorOffset = saveCursorOffset();
     const before = text.slice(0, slashStart);
     const after = text.slice(cursorOffset);
-    const newText = `${before}/${skill.name} ${after}`;
-    text = newText;
-    lastSkillPattern = "";
-    editable.innerHTML = buildHighlightedHtml(newText);
+    setTextAndHighlight(`${before}/${skill.name} ${after}`);
 
     const newOffset = slashStart + skill.name.length + 2;
     restoreCursorOffset(newOffset);

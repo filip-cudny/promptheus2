@@ -19,17 +19,13 @@ pub async fn open_prompt_dialog(
     initial_input: Option<String>,
     auto_send_input: Option<bool>,
 ) -> Result<(), String> {
-    let sanitized_id: String = prompt_id
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '-' })
-        .collect();
-    let label = format!("prompt-dialog-{sanitized_id}");
+    let label = "prompt-dialog";
 
-    if let Some(existing) = app.get_webview_window(&label) {
+    if let Some(existing) = app.get_webview_window(label) {
         existing.set_focus().map_err(|e| e.to_string())?;
         if let Some(entry_id) = history_entry_id {
             app.emit_to(
-                &label,
+                label,
                 "restore-history",
                 serde_json::json!({
                     "entry_id": entry_id,
@@ -37,14 +33,23 @@ pub async fn open_prompt_dialog(
                 }),
             )
             .map_err(|e| e.to_string())?;
-        }
-        if let Some(input) = &initial_input {
+        } else if let Some(input) = &initial_input {
             app.emit_to(
-                &label,
+                label,
                 "voice-input",
                 serde_json::json!({
                     "text": input,
                     "auto_send": auto_send_input.unwrap_or(false),
+                }),
+            )
+            .map_err(|e| e.to_string())?;
+        } else {
+            app.emit_to(
+                label,
+                "open-for-skill",
+                serde_json::json!({
+                    "prompt_id": prompt_id,
+                    "prompt_name": prompt_name,
                 }),
             )
             .map_err(|e| e.to_string())?;
@@ -80,10 +85,10 @@ pub async fn open_prompt_dialog(
 
     let mut builder = tauri::WebviewWindowBuilder::new(
         &app,
-        &label,
+        label,
         tauri::WebviewUrl::App(url.into()),
     )
-    .title(format!("Message to: {prompt_name}"))
+    .title("Promptheus — chat")
     .inner_size(width, height)
     .resizable(true)
     .decorations(true);
@@ -113,14 +118,7 @@ pub async fn open_prompt_dialog(
 }
 
 fn save_geometry(app: &tauri::AppHandle, geometry_key: &str) {
-    let windows: Vec<_> = app
-        .webview_windows()
-        .into_iter()
-        .filter(|(label, _)| label.starts_with("prompt-dialog-"))
-        .map(|(_, win)| win)
-        .collect();
-
-    let Some(win) = windows.first() else {
+    let Some(win) = app.get_webview_window("prompt-dialog") else {
         return;
     };
 

@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { X, MessageSquare } from "lucide-svelte";
+  import { X, MessageSquare, MessagesSquare } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import type { TabState } from "$lib/types";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
 
   let {
@@ -25,6 +26,36 @@
     store.closeTab(tabId);
   }
 
+  function tabTurnCount(tab: TabState): number {
+    const path = tab.tree.current_path;
+    let count = 0;
+    for (const nodeId of path) {
+      const node = tab.tree.nodes.get(nodeId);
+      if (node?.role === "user") count++;
+    }
+    return count;
+  }
+
+  function tabTimestamp(tab: TabState): string | null {
+    const path = tab.tree.current_path;
+    if (path.length === 0) return null;
+    const lastNode = tab.tree.nodes.get(path[path.length - 1]);
+    if (!lastNode) return null;
+    return formatTimestamp(lastNode.timestamp);
+  }
+
+  function formatTimestamp(raw: string): string {
+    const date = new Date(raw);
+    if (isNaN(date.getTime())) return raw;
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMin = Math.floor(diffMs / 60000);
+    if (diffMin < 1) return "Just now";
+    if (diffMin < 60) return `${diffMin}m ago`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
 </script>
 
 {#if open}
@@ -41,15 +72,28 @@
   </div>
 
   <div class="tab-list">
-    {#each store.tabs as tab (tab.tab_id)}
+    {#each [...store.tabs].reverse() as tab (tab.tab_id)}
+      {@const turns = tabTurnCount(tab)}
+      {@const ts = tabTimestamp(tab)}
       <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
       <div
         class="tab-item"
         class:active={tab.tab_id === store.activeTabId}
         onclick={() => handleTabClick(tab.tab_id)}
       >
-        <MessageSquare size={ICON_SIZE.sm} />
-        <span class="tab-name">{tab.tab_name}</span>
+        {#if turns > 1}
+          <MessagesSquare size={ICON_SIZE.sm} />
+        {:else}
+          <MessageSquare size={ICON_SIZE.sm} />
+        {/if}
+        <div class="tab-body">
+          <span class="tab-name">{tab.tab_name}</span>
+          {#if ts}
+            <span class="tab-meta">
+              {ts}{#if turns > 0}&nbsp;&middot;&nbsp;{turns} {turns === 1 ? "turn" : "turns"}{/if}
+            </span>
+          {/if}
+        </div>
         {#if showCloseButtons}
           <button
             class="tab-close"
@@ -146,15 +190,13 @@
 
   .tab-item {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 8px;
     padding: 8px 10px;
     border-radius: 6px;
     color: #aaa;
     font-size: 13px;
     cursor: pointer;
-    white-space: nowrap;
-    overflow: hidden;
     flex-shrink: 0;
   }
 
@@ -169,10 +211,24 @@
     font-weight: 600;
   }
 
-  .tab-name {
+  .tab-body {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .tab-name {
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tab-meta {
+    font-size: 11px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.3);
   }
 
   .tab-close {
@@ -199,5 +255,4 @@
     background: rgba(255, 255, 255, 0.12);
     color: #e0e0e0;
   }
-
 </style>

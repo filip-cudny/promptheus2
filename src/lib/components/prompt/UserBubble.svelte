@@ -8,6 +8,7 @@
   import { Trash2, Pencil, Copy, Check } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { highlightSkills } from "$lib/utils/skillHighlight";
+  import { isSkillXml, extractSkillDisplayText } from "$lib/utils/skillDisplay";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
 
   let {
@@ -33,7 +34,10 @@
   }
 
   function formatUserContent(content: string): string {
-    return highlightSkills(content, isKnownSkill, "skill-badge", "\n");
+    const displayContent = isSkillXml(content)
+      ? extractSkillDisplayText(content)
+      : content;
+    return highlightSkills(displayContent, isKnownSkill, "skill-badge", "\n");
   }
 
   let collapsed = $state(false);
@@ -44,12 +48,14 @@
   function toggleEditMode() {
     editMode = !editMode;
     if (editMode) {
-      editText = node.content;
+      editText = isSkillXml(node.content)
+        ? extractSkillDisplayText(node.content)
+        : node.content;
       requestAnimationFrame(() => {
         if (skillEditable) {
-          skillEditable.setTextAndHighlight(node.content);
+          skillEditable.setTextAndHighlight(editText);
           skillEditable.focus();
-          skillEditable.restoreCursor(node.content.length);
+          skillEditable.restoreCursor(editText.length);
         }
       });
     }
@@ -68,7 +74,10 @@
   }
 
   async function copyContent() {
-    await navigator.clipboard.writeText(node.content);
+    const displayText = isSkillXml(node.content)
+      ? extractSkillDisplayText(node.content)
+      : node.content;
+    await navigator.clipboard.writeText(displayText);
   }
 </script>
 

@@ -13,10 +13,8 @@ pub async fn complete(
     model_id: String,
     messages: Vec<ProcessedMessage>,
 ) -> Result<String, String> {
-    let state = state.lock().await;
-    state
-        .ai
-        .complete(&model_id, messages)
+    let ai = state.lock().await.ai.clone();
+    ai.complete(&model_id, messages)
         .await
         .map_err(|e| e.to_string())
 }
@@ -28,14 +26,11 @@ pub async fn complete_stream(
     messages: Vec<ProcessedMessage>,
     on_event: Channel<StreamEvent>,
 ) -> Result<(), String> {
-    let mut stream = {
-        let state = state.lock().await;
-        state
-            .ai
-            .complete_stream(&model_id, messages)
-            .await
-            .map_err(|e| e.to_string())?
-    };
+    let ai = state.lock().await.ai.clone();
+    let mut stream = ai
+        .complete_stream(&model_id, messages)
+        .await
+        .map_err(|e| e.to_string())?;
 
     let mut full_text = String::new();
 

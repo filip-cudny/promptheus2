@@ -132,6 +132,8 @@
   }
 
   const MENU_WIDTH = 320;
+  let resizeGeneration = 0;
+  let lastShownTrigger = 0;
 
   function getPromptsSectionOffset(): number {
     if (!menuEl) return 0;
@@ -141,8 +143,10 @@
   }
 
   async function resizeAndPositionWindow() {
+    const gen = ++resizeGeneration;
     await tick();
-    if (!menuEl) return;
+    if (gen !== resizeGeneration) return;
+    if (!menuEl || !isVisible()) return;
 
     const height = menuEl.scrollHeight + 2;
     const win = getCurrentWebviewWindow();
@@ -164,14 +168,30 @@
     hoverEnabled = false;
     suppressClose();
     await win.hide();
+    if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
     await win.setSize(new LogicalSize(MENU_WIDTH, height));
+    if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
     if (wa) {
       await win.setPosition(new LogicalPosition(x, y));
+      if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
     }
     await win.show();
+    if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
     await invoke("focus_context_menu");
     resumeClose();
+    lastShownTrigger = getOpenTrigger();
     logDebug(`[ctx-menu] opened at (${x}, ${y}), size ${MENU_WIDTH}x${height}`);
+  }
+
+  async function resizeWindow() {
+    if (lastShownTrigger !== getOpenTrigger()) return;
+    const gen = ++resizeGeneration;
+    await tick();
+    if (gen !== resizeGeneration) return;
+    if (!menuEl || !isVisible()) return;
+    const height = menuEl.scrollHeight + 2;
+    const win = getCurrentWebviewWindow();
+    await win.setSize(new LogicalSize(MENU_WIDTH, height));
   }
 
   function handleMouseMove() {
@@ -179,10 +199,17 @@
   }
 
   $effect(() => {
-    void expandedDescriptionId;
     void getOpenTrigger();
     if (menuVisible && menuItems.length > 0) {
       resizeAndPositionWindow();
+    }
+  });
+
+  $effect(() => {
+    void expandedDescriptionId;
+    void menuItems;
+    if (menuVisible && menuItems.length > 0) {
+      resizeWindow();
     }
   });
 
@@ -336,8 +363,6 @@
               {#if item.tooltip}
                 <button
                   class="action-btn info-btn"
-                  class:hidden-placeholder={recordingThis}
-                  disabled={recordingThis}
                   onclick={(e) => { e.stopPropagation(); expandedDescriptionId = expandedDescriptionId === item.id ? "" : item.id; }}
                 >
                   <Info size={ICON_SIZE.sm} />
@@ -359,8 +384,6 @@
               </button>
               <button
                 class="action-btn dialog-btn"
-                class:hidden-placeholder={recordingThis}
-                disabled={recordingThis}
                 title="Open dialog"
                 onclick={() => openDialogForItem(globalIndex)}
               >

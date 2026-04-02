@@ -4,6 +4,7 @@ pub mod sse;
 
 use std::collections::HashMap;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use futures::Stream;
 
@@ -46,9 +47,14 @@ struct ProviderEntry {
     parameters: ModelParameters,
 }
 
-pub struct AiService {
+struct AiServiceInner {
     providers: HashMap<String, ProviderEntry>,
     unavailable_models: HashMap<String, String>,
+}
+
+#[derive(Clone)]
+pub struct AiService {
+    inner: Arc<AiServiceInner>,
 }
 
 impl AiService {
@@ -90,8 +96,10 @@ impl AiService {
         }
 
         Self {
-            providers,
-            unavailable_models,
+            inner: Arc::new(AiServiceInner {
+                providers,
+                unavailable_models,
+            }),
         }
     }
 
@@ -124,22 +132,23 @@ impl AiService {
     }
 
     pub fn has_model(&self, model_id: &str) -> bool {
-        self.providers.contains_key(model_id)
+        self.inner.providers.contains_key(model_id)
     }
 
     pub fn get_available_models(&self) -> Vec<String> {
-        self.providers.keys().cloned().collect()
+        self.inner.providers.keys().cloned().collect()
     }
 
     pub fn get_unavailable_models(&self) -> &HashMap<String, String> {
-        &self.unavailable_models
+        &self.inner.unavailable_models
     }
 
     fn get_provider(&self, model_id: &str) -> Result<&ProviderEntry, AiError> {
-        if let Some(reason) = self.unavailable_models.get(model_id) {
+        if let Some(reason) = self.inner.unavailable_models.get(model_id) {
             return Err(AiError::ModelUnavailable(reason.clone()));
         }
-        self.providers
+        self.inner
+            .providers
             .get(model_id)
             .ok_or_else(|| AiError::ModelNotFound(model_id.to_string()))
     }

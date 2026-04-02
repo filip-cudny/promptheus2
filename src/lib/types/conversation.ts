@@ -40,4 +40,5 @@ export interface TabState {
   streamed_content: string;
   execution_id: string | null;
   history_entry_id: string | null;
+  pristine_input: string | null;
 }

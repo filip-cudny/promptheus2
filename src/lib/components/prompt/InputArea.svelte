@@ -84,8 +84,8 @@
 
   let unlistenTextUpdate: (() => void) | null = null;
 
-  function onKeyDown(e: KeyboardEvent) { if (e.key === "Shift") shiftHeld = true; }
-  function onKeyUp(e: KeyboardEvent) { if (e.key === "Shift") shiftHeld = false; }
+  function onKeyDown(e: KeyboardEvent) { shiftHeld = e.shiftKey; }
+  function onKeyUp(e: KeyboardEvent) { shiftHeld = e.shiftKey; }
 
   onMount(async () => {
     skillEditable?.focus();

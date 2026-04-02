@@ -34,6 +34,7 @@ pub enum SpeechError {
 
 pub struct SpeechService {
     is_recording: bool,
+    is_transcribing: bool,
     recording_action_id: Option<String>,
     pending_prompt_id: Option<String>,
     pending_prompt_name: Option<String>,
@@ -46,6 +47,7 @@ impl SpeechService {
     pub fn new() -> Self {
         Self {
             is_recording: false,
+            is_transcribing: false,
             recording_action_id: None,
             pending_prompt_id: None,
             pending_prompt_name: None,
@@ -137,6 +139,14 @@ impl SpeechService {
         self.is_recording
     }
 
+    pub fn is_transcribing(&self) -> bool {
+        self.is_transcribing
+    }
+
+    pub fn set_transcribing(&mut self, value: bool) {
+        self.is_transcribing = value;
+    }
+
     pub fn recording_action_id(&self) -> Option<&str> {
         self.recording_action_id.as_deref()
     }
@@ -178,7 +188,13 @@ pub async fn transcribe(
         .part("file", file_part)
         .text("model", config.model.clone());
 
-    let response = reqwest::Client::new()
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| SpeechError::TranscriptionFailed(e.to_string()))?;
+
+    let response = client
         .post(&url)
         .header("Authorization", format!("Bearer {api_key}"))
         .multipart(form)
