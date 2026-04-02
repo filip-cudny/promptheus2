@@ -75,8 +75,13 @@ pub async fn add_conversation_entry(
     nodes: Vec<SerializedConversationNode>,
     root_node_id: Option<String>,
     current_path: Vec<String>,
+    tab_id: Option<String>,
 ) -> Result<String, String> {
     let mut state = state.lock().await;
+    let resolved_context_section = tab_id
+        .as_deref()
+        .and_then(|id| state.conversation_context.get(id))
+        .map(|s| s.to_string());
     let id = state.history.add_conversation_entry(
         &turns,
         context_text,
@@ -89,6 +94,7 @@ pub async fn add_conversation_entry(
         root_node_id,
         current_path,
         false,
+        resolved_context_section,
     );
     emit_history_changed(&app)?;
     Ok(id)

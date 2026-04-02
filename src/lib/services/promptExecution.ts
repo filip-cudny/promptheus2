@@ -98,6 +98,13 @@ export async function releaseConversationContext(
   return invoke("release_conversation_context", { tabId });
 }
 
+export async function seedConversationContext(
+  tabId: string,
+  resolvedContextSection: string,
+): Promise<void> {
+  return invoke("seed_conversation_context", { tabId, resolvedContextSection });
+}
+
 export async function generateConversationTitle(
   userMessage: string,
 ): Promise<string> {

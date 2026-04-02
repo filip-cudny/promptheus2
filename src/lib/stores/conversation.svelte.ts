@@ -5,6 +5,8 @@ import {
   executeConversationTurn,
   generateConversationTitle,
   getSystemPrompt,
+  releaseConversationContext,
+  seedConversationContext,
   type ExecutionCallbacks,
 } from "$lib/services/promptExecution";
 import {
@@ -232,6 +234,31 @@ function serializeTurns(pairs: MessagePair[]): SerializedConversationTurn[] {
   }));
 }
 
+function prependToLastUserMessage(
+  messages: ProcessedMessage[],
+  prefix: string,
+): void {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role !== "user") continue;
+
+    if (typeof msg.content === "string") {
+      messages[i] = { ...msg, content: `${prefix}\n\n${msg.content}` };
+    } else if (Array.isArray(msg.content)) {
+      const lastTextIdx = msg.content.findLastIndex(
+        (p: { type: string }) => p.type === "text",
+      );
+      if (lastTextIdx !== -1) {
+        const parts = [...msg.content];
+        const part = parts[lastTextIdx] as { type: "text"; text: string };
+        parts[lastTextIdx] = { type: "text", text: `${prefix}\n\n${part.text}` };
+        messages[i] = { ...msg, content: parts };
+      }
+    }
+    break;
+  }
+}
+
 export function createConversationStore(
   promptId: string,
   promptName: string,
@@ -391,10 +418,14 @@ export function createConversationStore(
     let resultText = "";
 
     try {
-      const systemMessages = await getSystemPrompt(
+      const { messages: systemMessages, time_update } = await getSystemPrompt(
         tab.context_text || undefined,
+        tab.tab_id,
       );
       const treeMessages = buildMessagesFromTree(tab.tree, tab.context_images);
+      if (time_update) {
+        prependToLastUserMessage(treeMessages, time_update);
+      }
       const messages = [...systemMessages, ...treeMessages];
 
       const callbacks: ExecutionCallbacks = {
@@ -485,10 +516,14 @@ export function createConversationStore(
     let regenerateSuccess = false;
 
     try {
-      const systemMessages = await getSystemPrompt(
+      const { messages: systemMessages, time_update } = await getSystemPrompt(
         tab.context_text || undefined,
+        tab.tab_id,
       );
       const treeMessages = buildMessagesFromTree(tab.tree, tab.context_images);
+      if (time_update) {
+        prependToLastUserMessage(treeMessages, time_update);
+      }
       const messages = [...systemMessages, ...treeMessages];
 
       const callbacks: ExecutionCallbacks = {
@@ -700,6 +735,7 @@ export function createConversationStore(
           nodes,
           rootNodeId: tab.tree.root_node_id,
           currentPath: tab.tree.current_path,
+          tabId: tab.tab_id,
         });
         tab.history_entry_id = entryId;
         if (!/^Chat \d+$/.test(tab.tab_name)) {
@@ -788,12 +824,22 @@ export function createConversationStore(
       newTab.tree = restoredTree;
       tabs.push(newTab);
       activeTabId = newTab.tab_id;
+
+      if (entry.conversation_data?.resolved_context_section) {
+        seedConversationContext(
+          newTab.tab_id,
+          entry.conversation_data.resolved_context_section,
+        ).catch(() => {});
+      }
     } catch (e) {
       logError("Failed to restore from history: " + e);
     }
   }
 
   function destroy(): void {
+    for (const tab of tabs) {
+      releaseConversationContext(tab.tab_id).catch(() => {});
+    }
     tabs = [];
   }
 

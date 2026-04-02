@@ -41,6 +41,7 @@ export async function addConversationEntry(params: {
   nodes: SerializedConversationNode[];
   rootNodeId: string | null;
   currentPath: string[];
+  tabId: string | null;
 }): Promise<string> {
   return invoke("add_conversation_entry", params);
 }

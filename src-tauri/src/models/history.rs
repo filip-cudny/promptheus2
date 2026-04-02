@@ -50,6 +50,8 @@ pub struct ConversationHistoryData {
     pub root_node_id: Option<String>,
     #[serde(default)]
     pub current_path: Vec<String>,
+    #[serde(default)]
+    pub resolved_context_section: Option<String>,
 }
 
 fn default_true() -> bool {

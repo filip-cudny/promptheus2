@@ -30,6 +30,7 @@ export interface ConversationHistoryData {
   nodes: SerializedConversationNode[];
   root_node_id: string | null;
   current_path: string[];
+  resolved_context_section: string | null;
 }
 
 export interface LastInteractionData {

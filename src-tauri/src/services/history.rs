@@ -70,6 +70,7 @@ impl HistoryService {
         root_node_id: Option<String>,
         current_path: Vec<String>,
         quick_action: bool,
+        resolved_context_section: Option<String>,
     ) -> String {
         let now = Self::now_timestamp();
         let id = Self::generate_id();
@@ -86,6 +87,7 @@ impl HistoryService {
             nodes,
             root_node_id,
             current_path,
+            resolved_context_section,
         };
 
         let entry = HistoryEntry {

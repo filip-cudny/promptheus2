@@ -382,6 +382,7 @@ pub async fn execute_skill(
                 Some(user_node_id.clone()),
                 vec![user_node_id, assistant_node_id],
                 true,
+                None,
             );
             let _ = app.emit("history-changed", ());
 
@@ -606,5 +607,18 @@ pub async fn release_conversation_context(
 ) -> Result<(), String> {
     let mut state = state.lock().await;
     state.conversation_context.remove(&tab_id);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn seed_conversation_context(
+    state: State<'_, Mutex<AppState>>,
+    tab_id: String,
+    resolved_context_section: String,
+) -> Result<(), String> {
+    let mut state = state.lock().await;
+    if !state.conversation_context.has(&tab_id) {
+        state.conversation_context.insert(tab_id, resolved_context_section);
+    }
     Ok(())
 }

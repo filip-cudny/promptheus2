@@ -530,6 +530,7 @@ pub fn run() {
             commands::prompt_execution::get_system_prompt,
             commands::prompt_execution::resolve_context_section,
             commands::prompt_execution::release_conversation_context,
+            commands::prompt_execution::seed_conversation_context,
             commands::prompt_execution::generate_conversation_title,
             commands::prompt_dialog::open_prompt_dialog,
             commands::skills::list_skills,
