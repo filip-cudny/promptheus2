@@ -477,6 +477,7 @@ mod tests {
             None,
             vec![],
             false,
+            None,
         );
 
         let updated_turns = vec![
@@ -553,6 +554,7 @@ mod tests {
             None,
             vec![],
             false,
+            None,
         );
 
         let entry = svc.get_entry_by_id(&id).unwrap();
@@ -596,6 +598,7 @@ mod tests {
             Some("root".into()),
             vec!["root".into()],
             false,
+            None,
         );
 
         let conv = svc.get_conversation_data(&id).unwrap();

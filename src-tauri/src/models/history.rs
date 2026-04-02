@@ -166,6 +166,7 @@ mod tests {
                 ],
                 root_node_id: Some("node-root".into()),
                 current_path: vec!["node-root".into(), "node-reply".into()],
+                resolved_context_section: None,
             }),
             created_at: Some("2026-01-01T12:00:00Z".into()),
             updated_at: Some("2026-01-01T12:00:01Z".into()),
