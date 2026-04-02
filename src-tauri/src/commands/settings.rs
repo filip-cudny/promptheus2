@@ -34,6 +34,7 @@ pub struct AppState {
     pub speech: SpeechService,
     pub ui_state: UiStateService,
     pub conversation_context: ConversationContextCache,
+    pub active_app: String,
 }
 
 fn emit_changed(app: &AppHandle) -> Result<(), String> {

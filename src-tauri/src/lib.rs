@@ -13,6 +13,110 @@ mod traits;
 use commands::settings::AppState;
 use services::ai::AiService;
 use services::hotkeys::ShortcutActionMap;
+
+#[cfg(target_os = "macos")]
+fn detect_frontmost_app() -> String {
+    let script =
+        r#"tell application "System Events" to return name of first application process whose frontmost is true"#;
+    std::process::Command::new("osascript")
+        .args(["-e", script])
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                String::from_utf8(o.stdout)
+                    .ok()
+                    .map(|s| s.trim().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default()
+}
+
+#[cfg(target_os = "linux")]
+fn detect_frontmost_app() -> String {
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
+        return detect_frontmost_app_wayland();
+    }
+    detect_frontmost_app_x11()
+}
+
+#[cfg(target_os = "linux")]
+fn detect_frontmost_app_x11() -> String {
+    let window_id = std::process::Command::new("xdotool")
+        .arg("getactivewindow")
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+
+    if window_id.is_empty() {
+        return String::new();
+    }
+
+    let pid = std::process::Command::new("xdotool")
+        .args(["getwindowpid", &window_id])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
+
+    if !pid.is_empty() {
+        if let Ok(comm) = std::fs::read_to_string(format!("/proc/{pid}/comm")) {
+            let name = comm.trim().to_string();
+            if !name.is_empty() {
+                return name;
+            }
+        }
+    }
+
+    std::process::Command::new("xdotool")
+        .args(["getwindowname", &window_id])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
+}
+
+#[cfg(target_os = "linux")]
+fn detect_frontmost_app_wayland() -> String {
+    let output = std::process::Command::new("gdbus")
+        .args([
+            "call",
+            "--session",
+            "--dest",
+            "org.gnome.Shell",
+            "--object-path",
+            "/org/gnome/Shell",
+            "--method",
+            "org.gnome.Shell.Eval",
+            "global.display.focus_window ? global.display.focus_window.get_wm_class() : ''",
+        ])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .unwrap_or_default();
+
+    output
+        .split('\'')
+        .nth(1)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_default()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn detect_frontmost_app() -> String {
+    String::new()
+}
 use services::clipboard::ClipboardService;
 use services::config::ConfigService;
 use services::context::{ContextManagerService, ContextMenuProvider};
@@ -125,8 +229,13 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .tooltip("Promptheus")
         .on_menu_event(|app: &tauri::AppHandle, event: tauri::menu::MenuEvent| match event.id().as_ref() {
             "show-menu" => {
+                let frontmost = detect_frontmost_app();
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
+                    {
+                        let state = app.state::<Mutex<AppState>>();
+                        state.lock().await.active_app = frontmost;
+                    }
                     let _ = commands::menu::show_context_menu_window(app).await;
                 });
             }
@@ -267,6 +376,11 @@ async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
             execute_context_action(app, action).await;
         }
         "open_context_menu" => {
+            let frontmost = detect_frontmost_app();
+            {
+                let state = app.state::<Mutex<AppState>>();
+                state.lock().await.active_app = frontmost;
+            }
             if let Err(e) = commands::menu::show_context_menu_window(app.clone()).await {
                 log::error!("open_context_menu failed: {e}");
             }
@@ -476,6 +590,7 @@ pub fn run() {
                 speech: SpeechService::new(),
                 ui_state: ui_state_service,
                 conversation_context: crate::services::conversation_context::ConversationContextCache::new(),
+                active_app: String::new(),
             }));
             Ok(())
         })

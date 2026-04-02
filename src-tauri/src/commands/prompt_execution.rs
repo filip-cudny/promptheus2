@@ -257,7 +257,7 @@ pub async fn execute_skill(
             })?,
         };
 
-        let system_prompt = build_system_prompt_base(&state.config, None);
+        let system_prompt = build_system_prompt_base(&state.config, None, &state.active_app);
         let messages = skill_execution::prepare_skill_messages(
             &system_prompt,
             &skill,
@@ -448,17 +448,18 @@ pub async fn get_system_prompt(
     let resolved_context_section = match &tab_id {
         Some(id) => {
             if !state.conversation_context.has(id) {
-                let resolved = resolve_context_section_template(&state.config);
+                let resolved = resolve_context_section_template(&state.config, &state.active_app);
                 state.conversation_context.insert(id.clone(), resolved);
             }
             state.conversation_context.get(id).unwrap().to_string()
         }
-        None => resolve_context_section_template(&state.config),
+        None => resolve_context_section_template(&state.config, &state.active_app),
     };
 
     let base_prompt = build_system_prompt_base(
         &state.config,
         Some(&resolved_context_section),
+        &state.active_app,
     );
     let system_content = match &context_text {
         Some(text) if !text.is_empty() => {
@@ -501,7 +502,7 @@ pub async fn process_skill_template(
         }
     }
 
-    let system_prompt = build_system_prompt_base(&state.config, None);
+    let system_prompt = build_system_prompt_base(&state.config, None, &state.active_app);
     let messages = skill_execution::prepare_skill_messages(
         &system_prompt,
         &skill,
@@ -561,7 +562,7 @@ pub async fn generate_conversation_title(
     Ok(title.trim().to_string())
 }
 
-fn resolve_context_section_template(config: &ConfigService) -> String {
+fn resolve_context_section_template(config: &ConfigService, active_app: &str) -> String {
     let template = config.context_section_template();
     if template.is_empty() {
         return String::new();
@@ -573,17 +574,17 @@ fn resolve_context_section_template(config: &ConfigService) -> String {
         .replace("{{time}}", &now.format("%H:%M").to_string())
         .replace("{{timezone}}", &now.format("%Z").to_string())
         .replace("{{os}}", std::env::consts::OS)
-        .replace("{{active_app}}", "")
+        .replace("{{active_app}}", active_app)
 }
 
-fn build_system_prompt_base(config: &ConfigService, resolved_context_section: Option<&str>) -> String {
+fn build_system_prompt_base(config: &ConfigService, resolved_context_section: Option<&str>, active_app: &str) -> String {
     let system_prompt = &config.settings().system_prompt;
     let input_format_guide = config.input_format_guide();
     let about_me = config.about_me();
 
     let context_section = resolved_context_section
         .map(|s| s.to_string())
-        .unwrap_or_else(|| resolve_context_section_template(config));
+        .unwrap_or_else(|| resolve_context_section_template(config, active_app));
 
     if context_section.is_empty() {
         format!("{system_prompt}\n\n---\n\n{input_format_guide}\n\n---\n\n{about_me}")
@@ -597,7 +598,7 @@ pub async fn resolve_context_section(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<String, String> {
     let state = state.lock().await;
-    Ok(resolve_context_section_template(&state.config))
+    Ok(resolve_context_section_template(&state.config, &state.active_app))
 }
 
 #[tauri::command]
