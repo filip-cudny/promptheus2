@@ -259,7 +259,7 @@
       {#if section.sectionId === "chat"}
         {@const chatRecording = isRecordingChat()}
         {@const chatDisabled = (isRecording() && !chatRecording) || isExecuting()}
-        <div class="chat-row" role="menuitem">
+        <div class="chat-row" class:selected={chatRecording} role="menuitem" onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}>
           <button
             class="chat-button"
             class:disabled={chatDisabled}
@@ -272,13 +272,12 @@
                 await openPromptDialog("", "Chat");
               }
             }}
-            onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}
           >
             <MessageSquare size={ICON_SIZE.md} />
             <span>Chat</span>
           </button>
           <button
-            class="action-btn mic-btn"
+            class="action-btn mic-btn chat-mic-btn"
             class:disabled={chatDisabled}
             class:shift-accent={shiftHeld && !chatDisabled && !chatRecording}
             title={chatRecording ? "Stop recording" : "Voice input for chat"}
@@ -296,7 +295,7 @@
       {#if section.sectionId === "prompts"}
         <div data-section="prompts-anchor"></div>
       {/if}
-      {#each section.items as { item, globalIndex }}
+      {#each section.sectionId === "chat" ? [] : section.items as { item, globalIndex }}
         {@const contextItems = extractContextItems(item)}
         {@const lastInteractionData = extractLastInteractionData(item)}
         {#if contextItems}
@@ -406,6 +405,15 @@
     align-items: center;
   }
 
+  .chat-row:hover,
+  .chat-row.selected {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .chat-row:active {
+    background: rgba(255, 255, 255, 0.15);
+  }
+
   .chat-button {
     display: flex;
     align-items: center;
@@ -428,12 +436,8 @@
     cursor: default;
   }
 
-  .chat-button:hover:not(.disabled) {
-    background: rgba(255, 255, 255, 0.1);
-  }
-
-  .chat-button:active {
-    background: rgba(255, 255, 255, 0.15);
+  .chat-mic-btn {
+    margin-right: 30px;
   }
 
   .separator {
