@@ -4,7 +4,7 @@ import { error } from "@tauri-apps/plugin-log";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { MenuItem } from "$lib/types/menu";
 import { startExecution, isExecuting } from "$lib/stores/execution.svelte";
-import { openPromptDialog } from "$lib/services/promptDialog";
+import { openConversationDialog } from "$lib/services/conversationDialog";
 
 interface WorkArea {
   cursorX: number;
@@ -21,7 +21,7 @@ let _visible = $state(false);
 let _isRecording = $state(false);
 let _isTranscribing = $state(false);
 let _suppressClose = $state(false);
-let _recordingPromptId = $state<string | null>(null);
+let _recordingSkillId = $state<string | null>(null);
 let _openTrigger = $state(0);
 let _workArea: WorkArea | null = null;
 let numberBuffer = "";
@@ -40,12 +40,12 @@ const _navigableItems = $derived(
   _items.filter((item) => item.enabled),
 );
 
-const _allPromptItems = $derived(
-  _items.filter((item) => item.item_type === "prompt"),
+const _allSkillItems = $derived(
+  _items.filter((item) => item.item_type === "skill"),
 );
 
-const _promptItems = $derived(
-  _allPromptItems.filter((item) => item.enabled),
+const _skillItems = $derived(
+  _allSkillItems.filter((item) => item.enabled),
 );
 
 function getItems(): MenuItem[] {
@@ -84,33 +84,33 @@ function resumeClose() {
   _suppressClose = false;
 }
 
-function getRecordingPromptId(): string | null {
-  return _recordingPromptId;
+function getRecordingSkillId(): string | null {
+  return _recordingSkillId;
 }
 
 function applyItemStates(items: MenuItem[]): MenuItem[] {
   if (isExecuting()) {
     return items.map((item) =>
-      item.item_type === "prompt" ? { ...item, enabled: false } : item,
+      item.item_type === "skill" ? { ...item, enabled: false } : item,
     );
   }
   if (_isRecording) {
-    if (_recordingPromptId) {
+    if (_recordingSkillId) {
       return items.map((item) => {
         if (item.item_type === "speech") return { ...item, enabled: false };
-        if (item.item_type !== "prompt") return item;
-        const data = item.data as { prompt_id: string } | null;
-        if (data?.prompt_id === _recordingPromptId) return item;
+        if (item.item_type !== "skill") return item;
+        const data = item.data as { skill_id: string } | null;
+        if (data?.skill_id === _recordingSkillId) return item;
         return { ...item, enabled: false };
       });
     }
     return items.map((item) =>
-      item.item_type === "prompt" ? { ...item, enabled: false } : item,
+      item.item_type === "skill" ? { ...item, enabled: false } : item,
     );
   }
   if (_isTranscribing) {
     return items.map((item) =>
-      item.item_type === "prompt" || item.item_type === "speech"
+      item.item_type === "skill" || item.item_type === "speech"
         ? { ...item, enabled: false }
         : item,
     );
@@ -127,7 +127,7 @@ async function fetchRecordingState(): Promise<void> {
     }>("get_recording_state");
     _isRecording = state.is_recording;
     _isTranscribing = state.is_transcribing;
-    _recordingPromptId = state.action_id;
+    _recordingSkillId = state.action_id;
   } catch (e) {
     error("Failed to fetch recording state: " + e);
   }
@@ -136,7 +136,7 @@ async function fetchRecordingState(): Promise<void> {
 function clearRecordingState() {
   _isRecording = false;
   _isTranscribing = false;
-  _recordingPromptId = null;
+  _recordingSkillId = null;
 }
 
 function getWorkArea(): WorkArea | null {
@@ -178,8 +178,8 @@ function moveSelection(direction: 1 | -1) {
 
   let nextNavIndex: number;
   if (currentNavIndex === -1) {
-    const firstPrompt = _navigableItems.find((item) => item.item_type === "prompt");
-    nextNavIndex = firstPrompt ? _navigableItems.indexOf(firstPrompt) : 0;
+    const firstSkill = _navigableItems.find((item) => item.item_type === "skill");
+    nextNavIndex = firstSkill ? _navigableItems.indexOf(firstSkill) : 0;
   } else {
     nextNavIndex =
       (currentNavIndex + direction + _navigableItems.length) %
@@ -194,11 +194,11 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
   const item = _items[index];
   if (!item) return;
 
-  if (item.item_type === "prompt") {
-    const data = item.data as { prompt_id: string; prompt_name: string } | null;
-    if (!data?.prompt_id) return;
+  if (item.item_type === "skill") {
+    const data = item.data as { skill_id: string; skill_name: string } | null;
+    if (!data?.skill_id) return;
 
-    const isRecordingThis = _isRecording && _recordingPromptId === data.prompt_id;
+    const isRecordingThis = _isRecording && _recordingSkillId === data.skill_id;
     if (!item.enabled && !isRecordingThis) return;
 
     if (isRecordingThis) {
@@ -217,7 +217,7 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
 
     if (shiftPressed) {
       _isRecording = true;
-      _recordingPromptId = data.prompt_id;
+      _recordingSkillId = data.skill_id;
       try {
         await invoke("execute_menu_item", {
           itemId: item.id,
@@ -233,13 +233,13 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
 
     if (!item.enabled) return;
     await closeMenu();
-    startExecution(data.prompt_id);
+    startExecution(data.skill_id);
     return;
   }
 
   if (item.item_type === "speech") {
     if (!item.enabled) return;
-    if (_isRecording && !_recordingPromptId) {
+    if (_isRecording && !_recordingSkillId) {
       clearRecordingState();
       try {
         await invoke("execute_menu_item", { itemId: item.id, shiftPressed: false });
@@ -249,7 +249,7 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
       await closeMenu();
     } else if (!_isRecording) {
       _isRecording = true;
-      _recordingPromptId = null;
+      _recordingSkillId = null;
       try {
         await invoke("execute_menu_item", { itemId: item.id, shiftPressed: false });
       } catch (e) {
@@ -283,11 +283,11 @@ async function executeSelected(shiftPressed: boolean = false) {
 
 async function startAlternativeExecution(index: number) {
   const item = _items[index];
-  if (!item || item.item_type !== "prompt") return;
-  const data = item.data as { prompt_id: string; prompt_name: string } | null;
-  if (!data?.prompt_id) return;
+  if (!item || item.item_type !== "skill") return;
+  const data = item.data as { skill_id: string; skill_name: string } | null;
+  if (!data?.skill_id) return;
 
-  const isRecordingThis = _isRecording && _recordingPromptId === data.prompt_id;
+  const isRecordingThis = _isRecording && _recordingSkillId === data.skill_id;
   if (!item.enabled && !isRecordingThis) return;
 
   if (isRecordingThis) {
@@ -305,7 +305,7 @@ async function startAlternativeExecution(index: number) {
   }
 
   _isRecording = true;
-  _recordingPromptId = data.prompt_id;
+  _recordingSkillId = data.skill_id;
   try {
     await invoke("execute_menu_item", {
       itemId: item.id,
@@ -327,9 +327,9 @@ function handleNumberInput(digit: string, isAlternative: boolean) {
     const num = parseInt(numberBuffer, 10);
     numberBuffer = "";
 
-    if (num >= 1 && num <= _allPromptItems.length) {
-      const targetItem = _allPromptItems[num - 1];
-      if (!targetItem.enabled && !(_isRecording && _recordingPromptId === (targetItem.data as { prompt_id: string } | null)?.prompt_id)) return;
+    if (num >= 1 && num <= _allSkillItems.length) {
+      const targetItem = _allSkillItems[num - 1];
+      if (!targetItem.enabled && !(_isRecording && _recordingSkillId === (targetItem.data as { skill_id: string } | null)?.skill_id)) return;
       const targetIndex = _items.indexOf(targetItem);
       _selectedIndex = targetIndex;
       if (isAlternative) {
@@ -349,7 +349,7 @@ function clearNumberBuffer() {
 const CHAT_RECORDING_ID = "__chat__";
 
 function isRecordingChat(): boolean {
-  return _isRecording && _recordingPromptId === CHAT_RECORDING_ID;
+  return _isRecording && _recordingSkillId === CHAT_RECORDING_ID;
 }
 
 async function toggleChatRecording() {
@@ -368,7 +368,7 @@ async function toggleChatRecording() {
   }
 
   _isRecording = true;
-  _recordingPromptId = CHAT_RECORDING_ID;
+  _recordingSkillId = CHAT_RECORDING_ID;
   try {
     await invoke("execute_menu_item", {
       itemId: CHAT_RECORDING_ID,
@@ -381,12 +381,12 @@ async function toggleChatRecording() {
   await refreshItems();
 }
 
-function getAllPromptItems(): MenuItem[] {
-  return _allPromptItems;
+function getAllSkillItems(): MenuItem[] {
+  return _allSkillItems;
 }
 
-function getPromptItems(): MenuItem[] {
-  return _promptItems;
+function getSkillItems(): MenuItem[] {
+  return _skillItems;
 }
 
 async function refreshItems() {
@@ -431,7 +431,7 @@ async function init() {
   });
   unlistenRecordingStopped = await listen("speech-recording-stopped", () => {
     _isRecording = false;
-    _recordingPromptId = null;
+    _recordingSkillId = null;
     _isTranscribing = true;
     refreshItems();
   });
@@ -481,11 +481,11 @@ function destroy() {
 
 async function openDialogForItem(index: number) {
   const item = _items[index];
-  if (!item || item.item_type !== "prompt") return;
-  const data = item.data as { prompt_id: string; prompt_name: string } | null;
-  if (!data?.prompt_id) return;
+  if (!item || item.item_type !== "skill") return;
+  const data = item.data as { skill_id: string; skill_name: string } | null;
+  if (!data?.skill_id) return;
   await closeMenu();
-  await openPromptDialog(data.prompt_id, data.prompt_name ?? item.label);
+  await openConversationDialog(data.skill_id, data.skill_name ?? item.label);
 }
 
 export {
@@ -494,7 +494,7 @@ export {
   setSelectedIndex,
   isVisible,
   isRecording,
-  getRecordingPromptId,
+  getRecordingSkillId,
   getWorkArea,
   getOpenTrigger,
   openMenu,
@@ -508,8 +508,8 @@ export {
   startAlternativeExecution,
   handleNumberInput,
   clearNumberBuffer,
-  getAllPromptItems,
-  getPromptItems,
+  getAllSkillItems,
+  getSkillItems,
   isRecordingChat,
   toggleChatRecording,
   openDialogForItem,

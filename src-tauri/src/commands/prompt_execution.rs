@@ -383,8 +383,8 @@ pub async fn execute_conversation_from_tree(
     context_text: Option<String>,
     context_images: Vec<ImageData>,
     tab_id: String,
-    prompt_id: Option<String>,
-    prompt_name: Option<String>,
+    skill_id: Option<String>,
+    skill_name: Option<String>,
     on_event: Channel<StreamEvent>,
 ) -> Result<(), String> {
     let start_time = Instant::now();

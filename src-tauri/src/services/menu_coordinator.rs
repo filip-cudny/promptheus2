@@ -44,7 +44,7 @@ impl MenuCoordinator {
 
             let mut section_items = match section_id.as_str() {
                 "chat" => self.build_chat_items(),
-                "prompts" => self.build_prompt_items(),
+                "skills" | "prompts" => self.build_skill_items(),
                 "settings" => self.build_settings_items(config),
                 _ => self.build_provider_items(section_id),
             };
@@ -119,16 +119,16 @@ impl MenuCoordinator {
         }]
     }
 
-    fn build_prompt_items(&self) -> Vec<MenuItem> {
-        let mut prompt_items = Vec::new();
+    fn build_skill_items(&self) -> Vec<MenuItem> {
+        let mut skill_items = Vec::new();
         for provider in &self.providers {
             if DYNAMIC_PROVIDERS.contains(&provider.provider_name()) {
                 continue;
             }
             let items = provider.get_menu_items();
-            prompt_items.extend(items);
+            skill_items.extend(items);
         }
-        prompt_items
+        skill_items
     }
 
     fn build_settings_items(&self, config: &ConfigService) -> Vec<MenuItem> {
@@ -246,8 +246,8 @@ mod tests {
             vec![make_item("ctx-1", "Context", MenuItemType::Context)],
         )));
         coordinator.add_provider(Box::new(TestProvider::new(
-            "PromptProvider",
-            vec![make_item("p-1", "My Prompt", MenuItemType::Prompt)],
+            "SkillProvider",
+            vec![make_item("p-1", "My Prompt", MenuItemType::Skill)],
         )));
 
         let config = make_config_service();
@@ -259,7 +259,7 @@ mod tests {
             .collect();
 
         assert!(sections.contains(&Some("ContextMenuProvider")));
-        assert!(sections.contains(&Some("prompts")));
+        assert!(sections.contains(&Some("prompts")) || sections.contains(&Some("skills")));
         assert!(sections.contains(&Some("settings")));
     }
 
@@ -272,8 +272,8 @@ mod tests {
             vec![make_item("ctx-1", "Context", MenuItemType::Context)],
         )));
         coordinator.add_provider(Box::new(TestProvider::new(
-            "PromptProvider",
-            vec![make_item("p-1", "Prompt", MenuItemType::Prompt)],
+            "SkillProvider",
+            vec![make_item("p-1", "Prompt", MenuItemType::Skill)],
         )));
 
         let config = make_config_service();
@@ -309,8 +309,8 @@ mod tests {
             vec![],
         )));
         coordinator.add_provider(Box::new(TestProvider::new(
-            "PromptProvider",
-            vec![make_item("p-1", "Prompt", MenuItemType::Prompt)],
+            "SkillProvider",
+            vec![make_item("p-1", "Prompt", MenuItemType::Skill)],
         )));
 
         let config = make_config_service();
@@ -323,7 +323,7 @@ mod tests {
     }
 
     #[test]
-    fn test_prompts_virtual_section_excludes_dynamic() {
+    fn test_skills_virtual_section_excludes_dynamic() {
         let mut coordinator = MenuCoordinator::new();
 
         coordinator.add_provider(Box::new(TestProvider::new(
@@ -339,19 +339,19 @@ mod tests {
             vec![make_item("sp-1", "Speech", MenuItemType::Speech)],
         )));
         coordinator.add_provider(Box::new(TestProvider::new(
-            "PromptProvider",
-            vec![make_item("p-1", "My Prompt", MenuItemType::Prompt)],
+            "SkillProvider",
+            vec![make_item("p-1", "My Prompt", MenuItemType::Skill)],
         )));
 
         let config = make_config_service();
         let items = coordinator.get_menu_items(&config);
 
-        let prompt_section: Vec<&MenuItem> = items
+        let skill_section: Vec<&MenuItem> = items
             .iter()
-            .filter(|i| i.section_id.as_deref() == Some("prompts"))
+            .filter(|i| matches!(i.section_id.as_deref(), Some("skills" | "prompts")))
             .collect();
-        assert_eq!(prompt_section.len(), 1);
-        assert_eq!(prompt_section[0].id, "p-1");
+        assert_eq!(skill_section.len(), 1);
+        assert_eq!(skill_section[0].id, "p-1");
     }
 
     #[test]

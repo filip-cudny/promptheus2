@@ -233,12 +233,9 @@ Orchestrates the full prompt execution pipeline: validate → resolve prompt →
 **State methods**: `is_busy()`, `current_execution_id()`, `start_execution() -> Result<String, ExecutionError>` (generates UUID), `finish_execution()`.
 
 **Resolution methods** (associated functions, take `&ConfigService`):
-- `resolve_prompt(config, prompt_id)` — finds prompt by ID in config settings
 - `resolve_model(config, model_id)` — validates explicit model ID or falls back to `default_model`
 
-**Message preparation**: `prepare_messages(prompt, placeholder, clipboard, context, input_override)` — converts `PromptData.messages` to `Vec<ProcessedMessage>` via `PlaceholderService`. Maps `ClipboardUnavailable` to `ExecutionError::ClipboardError`.
-
-**Error enum**: `ExecutionError` with variants `AlreadyExecuting`, `PromptNotFound(String)`, `ModelNotFound(String)`, `ClipboardError(String)`, `AiError(String)`.
+**Error enum**: `ExecutionError` with variants `AlreadyExecuting`, `ModelNotFound(String)`, `ClipboardError(String)`, `AiError(String)`.
 
 ### Adding a new service
 

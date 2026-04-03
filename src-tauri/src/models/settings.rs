@@ -218,7 +218,7 @@ fn default_code_theme() -> String {
 fn default_menu_section_order() -> Vec<String> {
     vec![
         "chat".to_string(),
-        "prompts".to_string(),
+        "skills".to_string(),
         "speech".to_string(),
         "lastInteraction".to_string(),
         "context".to_string(),

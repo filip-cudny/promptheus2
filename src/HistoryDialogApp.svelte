@@ -3,7 +3,7 @@
   import { ChevronLeft, ChevronRight } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { getHistoryStore } from "$lib/stores/history.svelte";
-  import { openPromptDialog } from "$lib/services/promptDialog";
+  import { openConversationDialog } from "$lib/services/conversationDialog";
   import { getUiState, setUiState } from "$lib/services/uiState";
   import type { HistoryEntry } from "$lib/types";
   import HistoryEntryRow from "$lib/components/history/HistoryEntryRow.svelte";
@@ -40,7 +40,7 @@
   });
 
   async function handleOpen(entry: HistoryEntry) {
-    await openPromptDialog(entry.prompt_id ?? "", entry.title ?? entry.prompt_name ?? "Chat", entry.id);
+    await openConversationDialog(entry.skill_id ?? "", entry.title ?? entry.skill_name ?? "Chat", entry.id);
   }
 
   async function changePageSize(size: number) {

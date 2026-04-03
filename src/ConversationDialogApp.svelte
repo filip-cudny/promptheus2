@@ -16,14 +16,14 @@
   const historyStore = getHistoryStore();
 
   const params = new URLSearchParams(window.location.search);
-  const promptId = params.get("promptId") ?? "";
-  const promptName = params.get("promptName") ?? "Prompt";
+  const skillId = params.get("skillId") ?? "";
+  const skillName = params.get("skillName") ?? "Chat";
   const historyEntryId = params.get("historyEntryId");
   const lastInteractionOnly = params.get("lastInteractionOnly") === "true";
   const initialInput = params.get("initialInput");
   const autoSendInput = params.get("autoSendInput") === "true";
 
-  const store = createConversationStore(promptId, promptName);
+  const store = createConversationStore(skillId, skillName);
 
   let sidebarOpen = $state(false);
   let contextVisible = $state(false);
@@ -48,7 +48,7 @@
     if (currentTab && currentTab.tree.current_path.length > 0) {
       store.addTab();
     }
-    const inputText = promptId ? `/${promptId} ${text}` : text;
+    const inputText = skillId ? `/${skillId} ${text}` : text;
     store.updateInputText(inputText);
     if (autoSend) {
       store.sendMessage();
@@ -63,9 +63,9 @@
       await store.restoreFromHistory(historyEntryId, lastInteractionOnly);
     } else if (initialInput) {
       handleVoiceInput(initialInput, autoSendInput);
-    } else if (promptId) {
-      store.updateInputText(`/${promptId} `);
-      store.setPristineInput(`/${promptId} `);
+    } else if (skillId) {
+      store.updateInputText(`/${skillId} `);
+      store.setPristineInput(`/${skillId} `);
     }
 
     unlistenRestore = await listen<{ entry_id: string; last_interaction_only?: boolean }>(
@@ -79,8 +79,8 @@
       handleVoiceInput(event.payload.text, event.payload.auto_send);
     });
 
-    unlistenOpenForSkill = await listen<{ prompt_id: string; prompt_name: string }>("open-for-skill", (event) => {
-      store.openForSkill(event.payload.prompt_id, event.payload.prompt_name);
+    unlistenOpenForSkill = await listen<{ skill_id: string; skill_name: string }>("open-for-skill", (event) => {
+      store.openForSkill(event.payload.skill_id, event.payload.skill_name);
     });
 
     await autoShowContextIfNeeded();

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum MenuItemType {
-    Prompt,
+    Skill,
     Preset,
     History,
     System,
@@ -48,7 +48,7 @@ mod tests {
 
     #[test]
     fn test_menu_item_type_serialization() {
-        assert_eq!(serde_json::to_string(&MenuItemType::Prompt).unwrap(), "\"prompt\"");
+        assert_eq!(serde_json::to_string(&MenuItemType::Skill).unwrap(), "\"skill\"");
         assert_eq!(
             serde_json::to_string(&MenuItemType::LastInteraction).unwrap(),
             "\"last_interaction\""
@@ -61,12 +61,12 @@ mod tests {
 
     #[test]
     fn test_menu_item_from_minimal_json() {
-        let json = r#"{"id":"item-1","label":"Test","item_type":"prompt"}"#;
+        let json = r#"{"id":"item-1","label":"Test","item_type":"skill"}"#;
         let item: MenuItem = serde_json::from_str(json).unwrap();
 
         assert_eq!(item.id, "item-1");
         assert_eq!(item.label, "Test");
-        assert_eq!(item.item_type, MenuItemType::Prompt);
+        assert_eq!(item.item_type, MenuItemType::Skill);
         assert!(item.enabled);
         assert!(!item.separator_after);
         assert!(item.data.is_none());

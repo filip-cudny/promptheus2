@@ -56,7 +56,6 @@ TypeScript mirrors use `T | null` for `Option<T>` and `unknown` for `serde_json:
 - `Settings` — top-level, one per app
 - `ModelConfig`, `ApiKeySource`, `Provider`, `ModelParameters` — AI model configuration
 - `SpeechToTextModel` — STT model
-- `PromptData`, `PromptMessage` — prompt definitions
 - `KeymapGroup` — OS-specific hotkey bindings (`HashMap<String, String>`)
 - `NotificationSettings`, `NotificationEvents`, `NotificationColors` — notification config
 - `DescriptionGenerator` — auto-description model + prompt

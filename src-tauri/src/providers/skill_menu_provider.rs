@@ -2,11 +2,11 @@ use crate::models::menu::{MenuItem, MenuItemType};
 use crate::models::skill::SkillSummary;
 use crate::traits::MenuItemProvider;
 
-pub struct PromptMenuProvider {
+pub struct SkillMenuProvider {
     skills: Vec<SkillSummary>,
 }
 
-impl PromptMenuProvider {
+impl SkillMenuProvider {
     pub fn new(skills: Vec<SkillSummary>) -> Self {
         Self { skills }
     }
@@ -16,9 +16,9 @@ impl PromptMenuProvider {
     }
 }
 
-impl MenuItemProvider for PromptMenuProvider {
+impl MenuItemProvider for SkillMenuProvider {
     fn provider_name(&self) -> &str {
-        "PromptProvider"
+        "SkillProvider"
     }
 
     fn get_menu_items(&self) -> Vec<MenuItem> {
@@ -27,10 +27,10 @@ impl MenuItemProvider for PromptMenuProvider {
             .map(|skill| MenuItem {
                 id: skill.name.clone(),
                 label: skill.display_name.clone(),
-                item_type: MenuItemType::Prompt,
+                item_type: MenuItemType::Skill,
                 data: Some(serde_json::json!({
-                    "prompt_id": skill.name,
-                    "prompt_name": skill.display_name,
+                    "skill_id": skill.name,
+                    "skill_name": skill.display_name,
                 })),
                 enabled: true,
                 separator_after: false,
@@ -63,8 +63,8 @@ mod tests {
     }
 
     #[test]
-    fn test_get_menu_items_maps_skills() {
-        let provider = PromptMenuProvider::new(vec![
+    fn get_menu_items_maps_skills() {
+        let provider = SkillMenuProvider::new(vec![
             make_skill("summarize", "Summarize"),
             make_skill("translate", "Translate"),
         ]);
@@ -74,23 +74,23 @@ mod tests {
 
         assert_eq!(items[0].id, "summarize");
         assert_eq!(items[0].label, "Summarize");
-        assert_eq!(items[0].item_type, MenuItemType::Prompt);
+        assert_eq!(items[0].item_type, MenuItemType::Skill);
         assert!(items[0].enabled);
 
         let data = items[0].data.as_ref().unwrap();
-        assert_eq!(data["prompt_id"], "summarize");
-        assert_eq!(data["prompt_name"], "Summarize");
+        assert_eq!(data["skill_id"], "summarize");
+        assert_eq!(data["skill_name"], "Summarize");
     }
 
     #[test]
-    fn test_empty_skills() {
-        let provider = PromptMenuProvider::new(Vec::new());
+    fn empty_skills() {
+        let provider = SkillMenuProvider::new(Vec::new());
         assert!(provider.get_menu_items().is_empty());
     }
 
     #[test]
-    fn test_update_skills() {
-        let mut provider = PromptMenuProvider::new(vec![make_skill("p1", "Old")]);
+    fn update_skills() {
+        let mut provider = SkillMenuProvider::new(vec![make_skill("p1", "Old")]);
         assert_eq!(provider.get_menu_items().len(), 1);
 
         provider.update_skills(vec![
@@ -103,8 +103,8 @@ mod tests {
     }
 
     #[test]
-    fn test_provider_name() {
-        let provider = PromptMenuProvider::new(Vec::new());
-        assert_eq!(provider.provider_name(), "PromptProvider");
+    fn provider_name() {
+        let provider = SkillMenuProvider::new(Vec::new());
+        assert_eq!(provider.provider_name(), "SkillProvider");
     }
 }

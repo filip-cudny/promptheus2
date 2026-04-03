@@ -33,7 +33,7 @@
   }
 
   function entryTitle(entry: HistoryEntry): string {
-    return entry.title ?? entry.prompt_name ?? entry.input_content.slice(0, 60);
+    return entry.title ?? entry.skill_name ?? entry.input_content.slice(0, 60);
   }
 
   function formatTimestamp(raw: string): string {

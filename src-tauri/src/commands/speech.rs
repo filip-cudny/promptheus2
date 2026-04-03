@@ -21,8 +21,8 @@ struct SpeechErrorEvent {
 
 #[derive(Clone, Serialize)]
 struct AlternativeExecutePayload {
-    prompt_id: String,
-    prompt_name: String,
+    skill_id: String,
+    skill_name: String,
     text: String,
 }
 
@@ -121,12 +121,12 @@ pub async fn toggle_speech_recording(
                         s.speech.set_transcribing(false);
                         let (pending_id, pending_name) = s.speech.take_pending_prompt();
 
-                        if let Some(prompt_id) = pending_id {
+                        if let Some(skill_id) = pending_id {
                             let _ = app_clone.emit(
                                 "speech-alternative-execute",
                                 AlternativeExecutePayload {
-                                    prompt_id,
-                                    prompt_name: pending_name.unwrap_or_default(),
+                                    skill_id,
+                                    skill_name: pending_name.unwrap_or_default(),
                                     text: text.clone(),
                                 },
                             );

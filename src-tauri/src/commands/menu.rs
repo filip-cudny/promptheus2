@@ -80,8 +80,8 @@ pub async fn get_context_menu_items(
                 "last_text_entry": last_text.as_ref().map(|e| {
                     serde_json::json!({
                         "id": e.id,
-                        "prompt_id": e.prompt_id,
-                        "prompt_name": e.prompt_name,
+                        "skill_id": e.skill_id,
+                        "skill_name": e.skill_name,
                     })
                 }),
             }));

@@ -74,8 +74,8 @@ export async function executeConversationFromTree(
     contextText?: string;
     contextImages?: ImageData[];
     tabId: string;
-    promptId?: string;
-    promptName?: string;
+    skillId?: string;
+    skillName?: string;
   },
 ): Promise<void> {
   const onEvent = new Channel<StreamEvent>();
@@ -97,8 +97,8 @@ export async function executeConversationFromTree(
     contextText: options.contextText ?? null,
     contextImages: options.contextImages ?? [],
     tabId: options.tabId,
-    promptId: options.promptId ?? null,
-    promptName: options.promptName ?? null,
+    skillId: options.skillId ?? null,
+    skillName: options.skillName ?? null,
     onEvent,
   });
 }

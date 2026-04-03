@@ -59,7 +59,7 @@ For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconPro
 
 - Props: `text: string` (bindable), `images: ConversationImage[]` (bindable), optional `readonly`, `disabled`, `placeholder`.
 - Pure presentational component — no IPC calls or save logic. Parents control persistence.
-- Renders `ImageChipBar` above a textarea. Used in both the prompt dialog's context section and the context menu's inline edit mode.
+- Renders `ImageChipBar` above a textarea. Used in both the conversation dialog's context section and the context menu's inline edit mode.
 - Import `ConversationImage` from `$lib/types/conversation`.
 
 ### MarkdownRenderer

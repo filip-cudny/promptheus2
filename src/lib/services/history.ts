@@ -21,11 +21,11 @@ export async function addHistoryEntry(params: {
   inputContent: string;
   entryType: HistoryEntryType;
   outputContent: string | null;
-  promptId: string | null;
+  skillId: string | null;
   success: boolean;
   error: string | null;
   isMultiTurn: boolean;
-  promptName: string | null;
+  skillName: string | null;
 }): Promise<void> {
   return invoke("add_history_entry", params);
 }
@@ -34,8 +34,8 @@ export async function addConversationEntry(params: {
   turns: SerializedConversationTurn[];
   contextText: string;
   contextImagePaths: string[];
-  promptId: string | null;
-  promptName: string | null;
+  skillId: string | null;
+  skillName: string | null;
   success: boolean;
   error: string | null;
   nodes: SerializedConversationNode[];

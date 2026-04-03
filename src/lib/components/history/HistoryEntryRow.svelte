@@ -10,7 +10,7 @@
 
   let isChat = $derived(!entry.quick_action);
   let isTranscription = $derived(
-    entry.entry_type === "speech" && !entry.prompt_name && entry.quick_action,
+    entry.entry_type === "speech" && !entry.skill_name && entry.quick_action,
   );
 
   let copied = $state(false);
@@ -32,7 +32,7 @@
   );
 
   let displayName = $derived(
-    entry.title ?? entry.prompt_name ?? (entry.entry_type === "speech" ? "Transcription" : "Unknown"),
+    entry.title ?? entry.skill_name ?? (entry.entry_type === "speech" ? "Transcription" : "Unknown"),
   );
 
   let inputPreview = $derived(truncate(entry.input_content, 120));

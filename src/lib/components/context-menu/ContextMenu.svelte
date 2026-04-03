@@ -9,7 +9,7 @@
   import ContextSection from "./ContextSection.svelte";
   import LastInteractionSection from "./LastInteractionSection.svelte";
   import { Info, MessageSquare, MessageSquareShare, Mic, Square } from "lucide-svelte";
-  import { openPromptDialog } from "$lib/services/promptDialog";
+  import { openConversationDialog } from "$lib/services/conversationDialog";
   import { isExecuting } from "$lib/stores/execution.svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import {
@@ -19,7 +19,7 @@
     isVisible,
     getOpenTrigger,
     isRecording,
-    getRecordingPromptId,
+    getRecordingSkillId,
     closeMenu,
     suppressClose,
     isSuppressed,
@@ -30,8 +30,8 @@
     startAlternativeExecution,
     handleNumberInput,
     clearNumberBuffer,
-    getAllPromptItems,
-    getPromptItems,
+    getAllSkillItems,
+    getSkillItems,
     isRecordingChat,
     toggleChatRecording,
     openDialogForItem,
@@ -45,10 +45,10 @@
     "^": "6", "&": "7", "*": "8", "(": "9", ")": "0",
   };
 
-  function isRecordingThisPrompt(item: MenuItem): boolean {
+  function isRecordingThisSkill(item: MenuItem): boolean {
     if (!isRecording()) return false;
-    const data = item.data as { prompt_id: string } | null;
-    return data?.prompt_id === getRecordingPromptId();
+    const data = item.data as { skill_id: string } | null;
+    return data?.skill_id === getRecordingSkillId();
   }
 
   type SectionGroup = {
@@ -70,8 +70,8 @@
 
   interface LastTextEntryRef {
     id: string;
-    prompt_id: string | null;
-    prompt_name: string | null;
+    skill_id: string | null;
+    skill_name: string | null;
   }
 
   interface LastInteractionData {
@@ -135,9 +135,9 @@
   let resizeGeneration = 0;
   let lastShownTrigger = 0;
 
-  function getPromptsSectionOffset(): number {
+  function getSkillsSectionOffset(): number {
     if (!menuEl) return 0;
-    const anchor = menuEl.querySelector("[data-section='prompts-anchor']");
+    const anchor = menuEl.querySelector("[data-section='skills-anchor']");
     if (!anchor) return 0;
     return (anchor as HTMLElement).offsetTop;
   }
@@ -153,7 +153,7 @@
     const wa = getWorkArea();
     let x = 0, y = 0;
     if (wa) {
-      const anchorOffset = getPromptsSectionOffset();
+      const anchorOffset = getSkillsSectionOffset();
       x = wa.cursorX;
       y = wa.cursorY - anchorOffset;
 
@@ -236,8 +236,8 @@
   let menuVisible = $derived(isVisible());
   $effect(() => { if (!menuVisible) expandedDescriptionId = ""; });
   let menuItems = $derived(getItems());
-  let allPromptItems = $derived(getAllPromptItems());
-  let promptItems = $derived(getPromptItems());
+  let allSkillItems = $derived(getAllSkillItems());
+  let skillItems = $derived(getSkillItems());
   let currentSelectedIndex = $derived(getSelectedIndex());
 
   $effect(() => {
@@ -296,7 +296,7 @@
                 await toggleChatRecording();
               } else {
                 await closeMenu();
-                await openPromptDialog("", "Chat");
+                await openConversationDialog("", "Chat");
               }
             }}
           >
@@ -319,8 +319,8 @@
           </button>
         </div>
       {/if}
-      {#if section.sectionId === "prompts"}
-        <div data-section="prompts-anchor"></div>
+      {#if section.sectionId === "skills"}
+        <div data-section="skills-anchor"></div>
       {/if}
       {#each section.sectionId === "chat" ? [] : section.items as { item, globalIndex }}
         {@const contextItems = extractContextItems(item)}
@@ -349,16 +349,16 @@
               {:else if item.icon === "mic"}
                 <span class="item-icon"><Mic size={ICON_SIZE.md} /></span>
               {/if}
-              {#if item.item_type === "prompt"}
-                {@const promptIndex = allPromptItems.indexOf(item)}
-                {#if promptIndex >= 0}
-                  <span class="prompt-number">{promptIndex + 1}.</span>
+              {#if item.item_type === "skill"}
+                {@const skillIndex = allSkillItems.indexOf(item)}
+                {#if skillIndex >= 0}
+                  <span class="prompt-number">{skillIndex + 1}.</span>
                 {/if}
               {/if}
               <span class="item-label">{item.label}</span>
             </button>
-            {#if item.item_type === "prompt"}
-              {@const recordingThis = isRecordingThisPrompt(item)}
+            {#if item.item_type === "skill"}
+              {@const recordingThis = isRecordingThisSkill(item)}
               {@const micDisabled = !item.enabled && !recordingThis}
               {#if item.tooltip}
                 <button

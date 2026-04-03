@@ -8,6 +8,18 @@ Desktop application built with **Tauri 2**.
 - When using a framework API or plugin not yet documented, follow the process in [`docs/api-verification.md`](docs/api-verification.md).
 - When working in any directory, check for a `DOCS.md` file first — it contains conventions and patterns for that area, or references to detailed files for complex topics.
 
+## Logging
+
+Add log statements **during implementation**, not as a separate step. When writing or modifying any service, command, or store, include appropriate logging inline.
+
+Before adding logs, load only the guide you need from `docs/`:
+
+- **Choosing a level?** → read [`docs/logging-levels.docs.md`](docs/logging-levels.docs.md)
+- **Handling user data, API keys, or clipboard?** → read [`docs/logging-sensitivity.docs.md`](docs/logging-sensitivity.docs.md)
+- **Changing log config, targets, or rotation?** → read [`docs/logging-config.docs.md`](docs/logging-config.docs.md)
+
+Do not load all three — load only what applies to the current task.
+
 ## Code style
 
 - **No inline comments.** Code must be self-explanatory — use clear names, small functions, and logical structure instead of comments. If code needs a comment to be understood, refactor it.

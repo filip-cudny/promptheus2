@@ -184,8 +184,8 @@ function serializePathNodes(tab: TabState): ConversationNodeForExecution[] {
 }
 
 export function createConversationStore(
-  promptId: string,
-  promptName: string,
+  skillId: string,
+  skillName: string,
 ) {
   let tabs = $state<TabState[]>([createTabState("Chat 1")]);
   let activeTabId = $state(tabs[0].tab_id);
@@ -286,8 +286,8 @@ export function createConversationStore(
         contextText: tab.context_text || undefined,
         contextImages,
         tabId: tab.tab_id,
-        promptId,
-        promptName,
+        skillId,
+        skillName,
       });
     } catch (e) {
       logError("Failed to execute: " + e);
@@ -563,8 +563,8 @@ export function createConversationStore(
           turns,
           contextText: tab.context_text,
           contextImagePaths: [],
-          promptId,
-          promptName,
+          skillId,
+          skillName,
           success: true,
           error: null,
           nodes,
@@ -594,7 +594,7 @@ export function createConversationStore(
       if (!entry) return;
 
       const newTab = createTabState(
-        entry.prompt_name ?? `Restored`,
+        entry.skill_name ?? `Restored`,
       );
       newTab.history_entry_id = entryId;
 

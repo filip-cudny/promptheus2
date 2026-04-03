@@ -43,8 +43,8 @@ pub struct ConversationHistoryData {
     pub context_image_paths: Vec<String>,
     #[serde(default)]
     pub turns: Vec<SerializedConversationTurn>,
-    pub prompt_id: Option<String>,
-    pub prompt_name: Option<String>,
+    pub skill_id: Option<String>,
+    pub skill_name: Option<String>,
     #[serde(default)]
     pub nodes: Vec<SerializedConversationNode>,
     pub root_node_id: Option<String>,
@@ -65,13 +65,13 @@ pub struct HistoryEntry {
     pub input_content: String,
     pub entry_type: HistoryEntryType,
     pub output_content: Option<String>,
-    pub prompt_id: Option<String>,
+    pub skill_id: Option<String>,
     #[serde(default = "default_true")]
     pub success: bool,
     pub error: Option<String>,
     #[serde(default, alias = "is_conversation")]
     pub is_multi_turn: bool,
-    pub prompt_name: Option<String>,
+    pub skill_name: Option<String>,
     pub conversation_data: Option<ConversationHistoryData>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
@@ -95,11 +95,11 @@ mod tests {
             input_content: "Hello world".into(),
             entry_type: HistoryEntryType::Text,
             output_content: Some("Response text".into()),
-            prompt_id: Some("prompt-1".into()),
+            skill_id: Some("prompt-1".into()),
             success: true,
             error: None,
             is_multi_turn: false,
-            prompt_name: Some("Test Prompt".into()),
+            skill_name: Some("Test Prompt".into()),
             conversation_data: None,
             created_at: Some("2026-01-01T00:00:00Z".into()),
             updated_at: None,
@@ -125,11 +125,11 @@ mod tests {
             input_content: "Conversation start".into(),
             entry_type: HistoryEntryType::Speech,
             output_content: Some("Final output".into()),
-            prompt_id: Some("prompt-2".into()),
+            skill_id: Some("prompt-2".into()),
             success: true,
             error: None,
             is_multi_turn: true,
-            prompt_name: Some("Chat Prompt".into()),
+            skill_name: Some("Chat Prompt".into()),
             conversation_data: Some(ConversationHistoryData {
                 context_text: "Some context".into(),
                 context_image_paths: vec!["/path/to/image.png".into()],
@@ -142,8 +142,8 @@ mod tests {
                     output_versions: vec!["Hi there".into(), "Hello!".into()],
                     current_version_index: 0,
                 }],
-                prompt_id: Some("prompt-2".into()),
-                prompt_name: Some("Chat Prompt".into()),
+                skill_id: Some("prompt-2".into()),
+                skill_name: Some("Chat Prompt".into()),
                 nodes: vec![
                     SerializedConversationNode {
                         node_id: "node-root".into(),
@@ -204,9 +204,9 @@ mod tests {
         assert!(entry.success);
         assert!(!entry.is_multi_turn);
         assert!(entry.output_content.is_none());
-        assert!(entry.prompt_id.is_none());
+        assert!(entry.skill_id.is_none());
         assert!(entry.error.is_none());
-        assert!(entry.prompt_name.is_none());
+        assert!(entry.skill_name.is_none());
         assert!(entry.conversation_data.is_none());
         assert!(entry.created_at.is_none());
         assert!(entry.updated_at.is_none());

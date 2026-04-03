@@ -3,7 +3,7 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import Chip from "$lib/components/ui/Chip.svelte";
   import { copyHistoryContent } from "$lib/services/history";
-  import { openPromptDialog } from "$lib/services/promptDialog";
+  import { openConversationDialog } from "$lib/services/conversationDialog";
   import { closeMenu } from "$lib/stores/contextMenu.svelte";
   import { openHistoryDialog } from "$lib/services/historyDialog";
 
@@ -14,8 +14,8 @@
 
   interface LastTextEntryRef {
     id: string;
-    prompt_id: string | null;
-    prompt_name: string | null;
+    skill_id: string | null;
+    skill_name: string | null;
   }
 
   interface LastInteractionData {
@@ -40,7 +40,7 @@
     const entry = data?.last_text_entry;
     if (!entry) return;
     await closeMenu();
-    await openPromptDialog(entry.prompt_id ?? "", entry.prompt_name ?? "Chat", entry.id, true);
+    await openConversationDialog(entry.skill_id ?? "", entry.skill_name ?? "Chat", entry.id, true);
   }
 
   async function handleHistory() {

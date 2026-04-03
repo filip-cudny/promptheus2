@@ -26,7 +26,7 @@ export default defineConfig({
       input: {
         main: path.resolve("./index.html"),
         "context-menu": path.resolve("./context-menu.html"),
-        "prompt-dialog": path.resolve("./prompt-dialog.html"),
+        "conversation-dialog": path.resolve("./conversation-dialog.html"),
         "context-editor": path.resolve("./context-editor.html"),
         "history-dialog": path.resolve("./history-dialog.html"),
         "image-preview": path.resolve("./image-preview.html"),

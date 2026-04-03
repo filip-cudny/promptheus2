@@ -102,6 +102,12 @@ Uses `tauri-plugin-log` with the standard Rust `log` crate. Logs go to stdout, a
 - Default level is `Info` globally, `Debug` for the app crate. Override with `RUST_LOG` env var.
 - Log at decision points and errors, not at every function boundary.
 
+Detailed guides (load only what you need):
+
+- [Log levels reference](../docs/logging-levels.docs.md) — when to use each level with examples
+- [Data sensitivity](../docs/logging-sensitivity.docs.md) — what to log, redact, or never log per module
+- [Configuration & rotation](../docs/logging-config.docs.md) — env-specific levels, targets, file rotation, performance
+
 ### Hotkey Actions
 
 Global hotkeys are handled **entirely in the Rust backend** (`lib.rs → execute_hotkey_action`). Do **not** route hotkey actions through `app.emit()` to the frontend — this app has no persistent main window, so frontend event listeners are unreliable.

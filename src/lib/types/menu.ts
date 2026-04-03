@@ -1,5 +1,5 @@
 export type MenuItemType =
-  | "prompt"
+  | "skill"
   | "preset"
   | "history"
   | "system"

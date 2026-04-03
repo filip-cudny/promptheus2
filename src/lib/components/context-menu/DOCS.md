@@ -65,11 +65,11 @@ Action buttons are always visible (not gated by empty state) since Replace/Appen
 
 The context store (`$lib/stores/context.svelte.ts`) is initialized in `ContextMenuApp.svelte` so the section updates reactively via the `"context-changed"` Tauri event.
 
-### Prompt execution
+### Skill execution
 
-When a `prompt` item is clicked, the context menu store intercepts it (instead of calling the generic `execute_menu_item` backend command) and delegates to the execution store's `startExecution(promptId)`. The menu closes immediately, and the execution runs asynchronously.
+When a `skill` item is clicked, the context menu store intercepts it (instead of calling the generic `execute_menu_item` backend command) and delegates to the execution store's `startExecution(skillId)`. The menu closes immediately, and the execution runs asynchronously.
 
-During execution, prompt items are disabled. The store applies this by overlaying `enabled: false` on prompt items when `isExecuting()` is true (see `applyExecutionState` in `contextMenu.svelte.ts`). On `execution-completed`, the store refreshes items so they re-enable on next open.
+During execution, skill items are disabled. The store applies this by overlaying `enabled: false` on skill items when `isExecuting()` is true (see `applyExecutionState` in `contextMenu.svelte.ts`). On `execution-completed`, the store refreshes items so they re-enable on next open.
 
 The execution store is initialized in `ContextMenuApp.svelte` alongside the context store.
 

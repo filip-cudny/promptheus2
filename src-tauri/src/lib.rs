@@ -129,7 +129,7 @@ use services::placeholder::PlaceholderService;
 use services::prompt_execution::PromptExecutionService;
 use services::skill::SkillService;
 use services::speech::SpeechService;
-use providers::{LastInteractionMenuProvider, PromptMenuProvider, SpeechMenuProvider};
+use providers::{LastInteractionMenuProvider, SkillMenuProvider, SpeechMenuProvider};
 
 fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     use tauri::webview::{Color, WebviewWindowBuilder};
@@ -536,7 +536,7 @@ pub fn run() {
                     description: s.description.clone(),
                 })
                 .collect();
-            menu_coordinator.add_provider(Box::new(PromptMenuProvider::new(skill_summaries)));
+            menu_coordinator.add_provider(Box::new(SkillMenuProvider::new(skill_summaries)));
 
             let ui_state_service = services::ui_state::UiStateService::load(&config_dir)
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
@@ -623,7 +623,7 @@ pub fn run() {
             commands::prompt_execution::generate_conversation_title,
             commands::prompt_execution::resolve_skill_input,
             commands::prompt_execution::execute_conversation_from_tree,
-            commands::prompt_dialog::open_prompt_dialog,
+            commands::conversation_dialog::open_conversation_dialog,
             commands::skills::list_skills,
             commands::skills::get_skill,
             commands::skills::get_skill_body,

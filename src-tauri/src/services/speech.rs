@@ -36,8 +36,8 @@ pub struct SpeechService {
     is_recording: bool,
     is_transcribing: bool,
     recording_action_id: Option<String>,
-    pending_prompt_id: Option<String>,
-    pending_prompt_name: Option<String>,
+    pending_skill_id: Option<String>,
+    pending_skill_name: Option<String>,
     audio_buffer: Arc<Mutex<Vec<i16>>>,
     sample_rate: u32,
     stop_sender: Option<mpsc::Sender<()>>,
@@ -49,8 +49,8 @@ impl SpeechService {
             is_recording: false,
             is_transcribing: false,
             recording_action_id: None,
-            pending_prompt_id: None,
-            pending_prompt_name: None,
+            pending_skill_id: None,
+            pending_skill_name: None,
             audio_buffer: Arc::new(Mutex::new(Vec::new())),
             sample_rate: 16000,
             stop_sender: None,
@@ -152,12 +152,12 @@ impl SpeechService {
     }
 
     pub fn set_pending_prompt(&mut self, id: Option<String>, name: Option<String>) {
-        self.pending_prompt_id = id;
-        self.pending_prompt_name = name;
+        self.pending_skill_id = id;
+        self.pending_skill_name = name;
     }
 
     pub fn take_pending_prompt(&mut self) -> (Option<String>, Option<String>) {
-        (self.pending_prompt_id.take(), self.pending_prompt_name.take())
+        (self.pending_skill_id.take(), self.pending_skill_name.take())
     }
 }
 

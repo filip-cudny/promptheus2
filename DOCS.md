@@ -11,3 +11,6 @@ Top-level index of all `DOCS.md` files in the project. Updated incrementally as 
 - [src/lib/components/ui/DOCS.md](src/lib/components/ui/DOCS.md) — Reusable UI primitives: toast overlay, shared components
 - [src/lib/components/context-menu/DOCS.md](src/lib/components/context-menu/DOCS.md) — Context menu popup window: sections, keyboard nav, item execution
 - [docs/api-verification.md](docs/api-verification.md) — Process for verifying framework APIs against latest docs
+- [docs/logging-levels.docs.md](docs/logging-levels.docs.md) — Log levels: when to use each with examples
+- [docs/logging-sensitivity.docs.md](docs/logging-sensitivity.docs.md) — Data sensitivity tiers and per-module redaction rules
+- [docs/logging-config.docs.md](docs/logging-config.docs.md) — Environment config, targets, rotation, performance
