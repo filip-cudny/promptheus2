@@ -43,6 +43,7 @@
 
   function hide() {
     emitTo(sourceWindow, "text-attachment-updated", { text, index });
+    invoke("save_text_preview_geometry");
     invoke("hide_dialog_window", { label: "text-preview" });
   }
 

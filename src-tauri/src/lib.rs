@@ -658,6 +658,7 @@ pub fn run() {
             commands::image_preview::get_pending_image,
             commands::text_preview::open_text_preview,
             commands::text_preview::get_pending_text,
+            commands::text_preview::save_text_preview_geometry,
             commands::dock::hide_dialog_window,
             commands::notification::update_notification_window,
             commands::notification::drain_pending_notifications,

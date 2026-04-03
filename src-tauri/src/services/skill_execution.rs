@@ -1,8 +1,14 @@
+use regex::Regex;
+use std::sync::LazyLock;
+
 use crate::models::context::ContextItem;
-use crate::models::message::{ContentPart, ImageUrlData, MessageContent, ProcessedMessage};
+use crate::models::message::{
+    ContentPart, ConversationNodeForExecution, ImageData, ImageUrlData, MessageContent,
+    ProcessedMessage,
+};
 use crate::models::skill::Skill;
 use crate::services::context::ContextManagerService;
-use crate::services::skill::SkillError;
+use crate::services::skill::{SkillError, SkillService};
 
 pub fn compose_skill_user_message(skill: &Skill, input: &str) -> String {
     format!(

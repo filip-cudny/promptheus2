@@ -3,7 +3,10 @@ use std::sync::Mutex;
 use serde::Serialize;
 use tauri::{Emitter, Manager};
 
+use crate::services::dialog;
 use crate::services::dock::DockManager;
+
+const GEOMETRY_KEY: &str = "text-preview";
 
 struct PendingText {
     text: String,
@@ -27,8 +30,10 @@ pub async fn open_text_preview(
     index: usize,
     source_window: String,
 ) -> Result<(), String> {
+    let label = "text-preview";
+
     let win = app
-        .get_webview_window("text-preview")
+        .get_webview_window(label)
         .ok_or("text-preview window not found")?;
 
     *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(PendingText {
@@ -36,6 +41,8 @@ pub async fn open_text_preview(
         index,
         source_window,
     });
+
+    dialog::restore_size(&app, label, GEOMETRY_KEY).await;
 
     if let Ok(pos) = win.cursor_position() {
         let _ = win.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
@@ -56,10 +63,15 @@ pub async fn open_text_preview(
     win.show().map_err(|e| e.to_string())?;
     win.set_focus().map_err(|e| e.to_string())?;
 
-    app.emit_to("text-preview", "load-text", ())
+    app.emit_to(label, "load-text", ())
         .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+#[tauri::command]
+pub fn save_text_preview_geometry(app: tauri::AppHandle) {
+    dialog::save_geometry(&app, "text-preview", GEOMETRY_KEY);
 }
 
 #[tauri::command]

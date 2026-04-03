@@ -3,6 +3,7 @@ pub mod clipboard;
 pub mod config;
 pub mod conversation_context;
 pub mod context;
+pub mod dialog;
 pub mod dock;
 pub mod history;
 pub mod image_storage;
