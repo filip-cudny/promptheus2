@@ -22,3 +22,16 @@ export interface ConversationMessage {
   role: string;
   content: MessageContent;
 }
+
+export interface ImageData {
+  data: string;
+  media_type: string;
+}
+
+export interface ConversationNodeForExecution {
+  node_id: string;
+  role: string;
+  content: string;
+  images: ImageData[];
+  text_attachments: string[];
+}

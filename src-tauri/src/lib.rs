@@ -647,6 +647,8 @@ pub fn run() {
             commands::prompt_execution::release_conversation_context,
             commands::prompt_execution::seed_conversation_context,
             commands::prompt_execution::generate_conversation_title,
+            commands::prompt_execution::resolve_skill_input,
+            commands::prompt_execution::execute_conversation_from_tree,
             commands::prompt_dialog::open_prompt_dialog,
             commands::skills::list_skills,
             commands::skills::get_skill,

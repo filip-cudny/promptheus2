@@ -2,10 +2,10 @@ import { SvelteMap } from "svelte/reactivity";
 import { error as logError } from "@tauri-apps/plugin-log";
 import { generateId } from "$lib/utils/id";
 import {
-  executeConversationTurn,
+  executeConversationFromTree,
   generateConversationTitle,
-  getSystemPrompt,
   releaseConversationContext,
+  resolveSkillInput,
   seedConversationContext,
   type ExecutionCallbacks,
 } from "$lib/services/promptExecution";
@@ -15,24 +15,21 @@ import {
   updateHistoryEntryTitle,
   getHistoryEntry,
 } from "$lib/services/history";
-import { getSkillBody } from "$lib/services/skills";
 import {
-  parseInputForSkills,
-  composeSkillMessage,
+  isSkillXml,
+  extractSkillDisplayText,
   hasSkillReferences,
-  type ResolvedSkillSegment,
-} from "$lib/utils/skillComposer";
-import { isSkillXml, extractSkillDisplayText } from "$lib/utils/skillDisplay";
+} from "$lib/utils/skillDisplay";
 import type {
   ConversationNode,
   ConversationImage,
   ConversationTree,
   MessagePair,
   TabState,
-  ProcessedMessage,
   SerializedConversationNode,
   SerializedConversationTurn,
 } from "$lib/types";
+import type { ConversationNodeForExecution } from "$lib/types/ai";
 
 export function createEmptyTree(): ConversationTree {
   return {
@@ -141,70 +138,6 @@ function createTabState(tabName: string): TabState {
   };
 }
 
-function buildMessagesFromTree(
-  tree: ConversationTree,
-  contextImages: ConversationImage[],
-): ProcessedMessage[] {
-  const messages: ProcessedMessage[] = [];
-  let isFirstUser = true;
-
-  for (const nodeId of tree.current_path) {
-    const node = tree.nodes.get(nodeId);
-    if (!node) continue;
-
-    if (node.role === "user") {
-      const hasContextImages = isFirstUser && contextImages.length > 0;
-      const hasNodeImages = node.images.length > 0;
-      isFirstUser = false;
-
-      let textContent = node.content;
-      if (node.text_attachments.length > 0) {
-        const wrappedAttachments = node.text_attachments
-          .map((t, i) => `<pasted-text name="Text #${i + 1}">\n${t}\n</pasted-text>`)
-          .join("\n\n");
-        textContent = textContent
-          ? `${wrappedAttachments}\n\n${textContent}`
-          : wrappedAttachments;
-      }
-
-      if (hasContextImages || hasNodeImages) {
-        const parts: Array<
-          | { type: "text"; text: string }
-          | { type: "image_url"; image_url: { url: string } }
-        > = [];
-        if (hasContextImages) {
-          let contextIndex = 1;
-          for (const img of contextImages) {
-            parts.push({ type: "text", text: `[Context Image #${contextIndex++}]` });
-            parts.push({
-              type: "image_url",
-              image_url: {
-                url: `data:${img.media_type};base64,${img.data}`,
-              },
-            });
-          }
-        }
-        let imageIndex = 1;
-        for (const img of node.images) {
-          parts.push({ type: "text", text: `[Image #${imageIndex++}]` });
-          parts.push({
-            type: "image_url",
-            image_url: { url: `data:${img.media_type};base64,${img.data}` },
-          });
-        }
-        parts.push({ type: "text", text: textContent });
-        messages.push({ role: "user", content: parts });
-      } else {
-        messages.push({ role: "user", content: textContent });
-      }
-    } else {
-      messages.push({ role: "assistant", content: node.content });
-    }
-  }
-
-  return messages;
-}
-
 function serializeNodes(
   tree: ConversationTree,
 ): SerializedConversationNode[] {
@@ -234,29 +167,20 @@ function serializeTurns(pairs: MessagePair[]): SerializedConversationTurn[] {
   }));
 }
 
-function prependToLastUserMessage(
-  messages: ProcessedMessage[],
-  prefix: string,
-): void {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (msg.role !== "user") continue;
-
-    if (typeof msg.content === "string") {
-      messages[i] = { ...msg, content: `${prefix}\n\n${msg.content}` };
-    } else if (Array.isArray(msg.content)) {
-      const lastTextIdx = msg.content.findLastIndex(
-        (p: { type: string }) => p.type === "text",
-      );
-      if (lastTextIdx !== -1) {
-        const parts = [...msg.content];
-        const part = parts[lastTextIdx] as { type: "text"; text: string };
-        parts[lastTextIdx] = { type: "text", text: `${prefix}\n\n${part.text}` };
-        messages[i] = { ...msg, content: parts };
-      }
-    }
-    break;
-  }
+function serializePathNodes(tab: TabState): ConversationNodeForExecution[] {
+  return tab.tree.current_path
+    .map((nodeId) => tab.tree.nodes.get(nodeId))
+    .filter((node): node is ConversationNode => node !== undefined)
+    .map((node) => ({
+      node_id: node.node_id,
+      role: node.role,
+      content: node.content,
+      images: node.images.map((img) => ({
+        data: img.data,
+        media_type: img.media_type,
+      })),
+      text_attachments: node.text_attachments,
+    }));
 }
 
 export function createConversationStore(
@@ -314,42 +238,69 @@ export function createConversationStore(
     return tabs.find((t) => t.tab_id === tabId);
   }
 
-  async function resolveSkillSegments(
-    text: string,
-  ): Promise<ResolvedSkillSegment[] | null> {
-    if (!hasSkillReferences(text)) return null;
+  async function executeOnTree(
+    tab: TabState,
+    assistantNode: ConversationNode,
+  ): Promise<{ success: boolean; result: string }> {
+    tab.is_executing = true;
+    tab.is_streaming = true;
+    tab.streamed_content = "";
 
-    const segments = parseInputForSkills(text);
-    const hasAnySkill = segments.some((s) => s.skillName !== null);
-    if (!hasAnySkill) return null;
+    let success = false;
+    let resultText = "";
 
-    const resolved: ResolvedSkillSegment[] = [];
-    for (const seg of segments) {
-      if (seg.skillName) {
-        try {
-          const body = await getSkillBody(seg.skillName);
-          resolved.push({
-            skillName: seg.skillName,
-            skillBody: body,
-            input: seg.input,
-          });
-        } catch {
-          resolved.push({
-            skillName: seg.skillName,
-            skillBody: "",
-            input: seg.input,
-          });
-        }
-      } else if (seg.input) {
-        resolved.push({
-          skillName: promptId,
-          skillBody: "",
-          input: seg.input,
-        });
-      }
+    try {
+      const nodes = serializePathNodes(tab);
+      const contextImages = tab.context_images.map((img) => ({
+        data: img.data,
+        media_type: img.media_type,
+      }));
+
+      const callbacks: ExecutionCallbacks = {
+        onChunk: (_delta, accumulated) => {
+          assistantNode.content = accumulated;
+          tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+          tab.streamed_content = accumulated;
+        },
+        onDone: (fullText) => {
+          assistantNode.content = fullText;
+          tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+          tab.is_executing = false;
+          tab.is_streaming = false;
+          tab.streamed_content = "";
+          success = true;
+          resultText = fullText;
+        },
+        onError: (message) => {
+          logError("Execution error: " + message);
+          assistantNode.content =
+            assistantNode.content || `[error: ${message}]`;
+          tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+          tab.is_executing = false;
+          tab.is_streaming = false;
+          tab.streamed_content = "";
+        },
+      };
+
+      await executeConversationFromTree(nodes, callbacks, {
+        contextText: tab.context_text || undefined,
+        contextImages,
+        tabId: tab.tab_id,
+        promptId,
+        promptName,
+      });
+    } catch (e) {
+      logError("Failed to execute: " + e);
+      tab.is_executing = false;
+      tab.is_streaming = false;
+      tab.streamed_content = "";
     }
 
-    return resolved.length > 0 ? resolved : null;
+    if (success) {
+      await saveToHistory();
+    }
+
+    return { success, result: resultText };
   }
 
   async function sendMessage(): Promise<{ success: boolean; result: string }> {
@@ -363,10 +314,7 @@ export function createConversationStore(
     if (!text && images.length === 0 && textAttachments.length === 0)
       return { success: false, result: "" };
 
-    const skillSegments = await resolveSkillSegments(text);
-    const storedContent = skillSegments
-      ? composeSkillMessage(skillSegments)
-      : text;
+    const { resolved_text: storedContent } = await resolveSkillInput(text);
 
     const userNode = createNode(
       "user",
@@ -395,9 +343,6 @@ export function createConversationStore(
     tab.input_text = "";
     tab.input_images = [];
     tab.input_text_attachments = [];
-    tab.is_executing = true;
-    tab.is_streaming = true;
-    tab.streamed_content = "";
 
     const isFirstMessage = getMessagePairs(tab.tree).length === 1;
     const hasDefaultTabName = /^Chat \d+$/.test(tab.tab_name);
@@ -414,63 +359,7 @@ export function createConversationStore(
         .catch(() => {});
     }
 
-    let success = false;
-    let resultText = "";
-
-    try {
-      const { messages: systemMessages, time_update } = await getSystemPrompt(
-        tab.context_text || undefined,
-        tab.tab_id,
-      );
-      const treeMessages = buildMessagesFromTree(tab.tree, tab.context_images);
-      if (time_update) {
-        prependToLastUserMessage(treeMessages, time_update);
-      }
-      const messages = [...systemMessages, ...treeMessages];
-
-      const callbacks: ExecutionCallbacks = {
-        onChunk: (_delta, accumulated) => {
-          assistantNode.content = accumulated;
-          tab.tree.nodes.set(assistantNode.node_id, assistantNode);
-          tab.streamed_content = accumulated;
-        },
-        onDone: (fullText) => {
-          assistantNode.content = fullText;
-          tab.tree.nodes.set(assistantNode.node_id, assistantNode);
-          tab.is_executing = false;
-          tab.is_streaming = false;
-          tab.streamed_content = "";
-          success = true;
-          resultText = fullText;
-        },
-        onError: (message) => {
-          logError("Conversation execution error: " + message);
-          assistantNode.content =
-            assistantNode.content || `[error: ${message}]`;
-          tab.tree.nodes.set(assistantNode.node_id, assistantNode);
-          tab.is_executing = false;
-          tab.is_streaming = false;
-          tab.streamed_content = "";
-        },
-      };
-
-      await executeConversationTurn(messages, callbacks, {
-        promptId,
-        promptName,
-        skipClipboardCopy: true,
-      });
-    } catch (e) {
-      logError("Failed to execute conversation turn: " + e);
-      tab.is_executing = false;
-      tab.is_streaming = false;
-      tab.streamed_content = "";
-    }
-
-    if (success) {
-      await saveToHistory();
-    }
-
-    return { success, result: resultText };
+    return executeOnTree(tab, assistantNode);
   }
 
   function stopExecution(): void {
@@ -488,9 +377,11 @@ export function createConversationStore(
 
     const parentUser = tab.tree.nodes.get(node.parent_id);
     if (parentUser?.role === "user" && hasSkillReferences(parentUser.content)) {
-      const segments = await resolveSkillSegments(parentUser.content);
-      if (segments) {
-        parentUser.content = composeSkillMessage(segments);
+      const { resolved_text, had_skills } = await resolveSkillInput(
+        parentUser.content,
+      );
+      if (had_skills) {
+        parentUser.content = resolved_text;
         tab.tree.nodes.set(parentUser.node_id, parentUser);
       }
     }
@@ -509,63 +400,7 @@ export function createConversationStore(
       ];
     }
 
-    tab.is_executing = true;
-    tab.is_streaming = true;
-    tab.streamed_content = "";
-
-    let regenerateSuccess = false;
-
-    try {
-      const { messages: systemMessages, time_update } = await getSystemPrompt(
-        tab.context_text || undefined,
-        tab.tab_id,
-      );
-      const treeMessages = buildMessagesFromTree(tab.tree, tab.context_images);
-      if (time_update) {
-        prependToLastUserMessage(treeMessages, time_update);
-      }
-      const messages = [...systemMessages, ...treeMessages];
-
-      const callbacks: ExecutionCallbacks = {
-        onChunk: (_delta, accumulated) => {
-          newAssistant.content = accumulated;
-          tab.tree.nodes.set(newAssistant.node_id, newAssistant);
-          tab.streamed_content = accumulated;
-        },
-        onDone: (fullText) => {
-          newAssistant.content = fullText;
-          tab.tree.nodes.set(newAssistant.node_id, newAssistant);
-          tab.is_executing = false;
-          tab.is_streaming = false;
-          tab.streamed_content = "";
-          regenerateSuccess = true;
-        },
-        onError: (message) => {
-          logError("Regeneration error: " + message);
-          newAssistant.content =
-            newAssistant.content || `[error: ${message}]`;
-          tab.tree.nodes.set(newAssistant.node_id, newAssistant);
-          tab.is_executing = false;
-          tab.is_streaming = false;
-          tab.streamed_content = "";
-        },
-      };
-
-      await executeConversationTurn(messages, callbacks, {
-        promptId,
-        promptName,
-        skipClipboardCopy: true,
-      });
-    } catch (e) {
-      logError("Failed to regenerate: " + e);
-      tab.is_executing = false;
-      tab.is_streaming = false;
-      tab.streamed_content = "";
-    }
-
-    if (regenerateSuccess) {
-      await saveToHistory();
-    }
+    await executeOnTree(tab, newAssistant);
   }
 
   function switchBranch(nodeId: string, direction: -1 | 1): void {

@@ -1,5 +1,10 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
-import type { StreamEvent, ProcessedMessage } from "$lib/types/ai";
+import type {
+  StreamEvent,
+  ProcessedMessage,
+  ConversationNodeForExecution,
+  ImageData,
+} from "$lib/types/ai";
 
 export interface ExecutionCallbacks {
   onChunk: (delta: string, accumulated: string) => void;
@@ -116,4 +121,51 @@ export async function getExecutionState(): Promise<{
   execution_id: string | null;
 }> {
   return invoke("get_execution_state");
+}
+
+export interface ResolveSkillInputResult {
+  resolved_text: string;
+  had_skills: boolean;
+}
+
+export async function resolveSkillInput(
+  text: string,
+): Promise<ResolveSkillInputResult> {
+  return invoke("resolve_skill_input", { text });
+}
+
+export async function executeConversationFromTree(
+  nodes: ConversationNodeForExecution[],
+  callbacks: ExecutionCallbacks,
+  options: {
+    contextText?: string;
+    contextImages?: ImageData[];
+    tabId: string;
+    promptId?: string;
+    promptName?: string;
+  },
+): Promise<void> {
+  const onEvent = new Channel<StreamEvent>();
+  onEvent.onmessage = (event) => {
+    switch (event.event) {
+      case "chunk":
+        callbacks.onChunk(event.data.delta, event.data.accumulated);
+        break;
+      case "done":
+        callbacks.onDone(event.data.full_text);
+        break;
+      case "error":
+        callbacks.onError(event.data.message);
+        break;
+    }
+  };
+  return invoke("execute_conversation_from_tree", {
+    nodes,
+    contextText: options.contextText ?? null,
+    contextImages: options.contextImages ?? [],
+    tabId: options.tabId,
+    promptId: options.promptId ?? null,
+    promptName: options.promptName ?? null,
+    onEvent,
+  });
 }

@@ -31,6 +31,21 @@ pub struct ConversationMessage {
     pub content: MessageContent,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ImageData {
+    pub data: String,
+    pub media_type: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ConversationNodeForExecution {
+    pub node_id: String,
+    pub role: String,
+    pub content: String,
+    pub images: Vec<ImageData>,
+    pub text_attachments: Vec<String>,
+}
+
 impl From<ConversationMessage> for ProcessedMessage {
     fn from(msg: ConversationMessage) -> Self {
         Self {
