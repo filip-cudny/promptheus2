@@ -17,7 +17,6 @@ export interface Settings {
   number_input_debounce_ms: number;
   models: ModelConfig[];
   keymaps: KeymapGroup[];
-  prompts: PromptData[];
   system_prompt: string;
   about_me: string | null;
   context_section: string | null;
@@ -58,18 +57,6 @@ export interface SpeechToTextModel {
   api_key_env: string;
   base_url: string | null;
   api_key: string | null;
-}
-
-export interface PromptData {
-  id: string;
-  name: string;
-  description: string | null;
-  messages: PromptMessage[];
-}
-
-export interface PromptMessage {
-  role: string;
-  content: string;
 }
 
 export interface KeymapGroup {

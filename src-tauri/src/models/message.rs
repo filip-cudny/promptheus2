@@ -26,12 +26,6 @@ pub struct ProcessedMessage {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct ConversationMessage {
-    pub role: String,
-    pub content: MessageContent,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ImageData {
     pub data: String,
     pub media_type: String,
@@ -44,15 +38,6 @@ pub struct ConversationNodeForExecution {
     pub content: String,
     pub images: Vec<ImageData>,
     pub text_attachments: Vec<String>,
-}
-
-impl From<ConversationMessage> for ProcessedMessage {
-    fn from(msg: ConversationMessage) -> Self {
-        Self {
-            role: msg.role,
-            content: msg.content,
-        }
-    }
 }
 
 #[cfg(test)]

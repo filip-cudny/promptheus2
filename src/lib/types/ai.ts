@@ -18,11 +18,6 @@ export interface ProcessedMessage {
   content: MessageContent;
 }
 
-export interface ConversationMessage {
-  role: string;
-  content: MessageContent;
-}
-
 export interface ImageData {
   data: string;
   media_type: string;

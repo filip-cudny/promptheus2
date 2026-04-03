@@ -513,28 +513,6 @@ pub fn run() {
             )
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
-            if !config_service.settings().prompts.is_empty() {
-                let prompts = config_service.settings().prompts.clone();
-                let order = config_service.settings().skills_order.clone();
-                match skill_service.migrate_from_prompts(&prompts, &order) {
-                    Ok(migrated) => {
-                        if !migrated.is_empty() {
-                            log::info!("migrated {} prompts to skills", migrated.len());
-                            config_service.settings_mut().prompts.clear();
-                            let mut new_order = config_service.settings().skills_order.clone();
-                            for name in &migrated {
-                                if !new_order.contains(name) {
-                                    new_order.push(name.clone());
-                                }
-                            }
-                            config_service.update_skills_order(new_order);
-                            let _ = config_service.save();
-                        }
-                    }
-                    Err(e) => log::warn!("prompt migration failed: {e}"),
-                }
-            }
-
             log::info!(
                 "loaded {} skills from {}",
                 skill_service.list_skills().len(),
@@ -639,10 +617,6 @@ pub fn run() {
             commands::history::copy_history_content,
             commands::history::update_history_entry_title,
             commands::prompt_execution::execute_skill,
-            commands::prompt_execution::execute_conversation_turn,
-            commands::prompt_execution::get_execution_state,
-            commands::prompt_execution::process_skill_template,
-            commands::prompt_execution::get_system_prompt,
             commands::prompt_execution::resolve_context_section,
             commands::prompt_execution::release_conversation_context,
             commands::prompt_execution::seed_conversation_context,

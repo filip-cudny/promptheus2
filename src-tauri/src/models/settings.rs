@@ -36,9 +36,6 @@ pub struct Settings {
     #[serde(default)]
     pub keymaps: Vec<KeymapGroup>,
 
-    #[serde(default)]
-    pub prompts: Vec<PromptData>,
-
     #[serde(default = "default_system_prompt")]
     pub system_prompt: String,
 
@@ -135,24 +132,6 @@ pub struct SpeechToTextModel {
 
     #[serde(default)]
     pub api_key: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PromptData {
-    pub id: String,
-    pub name: String,
-
-    #[serde(default)]
-    pub description: Option<String>,
-
-    #[serde(default)]
-    pub messages: Vec<PromptMessage>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PromptMessage {
-    pub role: String,
-    pub content: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -281,7 +260,6 @@ impl Default for Settings {
             number_input_debounce_ms: 200,
             models: Vec::new(),
             keymaps: Vec::new(),
-            prompts: Vec::new(),
             system_prompt: default_system_prompt(),
             about_me: None,
             context_section: None,
@@ -357,7 +335,6 @@ mod tests {
         assert_eq!(settings.number_input_debounce_ms, 200);
         assert_eq!(settings.menu_section_order.len(), 6);
         assert!(settings.models.is_empty());
-        assert!(settings.prompts.is_empty());
     }
 
     #[test]
@@ -372,7 +349,6 @@ mod tests {
         assert_eq!(settings.models[0].model, "gpt-5.4");
         assert_eq!(settings.models[0].api_key_source, ApiKeySource::Env);
         assert_eq!(settings.keymaps.len(), 3);
-        assert_eq!(settings.prompts.len(), 5);
         assert_eq!(settings.number_input_debounce_ms, 200);
         assert_eq!(settings.default_model, Some("13b85c38-19cc-4387-a52d-6577478be057".to_string()));
 
@@ -401,7 +377,6 @@ mod tests {
         assert_eq!(settings.models.len(), settings2.models.len());
         assert_eq!(settings.models[0].id, settings2.models[0].id);
         assert_eq!(settings.models[0].model, settings2.models[0].model);
-        assert_eq!(settings.prompts.len(), settings2.prompts.len());
         assert_eq!(settings.keymaps.len(), settings2.keymaps.len());
         assert_eq!(settings.default_model, settings2.default_model);
         assert_eq!(settings.number_input_debounce_ms, settings2.number_input_debounce_ms);

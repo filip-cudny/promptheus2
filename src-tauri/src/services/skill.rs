@@ -2,7 +2,6 @@ use std::path::{Path, PathBuf};
 
 use log::{info, warn};
 
-use crate::models::settings::PromptData;
 use crate::models::skill::{Skill, SkillFrontmatter};
 
 #[derive(Debug, thiserror::Error)]
@@ -42,67 +41,6 @@ impl SkillService {
 
         service.scan_and_load(order)?;
         Ok(service)
-    }
-
-    pub fn migrate_from_prompts(
-        &mut self,
-        prompts: &[PromptData],
-        order: &[String],
-    ) -> Result<Vec<String>, SkillError> {
-        let mut migrated_names = Vec::new();
-
-        for prompt in prompts {
-            let slug = slug_from_name(&prompt.name);
-            let already_exists = self.skills.iter().any(|s| {
-                s.name == slug || s.display_name == prompt.name
-            });
-            if already_exists {
-                continue;
-            }
-
-            let body = prompt
-                .messages
-                .iter()
-                .find(|m| m.role == "system")
-                .map(|m| m.content.clone())
-                .or_else(|| {
-                    prompt
-                        .messages
-                        .iter()
-                        .find(|m| m.role == "user")
-                        .map(|m| {
-                            m.content
-                                .replace("{{clipboard}}", "")
-                                .replace("{{context}}", "")
-                                .trim()
-                                .to_string()
-                        })
-                })
-                .unwrap_or_default();
-
-            if body.is_empty() {
-                continue;
-            }
-
-            let skill_dir = self.skills_dir.join(&slug);
-            std::fs::create_dir_all(&skill_dir)?;
-
-            let frontmatter = format!(
-                "---\nname: {slug}\ndisplay_name: \"{}\"\ndescription: {}\n---\n\n{body}\n",
-                prompt.name,
-                prompt.description.as_deref().unwrap_or(&prompt.name),
-            );
-
-            std::fs::write(skill_dir.join("SKILL.md"), frontmatter)?;
-            info!("migrated prompt '{}' -> skill '{}'", prompt.name, slug);
-            migrated_names.push(slug);
-        }
-
-        if !migrated_names.is_empty() {
-            self.scan_and_load(order)?;
-        }
-
-        Ok(migrated_names)
     }
 
     fn initialize_defaults(
@@ -183,17 +121,6 @@ impl SkillService {
     pub fn skills_dir(&self) -> &Path {
         &self.skills_dir
     }
-}
-
-fn slug_from_name(name: &str) -> String {
-    name.to_lowercase()
-        .chars()
-        .map(|c| if c.is_alphanumeric() { c } else { '-' })
-        .collect::<String>()
-        .split('-')
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
 }
 
 fn display_name_from_slug(slug: &str) -> String {
@@ -445,108 +372,6 @@ mod tests {
         assert_eq!(display_name_from_slug("translate-english"), "Translate English");
         assert_eq!(display_name_from_slug("prompt-refine"), "Prompt Refine");
         assert_eq!(display_name_from_slug("simple"), "Simple");
-    }
-
-    #[test]
-    fn slug_from_name_converts_correctly() {
-        assert_eq!(slug_from_name("Translate English"), "translate-english");
-        assert_eq!(slug_from_name("prompt-refine"), "prompt-refine");
-        assert_eq!(slug_from_name("My Cool Prompt!"), "my-cool-prompt");
-        assert_eq!(slug_from_name("  spaces  "), "spaces");
-    }
-
-    #[test]
-    fn migrate_from_prompts_creates_skill_dirs() {
-        use crate::models::settings::{PromptData, PromptMessage};
-
-        let dir = TempDir::new().unwrap();
-        let skills_dir = dir.path().join("skills");
-        std::fs::create_dir(&skills_dir).unwrap();
-
-        write_skill_dir(&skills_dir, "existing", "existing", "desc", "body");
-
-        let mut service = SkillService::load(&skills_dir, None, &[]).unwrap();
-        assert_eq!(service.list_skills().len(), 1);
-
-        let prompts = vec![
-            PromptData {
-                id: "my-prompt".to_string(),
-                name: "My Prompt".to_string(),
-                description: Some("A custom prompt".to_string()),
-                messages: vec![PromptMessage {
-                    role: "system".to_string(),
-                    content: "You are a summarizer.".to_string(),
-                }],
-            },
-        ];
-
-        let migrated = service.migrate_from_prompts(&prompts, &[]).unwrap();
-        assert_eq!(migrated, vec!["my-prompt"]);
-        assert_eq!(service.list_skills().len(), 2);
-        assert!(service.get_skill("my-prompt").is_some());
-
-        let skill = service.get_skill("my-prompt").unwrap();
-        assert_eq!(skill.display_name, "My Prompt");
-        assert!(skill.body.contains("You are a summarizer."));
-    }
-
-    #[test]
-    fn migrate_skips_existing_skills() {
-        use crate::models::settings::{PromptData, PromptMessage};
-
-        let dir = TempDir::new().unwrap();
-        let skills_dir = dir.path().join("skills");
-        std::fs::create_dir(&skills_dir).unwrap();
-
-        write_skill_dir(&skills_dir, "existing", "existing", "desc", "original body");
-
-        let mut service = SkillService::load(&skills_dir, None, &[]).unwrap();
-
-        let prompts = vec![PromptData {
-            id: "existing".to_string(),
-            name: "Existing".to_string(),
-            description: None,
-            messages: vec![PromptMessage {
-                role: "system".to_string(),
-                content: "New body.".to_string(),
-            }],
-        }];
-
-        let migrated = service.migrate_from_prompts(&prompts, &[]).unwrap();
-        assert!(migrated.is_empty());
-
-        let skill = service.get_skill("existing").unwrap();
-        assert!(skill.body.contains("original body"));
-    }
-
-    #[test]
-    fn migrate_skips_when_display_name_matches_existing() {
-        use crate::models::settings::{PromptData, PromptMessage};
-
-        let dir = TempDir::new().unwrap();
-        let skills_dir = dir.path().join("skills");
-        std::fs::create_dir(&skills_dir).unwrap();
-
-        write_skill_dir_with_display(
-            &skills_dir, "translate-english", "translate-english",
-            "Translate - English", "desc", "original body",
-        );
-
-        let mut service = SkillService::load(&skills_dir, None, &[]).unwrap();
-
-        let prompts = vec![PromptData {
-            id: "c1b8d3e5-f2a7-4d96-8b39-5e7f3a2c1d0e".to_string(),
-            name: "Translate - English".to_string(),
-            description: None,
-            messages: vec![PromptMessage {
-                role: "system".to_string(),
-                content: "Migrated body.".to_string(),
-            }],
-        }];
-
-        let migrated = service.migrate_from_prompts(&prompts, &[]).unwrap();
-        assert!(migrated.is_empty(), "should skip prompt when display_name matches existing skill");
-        assert_eq!(service.list_skills().len(), 1);
     }
 
     #[test]
