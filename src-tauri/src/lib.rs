@@ -234,7 +234,7 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 tauri::async_runtime::spawn(async move {
                     {
                         let state = app.state::<Mutex<AppState>>();
-                        state.lock().await.active_app = frontmost;
+                        state.lock().await.push_active_app(frontmost);
                     }
                     let _ = commands::menu::show_context_menu_window(app).await;
                 });
@@ -379,7 +379,7 @@ async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
             let frontmost = detect_frontmost_app();
             {
                 let state = app.state::<Mutex<AppState>>();
-                state.lock().await.active_app = frontmost;
+                state.lock().await.push_active_app(frontmost);
             }
             if let Err(e) = commands::menu::show_context_menu_window(app.clone()).await {
                 log::error!("open_context_menu failed: {e}");
@@ -590,7 +590,7 @@ pub fn run() {
                 speech: SpeechService::new(),
                 ui_state: ui_state_service,
                 conversation_context: crate::services::conversation_context::ConversationContextCache::new(),
-                active_app: String::new(),
+                recent_apps: std::collections::VecDeque::new(),
             }));
             Ok(())
         })
@@ -666,6 +666,17 @@ pub fn run() {
             commands::ui_state::get_ui_state,
             commands::ui_state::set_ui_state,
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Focused(false) = event {
+                let app = window.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                    let detected = detect_frontmost_app();
+                    let state = app.state::<Mutex<crate::commands::settings::AppState>>();
+                    state.lock().await.push_active_app(detected);
+                });
+            }
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

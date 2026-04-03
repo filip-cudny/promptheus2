@@ -1,47 +1,39 @@
 <script lang="ts">
-  import { X, MessageSquare, MessagesSquare } from "lucide-svelte";
+  import { X, MessageSquare, MessagesSquare, Mic } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import type { TabState } from "$lib/types";
+  import type { HistoryEntry } from "$lib/types";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
+  import type { getHistoryStore } from "$lib/stores/history.svelte";
 
   let {
     store,
+    historyStore,
     open,
     onClose,
   }: {
     store: ReturnType<typeof createConversationStore>;
+    historyStore: ReturnType<typeof getHistoryStore>;
     open: boolean;
     onClose: () => void;
   } = $props();
 
-  const showCloseButtons = $derived(store.tabs.length > 1);
+  function isEntryActive(entryId: string): boolean {
+    const tab = store.tabs.find(t => t.history_entry_id === entryId);
+    return tab?.tab_id === store.activeTabId;
+  }
 
-  function handleTabClick(tabId: string) {
-    store.switchTab(tabId);
+  async function handleEntryClick(entry: HistoryEntry) {
+    await store.restoreFromHistory(entry.id, false);
     onClose();
   }
 
-  function handleCloseTab(e: MouseEvent, tabId: string) {
-    e.stopPropagation();
-    store.closeTab(tabId);
+  function entryTimestamp(entry: HistoryEntry): string | null {
+    const raw = entry.updated_at ?? entry.created_at ?? entry.timestamp;
+    return raw ? formatTimestamp(raw) : null;
   }
 
-  function tabTurnCount(tab: TabState): number {
-    const path = tab.tree.current_path;
-    let count = 0;
-    for (const nodeId of path) {
-      const node = tab.tree.nodes.get(nodeId);
-      if (node?.role === "user") count++;
-    }
-    return count;
-  }
-
-  function tabTimestamp(tab: TabState): string | null {
-    const path = tab.tree.current_path;
-    if (path.length === 0) return null;
-    const lastNode = tab.tree.nodes.get(path[path.length - 1]);
-    if (!lastNode) return null;
-    return formatTimestamp(lastNode.timestamp);
+  function entryTitle(entry: HistoryEntry): string {
+    return entry.title ?? entry.prompt_name ?? entry.input_content.slice(0, 60);
   }
 
   function formatTimestamp(raw: string): string {
@@ -72,36 +64,27 @@
   </div>
 
   <div class="tab-list">
-    {#each [...store.tabs].reverse() as tab (tab.tab_id)}
-      {@const turns = tabTurnCount(tab)}
-      {@const ts = tabTimestamp(tab)}
-      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    {#each historyStore.entries as entry (entry.id)}
+      {@const ts = entryTimestamp(entry)}
+      <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
       <div
         class="tab-item"
-        class:active={tab.tab_id === store.activeTabId}
-        onclick={() => handleTabClick(tab.tab_id)}
+        class:active={isEntryActive(entry.id)}
+        onclick={() => handleEntryClick(entry)}
       >
-        {#if turns > 1}
+        {#if entry.entry_type === "speech"}
+          <Mic size={ICON_SIZE.sm} />
+        {:else if entry.is_multi_turn}
           <MessagesSquare size={ICON_SIZE.sm} />
         {:else}
           <MessageSquare size={ICON_SIZE.sm} />
         {/if}
         <div class="tab-body">
-          <span class="tab-name">{tab.tab_name}</span>
+          <span class="tab-name">{entryTitle(entry)}</span>
           {#if ts}
-            <span class="tab-meta">
-              {ts}{#if turns > 0}&nbsp;&middot;&nbsp;{turns} {turns === 1 ? "turn" : "turns"}{/if}
-            </span>
+            <span class="tab-meta">{ts}</span>
           {/if}
         </div>
-        {#if showCloseButtons}
-          <button
-            class="tab-close"
-            onclick={(e: MouseEvent) => handleCloseTab(e, tab.tab_id)}
-          >
-            <X size={ICON_SIZE.sm} />
-          </button>
-        {/if}
       </div>
     {/each}
   </div>
@@ -229,30 +212,5 @@
     font-size: 11px;
     font-weight: 400;
     color: rgba(255, 255, 255, 0.3);
-  }
-
-  .tab-close {
-    flex-shrink: 0;
-    width: 20px;
-    height: 20px;
-    border-radius: 4px;
-    border: none;
-    background: transparent;
-    color: #666;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    opacity: 0;
-  }
-
-  .tab-item:hover .tab-close {
-    opacity: 1;
-  }
-
-  .tab-close:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: #e0e0e0;
   }
 </style>

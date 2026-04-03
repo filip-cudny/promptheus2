@@ -48,6 +48,9 @@ pub struct Settings {
     #[serde(default)]
     pub context_section: Option<String>,
 
+    #[serde(default = "default_recent_apps_count")]
+    pub recent_apps_count: usize,
+
     #[serde(default)]
     pub skills_order: Vec<String>,
 
@@ -256,6 +259,10 @@ fn default_conversation_title_prompt() -> String {
     "Generate a short conversation title based on the user's first message. Return only the title, 2-6 words, no emoji, no quotes, no trailing punctuation. Match the user's language when possible.".to_string()
 }
 
+fn default_recent_apps_count() -> usize {
+    4
+}
+
 fn default_white() -> String {
     "#FFFFFF".to_string()
 }
@@ -278,6 +285,7 @@ impl Default for Settings {
             system_prompt: default_system_prompt(),
             about_me: None,
             context_section: None,
+            recent_apps_count: default_recent_apps_count(),
             skills_order: Vec::new(),
             conversation_title_model: String::new(),
             conversation_title_prompt: default_conversation_title_prompt(),

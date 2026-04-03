@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, untrack } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import ContextSection from "./ContextSection.svelte";
   import AttachMenu from "./AttachMenu.svelte";
@@ -40,10 +40,12 @@
   let shiftHeld = $state(false);
   let skillEditable: ReturnType<typeof SkillEditable> | undefined = $state();
   let syncedTabId = $state("");
+  let lastDomText = $state("");
 
   $effect(() => {
     if (store.activeTabId === syncedTabId) {
       store.updateInputText(localText);
+      lastDomText = localText;
     }
   });
 
@@ -65,6 +67,9 @@
     const storeImages = store.inputImages;
     const storeAttachments = store.inputTextAttachments;
 
+    const tabChanged = tabId !== untrack(() => syncedTabId);
+    const textChangedExternally = storeText !== untrack(() => lastDomText);
+
     localText = storeText;
     localImages = storeImages;
     localTextAttachments = storeAttachments;
@@ -74,8 +79,10 @@
       if (storeText === "") {
         const el = skillEditable.getElement();
         if (el) el.innerHTML = "";
-      } else {
+        lastDomText = "";
+      } else if (tabChanged || textChangedExternally) {
         skillEditable.setTextAndHighlight(storeText);
+        lastDomText = storeText;
         requestAnimationFrame(() => {
           skillEditable?.focus();
           skillEditable?.restoreCursor(storeText.length);

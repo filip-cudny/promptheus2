@@ -7,11 +7,13 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import { PanelLeft, SquarePen } from "lucide-svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
+  import { getHistoryStore } from "$lib/stores/history.svelte";
   import ConversationArea from "$lib/components/prompt/ConversationArea.svelte";
   import InputArea from "$lib/components/prompt/InputArea.svelte";
   import TabSidebar from "$lib/components/prompt/TabSidebar.svelte";
 
   const skillsStore = getSkillsStore();
+  const historyStore = getHistoryStore();
 
   const params = new URLSearchParams(window.location.search);
   const promptId = params.get("promptId") ?? "";
@@ -55,6 +57,7 @@
 
   onMount(async () => {
     skillsStore.init();
+    historyStore.init();
 
     if (historyEntryId) {
       await store.restoreFromHistory(historyEntryId, lastInteractionOnly);
@@ -122,6 +125,7 @@
     unlistenContextChanged?.();
     unlistenVoiceInput?.();
     unlistenOpenForSkill?.();
+    historyStore.destroy();
     store.destroy();
   });
 </script>
@@ -135,9 +139,6 @@
       title="Toggle conversations"
     >
       <PanelLeft size={ICON_SIZE.md} />
-      {#if store.tabs.length > 1}
-        <span class="tab-badge">{store.tabs.length}</span>
-      {/if}
     </button>
     <button
       class="top-btn"
@@ -149,7 +150,7 @@
   </div>
   <ConversationArea {store} />
   <InputArea {store} {contextVisible} {contextDisabled} {contextInitialCollapsed} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
-  <TabSidebar {store} open={sidebarOpen} onClose={() => sidebarOpen = false} />
+  <TabSidebar {store} {historyStore} open={sidebarOpen} onClose={() => sidebarOpen = false} />
 </div>
 
 <style>
@@ -218,23 +219,5 @@
   .top-btn:hover {
     color: rgba(255, 255, 255, 0.8);
     background: rgba(255, 255, 255, 0.1);
-  }
-
-  .tab-badge {
-    position: absolute;
-    top: -5px;
-    right: -2px;
-    min-width: 15px;
-    height: 15px;
-    border-radius: 8px;
-    background: rgba(100, 160, 255, 0.85);
-    color: #fff;
-    font-size: 9px;
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 4px;
-    box-sizing: border-box;
   }
 </style>

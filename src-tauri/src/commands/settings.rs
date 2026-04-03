@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
@@ -34,7 +36,27 @@ pub struct AppState {
     pub speech: SpeechService,
     pub ui_state: UiStateService,
     pub conversation_context: ConversationContextCache,
-    pub active_app: String,
+    pub recent_apps: VecDeque<String>,
+}
+
+impl AppState {
+    pub fn push_active_app(&mut self, app: String) {
+        if app.is_empty() || app.to_lowercase().contains("promptheus") {
+            return;
+        }
+        let max = self.config.settings().recent_apps_count;
+        self.recent_apps.retain(|a| a != &app);
+        self.recent_apps.push_front(app);
+        self.recent_apps.truncate(max);
+    }
+
+    pub fn active_app(&self) -> &str {
+        self.recent_apps.front().map(|s| s.as_str()).unwrap_or("")
+    }
+
+    pub fn recent_apps_display(&self) -> String {
+        self.recent_apps.iter().cloned().collect::<Vec<_>>().join(", ")
+    }
 }
 
 fn emit_changed(app: &AppHandle) -> Result<(), String> {

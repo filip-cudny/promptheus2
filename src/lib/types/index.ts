@@ -21,6 +21,7 @@ export interface Settings {
   system_prompt: string;
   about_me: string | null;
   context_section: string | null;
+  recent_apps_count: number;
   skills_order: string[];
   conversation_title_model: string;
   conversation_title_prompt: string;

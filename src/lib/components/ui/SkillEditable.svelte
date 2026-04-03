@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
   import { highlightSkills } from "$lib/utils/skillHighlight";
   import type { SkillSummary } from "$lib/types";
@@ -37,8 +38,8 @@
   });
 
   $effect(() => {
-    if (!editable || !text) return;
     const _nameSet = skillsStore.nameSet;
+    if (!editable || !untrack(() => text)) return;
     lastSkillPattern = "";
     applyHighlighting();
   });
