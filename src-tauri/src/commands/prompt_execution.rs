@@ -9,9 +9,7 @@ use tokio_stream::StreamExt;
 use crate::commands::settings::AppState;
 use crate::services::config::ConfigService;
 use crate::models::ai::StreamEvent;
-use crate::models::history::{
-    SerializedConversationNode, SerializedConversationTurn,
-};
+use crate::models::history::SerializedConversationNode;
 use crate::models::message::{
     ConversationNodeForExecution, ImageData, MessageContent,
     NodeUpdate, ProcessedMessage,
@@ -102,7 +100,7 @@ pub async fn execute_skill(
 
     let stream_result = {
         let stream = ai
-            .complete_stream(&model_id, messages)
+            .complete_stream(&model_id, messages, None)
             .await
             .map_err(|e| e.to_string());
 
@@ -173,22 +171,11 @@ pub async fn execute_skill(
 
             let user_display_text = format!("/{skill_name} {input_content}");
 
-            let turn = SerializedConversationTurn {
-                turn_number: 1,
-                message_text: user_display_text.clone(),
-                message_image_paths: vec![],
-                output_text: Some(full_text.clone()),
-                is_complete: true,
-                output_versions: vec![full_text],
-                current_version_index: 0,
-            };
-
             let user_node = SerializedConversationNode {
                 node_id: user_node_id.clone(),
                 parent_id: None,
                 role: "user".to_string(),
                 content: user_display_text,
-                image_paths: vec![],
                 timestamp: now.clone(),
                 children: vec![assistant_node_id.clone()],
                 updates: vec![],
@@ -200,8 +187,7 @@ pub async fn execute_skill(
                 node_id: assistant_node_id.clone(),
                 parent_id: Some(user_node_id.clone()),
                 role: "assistant".to_string(),
-                content: turn.output_text.clone().unwrap_or_default(),
-                image_paths: vec![],
+                content: full_text.clone(),
                 timestamp: now,
                 children: vec![],
                 updates: vec![],
@@ -210,9 +196,7 @@ pub async fn execute_skill(
             };
 
             state.history.add_conversation_entry(
-                &[turn],
                 String::new(),
-                vec![],
                 Some(skill_name),
                 Some(skill_display_name),
                 true,
@@ -222,6 +206,7 @@ pub async fn execute_skill(
                 vec![user_node_id, assistant_node_id],
                 true,
                 None,
+                vec![],
             );
             let _ = app.emit("history-changed", ());
 
@@ -401,11 +386,13 @@ pub async fn execute_conversation_from_tree(
     tab_id: String,
     skill_id: Option<String>,
     skill_name: Option<String>,
+    model_id: Option<String>,
+    reasoning_effort: Option<String>,
     on_event: Channel<StreamEvent>,
 ) -> Result<(), String> {
     let start_time = Instant::now();
 
-    let (execution_id, resolved_model_id, model_display_name, all_messages, ai, updates_for_event) = {
+    let (execution_id, resolved_model_id, model_display_name, all_messages, ai, updates_for_event, param_overrides) = {
         let mut state = state.lock().await;
 
         let execution_id = state
@@ -414,10 +401,17 @@ pub async fn execute_conversation_from_tree(
             .map_err(|e| e.to_string())?;
 
         let resolved_model_id =
-            PromptExecutionService::resolve_model(&state.config, None).map_err(|e| {
+            PromptExecutionService::resolve_model(&state.config, model_id.as_deref()).map_err(|e| {
                 state.prompt_execution.finish_execution();
                 e.to_string()
             })?;
+
+        let param_overrides = reasoning_effort.map(|effort| {
+            ModelParameters {
+                reasoning_effort: Some(effort),
+                ..Default::default()
+            }
+        });
 
         let model_display_name = state
             .config
@@ -498,6 +492,7 @@ pub async fn execute_conversation_from_tree(
             all_messages,
             ai,
             updates_for_event,
+            param_overrides,
         )
     };
 
@@ -514,7 +509,7 @@ pub async fn execute_conversation_from_tree(
 
     let stream_result = {
         let stream = ai
-            .complete_stream(&resolved_model_id, all_messages)
+            .complete_stream(&resolved_model_id, all_messages, param_overrides)
             .await
             .map_err(|e| e.to_string());
 

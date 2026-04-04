@@ -10,7 +10,7 @@ use crate::services::ai::AiService;
 use crate::services::clipboard::ClipboardService;
 use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
-use crate::services::history::HistoryService;
+use crate::services::sqlite_history::SqliteHistoryService;
 use crate::services::image_storage::ImageStorage;
 use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::notification::NotificationService;
@@ -29,7 +29,7 @@ pub struct AppState {
     pub context: ContextManagerService,
     pub placeholder: PlaceholderService,
     pub ai: AiService,
-    pub history: HistoryService,
+    pub history: SqliteHistoryService,
     pub image_storage: ImageStorage,
     pub prompt_execution: PromptExecutionService,
     pub skill_service: SkillService,

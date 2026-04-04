@@ -15,11 +15,7 @@ import {
   updateHistoryEntryTitle,
   getHistoryEntry,
 } from "$lib/services/history";
-import {
-  isSkillXml,
-  extractSkillDisplayText,
-  hasSkillReferences,
-} from "$lib/utils/skillDisplay";
+import { hasSkillReferences } from "$lib/utils/skillDisplay";
 import type {
   ConversationNode,
   ConversationImage,
@@ -27,7 +23,7 @@ import type {
   MessagePair,
   TabState,
   SerializedConversationNode,
-  SerializedConversationTurn,
+  ImagePayload,
 } from "$lib/types";
 import type { ConversationNodeForExecution } from "$lib/types/ai";
 import { invoke } from "@tauri-apps/api/core";
@@ -150,7 +146,6 @@ function serializeNodes(
     parent_id: node.parent_id,
     role: node.role,
     content: node.content,
-    image_paths: [],
     text_attachments: node.text_attachments,
     timestamp: node.timestamp,
     children: node.children,
@@ -160,18 +155,30 @@ function serializeNodes(
   }));
 }
 
-function serializeTurns(pairs: MessagePair[]): SerializedConversationTurn[] {
-  return pairs.map((pair) => ({
-    turn_number: pair.message_number,
-    message_text: isSkillXml(pair.user.content)
-      ? extractSkillDisplayText(pair.user.content)
-      : pair.user.content,
-    message_image_paths: [],
-    output_text: pair.assistant?.content ?? null,
-    is_complete: pair.assistant !== null,
-    output_versions: pair.assistant ? [pair.assistant.content] : [],
-    current_version_index: 0,
-  }));
+function collectImages(tab: TabState): ImagePayload[] {
+  const images: ImagePayload[] = [];
+
+  for (const node of tab.tree.nodes.values()) {
+    for (let i = 0; i < node.images.length; i++) {
+      images.push({
+        node_id: node.node_id,
+        image_index: i,
+        data: node.images[i].data,
+        media_type: node.images[i].media_type,
+      });
+    }
+  }
+
+  for (let i = 0; i < tab.context_images.length; i++) {
+    images.push({
+      node_id: null,
+      image_index: i,
+      data: tab.context_images[i].data,
+      media_type: tab.context_images[i].media_type,
+    });
+  }
+
+  return images;
 }
 
 function serializePathNodes(tab: TabState): ConversationNodeForExecution[] {
@@ -650,25 +657,22 @@ export function createConversationStore(
     const pairs = getMessagePairs(tab.tree);
     if (pairs.length === 0) return;
 
-    const turns = serializeTurns(pairs);
     const nodes = serializeNodes(tab.tree);
+    const images = collectImages(tab);
 
     try {
       if (tab.history_entry_id) {
         await updateConversationEntry({
           entryId: tab.history_entry_id,
-          turns,
           contextText: tab.context_text,
-          contextImagePaths: [],
           nodes,
           rootNodeId: tab.tree.root_node_id,
           currentPath: tab.tree.current_path,
+          images,
         });
       } else {
         const entryId = await addConversationEntry({
-          turns,
           contextText: tab.context_text,
-          contextImagePaths: [],
           skillId,
           skillName,
           success: true,
@@ -677,6 +681,7 @@ export function createConversationStore(
           rootNodeId: tab.tree.root_node_id,
           currentPath: tab.tree.current_path,
           tabId: tab.tab_id,
+          images,
         });
         tab.history_entry_id = entryId;
         if (!/^Chat \d+$/.test(tab.tab_name)) {
@@ -713,8 +718,11 @@ export function createConversationStore(
       if (entry.conversation_data && !lastInteractionOnly) {
         const data = entry.conversation_data;
         newTab.context_text = data.context_text;
+        newTab.context_images = data.context_images ?? [];
         restoredTree.root_node_id = data.root_node_id;
         restoredTree.current_path = data.current_path;
+
+        const nodeImages = data.node_images ?? {};
 
         for (const serialized of data.nodes) {
           restoredTree.nodes.set(serialized.node_id, {
@@ -722,7 +730,7 @@ export function createConversationStore(
             parent_id: serialized.parent_id,
             role: serialized.role as "user" | "assistant",
             content: serialized.content,
-            images: [],
+            images: nodeImages[serialized.node_id] ?? [],
             text_attachments: serialized.text_attachments ?? [],
             timestamp: serialized.timestamp,
             children: serialized.children,

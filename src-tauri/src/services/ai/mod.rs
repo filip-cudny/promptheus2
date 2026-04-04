@@ -121,12 +121,17 @@ impl AiService {
         &self,
         model_id: &str,
         messages: Vec<ProcessedMessage>,
+        parameter_overrides: Option<ModelParameters>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk, AiError>> + Send>>, AiError> {
         let entry = self.get_provider(model_id)?;
+        let parameters = match parameter_overrides {
+            Some(overrides) => merge_parameters(&entry.parameters, &overrides),
+            None => entry.parameters.clone(),
+        };
         let request = CompletionRequest {
             model: entry.model_name.clone(),
             messages,
-            parameters: entry.parameters.clone(),
+            parameters,
         };
         entry.provider.complete_stream(request).await
     }
@@ -151,5 +156,16 @@ impl AiService {
             .providers
             .get(model_id)
             .ok_or_else(|| AiError::ModelNotFound(model_id.to_string()))
+    }
+}
+
+fn merge_parameters(base: &ModelParameters, overrides: &ModelParameters) -> ModelParameters {
+    ModelParameters {
+        temperature: overrides.temperature.or(base.temperature),
+        max_tokens: overrides.max_tokens.or(base.max_tokens),
+        top_p: overrides.top_p.or(base.top_p),
+        frequency_penalty: overrides.frequency_penalty.or(base.frequency_penalty),
+        presence_penalty: overrides.presence_penalty.or(base.presence_penalty),
+        reasoning_effort: overrides.reasoning_effort.clone().or(base.reasoning_effort.clone()),
     }
 }

@@ -65,11 +65,11 @@
 >
   <div class="entry-icon" class:icon-chat={isChat} class:icon-quick={!isChat}>
     {#if isChat}
-      <MessageSquare size={ICON_SIZE.md} />
+      <MessagesSquare size={ICON_SIZE.md} />
     {:else if entry.entry_type === "speech"}
       <Mic size={ICON_SIZE.md} />
     {:else}
-      <MessagesSquare size={ICON_SIZE.md} />
+      <MessageSquare size={ICON_SIZE.md} />
     {/if}
     {#if !entry.success}
       <span class="error-badge">

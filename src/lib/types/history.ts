@@ -1,23 +1,13 @@
 export type HistoryEntryType = "speech" | "text";
 
-export interface SerializedConversationTurn {
-  turn_number: number;
-  message_text: string;
-  message_image_paths: string[];
-  output_text: string | null;
-  is_complete: boolean;
-  output_versions: string[];
-  current_version_index: number;
-}
-
 import type { NodeUpdate } from "$lib/types/ai";
+import type { ConversationImage } from "$lib/types/conversation";
 
 export interface SerializedConversationNode {
   node_id: string;
   parent_id: string | null;
   role: string;
   content: string;
-  image_paths: string[];
   text_attachments: string[];
   timestamp: string;
   children: string[];
@@ -28,14 +18,19 @@ export interface SerializedConversationNode {
 
 export interface ConversationHistoryData {
   context_text: string;
-  context_image_paths: string[];
-  turns: SerializedConversationTurn[];
-  skill_id: string | null;
-  skill_name: string | null;
   nodes: SerializedConversationNode[];
   root_node_id: string | null;
   current_path: string[];
   resolved_environment_section: string | null;
+  node_images: Record<string, ConversationImage[]>;
+  context_images: ConversationImage[];
+}
+
+export interface ImagePayload {
+  node_id: string | null;
+  image_index: number;
+  data: string;
+  media_type: string;
 }
 
 export interface LastInteractionData {

@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
-use crate::models::message::NodeUpdate;
+use crate::models::message::{ImageData, NodeUpdate};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -31,8 +33,6 @@ pub struct SerializedConversationNode {
     pub role: String,
     pub content: String,
     #[serde(default)]
-    pub image_paths: Vec<String>,
-    #[serde(default)]
     pub timestamp: String,
     #[serde(default)]
     pub children: Vec<String>,
@@ -48,18 +48,24 @@ pub struct SerializedConversationNode {
 pub struct ConversationHistoryData {
     pub context_text: String,
     #[serde(default)]
-    pub context_image_paths: Vec<String>,
-    #[serde(default)]
-    pub turns: Vec<SerializedConversationTurn>,
-    pub skill_id: Option<String>,
-    pub skill_name: Option<String>,
-    #[serde(default)]
     pub nodes: Vec<SerializedConversationNode>,
     pub root_node_id: Option<String>,
     #[serde(default)]
     pub current_path: Vec<String>,
     #[serde(default)]
     pub resolved_environment_section: Option<String>,
+    #[serde(default)]
+    pub node_images: HashMap<String, Vec<ImageData>>,
+    #[serde(default)]
+    pub context_images: Vec<ImageData>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ImagePayload {
+    pub node_id: Option<String>,
+    pub image_index: u32,
+    pub data: String,
+    pub media_type: String,
 }
 
 fn default_true() -> bool {
@@ -140,25 +146,12 @@ mod tests {
             skill_name: Some("Chat Prompt".into()),
             conversation_data: Some(ConversationHistoryData {
                 context_text: "Some context".into(),
-                context_image_paths: vec!["/path/to/image.png".into()],
-                turns: vec![SerializedConversationTurn {
-                    turn_number: 1,
-                    message_text: "Hello".into(),
-                    message_image_paths: vec![],
-                    output_text: Some("Hi there".into()),
-                    is_complete: true,
-                    output_versions: vec!["Hi there".into(), "Hello!".into()],
-                    current_version_index: 0,
-                }],
-                skill_id: Some("prompt-2".into()),
-                skill_name: Some("Chat Prompt".into()),
                 nodes: vec![
                     SerializedConversationNode {
                         node_id: "node-root".into(),
                         parent_id: None,
                         role: "user".into(),
                         content: "Hello".into(),
-                        image_paths: vec![],
                         timestamp: "2026-01-01T12:00:00Z".into(),
                         children: vec!["node-reply".into()],
                         updates: vec![],
@@ -170,7 +163,6 @@ mod tests {
                         parent_id: Some("node-root".into()),
                         role: "assistant".into(),
                         content: "Hi there".into(),
-                        image_paths: vec![],
                         timestamp: "2026-01-01T12:00:01Z".into(),
                         children: vec![],
                         updates: vec![],
@@ -181,6 +173,8 @@ mod tests {
                 root_node_id: Some("node-root".into()),
                 current_path: vec!["node-root".into(), "node-reply".into()],
                 resolved_environment_section: None,
+                node_images: HashMap::new(),
+                context_images: vec![],
             }),
             created_at: Some("2026-01-01T12:00:00Z".into()),
             updated_at: Some("2026-01-01T12:00:01Z".into()),
@@ -195,11 +189,9 @@ mod tests {
         assert!(deserialized.is_multi_turn);
 
         let conv = deserialized.conversation_data.unwrap();
-        assert_eq!(conv.turns.len(), 1);
         assert_eq!(conv.nodes.len(), 2);
         assert_eq!(conv.root_node_id, Some("node-root".into()));
         assert_eq!(conv.current_path.len(), 2);
-        assert_eq!(conv.context_image_paths.len(), 1);
     }
 
     #[test]

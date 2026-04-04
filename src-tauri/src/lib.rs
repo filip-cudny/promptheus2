@@ -120,7 +120,8 @@ fn detect_frontmost_app() -> String {
 use services::clipboard::ClipboardService;
 use services::config::ConfigService;
 use services::context::{ContextManagerService, ContextMenuProvider};
-use services::history::HistoryService;
+use services::database::Database;
+use services::sqlite_history::SqliteHistoryService;
 use services::image_storage::ImageStorage;
 use services::menu_coordinator::MenuCoordinator;
 use services::dock::DockManager;
@@ -544,9 +545,10 @@ pub fn run() {
             let ai_service = AiService::new(&config_service.settings().models);
             let context_service = ContextManagerService::new();
             let placeholder_service = PlaceholderService::new();
-            let history_service = HistoryService::new(1000);
-
             let app_data_dir = app.path().app_data_dir()?;
+            let database = Database::open(&app_data_dir)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            let history_service = SqliteHistoryService::new(database, 1000);
             let image_storage = ImageStorage::new(&app_data_dir);
             image_storage
                 .initialize()

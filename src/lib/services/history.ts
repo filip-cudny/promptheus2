@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   HistoryEntry,
   HistoryEntryType,
-  SerializedConversationTurn,
+  ImagePayload,
   SerializedConversationNode,
   LastInteractionData,
 } from "$lib/types";
@@ -31,9 +31,7 @@ export async function addHistoryEntry(params: {
 }
 
 export async function addConversationEntry(params: {
-  turns: SerializedConversationTurn[];
   contextText: string;
-  contextImagePaths: string[];
   skillId: string | null;
   skillName: string | null;
   success: boolean;
@@ -42,18 +40,18 @@ export async function addConversationEntry(params: {
   rootNodeId: string | null;
   currentPath: string[];
   tabId: string | null;
+  images: ImagePayload[];
 }): Promise<string> {
   return invoke("add_conversation_entry", params);
 }
 
 export async function updateConversationEntry(params: {
   entryId: string;
-  turns: SerializedConversationTurn[];
   contextText: string;
-  contextImagePaths: string[];
   nodes: SerializedConversationNode[];
   rootNodeId: string | null;
   currentPath: string[];
+  images: ImagePayload[];
 }): Promise<void> {
   return invoke("update_conversation_entry", params);
 }

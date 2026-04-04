@@ -3,7 +3,7 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 use crate::models::history::{
-    HistoryEntry, HistoryEntryType, SerializedConversationNode, SerializedConversationTurn,
+    HistoryEntry, HistoryEntryType, ImagePayload, SerializedConversationNode,
 };
 
 use super::settings::AppState;
@@ -46,7 +46,7 @@ pub async fn add_history_entry(
     is_multi_turn: bool,
     skill_name: Option<String>,
 ) -> Result<(), String> {
-    let mut state = state.lock().await;
+    let state = state.lock().await;
     state.history.add_entry(
         input_content,
         entry_type,
@@ -65,9 +65,7 @@ pub async fn add_history_entry(
 pub async fn add_conversation_entry(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
-    turns: Vec<SerializedConversationTurn>,
     context_text: String,
-    context_image_paths: Vec<String>,
     skill_id: Option<String>,
     skill_name: Option<String>,
     success: bool,
@@ -76,16 +74,15 @@ pub async fn add_conversation_entry(
     root_node_id: Option<String>,
     current_path: Vec<String>,
     tab_id: Option<String>,
+    #[allow(unused_variables)] images: Vec<ImagePayload>,
 ) -> Result<String, String> {
-    let mut state = state.lock().await;
+    let state = state.lock().await;
     let resolved_environment_section = tab_id
         .as_deref()
         .and_then(|id| state.conversation_context.get(id))
         .map(|s| s.to_string());
     let id = state.history.add_conversation_entry(
-        &turns,
         context_text,
-        context_image_paths,
         skill_id,
         skill_name,
         success,
@@ -95,6 +92,7 @@ pub async fn add_conversation_entry(
         current_path,
         false,
         resolved_environment_section,
+        images,
     );
     emit_history_changed(&app)?;
     Ok(id)
@@ -105,24 +103,22 @@ pub async fn update_conversation_entry(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
     entry_id: String,
-    turns: Vec<SerializedConversationTurn>,
     context_text: String,
-    context_image_paths: Vec<String>,
     nodes: Vec<SerializedConversationNode>,
     root_node_id: Option<String>,
     current_path: Vec<String>,
+    #[allow(unused_variables)] images: Vec<ImagePayload>,
 ) -> Result<(), String> {
-    let mut state = state.lock().await;
+    let state = state.lock().await;
     state
         .history
         .update_conversation_entry(
             &entry_id,
-            &turns,
             context_text,
-            context_image_paths,
             nodes,
             root_node_id,
             current_path,
+            images,
         )
         .map_err(|e| e.to_string())?;
     emit_history_changed(&app)
@@ -148,7 +144,7 @@ pub async fn update_history_entry_title(
     entry_id: String,
     title: String,
 ) -> Result<(), String> {
-    let mut state = state.lock().await;
+    let state = state.lock().await;
     state
         .history
         .update_entry_title(&entry_id, title)
@@ -161,7 +157,7 @@ pub async fn clear_history(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
 ) -> Result<(), String> {
-    let mut state = state.lock().await;
+    let state = state.lock().await;
     state.history.clear();
     emit_history_changed(&app)
 }
