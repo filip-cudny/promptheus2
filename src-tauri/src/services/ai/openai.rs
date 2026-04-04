@@ -8,7 +8,7 @@ use tokio_stream::StreamExt;
 
 use crate::models::settings::ModelConfig;
 
-use super::provider::{AiProvider, CompletionRequest, StreamChunk};
+use super::provider::{AiProvider, CompletionRequest, StreamChunk, TokenUsage};
 use super::sse::parse_sse_stream;
 use super::AiError;
 
@@ -69,6 +69,10 @@ fn build_request_body(
         "stream": stream,
     });
 
+    if stream {
+        body["stream_options"] = serde_json::json!({"include_usage": true});
+    }
+
     let obj = body.as_object_mut().unwrap();
 
     if let Some(temp) = request.parameters.temperature {
@@ -126,6 +130,7 @@ struct ChatCompletionMessage {
 #[derive(Deserialize)]
 struct ChatCompletionChunk {
     choices: Vec<ChatCompletionChunkChoice>,
+    usage: Option<ChunkUsage>,
 }
 
 #[derive(Deserialize)]
@@ -136,6 +141,12 @@ struct ChatCompletionChunkChoice {
 #[derive(Deserialize)]
 struct ChatCompletionDelta {
     content: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ChunkUsage {
+    prompt_tokens: usize,
+    completion_tokens: usize,
 }
 
 #[async_trait]
@@ -217,13 +228,18 @@ impl AiProvider for OpenAiProvider {
                                 Err(_) => continue,
                             };
 
+                            let usage = chunk.usage.map(|u| TokenUsage {
+                                prompt_tokens: u.prompt_tokens,
+                                completion_tokens: u.completion_tokens,
+                            });
+
                             let delta = chunk
                                 .choices
                                 .first()
                                 .and_then(|c| c.delta.content.as_deref())
                                 .unwrap_or("");
 
-                            if delta.is_empty() {
+                            if delta.is_empty() && usage.is_none() {
                                 continue;
                             }
 
@@ -232,6 +248,7 @@ impl AiProvider for OpenAiProvider {
                                 Ok(StreamChunk {
                                     delta: delta.to_string(),
                                     accumulated: accumulated.clone(),
+                                    usage,
                                 }),
                                 (sse_stream, accumulated),
                             ));

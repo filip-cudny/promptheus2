@@ -17,6 +17,12 @@ pub struct CompletionRequest {
 pub struct StreamChunk {
     pub delta: String,
     pub accumulated: String,
+    pub usage: Option<TokenUsage>,
+}
+
+pub struct TokenUsage {
+    pub prompt_tokens: usize,
+    pub completion_tokens: usize,
 }
 
 #[async_trait]

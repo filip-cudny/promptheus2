@@ -33,19 +33,27 @@ pub async fn complete_stream(
         .map_err(|e| e.to_string())?;
 
     let mut full_text = String::new();
+    let mut prompt_tokens: Option<usize> = None;
+    let mut completion_tokens: Option<usize> = None;
 
     while let Some(result) = stream.next().await {
         match result {
             Ok(chunk) => {
-                full_text.clone_from(&chunk.accumulated);
-                if on_event
-                    .send(StreamEvent::Chunk {
-                        delta: chunk.delta,
-                        accumulated: chunk.accumulated,
-                    })
-                    .is_err()
-                {
-                    break;
+                if let Some(usage) = chunk.usage {
+                    prompt_tokens = Some(usage.prompt_tokens);
+                    completion_tokens = Some(usage.completion_tokens);
+                }
+                if !chunk.delta.is_empty() {
+                    full_text.clone_from(&chunk.accumulated);
+                    if on_event
+                        .send(StreamEvent::Chunk {
+                            delta: chunk.delta,
+                            accumulated: chunk.accumulated,
+                        })
+                        .is_err()
+                    {
+                        break;
+                    }
                 }
             }
             Err(e) => {
@@ -57,6 +65,10 @@ pub async fn complete_stream(
         }
     }
 
-    let _ = on_event.send(StreamEvent::Done { full_text });
+    let _ = on_event.send(StreamEvent::Done {
+        full_text,
+        prompt_tokens,
+        completion_tokens,
+    });
     Ok(())
 }

@@ -38,6 +38,10 @@ pub struct SerializedConversationNode {
     pub children: Vec<String>,
     #[serde(default)]
     pub updates: Vec<NodeUpdate>,
+    #[serde(default)]
+    pub prompt_tokens: Option<usize>,
+    #[serde(default)]
+    pub completion_tokens: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -158,6 +162,8 @@ mod tests {
                         timestamp: "2026-01-01T12:00:00Z".into(),
                         children: vec!["node-reply".into()],
                         updates: vec![],
+                        prompt_tokens: None,
+                        completion_tokens: None,
                     },
                     SerializedConversationNode {
                         node_id: "node-reply".into(),
@@ -168,6 +174,8 @@ mod tests {
                         timestamp: "2026-01-01T12:00:01Z".into(),
                         children: vec![],
                         updates: vec![],
+                        prompt_tokens: None,
+                        completion_tokens: None,
                     },
                 ],
                 root_node_id: Some("node-root".into()),

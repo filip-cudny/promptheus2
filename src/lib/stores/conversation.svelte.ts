@@ -30,8 +30,7 @@ import type {
   SerializedConversationTurn,
 } from "$lib/types";
 import type { ConversationNodeForExecution } from "$lib/types/ai";
-import { countTokensDebounced, estimateImageTokens } from "$lib/services/tokenCounter";
-import type { Provider } from "$lib/types";
+import { invoke } from "@tauri-apps/api/core";
 
 export function createEmptyTree(): ConversationTree {
   return {
@@ -58,6 +57,8 @@ export function createNode(
     timestamp: new Date().toISOString(),
     children: [],
     updates: [],
+    prompt_tokens: null,
+    completion_tokens: null,
   };
 }
 
@@ -154,6 +155,8 @@ function serializeNodes(
     timestamp: node.timestamp,
     children: node.children,
     updates: node.updates,
+    prompt_tokens: node.prompt_tokens,
+    completion_tokens: node.completion_tokens,
   }));
 }
 
@@ -228,46 +231,93 @@ export function createConversationStore(
   });
 
   let totalTokens = $state(0);
-  let tokenProvider = $state<Provider>("openai");
+  let tokenDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function collectAllText(): string {
-    const parts: string[] = [];
-    for (const nodeId of activeTab.tree.current_path) {
-      const node = activeTab.tree.nodes.get(nodeId);
-      if (node) {
-        parts.push(node.content);
-        parts.push(...node.text_attachments);
+  function getLastApiUsage(): { prompt: number; completion: number } | null {
+    const path = activeTab.tree.current_path;
+    for (let i = path.length - 1; i >= 0; i--) {
+      const node = activeTab.tree.nodes.get(path[i]);
+      if (node?.role === "assistant" && node.prompt_tokens != null && node.completion_tokens != null) {
+        return { prompt: node.prompt_tokens, completion: node.completion_tokens };
       }
     }
-    if (activeTab.context_text) parts.push(activeTab.context_text);
-    if (activeTab.input_text) parts.push(activeTab.input_text);
-    parts.push(...activeTab.input_text_attachments);
-    return parts.filter(Boolean).join("\n");
-  }
-
-  function countAllImageTokens(): number {
-    let count = 0;
-    const perImage = estimateImageTokens(tokenProvider);
-    for (const nodeId of activeTab.tree.current_path) {
-      const node = activeTab.tree.nodes.get(nodeId);
-      if (node) count += node.images.length * perImage;
-    }
-    count += activeTab.context_images.length * perImage;
-    count += activeTab.input_images.length * perImage;
-    return count;
+    return null;
   }
 
   $effect(() => {
-    const allText = collectAllText();
-    const imageTokens = countAllImageTokens();
-    countTokensDebounced(allText, tokenProvider, (textTokens) => {
-      totalTokens = textTokens + imageTokens;
-    });
-  });
+    const lastUsage = getLastApiUsage();
+    const apiTotal = lastUsage ? lastUsage.prompt + lastUsage.completion : null;
+    const inputText = activeTab.input_text;
+    const inputImages = activeTab.input_images;
+    const inputAttachments = activeTab.input_text_attachments;
+    const hasPendingInput = inputText.trim() || inputImages.length > 0 || inputAttachments.length > 0;
 
-  function setTokenProvider(provider: Provider): void {
-    tokenProvider = provider;
-  }
+    if (apiTotal != null) {
+      if (!hasPendingInput) {
+        totalTokens = apiTotal;
+        return;
+      }
+
+      const pendingNode: ConversationNodeForExecution = {
+        node_id: "pending-input",
+        role: "user",
+        content: inputText,
+        images: inputImages.map((img) => ({ data: img.data, media_type: img.media_type })),
+        text_attachments: [...inputAttachments],
+        updates: [],
+      };
+      const tabId = activeTab.tab_id;
+
+      if (tokenDebounceTimer) clearTimeout(tokenDebounceTimer);
+      tokenDebounceTimer = setTimeout(async () => {
+        try {
+          const inputTokens = await invoke<number>("count_conversation_tokens", {
+            nodes: [pendingNode],
+            contextText: null,
+            contextImages: [],
+            tabId,
+          });
+          totalTokens = apiTotal + inputTokens;
+        } catch {
+          totalTokens = apiTotal;
+        }
+      }, 300);
+      return;
+    }
+
+    const nodes = serializePathNodes(activeTab);
+    if (hasPendingInput) {
+      nodes.push({
+        node_id: "pending-input",
+        role: "user",
+        content: inputText,
+        images: inputImages.map((img) => ({ data: img.data, media_type: img.media_type })),
+        text_attachments: [...inputAttachments],
+        updates: [],
+      });
+    }
+
+    const contextText = activeTab.context_text || null;
+    const contextImages = activeTab.context_images.map((img) => ({
+      data: img.data,
+      media_type: img.media_type,
+    }));
+    const tabId = activeTab.tab_id;
+
+    if (tokenDebounceTimer) clearTimeout(tokenDebounceTimer);
+    tokenDebounceTimer = setTimeout(async () => {
+      try {
+        totalTokens = await invoke<number>("count_conversation_tokens", {
+          nodes,
+          contextText,
+          contextImages,
+          tabId,
+        });
+      } catch {
+        totalTokens = 0;
+      }
+    }, 300);
+  });
 
   const isRegenerateMode = $derived.by(() => {
     const path = activeTab.tree.current_path;
@@ -309,8 +359,10 @@ export function createConversationStore(
           tab.tree.nodes.set(assistantNode.node_id, assistantNode);
           tab.streamed_content = accumulated;
         },
-        onDone: (fullText) => {
+        onDone: (fullText, usage) => {
           assistantNode.content = fullText;
+          assistantNode.prompt_tokens = usage?.prompt_tokens ?? null;
+          assistantNode.completion_tokens = usage?.completion_tokens ?? null;
           tab.tree.nodes.set(assistantNode.node_id, assistantNode);
           tab.is_executing = false;
           tab.is_streaming = false;
@@ -675,6 +727,8 @@ export function createConversationStore(
             timestamp: serialized.timestamp,
             children: serialized.children,
             updates: serialized.updates ?? [],
+            prompt_tokens: serialized.prompt_tokens ?? null,
+            completion_tokens: serialized.completion_tokens ?? null,
           });
         }
       } else if (entry.input_content) {
@@ -695,6 +749,8 @@ export function createConversationStore(
           timestamp: now,
           children: entry.output_content ? [assistantNodeId] : [],
           updates: [],
+          prompt_tokens: null,
+          completion_tokens: null,
         });
 
         if (entry.output_content) {
@@ -709,6 +765,8 @@ export function createConversationStore(
             timestamp: now,
             children: [],
             updates: [],
+            prompt_tokens: null,
+            completion_tokens: null,
           });
         }
       }
@@ -781,8 +839,15 @@ export function createConversationStore(
     get totalTokens() {
       return totalTokens;
     },
+    get lastPromptTokens() {
+      const usage = getLastApiUsage();
+      return usage?.prompt ?? null;
+    },
+    get lastCompletionTokens() {
+      const usage = getLastApiUsage();
+      return usage?.completion ?? null;
+    },
     sendMessage,
-    setTokenProvider,
     stopExecution,
     regenerate,
     switchBranch,

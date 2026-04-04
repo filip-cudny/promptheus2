@@ -110,19 +110,27 @@ pub async fn execute_skill(
             Ok(mut stream) => {
                 let mut full_text = String::new();
                 let mut stream_error: Option<String> = None;
+                let mut prompt_tokens: Option<usize> = None;
+                let mut completion_tokens: Option<usize> = None;
 
                 while let Some(result) = stream.next().await {
                     match result {
                         Ok(chunk) => {
-                            full_text.clone_from(&chunk.accumulated);
-                            if on_event
-                                .send(StreamEvent::Chunk {
-                                    delta: chunk.delta,
-                                    accumulated: chunk.accumulated,
-                                })
-                                .is_err()
-                            {
-                                break;
+                            if let Some(usage) = chunk.usage {
+                                prompt_tokens = Some(usage.prompt_tokens);
+                                completion_tokens = Some(usage.completion_tokens);
+                            }
+                            if !chunk.delta.is_empty() {
+                                full_text.clone_from(&chunk.accumulated);
+                                if on_event
+                                    .send(StreamEvent::Chunk {
+                                        delta: chunk.delta,
+                                        accumulated: chunk.accumulated,
+                                    })
+                                    .is_err()
+                                {
+                                    break;
+                                }
                             }
                         }
                         Err(e) => {
@@ -141,6 +149,8 @@ pub async fn execute_skill(
                     None => {
                         let _ = on_event.send(StreamEvent::Done {
                             full_text: full_text.clone(),
+                            prompt_tokens,
+                            completion_tokens,
                         });
                         Ok(full_text)
                     }
@@ -182,6 +192,8 @@ pub async fn execute_skill(
                 timestamp: now.clone(),
                 children: vec![assistant_node_id.clone()],
                 updates: vec![],
+                prompt_tokens: None,
+                completion_tokens: None,
             };
 
             let assistant_node = SerializedConversationNode {
@@ -193,6 +205,8 @@ pub async fn execute_skill(
                 timestamp: now,
                 children: vec![],
                 updates: vec![],
+                prompt_tokens: None,
+                completion_tokens: None,
             };
 
             state.history.add_conversation_entry(
@@ -295,7 +309,7 @@ pub async fn generate_conversation_title(
     Ok(title.trim().to_string())
 }
 
-fn resolve_environment_section_template(config: &ConfigService, active_app: &str, recent_apps: &str) -> String {
+pub fn resolve_environment_section_template(config: &ConfigService, active_app: &str, recent_apps: &str) -> String {
     let template = config.environment_section_template();
     if template.is_empty() {
         return String::new();
@@ -311,7 +325,7 @@ fn resolve_environment_section_template(config: &ConfigService, active_app: &str
         .replace("{{recent_apps}}", recent_apps)
 }
 
-fn build_system_prompt_base(config: &ConfigService, resolved_environment_section: Option<&str>, active_app: &str, recent_apps: &str) -> String {
+pub fn build_system_prompt_base(config: &ConfigService, resolved_environment_section: Option<&str>, active_app: &str, recent_apps: &str) -> String {
     let system_prompt = &config.settings().system_prompt;
     let input_format_guide = config.input_format_guide();
     let about_me = config.about_me();
@@ -508,19 +522,27 @@ pub async fn execute_conversation_from_tree(
             Ok(mut stream) => {
                 let mut full_text = String::new();
                 let mut stream_error: Option<String> = None;
+                let mut prompt_tokens: Option<usize> = None;
+                let mut completion_tokens: Option<usize> = None;
 
                 while let Some(result) = stream.next().await {
                     match result {
                         Ok(chunk) => {
-                            full_text.clone_from(&chunk.accumulated);
-                            if on_event
-                                .send(StreamEvent::Chunk {
-                                    delta: chunk.delta,
-                                    accumulated: chunk.accumulated,
-                                })
-                                .is_err()
-                            {
-                                break;
+                            if let Some(usage) = chunk.usage {
+                                prompt_tokens = Some(usage.prompt_tokens);
+                                completion_tokens = Some(usage.completion_tokens);
+                            }
+                            if !chunk.delta.is_empty() {
+                                full_text.clone_from(&chunk.accumulated);
+                                if on_event
+                                    .send(StreamEvent::Chunk {
+                                        delta: chunk.delta,
+                                        accumulated: chunk.accumulated,
+                                    })
+                                    .is_err()
+                                {
+                                    break;
+                                }
                             }
                         }
                         Err(e) => {
@@ -539,6 +561,8 @@ pub async fn execute_conversation_from_tree(
                     None => {
                         let _ = on_event.send(StreamEvent::Done {
                             full_text: full_text.clone(),
+                            prompt_tokens,
+                            completion_tokens,
                         });
                         Ok(full_text)
                     }

@@ -585,6 +585,8 @@ mod tests {
             timestamp: "2026-01-01".into(),
             children: vec![],
             updates: vec![],
+            prompt_tokens: None,
+            completion_tokens: None,
         }];
 
         let id = svc.add_conversation_entry(

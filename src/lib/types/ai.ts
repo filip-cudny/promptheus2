@@ -4,7 +4,7 @@ export type NodeUpdate =
 
 export type StreamEvent =
   | { event: "chunk"; data: { delta: string; accumulated: string } }
-  | { event: "done"; data: { full_text: string } }
+  | { event: "done"; data: { full_text: string; prompt_tokens: number | null; completion_tokens: number | null } }
   | { event: "error"; data: { message: string } }
   | { event: "node_updates"; data: { node_id: string; updates: NodeUpdate[] } };
 

@@ -76,7 +76,6 @@
       const activeModel = settings.models.find((m) => m.id === settings.default_model);
       if (activeModel) {
         contextWindowSize = getContextWindowSize(activeModel.model, activeModel.context_window_size);
-        store.setTokenProvider(activeModel.provider);
       }
     } catch {}
   }

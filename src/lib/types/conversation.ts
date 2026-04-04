@@ -10,6 +10,8 @@ export interface ConversationNode {
   timestamp: string;
   children: string[];
   updates: NodeUpdate[];
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
 }
 
 export interface ConversationImage {

@@ -642,6 +642,8 @@ pub fn run() {
             commands::speech::toggle_speech_recording,
             commands::speech::get_recording_state,
             commands::tokenizer::count_tokens,
+            commands::tokenizer::get_skill_token_counts,
+            commands::tokenizer::count_conversation_tokens,
             commands::ui_state::get_ui_state,
             commands::ui_state::set_ui_state,
         ])

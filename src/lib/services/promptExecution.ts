@@ -7,9 +7,14 @@ import type {
 
 import type { NodeUpdate } from "$lib/types/ai";
 
+export interface TokenUsageData {
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+}
+
 export interface ExecutionCallbacks {
   onChunk: (delta: string, accumulated: string) => void;
-  onDone: (fullText: string) => void;
+  onDone: (fullText: string, usage?: TokenUsageData) => void;
   onError: (message: string) => void;
   onNodeUpdates?: (nodeId: string, updates: NodeUpdate[]) => void;
 }
@@ -26,7 +31,10 @@ export async function executeSkill(
         callbacks.onChunk(event.data.delta, event.data.accumulated);
         break;
       case "done":
-        callbacks.onDone(event.data.full_text);
+        callbacks.onDone(event.data.full_text, {
+          prompt_tokens: event.data.prompt_tokens,
+          completion_tokens: event.data.completion_tokens,
+        });
         break;
       case "error":
         callbacks.onError(event.data.message);
@@ -88,7 +96,10 @@ export async function executeConversationFromTree(
         callbacks.onChunk(event.data.delta, event.data.accumulated);
         break;
       case "done":
-        callbacks.onDone(event.data.full_text);
+        callbacks.onDone(event.data.full_text, {
+          prompt_tokens: event.data.prompt_tokens,
+          completion_tokens: event.data.completion_tokens,
+        });
         break;
       case "error":
         callbacks.onError(event.data.message);
