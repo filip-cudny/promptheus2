@@ -32,12 +32,28 @@ pub struct ImageData {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum NodeUpdate {
+    Environment {
+        value: String,
+    },
+    Context {
+        content: String,
+        reason: String,
+        #[serde(default)]
+        image_refs: Vec<String>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConversationNodeForExecution {
     pub node_id: String,
     pub role: String,
     pub content: String,
     pub images: Vec<ImageData>,
     pub text_attachments: Vec<String>,
+    #[serde(default)]
+    pub updates: Vec<NodeUpdate>,
 }
 
 #[cfg(test)]

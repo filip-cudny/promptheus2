@@ -13,8 +13,8 @@ use crate::models::history::{
     SerializedConversationNode, SerializedConversationTurn,
 };
 use crate::models::message::{
-    ContentPart, ConversationNodeForExecution, ImageData, MessageContent,
-    ProcessedMessage,
+    ConversationNodeForExecution, ImageData, MessageContent,
+    NodeUpdate, ProcessedMessage,
 };
 use crate::services::notification::NotificationLevel;
 use crate::services::prompt_execution::PromptExecutionService;
@@ -181,6 +181,7 @@ pub async fn execute_skill(
                 image_paths: vec![],
                 timestamp: now.clone(),
                 children: vec![assistant_node_id.clone()],
+                updates: vec![],
             };
 
             let assistant_node = SerializedConversationNode {
@@ -191,6 +192,7 @@ pub async fn execute_skill(
                 image_paths: vec![],
                 timestamp: now,
                 children: vec![],
+                updates: vec![],
             };
 
             state.history.add_conversation_entry(
@@ -293,8 +295,8 @@ pub async fn generate_conversation_title(
     Ok(title.trim().to_string())
 }
 
-fn resolve_context_section_template(config: &ConfigService, active_app: &str, recent_apps: &str) -> String {
-    let template = config.context_section_template();
+fn resolve_environment_section_template(config: &ConfigService, active_app: &str, recent_apps: &str) -> String {
+    let template = config.environment_section_template();
     if template.is_empty() {
         return String::new();
     }
@@ -309,28 +311,28 @@ fn resolve_context_section_template(config: &ConfigService, active_app: &str, re
         .replace("{{recent_apps}}", recent_apps)
 }
 
-fn build_system_prompt_base(config: &ConfigService, resolved_context_section: Option<&str>, active_app: &str, recent_apps: &str) -> String {
+fn build_system_prompt_base(config: &ConfigService, resolved_environment_section: Option<&str>, active_app: &str, recent_apps: &str) -> String {
     let system_prompt = &config.settings().system_prompt;
     let input_format_guide = config.input_format_guide();
     let about_me = config.about_me();
 
-    let context_section = resolved_context_section
+    let environment_section = resolved_environment_section
         .map(|s| s.to_string())
-        .unwrap_or_else(|| resolve_context_section_template(config, active_app, recent_apps));
+        .unwrap_or_else(|| resolve_environment_section_template(config, active_app, recent_apps));
 
-    if context_section.is_empty() {
+    if environment_section.is_empty() {
         format!("{system_prompt}\n\n---\n\n{input_format_guide}\n\n---\n\n{about_me}")
     } else {
-        format!("{system_prompt}\n\n---\n\n{context_section}\n\n---\n\n{input_format_guide}\n\n---\n\n{about_me}")
+        format!("{system_prompt}\n\n---\n\n{environment_section}\n\n---\n\n{input_format_guide}\n\n---\n\n{about_me}")
     }
 }
 
 #[tauri::command]
-pub async fn resolve_context_section(
+pub async fn resolve_environment_section(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<String, String> {
     let state = state.lock().await;
-    Ok(resolve_context_section_template(&state.config, state.active_app(), &state.recent_apps_display()))
+    Ok(resolve_environment_section_template(&state.config, state.active_app(), &state.recent_apps_display()))
 }
 
 #[tauri::command]
@@ -347,11 +349,11 @@ pub async fn release_conversation_context(
 pub async fn seed_conversation_context(
     state: State<'_, Mutex<AppState>>,
     tab_id: String,
-    resolved_context_section: String,
+    resolved_environment_section: String,
 ) -> Result<(), String> {
     let mut state = state.lock().await;
     if !state.conversation_context.has(&tab_id) {
-        state.conversation_context.insert(tab_id, resolved_context_section);
+        state.conversation_context.insert(tab_id, resolved_environment_section);
     }
     Ok(())
 }
@@ -379,7 +381,7 @@ pub async fn resolve_skill_input(
 pub async fn execute_conversation_from_tree(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
-    nodes: Vec<ConversationNodeForExecution>,
+    mut nodes: Vec<ConversationNodeForExecution>,
     context_text: Option<String>,
     context_images: Vec<ImageData>,
     tab_id: String,
@@ -389,7 +391,7 @@ pub async fn execute_conversation_from_tree(
 ) -> Result<(), String> {
     let start_time = Instant::now();
 
-    let (execution_id, resolved_model_id, model_display_name, all_messages, ai) = {
+    let (execution_id, resolved_model_id, model_display_name, all_messages, ai, updates_for_event) = {
         let mut state = state.lock().await;
 
         let execution_id = state
@@ -417,40 +419,61 @@ pub async fn execute_conversation_from_tree(
 
         if !state.conversation_context.has(&tab_id) {
             let resolved =
-                resolve_context_section_template(&state.config, &active_app, &recent_apps);
+                resolve_environment_section_template(&state.config, &active_app, &recent_apps);
             state.conversation_context.insert(tab_id.clone(), resolved);
         }
-        let resolved_context_section = state.conversation_context.get(&tab_id).unwrap().to_string();
+        let resolved_environment_section = state.conversation_context.get(&tab_id).unwrap().to_string();
 
-        let base_prompt = build_system_prompt_base(
+        let system_content = build_system_prompt_base(
             &state.config,
-            Some(&resolved_context_section),
+            Some(&resolved_environment_section),
             &active_app,
             &recent_apps,
         );
-        let system_content = match &context_text {
-            Some(text) if !text.is_empty() => {
-                format!("{base_prompt}\n\n<context>\n{text}\n</context>")
-            }
-            _ => base_prompt,
-        };
 
-        let time_update = state.conversation_context.time_update_if_stale(&tab_id);
+        let mut node_updates: Vec<NodeUpdate> = Vec::new();
+
+        if let Some(env_update) = state.conversation_context.environment_update_if_stale(
+            &tab_id,
+            &active_app,
+            &recent_apps,
+        ) {
+            node_updates.push(env_update);
+        }
+
+        let context_str = context_text.as_deref().unwrap_or("");
+        let image_data_len: usize = context_images.iter().map(|i| i.data.len()).sum();
+        if let Some(ctx_update) = state.conversation_context.context_update_if_changed(
+            &tab_id,
+            context_str,
+            context_images.len(),
+            image_data_len,
+        ) {
+            node_updates.push(ctx_update);
+        }
+
+        let updates_for_event = if !node_updates.is_empty() {
+            if let Some(last_user) = nodes.iter_mut().rev().find(|n| n.role == "user") {
+                let node_id = last_user.node_id.clone();
+                last_user.updates = node_updates.clone();
+                Some((node_id, node_updates))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         let system_message = ProcessedMessage {
             role: "system".to_string(),
             content: MessageContent::Text(system_content),
         };
 
-        let mut tree_messages =
+        let tree_messages =
             skill_execution::build_messages_from_tree(&nodes, &context_images);
 
-        if let Some(update) = time_update {
-            prepend_to_last_user_message(&mut tree_messages, &update);
-        }
-
         let mut all_messages = vec![system_message];
-        all_messages.append(&mut tree_messages);
+        all_messages.extend(tree_messages);
 
         let ai = state.ai.clone();
 
@@ -460,8 +483,13 @@ pub async fn execute_conversation_from_tree(
             model_display_name,
             all_messages,
             ai,
+            updates_for_event,
         )
     };
+
+    if let Some((node_id, updates)) = updates_for_event {
+        let _ = on_event.send(StreamEvent::NodeUpdates { node_id, updates });
+    }
 
     let _ = app.emit(
         "execution-started",
@@ -558,23 +586,3 @@ pub async fn execute_conversation_from_tree(
     }
 }
 
-fn prepend_to_last_user_message(messages: &mut [ProcessedMessage], prefix: &str) {
-    for msg in messages.iter_mut().rev() {
-        if msg.role != "user" {
-            continue;
-        }
-        match &mut msg.content {
-            MessageContent::Text(text) => {
-                *text = format!("{prefix}\n\n{text}");
-            }
-            MessageContent::Parts(parts) => {
-                if let Some(last_text_idx) = parts.iter().rposition(|p| matches!(p, ContentPart::Text { .. })) {
-                    if let ContentPart::Text { text } = &mut parts[last_text_idx] {
-                        *text = format!("{prefix}\n\n{text}");
-                    }
-                }
-            }
-        }
-        break;
-    }
-}

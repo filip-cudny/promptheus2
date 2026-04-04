@@ -10,6 +10,8 @@ export interface SerializedConversationTurn {
   current_version_index: number;
 }
 
+import type { NodeUpdate } from "$lib/types/ai";
+
 export interface SerializedConversationNode {
   node_id: string;
   parent_id: string | null;
@@ -19,6 +21,7 @@ export interface SerializedConversationNode {
   text_attachments: string[];
   timestamp: string;
   children: string[];
+  updates: NodeUpdate[];
 }
 
 export interface ConversationHistoryData {
@@ -30,7 +33,7 @@ export interface ConversationHistoryData {
   nodes: SerializedConversationNode[];
   root_node_id: string | null;
   current_path: string[];
-  resolved_context_section: string | null;
+  resolved_environment_section: string | null;
 }
 
 export interface LastInteractionData {

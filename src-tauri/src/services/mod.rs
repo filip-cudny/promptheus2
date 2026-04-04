@@ -16,4 +16,5 @@ pub mod prompt_execution;
 pub mod skill;
 pub mod skill_execution;
 pub mod speech;
+pub mod tokenizer;
 pub mod ui_state;

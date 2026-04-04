@@ -5,6 +5,7 @@
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
   import { resizeTextarea } from "$lib/utils/autoResize";
+  import { countTokensDebounced } from "$lib/services/tokenCounter";
   import EditorToolbar from "$lib/components/ui/EditorToolbar.svelte";
 
   const win = getCurrentWebviewWindow();
@@ -16,7 +17,12 @@
   let textarea: HTMLTextAreaElement | undefined = $state();
 
   let lineCount = $derived(text ? text.split("\n").length : 0);
+  let tokenCount = $state(0);
   let originalText = $state("");
+
+  $effect(() => {
+    countTokensDebounced(text, "openai", (count) => { tokenCount = count; });
+  });
   let isDirty = $derived(text !== originalText);
 
   $effect(() => {
@@ -69,7 +75,7 @@
 </script>
 
 <div class="text-preview">
-  <EditorToolbar {lineCount} bind:editMode saveDisabled={!isDirty} onsave={hide} />
+  <EditorToolbar {lineCount} {tokenCount} bind:editMode saveDisabled={!isDirty} onsave={hide} />
 
   <div class="content">
     {#if editMode}

@@ -4,11 +4,13 @@
 
   let {
     lineCount,
+    tokenCount,
     editMode = $bindable(false),
     saveDisabled = false,
     onsave,
   }: {
     lineCount: number;
+    tokenCount?: number;
     editMode?: boolean;
     saveDisabled?: boolean;
     onsave: () => void;
@@ -16,7 +18,7 @@
 </script>
 
 <div class="editor-toolbar">
-  <span class="line-count">{lineCount} {lineCount === 1 ? "line" : "lines"}</span>
+  <span class="line-count">{lineCount} {lineCount === 1 ? "line" : "lines"}{#if tokenCount !== undefined} · ~{tokenCount} tokens{/if}</span>
   <div class="spacer"></div>
   <button
     class="mode-btn"

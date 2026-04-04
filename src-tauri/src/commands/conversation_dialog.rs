@@ -1,6 +1,30 @@
+use std::sync::Mutex;
+
+use serde::Serialize;
 use tauri::Emitter;
 
 use crate::services::dialog::{self, DialogConfig};
+
+struct PendingDialogParams {
+    skill_id: String,
+    skill_name: String,
+    history_entry_id: Option<String>,
+    last_interaction_only: bool,
+    initial_input: Option<String>,
+    auto_send_input: bool,
+}
+
+static PENDING: Mutex<Option<PendingDialogParams>> = Mutex::new(None);
+
+#[derive(Serialize)]
+pub struct DialogInitParams {
+    skill_id: String,
+    skill_name: String,
+    history_entry_id: Option<String>,
+    last_interaction_only: bool,
+    initial_input: Option<String>,
+    auto_send_input: bool,
+}
 
 #[tauri::command]
 pub async fn open_conversation_dialog(
@@ -13,60 +37,68 @@ pub async fn open_conversation_dialog(
     auto_send_input: Option<bool>,
 ) -> Result<(), String> {
     let label = "conversation-dialog";
+    let last_interaction_only = last_interaction_only.unwrap_or(false);
+    let auto_send_input = auto_send_input.unwrap_or(false);
 
     let config = DialogConfig {
         label,
-        url: build_url(&skill_id, &skill_name, &history_entry_id, last_interaction_only, &initial_input, auto_send_input),
+        url: "conversation-dialog.html".into(),
         title: "Promptheus — chat",
         default_width: 700.0,
         default_height: 600.0,
         geometry_key: "conversation-dialog",
     };
 
+    *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(PendingDialogParams {
+        skill_id: skill_id.clone(),
+        skill_name: skill_name.clone(),
+        history_entry_id: history_entry_id.clone(),
+        last_interaction_only,
+        initial_input: initial_input.clone(),
+        auto_send_input,
+    });
+
     let (_, created) = dialog::open_or_focus(&app, &config).await?;
 
     if !created {
-        emit_reuse_event(&app, label, history_entry_id, last_interaction_only, initial_input, auto_send_input, &skill_id, &skill_name)?;
+        emit_reuse_event(
+            &app,
+            label,
+            history_entry_id,
+            last_interaction_only,
+            initial_input,
+            auto_send_input,
+            &skill_id,
+            &skill_name,
+        )?;
     }
 
     Ok(())
 }
 
-fn build_url(
-    skill_id: &str,
-    skill_name: &str,
-    history_entry_id: &Option<String>,
-    last_interaction_only: Option<bool>,
-    initial_input: &Option<String>,
-    auto_send_input: Option<bool>,
-) -> String {
-    let mut url = format!(
-        "conversation-dialog.html?skillId={}&skillName={}",
-        skill_id,
-        urlencoding::encode(skill_name),
-    );
-    if let Some(entry_id) = history_entry_id {
-        url.push_str(&format!("&historyEntryId={}", entry_id));
-    }
-    if last_interaction_only.unwrap_or(false) {
-        url.push_str("&lastInteractionOnly=true");
-    }
-    if let Some(input) = initial_input {
-        url.push_str(&format!("&initialInput={}", urlencoding::encode(input)));
-        if auto_send_input.unwrap_or(false) {
-            url.push_str("&autoSendInput=true");
-        }
-    }
-    url
+#[tauri::command]
+pub fn get_dialog_init_params() -> Option<DialogInitParams> {
+    PENDING
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take()
+        .map(|p| DialogInitParams {
+            skill_id: p.skill_id,
+            skill_name: p.skill_name,
+            history_entry_id: p.history_entry_id,
+            last_interaction_only: p.last_interaction_only,
+            initial_input: p.initial_input,
+            auto_send_input: p.auto_send_input,
+        })
 }
 
 fn emit_reuse_event(
     app: &tauri::AppHandle,
     label: &str,
     history_entry_id: Option<String>,
-    last_interaction_only: Option<bool>,
+    last_interaction_only: bool,
     initial_input: Option<String>,
-    auto_send_input: Option<bool>,
+    auto_send_input: bool,
     skill_id: &str,
     skill_name: &str,
 ) -> Result<(), String> {
@@ -76,7 +108,7 @@ fn emit_reuse_event(
             "restore-history",
             serde_json::json!({
                 "entry_id": entry_id,
-                "last_interaction_only": last_interaction_only.unwrap_or(false),
+                "last_interaction_only": last_interaction_only,
             }),
         )
         .map_err(|e| e.to_string())
@@ -86,7 +118,7 @@ fn emit_reuse_event(
             "voice-input",
             serde_json::json!({
                 "text": input,
-                "auto_send": auto_send_input.unwrap_or(false),
+                "auto_send": auto_send_input,
             }),
         )
         .map_err(|e| e.to_string())

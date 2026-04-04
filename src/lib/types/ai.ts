@@ -1,7 +1,12 @@
+export type NodeUpdate =
+  | { type: "environment"; value: string }
+  | { type: "context"; content: string; reason: string; image_refs: string[] };
+
 export type StreamEvent =
   | { event: "chunk"; data: { delta: string; accumulated: string } }
   | { event: "done"; data: { full_text: string } }
-  | { event: "error"; data: { message: string } };
+  | { event: "error"; data: { message: string } }
+  | { event: "node_updates"; data: { node_id: string; updates: NodeUpdate[] } };
 
 export interface ImageUrlData {
   url: string;
@@ -29,4 +34,5 @@ export interface ConversationNodeForExecution {
   content: string;
   images: ImageData[];
   text_attachments: string[];
+  updates: NodeUpdate[];
 }

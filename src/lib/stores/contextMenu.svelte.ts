@@ -194,18 +194,23 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
   const item = _items[index];
   if (!item) return;
 
-  if (item.item_type === "skill") {
+  const itemId = item.id;
+  const itemType = item.item_type;
+  const itemEnabled = item.enabled;
+
+  if (itemType === "skill") {
     const data = item.data as { skill_id: string; skill_name: string } | null;
     if (!data?.skill_id) return;
 
-    const isRecordingThis = _isRecording && _recordingSkillId === data.skill_id;
-    if (!item.enabled && !isRecordingThis) return;
+    const skillId = data.skill_id;
+    const isRecordingThis = _isRecording && _recordingSkillId === skillId;
+    if (!itemEnabled && !isRecordingThis) return;
 
     if (isRecordingThis) {
       clearRecordingState();
       try {
         await invoke("execute_menu_item", {
-          itemId: item.id,
+          itemId,
           shiftPressed: true,
         });
       } catch (e) {
@@ -217,10 +222,10 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
 
     if (shiftPressed) {
       _isRecording = true;
-      _recordingSkillId = data.skill_id;
+      _recordingSkillId = skillId;
       try {
         await invoke("execute_menu_item", {
-          itemId: item.id,
+          itemId,
           shiftPressed: true,
         });
       } catch (e) {
@@ -231,18 +236,18 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
       return;
     }
 
-    if (!item.enabled) return;
+    if (!itemEnabled) return;
     await closeMenu();
-    startExecution(data.skill_id);
+    startExecution(skillId);
     return;
   }
 
-  if (item.item_type === "speech") {
-    if (!item.enabled) return;
+  if (itemType === "speech") {
+    if (!itemEnabled) return;
     if (_isRecording && !_recordingSkillId) {
       clearRecordingState();
       try {
-        await invoke("execute_menu_item", { itemId: item.id, shiftPressed: false });
+        await invoke("execute_menu_item", { itemId, shiftPressed: false });
       } catch (e) {
         error("Failed to stop speech recording: " + e);
       }
@@ -251,7 +256,7 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
       _isRecording = true;
       _recordingSkillId = null;
       try {
-        await invoke("execute_menu_item", { itemId: item.id, shiftPressed: false });
+        await invoke("execute_menu_item", { itemId, shiftPressed: false });
       } catch (e) {
         error("Failed to start speech recording: " + e);
         clearRecordingState();
@@ -261,11 +266,11 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
     return;
   }
 
-  if (!item.enabled) return;
+  if (!itemEnabled) return;
 
   try {
     await invoke("execute_menu_item", {
-      itemId: item.id,
+      itemId,
       shiftPressed,
     });
   } catch (e) {
@@ -287,14 +292,16 @@ async function startAlternativeExecution(index: number) {
   const data = item.data as { skill_id: string; skill_name: string } | null;
   if (!data?.skill_id) return;
 
-  const isRecordingThis = _isRecording && _recordingSkillId === data.skill_id;
+  const skillId = data.skill_id;
+  const itemId = item.id;
+  const isRecordingThis = _isRecording && _recordingSkillId === skillId;
   if (!item.enabled && !isRecordingThis) return;
 
   if (isRecordingThis) {
     clearRecordingState();
     try {
       await invoke("execute_menu_item", {
-        itemId: item.id,
+        itemId,
         shiftPressed: true,
       });
     } catch (e) {
@@ -305,10 +312,10 @@ async function startAlternativeExecution(index: number) {
   }
 
   _isRecording = true;
-  _recordingSkillId = data.skill_id;
+  _recordingSkillId = skillId;
   try {
     await invoke("execute_menu_item", {
-      itemId: item.id,
+      itemId,
       shiftPressed: true,
     });
   } catch (e) {
@@ -484,8 +491,10 @@ async function openDialogForItem(index: number) {
   if (!item || item.item_type !== "skill") return;
   const data = item.data as { skill_id: string; skill_name: string } | null;
   if (!data?.skill_id) return;
+  const skillId = data.skill_id;
+  const skillName = data.skill_name ?? item.label;
   await closeMenu();
-  await openConversationDialog(data.skill_id, data.skill_name ?? item.label);
+  await openConversationDialog(skillId, skillName);
 }
 
 export {

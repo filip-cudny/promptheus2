@@ -9,6 +9,7 @@
   import SkillEditable from "$lib/components/ui/SkillEditable.svelte";
   import { SendHorizonal, RefreshCw, Square, CopyCheck } from "lucide-svelte";
   import { getImageFromPasteEvent, extractTextAttachment } from "$lib/utils/paste";
+  import { formatTokenCount } from "$lib/utils/contextWindow";
   import { TEXT_ATTACHMENT_CHAR_THRESHOLD } from "$lib/constants/ui";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
@@ -19,6 +20,7 @@
     contextVisible,
     contextDisabled,
     contextInitialCollapsed = false,
+    contextWindowSize = 0,
     onSendAndCopy,
     onContextAutoShow,
     onCloseContext,
@@ -28,6 +30,7 @@
     contextVisible: boolean;
     contextDisabled: boolean;
     contextInitialCollapsed?: boolean;
+    contextWindowSize?: number;
     onSendAndCopy: () => void;
     onContextAutoShow: () => void;
     onCloseContext: () => void;
@@ -196,6 +199,11 @@
   <div class="button-bar">
     <div class="bar-left">
       <AttachMenu onSelectContext={onToggleContext} {contextDisabled} />
+      {#if store.totalTokens > 0}
+        <span class="token-count">
+          ~{formatTokenCount(store.totalTokens)}{#if contextWindowSize > 0} / {formatTokenCount(contextWindowSize)}{/if}
+        </span>
+      {/if}
     </div>
 
     <div class="bar-right">
@@ -285,6 +293,13 @@
     display: flex;
     gap: 6px;
     align-items: center;
+  }
+
+  .token-count {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.4);
+    user-select: none;
+    white-space: nowrap;
   }
 
   .bar-right {

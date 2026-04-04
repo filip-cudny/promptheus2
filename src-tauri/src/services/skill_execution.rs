@@ -4,7 +4,7 @@ use std::sync::LazyLock;
 use crate::models::context::ContextItem;
 use crate::models::message::{
     ContentPart, ConversationNodeForExecution, ImageData, ImageUrlData, MessageContent,
-    ProcessedMessage,
+    NodeUpdate, ProcessedMessage,
 };
 use crate::models::skill::Skill;
 use crate::services::context::ContextManagerService;
@@ -198,6 +198,39 @@ pub fn resolve_skill_input(
     }
 }
 
+fn build_user_text_with_updates(content: &str, updates: &[NodeUpdate]) -> String {
+    let mut prefix_parts: Vec<String> = Vec::new();
+    for update in updates {
+        match update {
+            NodeUpdate::Environment { value } => {
+                prefix_parts.push(value.clone());
+            }
+            NodeUpdate::Context {
+                content,
+                reason,
+                ..
+            } => match reason.as_str() {
+                "initial" => {
+                    prefix_parts.push(format!("<context>\n{content}\n</context>"));
+                }
+                "replaced" => {
+                    prefix_parts.push(format!("<context-update>\n{content}\n</context-update>"));
+                }
+                "cleared" => {
+                    prefix_parts.push("<context-update reason=\"cleared\" />".to_string());
+                }
+                _ => {}
+            },
+        }
+    }
+    if prefix_parts.is_empty() {
+        content.to_string()
+    } else {
+        let prefix = prefix_parts.join("\n\n");
+        format!("{prefix}\n\n{content}")
+    }
+}
+
 pub fn build_messages_from_tree(
     nodes: &[ConversationNodeForExecution],
     context_images: &[ImageData],
@@ -211,7 +244,7 @@ pub fn build_messages_from_tree(
             let has_node_images = !node.images.is_empty();
             is_first_user = false;
 
-            let mut text_content = node.content.clone();
+            let mut text_content = build_user_text_with_updates(&node.content, &node.updates);
             if !node.text_attachments.is_empty() {
                 let wrapped: Vec<String> = node
                     .text_attachments
@@ -442,6 +475,7 @@ mod tests {
                 content: "hello".into(),
                 images: vec![],
                 text_attachments: vec![],
+                updates: vec![],
             },
             ConversationNodeForExecution {
                 node_id: "2".into(),
@@ -449,6 +483,7 @@ mod tests {
                 content: "hi there".into(),
                 images: vec![],
                 text_attachments: vec![],
+                updates: vec![],
             },
         ];
         let messages = build_messages_from_tree(&nodes, &[]);
@@ -470,6 +505,7 @@ mod tests {
             content: "analyze this".into(),
             images: vec![],
             text_attachments: vec!["some code".into()],
+            updates: vec![],
         }];
         let messages = build_messages_from_tree(&nodes, &[]);
         if let MessageContent::Text(ref t) = messages[0].content {
@@ -489,6 +525,7 @@ mod tests {
             content: "describe this".into(),
             images: vec![],
             text_attachments: vec![],
+            updates: vec![],
         }];
         let ctx_images = vec![ImageData {
             data: "abc123".into(),
@@ -514,6 +551,7 @@ mod tests {
                 content: "first".into(),
                 images: vec![],
                 text_attachments: vec![],
+                updates: vec![],
             },
             ConversationNodeForExecution {
                 node_id: "2".into(),
@@ -521,6 +559,7 @@ mod tests {
                 content: "reply".into(),
                 images: vec![],
                 text_attachments: vec![],
+                updates: vec![],
             },
             ConversationNodeForExecution {
                 node_id: "3".into(),
@@ -528,6 +567,7 @@ mod tests {
                 content: "second".into(),
                 images: vec![],
                 text_attachments: vec![],
+                updates: vec![],
             },
         ];
         let ctx_images = vec![ImageData {

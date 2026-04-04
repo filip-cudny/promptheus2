@@ -89,6 +89,7 @@ mod tests {
                 api_key: Some("test-key".to_string()),
                 base_url: None,
                 parameters: None,
+                context_window_size: None,
             }],
             ..Default::default()
         };

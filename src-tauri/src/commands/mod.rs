@@ -14,4 +14,5 @@ pub mod settings;
 pub mod skills;
 pub mod speech;
 pub mod text_preview;
+pub mod tokenizer;
 pub mod ui_state;

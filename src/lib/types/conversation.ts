@@ -1,3 +1,5 @@
+import type { NodeUpdate } from "$lib/types/ai";
+
 export interface ConversationNode {
   node_id: string;
   parent_id: string | null;
@@ -7,6 +9,7 @@ export interface ConversationNode {
   text_attachments: string[];
   timestamp: string;
   children: string[];
+  updates: NodeUpdate[];
 }
 
 export interface ConversationImage {

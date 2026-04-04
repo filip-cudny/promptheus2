@@ -30,6 +30,8 @@ import type {
   SerializedConversationTurn,
 } from "$lib/types";
 import type { ConversationNodeForExecution } from "$lib/types/ai";
+import { countTokensDebounced, estimateImageTokens } from "$lib/services/tokenCounter";
+import type { Provider } from "$lib/types";
 
 export function createEmptyTree(): ConversationTree {
   return {
@@ -55,6 +57,7 @@ export function createNode(
     text_attachments: textAttachments,
     timestamp: new Date().toISOString(),
     children: [],
+    updates: [],
   };
 }
 
@@ -150,6 +153,7 @@ function serializeNodes(
     text_attachments: node.text_attachments,
     timestamp: node.timestamp,
     children: node.children,
+    updates: node.updates,
   }));
 }
 
@@ -180,6 +184,7 @@ function serializePathNodes(tab: TabState): ConversationNodeForExecution[] {
         media_type: img.media_type,
       })),
       text_attachments: node.text_attachments,
+      updates: node.updates,
     }));
 }
 
@@ -221,6 +226,48 @@ export function createConversationStore(
     }
     return true;
   });
+
+  let totalTokens = $state(0);
+  let tokenProvider = $state<Provider>("openai");
+
+  function collectAllText(): string {
+    const parts: string[] = [];
+    for (const nodeId of activeTab.tree.current_path) {
+      const node = activeTab.tree.nodes.get(nodeId);
+      if (node) {
+        parts.push(node.content);
+        parts.push(...node.text_attachments);
+      }
+    }
+    if (activeTab.context_text) parts.push(activeTab.context_text);
+    if (activeTab.input_text) parts.push(activeTab.input_text);
+    parts.push(...activeTab.input_text_attachments);
+    return parts.filter(Boolean).join("\n");
+  }
+
+  function countAllImageTokens(): number {
+    let count = 0;
+    const perImage = estimateImageTokens(tokenProvider);
+    for (const nodeId of activeTab.tree.current_path) {
+      const node = activeTab.tree.nodes.get(nodeId);
+      if (node) count += node.images.length * perImage;
+    }
+    count += activeTab.context_images.length * perImage;
+    count += activeTab.input_images.length * perImage;
+    return count;
+  }
+
+  $effect(() => {
+    const allText = collectAllText();
+    const imageTokens = countAllImageTokens();
+    countTokensDebounced(allText, tokenProvider, (textTokens) => {
+      totalTokens = textTokens + imageTokens;
+    });
+  });
+
+  function setTokenProvider(provider: Provider): void {
+    tokenProvider = provider;
+  }
 
   const isRegenerateMode = $derived.by(() => {
     const path = activeTab.tree.current_path;
@@ -279,6 +326,13 @@ export function createConversationStore(
           tab.is_executing = false;
           tab.is_streaming = false;
           tab.streamed_content = "";
+        },
+        onNodeUpdates: (nodeId, updates) => {
+          const node = tab.tree.nodes.get(nodeId);
+          if (node) {
+            node.updates = updates;
+            tab.tree.nodes.set(nodeId, node);
+          }
         },
       };
 
@@ -620,6 +674,7 @@ export function createConversationStore(
             text_attachments: serialized.text_attachments ?? [],
             timestamp: serialized.timestamp,
             children: serialized.children,
+            updates: serialized.updates ?? [],
           });
         }
       } else if (entry.input_content) {
@@ -639,6 +694,7 @@ export function createConversationStore(
           text_attachments: [],
           timestamp: now,
           children: entry.output_content ? [assistantNodeId] : [],
+          updates: [],
         });
 
         if (entry.output_content) {
@@ -652,6 +708,7 @@ export function createConversationStore(
             text_attachments: [],
             timestamp: now,
             children: [],
+            updates: [],
           });
         }
       }
@@ -660,10 +717,10 @@ export function createConversationStore(
       tabs.push(newTab);
       activeTabId = newTab.tab_id;
 
-      if (entry.conversation_data?.resolved_context_section) {
+      if (entry.conversation_data?.resolved_environment_section) {
         seedConversationContext(
           newTab.tab_id,
-          entry.conversation_data.resolved_context_section,
+          entry.conversation_data.resolved_environment_section,
         ).catch(() => {});
       }
     } catch (e) {
@@ -721,7 +778,11 @@ export function createConversationStore(
     get inputTextAttachments() {
       return inputTextAttachments;
     },
+    get totalTokens() {
+      return totalTokens;
+    },
     sendMessage,
+    setTokenProvider,
     stopExecution,
     regenerate,
     switchBranch,

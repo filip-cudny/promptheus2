@@ -78,7 +78,7 @@ pub async fn add_conversation_entry(
     tab_id: Option<String>,
 ) -> Result<String, String> {
     let mut state = state.lock().await;
-    let resolved_context_section = tab_id
+    let resolved_environment_section = tab_id
         .as_deref()
         .and_then(|id| state.conversation_context.get(id))
         .map(|s| s.to_string());
@@ -94,7 +94,7 @@ pub async fn add_conversation_entry(
         root_node_id,
         current_path,
         false,
-        resolved_context_section,
+        resolved_environment_section,
     );
     emit_history_changed(&app)?;
     Ok(id)

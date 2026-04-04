@@ -19,7 +19,7 @@ export interface Settings {
   keymaps: KeymapGroup[];
   system_prompt: string;
   about_me: string | null;
-  context_section: string | null;
+  environment_section: string | null;
   recent_apps_count: number;
   skills_order: string[];
   conversation_title_model: string;
@@ -36,6 +36,7 @@ export interface ModelConfig {
   api_key: string | null;
   base_url: string | null;
   parameters: ModelParameters | null;
+  context_window_size: number | null;
 }
 
 export type ApiKeySource = "env" | "direct";

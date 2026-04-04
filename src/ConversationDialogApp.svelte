@@ -1,9 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { createConversationStore } from "$lib/stores/conversation.svelte";
   import { hasContext } from "$lib/services/context";
+  import { getSettings } from "$lib/services/settings";
+  import { getContextWindowSize } from "$lib/utils/contextWindow";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { PanelLeft, SquarePen } from "lucide-svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
@@ -12,23 +15,25 @@
   import InputArea from "$lib/components/prompt/InputArea.svelte";
   import TabSidebar from "$lib/components/prompt/TabSidebar.svelte";
 
+  interface DialogInitParams {
+    skill_id: string;
+    skill_name: string;
+    history_entry_id: string | null;
+    last_interaction_only: boolean;
+    initial_input: string | null;
+    auto_send_input: boolean;
+  }
+
   const skillsStore = getSkillsStore();
   const historyStore = getHistoryStore();
 
-  const params = new URLSearchParams(window.location.search);
-  const skillId = params.get("skillId") ?? "";
-  const skillName = params.get("skillName") ?? "Chat";
-  const historyEntryId = params.get("historyEntryId");
-  const lastInteractionOnly = params.get("lastInteractionOnly") === "true";
-  const initialInput = params.get("initialInput");
-  const autoSendInput = params.get("autoSendInput") === "true";
-
-  const store = createConversationStore(skillId, skillName);
+  const store = createConversationStore("", "Chat");
 
   let sidebarOpen = $state(false);
   let contextVisible = $state(false);
   let contextDisabled = $state(false);
   let contextInitialCollapsed = $state(false);
+  let contextWindowSize = $state(0);
 
   let unlistenRestore: UnlistenFn | undefined;
   let unlistenContextChanged: UnlistenFn | undefined;
@@ -43,7 +48,7 @@
     }
   }
 
-  function handleVoiceInput(text: string, autoSend: boolean) {
+  function handleVoiceInput(skillId: string, text: string, autoSend: boolean) {
     const currentTab = store.tabs.find(t => t.tab_id === store.activeTabId);
     if (currentTab && currentTab.tree.current_path.length > 0) {
       store.addTab();
@@ -55,17 +60,35 @@
     }
   }
 
+  async function applyInitParams(p: DialogInitParams) {
+    if (p.history_entry_id) {
+      await store.restoreFromHistory(p.history_entry_id, p.last_interaction_only);
+    } else if (p.initial_input) {
+      handleVoiceInput(p.skill_id, p.initial_input, p.auto_send_input);
+    } else if (p.skill_id) {
+      store.openForSkill(p.skill_id, p.skill_name);
+    }
+  }
+
+  async function loadModelInfo() {
+    try {
+      const settings = await getSettings();
+      const activeModel = settings.models.find((m) => m.id === settings.default_model);
+      if (activeModel) {
+        contextWindowSize = getContextWindowSize(activeModel.model, activeModel.context_window_size);
+        store.setTokenProvider(activeModel.provider);
+      }
+    } catch {}
+  }
+
   onMount(async () => {
     skillsStore.init();
     historyStore.init();
+    loadModelInfo();
 
-    if (historyEntryId) {
-      await store.restoreFromHistory(historyEntryId, lastInteractionOnly);
-    } else if (initialInput) {
-      handleVoiceInput(initialInput, autoSendInput);
-    } else if (skillId) {
-      store.updateInputText(`/${skillId} `);
-      store.setPristineInput(`/${skillId} `);
+    const initParams = await invoke<DialogInitParams | null>("get_dialog_init_params");
+    if (initParams) {
+      await applyInitParams(initParams);
     }
 
     unlistenRestore = await listen<{ entry_id: string; last_interaction_only?: boolean }>(
@@ -76,7 +99,7 @@
     );
 
     unlistenVoiceInput = await listen<{ text: string; auto_send: boolean }>("voice-input", (event) => {
-      handleVoiceInput(event.payload.text, event.payload.auto_send);
+      handleVoiceInput("", event.payload.text, event.payload.auto_send);
     });
 
     unlistenOpenForSkill = await listen<{ skill_id: string; skill_name: string }>("open-for-skill", (event) => {
@@ -149,7 +172,7 @@
     </button>
   </div>
   <ConversationArea {store} />
-  <InputArea {store} {contextVisible} {contextDisabled} {contextInitialCollapsed} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
+  <InputArea {store} {contextVisible} {contextDisabled} {contextInitialCollapsed} {contextWindowSize} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
   <TabSidebar {store} {historyStore} open={sidebarOpen} onClose={() => sidebarOpen = false} />
 </div>
 

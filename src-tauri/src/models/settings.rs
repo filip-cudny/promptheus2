@@ -43,7 +43,7 @@ pub struct Settings {
     pub about_me: Option<String>,
 
     #[serde(default)]
-    pub context_section: Option<String>,
+    pub environment_section: Option<String>,
 
     #[serde(default = "default_recent_apps_count")]
     pub recent_apps_count: usize,
@@ -81,6 +81,9 @@ pub struct ModelConfig {
 
     #[serde(default)]
     pub parameters: Option<ModelParameters>,
+
+    #[serde(default)]
+    pub context_window_size: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -262,7 +265,7 @@ impl Default for Settings {
             keymaps: Vec::new(),
             system_prompt: default_system_prompt(),
             about_me: None,
-            context_section: None,
+            environment_section: None,
             recent_apps_count: default_recent_apps_count(),
             skills_order: Vec::new(),
             conversation_title_model: String::new(),

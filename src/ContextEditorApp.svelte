@@ -10,6 +10,7 @@
     appendContext,
     appendContextImage,
   } from "$lib/services/context";
+  import { countTokensDebounced, estimateImageTokens } from "$lib/services/tokenCounter";
   import type { ConversationImage } from "$lib/types/conversation";
 
   let text = $state("");
@@ -18,6 +19,12 @@
   let errorMessage = $state("");
   let editMode = $state(true);
   let lineCount = $derived(text ? text.split("\n").length : 0);
+  let textTokens = $state(0);
+  let tokenCount = $derived(textTokens + images.length * estimateImageTokens("openai"));
+
+  $effect(() => {
+    countTokensDebounced(text, "openai", (count) => { textTokens = count; });
+  });
 
   onMount(async () => {
     const items = await getContextItems();
@@ -65,7 +72,7 @@
 
 <div class="editor-shell">
   <div class="editor-content">
-    <EditorToolbar {lineCount} bind:editMode saveDisabled={saving} onsave={save} />
+    <EditorToolbar {lineCount} {tokenCount} bind:editMode saveDisabled={saving} onsave={save} />
     {#if errorMessage}
       <span class="save-error">{errorMessage}</span>
     {/if}

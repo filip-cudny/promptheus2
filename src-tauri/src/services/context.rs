@@ -23,7 +23,7 @@ impl MenuItemProvider for ContextMenuProvider {
 
     fn get_menu_items(&self) -> Vec<MenuItem> {
         vec![MenuItem {
-            id: "context_section".to_string(),
+            id: "environment_section".to_string(),
             label: "Context".to_string(),
             item_type: MenuItemType::Context,
             data: Some(serde_json::json!({ "items": self.items })),
@@ -307,7 +307,7 @@ mod tests {
     }
 
     #[test]
-    fn provider_returns_context_section_when_no_items() {
+    fn provider_returns_environment_section_when_no_items() {
         let provider = ContextMenuProvider::new();
         let items = provider.get_menu_items();
         assert_eq!(items.len(), 1);
@@ -338,7 +338,7 @@ mod tests {
         assert_eq!(items.len(), 1);
 
         let item = &items[0];
-        assert_eq!(item.id, "context_section");
+        assert_eq!(item.id, "environment_section");
         assert_eq!(item.label, "Context");
         assert_eq!(item.item_type, MenuItemType::Context);
         assert!(item.enabled);

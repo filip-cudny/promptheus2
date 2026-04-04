@@ -5,10 +5,13 @@ import type {
   ImageData,
 } from "$lib/types/ai";
 
+import type { NodeUpdate } from "$lib/types/ai";
+
 export interface ExecutionCallbacks {
   onChunk: (delta: string, accumulated: string) => void;
   onDone: (fullText: string) => void;
   onError: (message: string) => void;
+  onNodeUpdates?: (nodeId: string, updates: NodeUpdate[]) => void;
 }
 
 export async function executeSkill(
@@ -45,9 +48,9 @@ export async function releaseConversationContext(
 
 export async function seedConversationContext(
   tabId: string,
-  resolvedContextSection: string,
+  resolvedEnvironmentSection: string,
 ): Promise<void> {
-  return invoke("seed_conversation_context", { tabId, resolvedContextSection });
+  return invoke("seed_conversation_context", { tabId, resolvedEnvironmentSection });
 }
 
 export async function generateConversationTitle(
@@ -89,6 +92,9 @@ export async function executeConversationFromTree(
         break;
       case "error":
         callbacks.onError(event.data.message);
+        break;
+      case "node_updates":
+        callbacks.onNodeUpdates?.(event.data.node_id, event.data.updates);
         break;
     }
   };

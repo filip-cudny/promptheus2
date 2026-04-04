@@ -33,7 +33,7 @@ impl ConfigService {
 
         let _ = Self::initialize_input_format_guide(config_dir);
         let _ = Self::initialize_about_me(config_dir);
-        let _ = Self::initialize_context_section(config_dir);
+        let _ = Self::initialize_environment_section(config_dir);
 
         let content = std::fs::read_to_string(&settings_path)?;
         let mut settings: Settings = serde_json::from_str(&content)?;
@@ -80,7 +80,7 @@ impl ConfigService {
         Self::initialize_env(config_dir)?;
         Self::initialize_input_format_guide(config_dir)?;
         Self::initialize_about_me(config_dir)?;
-        Self::initialize_context_section(config_dir)?;
+        Self::initialize_environment_section(config_dir)?;
 
         Ok(())
     }
@@ -103,10 +103,10 @@ impl ConfigService {
         Ok(())
     }
 
-    fn initialize_context_section(config_dir: &Path) -> Result<(), ConfigError> {
-        let path = config_dir.join("context_section.md");
+    fn initialize_environment_section(config_dir: &Path) -> Result<(), ConfigError> {
+        let path = config_dir.join("environment_section.md");
         if !path.exists() {
-            let default = include_str!("../../resources/context_section.md");
+            let default = include_str!("../../resources/environment_section.md");
             std::fs::write(&path, default)?;
         }
         Ok(())
@@ -267,12 +267,12 @@ impl ConfigService {
         std::fs::read_to_string(&path).unwrap_or_default()
     }
 
-    pub fn context_section_template(&self) -> String {
+    pub fn environment_section_template(&self) -> String {
         let filename = self
             .settings
-            .context_section
+            .environment_section
             .as_deref()
-            .unwrap_or("context_section.md");
+            .unwrap_or("environment_section.md");
         let path = self.config_dir.join(filename);
         std::fs::read_to_string(&path).unwrap_or_default()
     }
@@ -459,6 +459,7 @@ mod tests {
             api_key: None,
             base_url: None,
             parameters: None,
+            context_window_size: None,
         };
         let settings = Settings {
             models: vec![model.clone(), model],
@@ -513,6 +514,7 @@ mod tests {
             api_key: Some("direct-secret".to_string()),
             base_url: None,
             parameters: None,
+            context_window_size: None,
         });
 
 
@@ -577,6 +579,7 @@ mod tests {
                 api_key: None,
                 base_url: None,
                 parameters: None,
+                context_window_size: None,
             }],
             ..Default::default()
         };
@@ -601,6 +604,7 @@ mod tests {
             api_key: None,
             base_url: None,
             parameters: None,
+            context_window_size: None,
         };
         let initial_count = service.settings().models.len();
         service.add_model(new_model.clone());
@@ -632,6 +636,7 @@ mod tests {
             api_key: None,
             base_url: None,
             parameters: None,
+            context_window_size: None,
         };
         let count_before = service.settings().models.len();
         service.update_model("upsert-model", upsert_model);
@@ -663,6 +668,7 @@ mod tests {
                 api_key: None,
                 base_url: Some("ftp://invalid".to_string()),
                 parameters: None,
+                context_window_size: None,
             }],
             ..Default::default()
         };
@@ -684,6 +690,7 @@ mod tests {
                 api_key: None,
                 base_url: None,
                 parameters: None,
+                context_window_size: None,
             }],
             number_input_debounce_ms: 99999,
             ..Default::default()
@@ -709,6 +716,7 @@ mod tests {
                 api_key: None,
                 base_url: None,
                 parameters: None,
+                context_window_size: None,
             }],
             ..Default::default()
         };

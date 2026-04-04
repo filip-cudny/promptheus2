@@ -70,7 +70,7 @@ impl HistoryService {
         root_node_id: Option<String>,
         current_path: Vec<String>,
         quick_action: bool,
-        resolved_context_section: Option<String>,
+        resolved_environment_section: Option<String>,
     ) -> String {
         let now = Self::now_timestamp();
         let id = Self::generate_id();
@@ -87,7 +87,7 @@ impl HistoryService {
             nodes,
             root_node_id,
             current_path,
-            resolved_context_section,
+            resolved_environment_section,
         };
 
         let entry = HistoryEntry {
@@ -584,6 +584,7 @@ mod tests {
             image_paths: vec![],
             timestamp: "2026-01-01".into(),
             children: vec![],
+            updates: vec![],
         }];
 
         let id = svc.add_conversation_entry(

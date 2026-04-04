@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::models::message::NodeUpdate;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum HistoryEntryType {
@@ -34,6 +36,8 @@ pub struct SerializedConversationNode {
     pub timestamp: String,
     #[serde(default)]
     pub children: Vec<String>,
+    #[serde(default)]
+    pub updates: Vec<NodeUpdate>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,7 +55,7 @@ pub struct ConversationHistoryData {
     #[serde(default)]
     pub current_path: Vec<String>,
     #[serde(default)]
-    pub resolved_context_section: Option<String>,
+    pub resolved_environment_section: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -153,6 +157,7 @@ mod tests {
                         image_paths: vec![],
                         timestamp: "2026-01-01T12:00:00Z".into(),
                         children: vec!["node-reply".into()],
+                        updates: vec![],
                     },
                     SerializedConversationNode {
                         node_id: "node-reply".into(),
@@ -162,11 +167,12 @@ mod tests {
                         image_paths: vec![],
                         timestamp: "2026-01-01T12:00:01Z".into(),
                         children: vec![],
+                        updates: vec![],
                     },
                 ],
                 root_node_id: Some("node-root".into()),
                 current_path: vec!["node-root".into(), "node-reply".into()],
-                resolved_context_section: None,
+                resolved_environment_section: None,
             }),
             created_at: Some("2026-01-01T12:00:00Z".into()),
             updated_at: Some("2026-01-01T12:00:01Z".into()),
