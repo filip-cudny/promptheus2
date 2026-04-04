@@ -113,6 +113,18 @@ pub async fn count_conversation_tokens(
     let (all_text, image_count, provider) = {
         let state = state.lock().await;
 
+        let nodes: Vec<ConversationNodeForExecution> = nodes
+            .into_iter()
+            .map(|mut node| {
+                if node.role == "user" {
+                    let result =
+                        skill_execution::resolve_skill_input(&state.skill_service, &node.content);
+                    node.content = result.resolved_text;
+                }
+                node
+            })
+            .collect();
+
         let provider = crate::services::prompt_execution::PromptExecutionService::resolve_model(
             &state.config,
             None,

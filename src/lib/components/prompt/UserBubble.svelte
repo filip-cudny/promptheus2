@@ -29,15 +29,15 @@
 
   const skillsStore = getSkillsStore();
 
-  function isKnownSkill(name: string): boolean {
-    return skillsStore.nameSet.has(name.slice(1));
+  function classifySkillToken(token: string, _finished: boolean): string | null {
+    return skillsStore.nameSet.has(token.slice(1)) ? "skill-badge" : null;
   }
 
   function formatUserContent(content: string): string {
     const displayContent = isSkillXml(content)
       ? extractSkillDisplayText(content)
       : content;
-    return highlightSkills(displayContent, isKnownSkill, "skill-badge", "\n");
+    return highlightSkills(displayContent, classifySkillToken, "\n");
   }
 
   let collapsed = $state(false);

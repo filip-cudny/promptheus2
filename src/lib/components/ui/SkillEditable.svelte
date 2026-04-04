@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { untrack } from "svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
-  import { highlightSkills } from "$lib/utils/skillHighlight";
+  import { highlightSkills, fuzzyMatch } from "$lib/utils/skillHighlight";
   import type { SkillSummary } from "$lib/types";
 
   let {
@@ -20,13 +19,13 @@
     onpaste?: (e: ClipboardEvent) => void;
   } = $props();
 
-  let editable: HTMLDivElement | undefined = $state();
+  let textarea: HTMLTextAreaElement | undefined = $state();
+  let overlay: HTMLDivElement | undefined = $state();
   const skillsStore = getSkillsStore();
   let showAutocomplete = $state(false);
   let autocompleteItems = $state<SkillSummary[]>([]);
   let autocompleteIndex = $state(0);
   let slashStart = $state(-1);
-  let lastSkillPattern = "";
   let dropdownEl: HTMLDivElement | undefined = $state();
 
   $effect(() => {
@@ -37,142 +36,59 @@
     }
   });
 
-  $effect(() => {
-    const _nameSet = skillsStore.nameSet;
-    if (!editable || !untrack(() => text)) return;
-    lastSkillPattern = "";
-    applyHighlighting();
-  });
+  const highlightedHtml = $derived(
+    highlightSkills(text, classifySkillToken, "<br>"),
+  );
 
   export function focus() {
-    editable?.focus();
+    textarea?.focus();
   }
 
-  export function getElement(): HTMLDivElement | undefined {
-    return editable;
+  export function getElement(): HTMLTextAreaElement | undefined {
+    return textarea;
   }
 
   export function setTextAndHighlight(newText: string) {
     text = newText;
-    lastSkillPattern = "";
-    if (editable) {
-      editable.innerHTML = buildHighlightedHtml(newText);
-    }
   }
 
   export function restoreCursor(offset: number) {
-    restoreCursorOffset(offset);
+    if (!textarea) return;
+    textarea.selectionStart = textarea.selectionEnd = offset;
   }
 
-  function getPlainText(): string {
-    if (!editable) return "";
-    const clone = editable.cloneNode(true) as HTMLElement;
-    clone.querySelectorAll("br").forEach((br) => {
-      br.replaceWith("\n");
-    });
-    clone.querySelectorAll("div, p").forEach((block, i) => {
-      if (i > 0 || block.previousSibling) {
-        block.insertBefore(document.createTextNode("\n"), block.firstChild);
-      }
-    });
-    return (clone.textContent ?? "").replace(/^\n/, "");
-  }
-
-  function saveCursorOffset(): number {
-    if (!editable) return 0;
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return 0;
-    const range = sel.getRangeAt(0);
-    const pre = document.createRange();
-    pre.selectNodeContents(editable);
-    pre.setEnd(range.startContainer, range.startOffset);
-    return pre.toString().length;
-  }
-
-  function restoreCursorOffset(offset: number) {
-    if (!editable) return;
-    const sel = window.getSelection();
-    if (!sel) return;
-
-    let remaining = offset;
-    const walker = document.createTreeWalker(editable, NodeFilter.SHOW_TEXT);
-    let node: Text | null;
-
-    while ((node = walker.nextNode() as Text | null)) {
-      if (remaining <= node.length) {
-        const range = document.createRange();
-        range.setStart(node, remaining);
-        range.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(range);
-        return;
-      }
-      remaining -= node.length;
-    }
-
-    const range = document.createRange();
-    range.selectNodeContents(editable);
-    range.collapse(false);
-    sel.removeAllRanges();
-    sel.addRange(range);
-  }
-
-  function isKnownSkill(token: string): boolean {
-    return skillsStore.nameSet.has(token.slice(1));
-  }
-
-  function buildHighlightedHtml(t: string): string {
-    return highlightSkills(t, isKnownSkill, "hl-skill", "<br>");
-  }
-
-  function getSkillPattern(t: string): string {
-    const matches: string[] = [];
-    for (const line of t.split("\n")) {
-      for (const m of line.matchAll(/(^|\s)(\/[a-z0-9-]+)(\s|$)/g)) {
-        if (isKnownSkill(m[2])) matches.push(m[2]);
-      }
-    }
-    return matches.join("|");
-  }
-
-  function hasBrowserStyledSpans(): boolean {
-    if (!editable) return false;
-    return editable.querySelector("span:not(.hl-skill)") !== null;
-  }
-
-  function applyHighlighting() {
-    if (!editable) return;
-    const t = getPlainText();
-    const pattern = getSkillPattern(t);
-    if (pattern === lastSkillPattern && !hasBrowserStyledSpans()) return;
-    lastSkillPattern = pattern;
-    const offset = saveCursorOffset();
-    editable.innerHTML = buildHighlightedHtml(t);
-    restoreCursorOffset(offset);
+  function classifySkillToken(token: string, finished: boolean): string | null {
+    const name = token.slice(1);
+    if (!name) return "hl-skill-partial";
+    if (skillsStore.nameSet.has(name)) return "hl-skill";
+    if (finished) return null;
+    const hasMatch = skillsStore.items.some(
+      (s) =>
+        fuzzyMatch(name, s.name) !== null ||
+        fuzzyMatch(name, s.display_name.toLowerCase()) !== null,
+    );
+    return hasMatch ? "hl-skill-partial" : null;
   }
 
   function handleInput() {
-    const t = getPlainText();
-    text = t;
-
-    if (!t && editable) {
-      editable.innerHTML = "";
-      lastSkillPattern = "";
-    } else {
-      applyHighlighting();
-    }
-
+    if (textarea) text = textarea.value;
     detectSlashCommand();
     oninput?.();
   }
 
+  function syncScroll() {
+    if (overlay && textarea) {
+      overlay.scrollTop = textarea.scrollTop;
+    }
+  }
+
   function detectSlashCommand() {
-    if (!editable) {
+    if (!textarea) {
       closeAutocomplete();
       return;
     }
 
-    const offset = saveCursorOffset();
+    const offset = textarea.selectionStart;
     const textBefore = text.slice(0, offset);
     const match = textBefore.match(/(^|\s)(\/[a-z0-9-]*)$/);
 
@@ -180,13 +96,20 @@
       const slashToken = match[2];
       const query = slashToken.slice(1);
       slashStart = offset - slashToken.length;
-      const filtered = skillsStore.items.filter(
-        (s) =>
-          s.name.includes(query) ||
-          s.display_name.toLowerCase().includes(query),
-      );
-      if (filtered.length > 0) {
-        autocompleteItems = filtered;
+
+      const scored = skillsStore.items
+        .map((s) => {
+          if (!query) return { skill: s, score: 0 };
+          const nameScore = fuzzyMatch(query, s.name);
+          const displayScore = fuzzyMatch(query, s.display_name.toLowerCase());
+          const best = Math.max(nameScore ?? -1, displayScore ?? -1);
+          return best >= 0 ? { skill: s, score: best } : null;
+        })
+        .filter((x): x is { skill: SkillSummary; score: number } => x !== null)
+        .sort((a, b) => b.score - a.score);
+
+      if (scored.length > 0) {
+        autocompleteItems = scored.map((s) => s.skill);
         autocompleteIndex = 0;
         showAutocomplete = true;
         return;
@@ -204,17 +127,21 @@
   }
 
   function insertSkill(skill: SkillSummary) {
-    if (!editable || slashStart < 0) return;
+    if (!textarea || slashStart < 0) return;
 
-    const cursorOffset = saveCursorOffset();
+    const cursorOffset = textarea.selectionStart;
     const before = text.slice(0, slashStart);
     const after = text.slice(cursorOffset);
-    setTextAndHighlight(`${before}/${skill.name} ${after}`);
+    text = `${before}/${skill.name} ${after}`;
 
     const newOffset = slashStart + skill.name.length + 2;
-    restoreCursorOffset(newOffset);
     closeAutocomplete();
-    editable.focus();
+    requestAnimationFrame(() => {
+      if (!textarea) return;
+      textarea.value = text;
+      textarea.selectionStart = textarea.selectionEnd = newOffset;
+      textarea.focus();
+    });
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -252,17 +179,21 @@
 
 <div class="skill-editable-wrapper">
   <div
-    bind:this={editable}
-    class="skill-editable {editableClass}"
-    contenteditable="true"
-    role="textbox"
-    tabindex="0"
-    aria-multiline="true"
-    data-placeholder={placeholder}
+    bind:this={overlay}
+    class="highlight-overlay {editableClass}"
+    aria-hidden="true"
+  >{@html highlightedHtml}&nbsp;</div>
+  <textarea
+    bind:this={textarea}
+    bind:value={text}
+    class="skill-textarea {editableClass}"
+    {placeholder}
+    rows={1}
     oninput={handleInput}
     onkeydown={handleKeydown}
     onpaste={onpaste}
-  ></div>
+    onscroll={syncScroll}
+  ></textarea>
 
   {#if showAutocomplete && autocompleteItems.length > 0}
     <div class="autocomplete-dropdown" bind:this={dropdownEl}>
@@ -285,31 +216,48 @@
     position: relative;
   }
 
-  .skill-editable {
+  .highlight-overlay,
+  .skill-textarea {
     width: 100%;
     min-height: 1.5em;
-    overflow-y: auto;
     background: transparent;
     border: none;
     color: #e0e0e0;
     font: inherit;
     white-space: pre-wrap;
     word-wrap: break-word;
-    outline: none;
+    overflow-y: auto;
     box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    line-height: inherit;
+    letter-spacing: inherit;
   }
 
-  .skill-editable:empty::before {
-    content: attr(data-placeholder);
-    color: rgba(255, 255, 255, 0.3);
+  .skill-textarea {
+    position: relative;
+    z-index: 1;
+    color: transparent;
+    caret-color: #e0e0e0;
+    outline: none;
+    resize: none;
+  }
+
+  .highlight-overlay {
+    position: absolute;
+    inset: 0;
     pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
   }
 
-  .skill-editable :global(.hl-skill) {
-    font-weight: 600;
+  .highlight-overlay :global(.hl-skill) {
     color: rgba(100, 160, 255, 0.9);
   }
 
+  .highlight-overlay :global(.hl-skill-partial) {
+    color: rgba(100, 160, 255, 0.6);
+  }
 
   .autocomplete-dropdown {
     position: absolute;

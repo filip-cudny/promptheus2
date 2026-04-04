@@ -102,37 +102,47 @@ struct SkillSegment {
     input: String,
 }
 
-static SKILL_LINE_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^/([a-z0-9-]+)(?:\s+(.*))?$").unwrap());
+static SKILL_TOKEN_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?m)(?:^|\s)(/[a-z0-9-]+)").unwrap());
 
 fn parse_input_for_skills(text: &str) -> Vec<SkillSegment> {
-    let mut segments = Vec::new();
-    let mut current_skill: Option<String> = None;
-    let mut current_lines: Vec<&str> = Vec::new();
+    let skill_positions: Vec<(usize, usize, String)> = SKILL_TOKEN_RE
+        .captures_iter(text)
+        .map(|caps| {
+            let m = caps.get(1).unwrap();
+            (m.start(), m.end(), m.as_str()[1..].to_string())
+        })
+        .collect();
 
-    for line in text.lines() {
-        if let Some(caps) = SKILL_LINE_RE.captures(line) {
-            if !current_lines.is_empty() || current_skill.is_some() {
-                let input = current_lines.join("\n").trim().to_string();
-                segments.push(SkillSegment {
-                    skill_name: current_skill.take(),
-                    input,
-                });
-                current_lines.clear();
-            }
-            current_skill = Some(caps[1].to_string());
-            if let Some(rest) = caps.get(2) {
-                current_lines.push(rest.as_str());
-            }
-        } else {
-            current_lines.push(line);
+    if skill_positions.is_empty() {
+        let trimmed = text.trim().to_string();
+        if trimmed.is_empty() {
+            return Vec::new();
         }
+        return vec![SkillSegment {
+            skill_name: None,
+            input: trimmed,
+        }];
     }
 
-    if !current_lines.is_empty() || current_skill.is_some() {
-        let input = current_lines.join("\n").trim().to_string();
+    let mut segments = Vec::new();
+
+    let before = text[..skill_positions[0].0].trim();
+    if !before.is_empty() {
         segments.push(SkillSegment {
-            skill_name: current_skill,
+            skill_name: None,
+            input: before.to_string(),
+        });
+    }
+
+    for (i, (_, end, name)) in skill_positions.iter().enumerate() {
+        let input_end = skill_positions
+            .get(i + 1)
+            .map(|(start, _, _)| *start)
+            .unwrap_or(text.len());
+        let input = text[*end..input_end].trim().to_string();
+        segments.push(SkillSegment {
+            skill_name: Some(name.clone()),
             input,
         });
     }
@@ -141,11 +151,8 @@ fn parse_input_for_skills(text: &str) -> Vec<SkillSegment> {
     segments
 }
 
-static HAS_SKILL_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?m)^/[a-z0-9-]+(\s|$)").unwrap());
-
 pub fn has_skill_references(text: &str) -> bool {
-    HAS_SKILL_RE.is_match(text)
+    SKILL_TOKEN_RE.is_match(text)
 }
 
 pub struct ResolveSkillResult {
@@ -463,7 +470,7 @@ mod tests {
         assert!(has_skill_references("/translate hello"));
         assert!(has_skill_references("some text\n/translate hello"));
         assert!(!has_skill_references("no skills here"));
-        assert!(!has_skill_references("a /translate in middle"));
+        assert!(has_skill_references("a /translate in middle"));
     }
 
     #[test]

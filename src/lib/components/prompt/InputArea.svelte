@@ -80,8 +80,7 @@
 
     if (skillEditable) {
       if (storeText === "") {
-        const el = skillEditable.getElement();
-        if (el) el.innerHTML = "";
+        skillEditable.setTextAndHighlight("");
         lastDomText = "";
       } else if (tabChanged || textChangedExternally) {
         skillEditable.setTextAndHighlight(storeText);
