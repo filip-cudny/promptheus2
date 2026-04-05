@@ -24,6 +24,10 @@ struct TreeJson {
     root_node_id: Option<String>,
     current_path: Vec<String>,
     resolved_environment_section: Option<String>,
+    #[serde(default)]
+    model_id: Option<String>,
+    #[serde(default)]
+    reasoning_effort: Option<String>,
 }
 
 pub struct SqliteHistoryService {
@@ -94,6 +98,8 @@ impl SqliteHistoryService {
         quick_action: bool,
         resolved_environment_section: Option<String>,
         images: Vec<ImagePayload>,
+        model_id: Option<String>,
+        reasoning_effort: Option<String>,
     ) -> String {
         let id = Self::generate_id();
         let now = Self::now_timestamp();
@@ -106,6 +112,8 @@ impl SqliteHistoryService {
             root_node_id: root_node_id.clone(),
             current_path: current_path.clone(),
             resolved_environment_section,
+            model_id,
+            reasoning_effort,
         })
         .unwrap_or_default();
 
@@ -146,6 +154,8 @@ impl SqliteHistoryService {
         root_node_id: Option<String>,
         current_path: Vec<String>,
         images: Vec<ImagePayload>,
+        model_id: Option<String>,
+        reasoning_effort: Option<String>,
     ) -> Result<(), HistoryError> {
         let now = Self::now_timestamp();
 
@@ -157,6 +167,8 @@ impl SqliteHistoryService {
             root_node_id,
             current_path,
             resolved_environment_section: None,
+            model_id,
+            reasoning_effort,
         })
         .unwrap_or_default();
 
@@ -244,6 +256,8 @@ impl SqliteHistoryService {
                         resolved_environment_section: tree.resolved_environment_section,
                         node_images: HashMap::new(),
                         context_images: vec![],
+                        model_id: tree.model_id,
+                        reasoning_effort: tree.reasoning_effort,
                     });
 
                 Ok((
@@ -574,6 +588,8 @@ mod tests {
             false,
             None,
             vec![],
+            None,
+            None,
         );
 
         let entry = svc.get_entry_by_id(&id).unwrap();
@@ -601,6 +617,8 @@ mod tests {
             false,
             None,
             vec![],
+            None,
+            None,
         );
 
         let new_nodes = make_nodes("hi updated", "hello updated");
@@ -611,6 +629,8 @@ mod tests {
             Some("u1".into()),
             vec!["u1".into(), "a1".into()],
             vec![],
+            None,
+            None,
         )
         .unwrap();
 
@@ -631,6 +651,8 @@ mod tests {
             None,
             vec![],
             vec![],
+            None,
+            None,
         );
         assert!(result.is_err());
     }
@@ -738,6 +760,8 @@ mod tests {
                     media_type: "image/jpeg".into(),
                 },
             ],
+            None,
+            None,
         );
 
         let entry = svc.get_entry_by_id(&id).unwrap();
@@ -776,6 +800,8 @@ mod tests {
                 data: image_data,
                 media_type: "image/png".into(),
             }],
+            None,
+            None,
         );
 
         svc.clear();

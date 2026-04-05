@@ -24,6 +24,8 @@ export interface ConversationHistoryData {
   resolved_environment_section: string | null;
   node_images: Record<string, ConversationImage[]>;
   context_images: ConversationImage[];
+  model_id: string | null;
+  reasoning_effort: string | null;
 }
 
 export interface ImagePayload {

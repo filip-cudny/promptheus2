@@ -41,6 +41,8 @@ export async function addConversationEntry(params: {
   currentPath: string[];
   tabId: string | null;
   images: ImagePayload[];
+  modelId: string | null;
+  reasoningEffort: string | null;
 }): Promise<string> {
   return invoke("add_conversation_entry", params);
 }
@@ -52,6 +54,8 @@ export async function updateConversationEntry(params: {
   rootNodeId: string | null;
   currentPath: string[];
   images: ImagePayload[];
+  modelId: string | null;
+  reasoningEffort: string | null;
 }): Promise<void> {
   return invoke("update_conversation_entry", params);
 }

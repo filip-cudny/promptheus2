@@ -261,6 +261,7 @@
     background: rgba(30, 30, 30, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
+    overflow: visible;
   }
 
   :global([data-platform="linux"]) .input-area {
@@ -298,6 +299,8 @@
     justify-content: space-between;
     gap: 8px;
     padding: 6px 8px;
+    position: relative;
+    overflow: visible;
   }
 
   .bar-left {
@@ -305,6 +308,8 @@
     display: flex;
     gap: 6px;
     align-items: center;
+    position: relative;
+    overflow: visible;
   }
 
   .token-count {

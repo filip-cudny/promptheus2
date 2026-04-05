@@ -36,7 +36,10 @@
   );
 
   let showReasoning = $derived(
-    selectedModel ? supportsReasoning(selectedModel.provider, selectedModel.model) : false,
+    selectedModel
+      ? supportsReasoning(selectedModel.provider, selectedModel.model) ||
+        selectedModel.parameters?.reasoning_effort != null
+      : false,
   );
 
   let availableLevels = $derived(
@@ -108,11 +111,31 @@
   </button>
 
   {#if showReasoning}
-    <button class="selector-chip reasoning-chip" onclick={toggleReasoningDropdown} title="Reasoning level">
-      <Brain size={ICON_SIZE.sm} />
-      <span class="chip-label">{REASONING_LEVEL_LABELS[currentLevel]}</span>
-      <ChevronDown size={ICON_SIZE.sm} />
-    </button>
+    <div class="reasoning-wrapper">
+      <button class="selector-chip reasoning-chip" onclick={toggleReasoningDropdown} title="Reasoning level">
+        <Brain size={ICON_SIZE.sm} />
+        <span class="chip-label">{REASONING_LEVEL_LABELS[currentLevel]}</span>
+        <ChevronDown size={ICON_SIZE.sm} />
+      </button>
+      {#if reasoningDropdownOpen}
+        <div class="dropdown reasoning-dropdown">
+          {#each availableLevels as level}
+            <button
+              class="dropdown-item"
+              class:active={level === currentLevel}
+              onclick={() => selectReasoning(level)}
+            >
+              <span class="check-icon">
+                {#if level === currentLevel}
+                  <Check size={ICON_SIZE.sm} />
+                {/if}
+              </span>
+              <span class="dropdown-label">{REASONING_LEVEL_LABELS[level]}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
   {/if}
 
   {#if modelDropdownOpen}
@@ -120,34 +143,15 @@
       {#each models as model}
         <button
           class="dropdown-item"
-          class:active={model.id === selectedModelId}
+          class:active={model.id === selectedModel?.id}
           onclick={() => selectModel(model.id)}
         >
           <span class="check-icon">
-            {#if model.id === selectedModelId}
+            {#if model.id === selectedModel?.id}
               <Check size={ICON_SIZE.sm} />
             {/if}
           </span>
           <span class="dropdown-label">{model.display_name}</span>
-        </button>
-      {/each}
-    </div>
-  {/if}
-
-  {#if reasoningDropdownOpen}
-    <div class="dropdown reasoning-dropdown">
-      {#each availableLevels as level}
-        <button
-          class="dropdown-item"
-          class:active={level === currentLevel}
-          onclick={() => selectReasoning(level)}
-        >
-          <span class="check-icon">
-            {#if level === currentLevel}
-              <Check size={ICON_SIZE.sm} />
-            {/if}
-          </span>
-          <span class="dropdown-label">{REASONING_LEVEL_LABELS[level]}</span>
         </button>
       {/each}
     </div>
@@ -183,6 +187,10 @@
     color: rgba(255, 255, 255, 0.8);
   }
 
+  .reasoning-wrapper {
+    position: relative;
+  }
+
   .reasoning-chip {
     max-width: 90px;
   }
@@ -195,11 +203,10 @@
 
   .dropdown {
     position: absolute;
-    top: calc(100% + 4px);
+    bottom: calc(100% + 4px);
     left: 0;
     z-index: 1000;
-    min-width: 160px;
-    max-width: 240px;
+    width: 220px;
     background: #252525;
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 6px;
@@ -208,9 +215,8 @@
   }
 
   .reasoning-dropdown {
-    left: auto;
-    right: 0;
-    min-width: 100px;
+    left: 0;
+    width: 220px;
   }
 
   .dropdown-item {

@@ -553,7 +553,7 @@ export function createConversationStore(
     return skillId ? `/${skillId} ` : "";
   }
 
-  function openForSkill(skillId: string, skillName: string): void {
+  function openForSkill(skillId: string, skillName: string): boolean {
     const tab = getTab(activeTabId);
     const prefix = skillInputPrefix(skillId);
 
@@ -561,12 +561,14 @@ export function createConversationStore(
       tab.input_text = prefix;
       tab.pristine_input = prefix || null;
       tab.tab_name = skillName || "Chat";
+      return false;
     } else {
       const newTab = createTabState(skillName || `Chat ${tabs.length + 1}`);
       newTab.input_text = prefix;
       newTab.pristine_input = prefix || null;
       tabs.push(newTab);
       activeTabId = newTab.tab_id;
+      return true;
     }
   }
 
@@ -685,6 +687,8 @@ export function createConversationStore(
           rootNodeId: tab.tree.root_node_id,
           currentPath: tab.tree.current_path,
           images,
+          modelId: tab.model_id,
+          reasoningEffort: tab.reasoning_effort,
         });
       } else {
         const entryId = await addConversationEntry({
@@ -698,6 +702,8 @@ export function createConversationStore(
           currentPath: tab.tree.current_path,
           tabId: tab.tab_id,
           images,
+          modelId: tab.model_id,
+          reasoningEffort: tab.reasoning_effort,
         });
         tab.history_entry_id = entryId;
         if (!/^Chat \d+$/.test(tab.tab_name)) {
@@ -735,6 +741,8 @@ export function createConversationStore(
         const data = entry.conversation_data;
         newTab.context_text = data.context_text;
         newTab.context_images = data.context_images ?? [];
+        newTab.model_id = data.model_id ?? null;
+        newTab.reasoning_effort = data.reasoning_effort ?? null;
         restoredTree.root_node_id = data.root_node_id;
         restoredTree.current_path = data.current_path;
 
@@ -897,6 +905,7 @@ export function createConversationStore(
     updateReasoningEffort,
     saveToHistory,
     restoreFromHistory,
+    isTabClean,
     destroy,
   };
 }

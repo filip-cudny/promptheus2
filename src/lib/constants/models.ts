@@ -11,21 +11,58 @@ export const REASONING_LEVEL_LABELS: Record<ReasoningLevel, string> = {
   high: "High",
 };
 
-const OPENAI_REASONING_PREFIXES = ["o1", "o3", "o4"];
+const OPENAI_REASONING_MODELS: readonly string[] = [
+  "o1",
+  "o1-mini",
+  "o1-preview",
+  "o3",
+  "o3-mini",
+  "o3-pro",
+  "o4-mini",
+  "o4-mini-deep-research",
+  "o3-deep-research",
+  "gpt-5",
+  "gpt-5-mini",
+  "gpt-5-nano",
+  "gpt-5.3-codex",
+  "gpt-5.4",
+  "gpt-5.4-mini",
+  "gpt-5.4-nano",
+  "gpt-5.4-pro",
+];
+
+const ANTHROPIC_REASONING_MODELS: readonly string[] = [
+  "claude-opus-4-6",
+  "claude-opus-4-5-20251101",
+  "claude-opus-4-1-20250805",
+  "claude-opus-4-20250514",
+  "claude-sonnet-4-6",
+  "claude-sonnet-4-5-20250929",
+  "claude-sonnet-4-20250514",
+  "claude-3-7-sonnet-20250219",
+  "claude-haiku-4-5-20251001",
+];
+
+const GEMINI_REASONING_MODELS: readonly string[] = [
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+  "gemini-2.5-flash-lite-preview",
+  "gemini-2.5-flash-preview",
+  "gemini-2.5-pro",
+  "gemini-3-flash-preview",
+  "gemini-3.1-pro",
+  "gemini-3.1-flash-lite",
+];
+
+const REASONING_MODELS_BY_PROVIDER: Record<Provider, readonly string[]> = {
+  openai: OPENAI_REASONING_MODELS,
+  anthropic: ANTHROPIC_REASONING_MODELS,
+  gemini: GEMINI_REASONING_MODELS,
+};
 
 export function supportsReasoning(provider: Provider, modelName: string): boolean {
-  switch (provider) {
-    case "openai":
-      return OPENAI_REASONING_PREFIXES.some(
-        (prefix) => modelName === prefix || modelName.startsWith(`${prefix}-`),
-      );
-    case "anthropic":
-      return modelName.includes("claude") && (modelName.includes("3.5") || modelName.includes("3-5") || modelName.includes("4"));
-    case "gemini":
-      return modelName.includes("thinking") || modelName.includes("2.5");
-    default:
-      return false;
-  }
+  const models = REASONING_MODELS_BY_PROVIDER[provider];
+  return models?.includes(modelName) ?? false;
 }
 
 export function getAvailableReasoningLevels(provider: Provider): ReasoningLevel[] {

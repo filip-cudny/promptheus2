@@ -208,6 +208,8 @@ pub async fn execute_skill(
                 true,
                 None,
                 vec![],
+                None,
+                None,
             );
             let _ = app.emit("history-changed", ());
 

@@ -43,6 +43,10 @@ pub struct ConversationHistoryData {
     pub node_images: HashMap<String, Vec<ImageData>>,
     #[serde(default)]
     pub context_images: Vec<ImageData>,
+    #[serde(default)]
+    pub model_id: Option<String>,
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -160,6 +164,8 @@ mod tests {
                 resolved_environment_section: None,
                 node_images: HashMap::new(),
                 context_images: vec![],
+                model_id: None,
+                reasoning_effort: None,
             }),
             created_at: Some("2026-01-01T12:00:00Z".into()),
             updated_at: Some("2026-01-01T12:00:01Z".into()),

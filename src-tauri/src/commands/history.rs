@@ -75,6 +75,8 @@ pub async fn add_conversation_entry(
     current_path: Vec<String>,
     tab_id: Option<String>,
     #[allow(unused_variables)] images: Vec<ImagePayload>,
+    model_id: Option<String>,
+    reasoning_effort: Option<String>,
 ) -> Result<String, String> {
     let state = state.lock().await;
     let resolved_environment_section = tab_id
@@ -93,6 +95,8 @@ pub async fn add_conversation_entry(
         false,
         resolved_environment_section,
         images,
+        model_id,
+        reasoning_effort,
     );
     emit_history_changed(&app)?;
     Ok(id)
@@ -108,6 +112,8 @@ pub async fn update_conversation_entry(
     root_node_id: Option<String>,
     current_path: Vec<String>,
     #[allow(unused_variables)] images: Vec<ImagePayload>,
+    model_id: Option<String>,
+    reasoning_effort: Option<String>,
 ) -> Result<(), String> {
     let state = state.lock().await;
     state
@@ -119,6 +125,8 @@ pub async fn update_conversation_entry(
             root_node_id,
             current_path,
             images,
+            model_id,
+            reasoning_effort,
         )
         .map_err(|e| e.to_string())?;
     emit_history_changed(&app)
