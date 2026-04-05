@@ -12,21 +12,6 @@ pub enum HistoryEntryType {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SerializedConversationTurn {
-    pub turn_number: u32,
-    pub message_text: String,
-    #[serde(default)]
-    pub message_image_paths: Vec<String>,
-    pub output_text: Option<String>,
-    #[serde(default)]
-    pub is_complete: bool,
-    #[serde(default)]
-    pub output_versions: Vec<String>,
-    #[serde(default)]
-    pub current_version_index: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializedConversationNode {
     pub node_id: String,
     pub parent_id: Option<String>,

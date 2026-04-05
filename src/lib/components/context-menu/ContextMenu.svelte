@@ -8,10 +8,13 @@
   import type { ContextItem } from "$lib/types/context";
   import ContextSection from "./ContextSection.svelte";
   import LastInteractionSection from "./LastInteractionSection.svelte";
+  import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
   import { Info, MessageSquare, MessageSquareShare, Mic, Square } from "lucide-svelte";
   import { openConversationDialog } from "$lib/services/conversationDialog";
   import { isExecuting } from "$lib/stores/execution.svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import { updateSetting, updateModelReasoningEffort } from "$lib/services/settings";
+  import type { ModelConfig, Provider } from "$lib/types";
   import {
     getItems,
     getSelectedIndex,
@@ -85,6 +88,20 @@
     if (item.item_type !== "last_interaction") return null;
     return (item.data ?? null) as LastInteractionData | null;
   }
+
+  interface ModelsMenuData {
+    models: { id: string; display_name: string; model: string; provider: Provider; reasoning_effort: string | null }[];
+    default_model_id: string | null;
+    default_reasoning_effort: string | null;
+  }
+
+  function extractModelsData(item: MenuItem): ModelsMenuData | null {
+    if (item.item_type !== "models") return null;
+    return (item.data ?? null) as ModelsMenuData | null;
+  }
+
+  let modelsDefaultModelId = $state<string | null>(null);
+  let modelsReasoningEffort = $state<string | null>(null);
 
   let menuEl: HTMLDivElement | undefined = $state();
   let expandedDescriptionId = $state("");
@@ -235,6 +252,18 @@
 
   let menuVisible = $derived(isVisible());
   $effect(() => { if (!menuVisible) expandedDescriptionId = ""; });
+
+  $effect(() => {
+    const items = getItems();
+    const modelsItem = items.find((i) => i.item_type === "models");
+    if (modelsItem) {
+      const data = extractModelsData(modelsItem);
+      if (data) {
+        modelsDefaultModelId = data.default_model_id;
+        modelsReasoningEffort = data.default_reasoning_effort;
+      }
+    }
+  });
   let menuItems = $derived(getItems());
   let allSkillItems = $derived(getAllSkillItems());
   let skillItems = $derived(getSkillItems());
@@ -319,10 +348,48 @@
           </button>
         </div>
       {/if}
+      {#if section.sectionId === "models"}
+        {@const modelsItem = section.items[0]?.item}
+        {@const modelsData = modelsItem ? extractModelsData(modelsItem) : null}
+        {#if modelsData && modelsData.models.length > 0}
+          <div class="models-row" onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}>
+            <ModelSelector
+              models={modelsData.models.map((m) => ({
+                id: m.id,
+                model: m.model,
+                display_name: m.display_name,
+                provider: m.provider,
+                api_key_source: "env" as const,
+                api_key_env: null,
+                api_key: null,
+                base_url: null,
+                parameters: m.reasoning_effort ? { temperature: null, max_tokens: null, top_p: null, frequency_penalty: null, presence_penalty: null, reasoning_effort: m.reasoning_effort } : null,
+                context_window_size: null,
+              }))}
+              selectedModelId={modelsDefaultModelId}
+              reasoningEffort={modelsReasoningEffort}
+              onModelSelect={async (modelId) => {
+                modelsDefaultModelId = modelId;
+                const model = modelsData.models.find((m) => m.id === modelId);
+                modelsReasoningEffort = model?.reasoning_effort ?? null;
+                await updateSetting("default_model", modelId);
+              }}
+              onReasoningSelect={async (effort) => {
+                modelsReasoningEffort = effort;
+                if (modelsDefaultModelId) {
+                  await updateModelReasoningEffort(modelsDefaultModelId, effort);
+                }
+              }}
+              preventDismiss={{ suppress: suppressClose, resume: resumeClose }}
+              onDropdownToggle={() => resizeWindow()}
+            />
+          </div>
+        {/if}
+      {/if}
       {#if section.sectionId === "skills"}
         <div data-section="skills-anchor"></div>
       {/if}
-      {#each section.sectionId === "chat" ? [] : section.items as { item, globalIndex }}
+      {#each section.sectionId === "chat" || section.sectionId === "models" ? [] : section.items as { item, globalIndex }}
         {@const contextItems = extractContextItems(item)}
         {@const lastInteractionData = extractLastInteractionData(item)}
         {#if contextItems}
@@ -421,6 +488,12 @@
     color: rgba(255, 255, 255, 0.4);
     text-align: center;
     font-style: italic;
+  }
+
+  .models-row {
+    display: flex;
+    align-items: center;
+    padding: 4px 12px;
   }
 
   .chat-row {

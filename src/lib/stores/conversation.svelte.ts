@@ -135,6 +135,8 @@ function createTabState(tabName: string): TabState {
     execution_id: null,
     history_entry_id: null,
     pristine_input: null,
+    model_id: null,
+    reasoning_effort: null,
   };
 }
 
@@ -218,6 +220,8 @@ export function createConversationStore(
   const inputText = $derived(activeTab.input_text);
   const inputImages = $derived(activeTab.input_images);
   const inputTextAttachments = $derived(activeTab.input_text_attachments);
+  const modelId = $derived(activeTab.model_id);
+  const reasoningEffort = $derived(activeTab.reasoning_effort);
 
   const canSend = $derived.by(() => {
     if (activeTab.is_executing) return false;
@@ -401,6 +405,8 @@ export function createConversationStore(
         tabId: tab.tab_id,
         skillId,
         skillName,
+        modelId: tab.model_id || undefined,
+        reasoningEffort: tab.reasoning_effort || undefined,
       });
     } catch (e) {
       logError("Failed to execute: " + e);
@@ -650,6 +656,16 @@ export function createConversationStore(
     if (tab) tab.input_text_attachments = attachments;
   }
 
+  function updateModelId(id: string | null): void {
+    const tab = getTab(activeTabId);
+    if (tab) tab.model_id = id;
+  }
+
+  function updateReasoningEffort(effort: string | null): void {
+    const tab = getTab(activeTabId);
+    if (tab) tab.reasoning_effort = effort;
+  }
+
   async function saveToHistory(): Promise<void> {
     const tab = getTab(activeTabId);
     if (!tab) return;
@@ -844,6 +860,12 @@ export function createConversationStore(
     get inputTextAttachments() {
       return inputTextAttachments;
     },
+    get modelId() {
+      return modelId;
+    },
+    get reasoningEffort() {
+      return reasoningEffort;
+    },
     get totalTokens() {
       return totalTokens;
     },
@@ -871,6 +893,8 @@ export function createConversationStore(
     updateInputText,
     updateInputImages,
     updateInputTextAttachments,
+    updateModelId,
+    updateReasoningEffort,
     saveToHistory,
     restoreFromHistory,
     destroy,

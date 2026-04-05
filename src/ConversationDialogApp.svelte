@@ -29,11 +29,14 @@
 
   const store = createConversationStore("", "Chat");
 
+  import type { ModelConfig } from "$lib/types";
+
   let sidebarOpen = $state(false);
   let contextVisible = $state(false);
   let contextDisabled = $state(false);
   let contextInitialCollapsed = $state(false);
   let contextWindowSize = $state(0);
+  let models = $state<ModelConfig[]>([]);
 
   let unlistenRestore: UnlistenFn | undefined;
   let unlistenContextChanged: UnlistenFn | undefined;
@@ -73,7 +76,10 @@
   async function loadModelInfo() {
     try {
       const settings = await getSettings();
-      const activeModel = settings.models.find((m) => m.id === settings.default_model);
+      models = settings.models;
+      const tabModelId = store.modelId;
+      const activeModelId = tabModelId ?? settings.default_model;
+      const activeModel = settings.models.find((m) => m.id === activeModelId);
       if (activeModel) {
         contextWindowSize = getContextWindowSize(activeModel.model, activeModel.context_window_size);
       }
@@ -171,7 +177,7 @@
     </button>
   </div>
   <ConversationArea {store} />
-  <InputArea {store} {contextVisible} {contextDisabled} {contextInitialCollapsed} {contextWindowSize} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
+  <InputArea {store} {models} {contextVisible} {contextDisabled} {contextInitialCollapsed} {contextWindowSize} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
   <TabSidebar {store} {historyStore} open={sidebarOpen} onClose={() => sidebarOpen = false} />
 </div>
 

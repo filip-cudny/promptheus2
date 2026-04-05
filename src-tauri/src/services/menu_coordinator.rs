@@ -45,6 +45,7 @@ impl MenuCoordinator {
             let mut section_items = match section_id.as_str() {
                 "chat" => self.build_chat_items(),
                 "skills" | "prompts" => self.build_skill_items(),
+                "models" => self.build_models_items(config),
                 "settings" => self.build_settings_items(config),
                 _ => self.build_provider_items(section_id),
             };
@@ -129,6 +130,53 @@ impl MenuCoordinator {
             skill_items.extend(items);
         }
         skill_items
+    }
+
+    fn build_models_items(&self, config: &ConfigService) -> Vec<MenuItem> {
+        let settings = config.settings();
+        if settings.models.is_empty() {
+            return Vec::new();
+        }
+
+        let default_model_id = settings.default_model.clone();
+
+        let default_reasoning_effort = default_model_id
+            .as_ref()
+            .and_then(|id| settings.models.iter().find(|m| &m.id == id))
+            .and_then(|m| m.parameters.as_ref())
+            .and_then(|p| p.reasoning_effort.clone());
+
+        let models: Vec<serde_json::Value> = settings
+            .models
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "id": m.id,
+                    "display_name": m.display_name,
+                    "model": m.model,
+                    "provider": m.provider,
+                    "reasoning_effort": m.parameters.as_ref().and_then(|p| p.reasoning_effort.clone()),
+                })
+            })
+            .collect();
+
+        vec![MenuItem {
+            id: "__models__".to_string(),
+            label: "Models".to_string(),
+            item_type: MenuItemType::Models,
+            data: Some(serde_json::json!({
+                "models": models,
+                "default_model_id": default_model_id,
+                "default_reasoning_effort": default_reasoning_effort,
+            })),
+            enabled: true,
+            separator_after: false,
+            style: None,
+            tooltip: None,
+            submenu_items: None,
+            icon: None,
+            section_id: None,
+        }]
     }
 
     fn build_settings_items(&self, config: &ConfigService) -> Vec<MenuItem> {

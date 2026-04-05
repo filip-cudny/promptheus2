@@ -7,7 +7,8 @@ export type MenuItemType =
   | "context"
   | "last_interaction"
   | "settings_section"
-  | "chat";
+  | "chat"
+  | "models";
 
 export interface MenuItem {
   id: string;

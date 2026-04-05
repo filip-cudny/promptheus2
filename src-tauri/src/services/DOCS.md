@@ -15,7 +15,8 @@ services/
 ├── clipboard.rs         # ClipboardService — text and image clipboard operations
 ├── config.rs            # ConfigService — settings load/validate/save/mutate
 ├── context.rs           # ContextManagerService — ordered context items (text/image)
-├── history.rs           # HistoryService — in-memory execution history tracking
+├── database.rs          # Database — SQLite connection, schema creation, migrations
+├── sqlite_history.rs    # SqliteHistoryService — persistent history storage via SQLite
 ├── hotkeys.rs           # Hotkey translation and OS-filtered binding resolution
 ├── image_storage.rs     # ImageStorage — temp image file save/load for conversation history
 ├── menu_coordinator.rs  # MenuCoordinator — aggregates menu providers into ordered sections
@@ -93,31 +94,35 @@ Manages an ordered list of `ContextItem` values (text and/or images) in memory. 
 
 **Key edge case**: `has_context()` checks for Text variant existence; `get_context()` additionally filters out empty-content items. Image-only context returns `None` from `get_context()`.
 
-### HistoryService specifics
+### SqliteHistoryService specifics
 
-In-memory record of prompt executions (text and speech). Session-only — no persistence to disk. History is lost on app restart, matching original behavior.
+Persistent history storage via SQLite. Database file at `{app_data_dir}/history.db`. Survives app restarts.
 
-**No internal locking**: plain struct with `Vec<HistoryEntry>`. Thread safety provided by `Mutex<AppState>` in the command layer.
+**Schema**: two tables — `conversations` (metadata columns + `tree_json` blob for full conversation tree) and `conversation_images` (binary image data with foreign key to conversations, cascade delete). Schema migrations via `database.rs` with version table.
 
-**Constructor**: `HistoryService::new(max_entries)` — creates an empty service with a bounded capacity.
+**No internal locking**: plain struct with `Database`. Thread safety provided by `Mutex<AppState>` in the command layer.
 
-**ID generation**: millisecond timestamp via `SystemTime::now().duration_since(UNIX_EPOCH).as_millis()`. Not globally unique but sufficient for single-user desktop app.
+**Constructor**: `SqliteHistoryService::new(database, max_entries)` — takes ownership of a `Database` instance.
 
-**Timestamp format**: `chrono::Local::now().format("%Y-%m-%d %H:%M:%S")` for `timestamp`, `created_at`, and `updated_at` fields.
+**ID generation**: UUID v4 via `uuid::Uuid::new_v4()`.
 
-**Max entries enforcement**: after each append, if `entries.len() > max_entries`, entries are sorted by recency and truncated to `max_entries`. Oldest entries are silently dropped.
+**Timestamp format**: `chrono::Local::now().format("%Y-%m-%d %H:%M:%S")`.
 
-**Sorting**: `get_history()` returns entries sorted most-recent-first using a fallback chain: `updated_at` → `created_at` → `timestamp`. All three are `"%Y-%m-%d %H:%M:%S"` strings, so lexicographic comparison works.
+**Max entries enforcement**: after each insert, deletes rows not in the top N by recency.
 
-**Simple entries**: `add_entry()` records a single prompt execution (text or speech) with input, output, success/error status, and prompt metadata.
+**Sorting**: `get_history()` returns entries ordered by `COALESCE(updated_at, created_at) DESC, rowid DESC`.
 
-**Conversation entries**: `add_conversation_entry()` creates a multi-turn entry with full `ConversationHistoryData` (turns, tree nodes, context). Returns the entry ID for later updates. `update_conversation_entry()` modifies an existing conversation entry and sets `updated_at`.
+**Simple entries**: `add_entry()` inserts a single prompt execution (no tree_json).
 
-**Summary builders**: conversation entries auto-generate `input_content` and `output_content` summaries from turns. Last turn's text is used, truncated to 200 chars (100 if multiple turns), with "+N more" suffix.
+**Conversation entries**: `add_conversation_entry()` serializes nodes/tree as JSON into `tree_json`, inserts images as BLOBs in a single transaction. Returns the entry ID. `update_conversation_entry()` replaces tree_json and re-inserts all images in a transaction.
 
-**Methods**: `new`, `add_entry`, `add_conversation_entry`, `update_conversation_entry`, `get_history`, `get_entry_by_id`, `get_last_item_by_type`, `get_conversation_data`, `clear`, `entry_count`.
+**Image handling**: images received as base64 `ImagePayload`, decoded to BLOBs on save. On `get_entry_by_id()`, BLOBs are re-encoded to base64 and grouped into `node_images` (by node_id) and `context_images` (node_id = NULL) on `ConversationHistoryData`.
 
-**Error enum**: `HistoryError` with single variant `EntryNotFound(String)`.
+**Summary builders**: `build_input_summary` and `build_output_summary` derive summaries from nodes (last user/assistant content, truncated to 200 chars, with "+N more" suffix for multi-turn).
+
+**Methods**: `new`, `add_entry`, `add_conversation_entry`, `update_conversation_entry`, `get_history`, `get_entry_by_id`, `get_last_item_by_type`, `get_last_quick_action`, `get_conversation_data`, `update_entry_title`, `clear`, `entry_count`.
+
+**Error enum**: `HistoryError` with variants `EntryNotFound(String)` and `Database(rusqlite::Error)`.
 
 ### Hotkeys specifics
 
@@ -147,7 +152,7 @@ Manages temporary image files for conversation history. Saves base64-encoded ima
 
 **Cleanup**: `cleanup()` removes all files and recreates the empty directory. `initialize()` does the same on startup.
 
-**Coordination with HistoryService**: `ImageStorage` is a separate service. `HistoryService` stores file paths as `Vec<String>` in `context_image_paths` and `message_image_paths`. The command layer coordinates between the two.
+**Coordination with SqliteHistoryService**: `ImageStorage` handles transient image files during execution. Persistent image storage is handled directly by `SqliteHistoryService` via the `conversation_images` table (base64 → BLOB on save, BLOB → base64 on restore).
 
 **Error variants**: `Io` (filesystem errors), `Base64Decode` (invalid base64 input).
 

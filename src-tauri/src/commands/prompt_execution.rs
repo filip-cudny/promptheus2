@@ -9,6 +9,7 @@ use tokio_stream::StreamExt;
 use crate::commands::settings::AppState;
 use crate::services::config::ConfigService;
 use crate::models::ai::StreamEvent;
+use crate::models::settings::ModelParameters;
 use crate::models::history::SerializedConversationNode;
 use crate::models::message::{
     ConversationNodeForExecution, ImageData, MessageContent,

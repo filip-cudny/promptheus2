@@ -7,6 +7,7 @@
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import TextChipBar from "$lib/components/ui/TextChipBar.svelte";
   import SkillEditable from "$lib/components/ui/SkillEditable.svelte";
+  import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
   import { SendHorizonal, RefreshCw, Square, CopyCheck } from "lucide-svelte";
   import { getImageFromPasteEvent, extractTextAttachment } from "$lib/utils/paste";
   import { formatTokenCount } from "$lib/utils/contextWindow";
@@ -14,9 +15,11 @@
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
+  import type { ModelConfig } from "$lib/types";
 
   let {
     store,
+    models = [],
     contextVisible,
     contextDisabled,
     contextInitialCollapsed = false,
@@ -27,6 +30,7 @@
     onToggleContext,
   }: {
     store: ReturnType<typeof createConversationStore>;
+    models?: ModelConfig[];
     contextVisible: boolean;
     contextDisabled: boolean;
     contextInitialCollapsed?: boolean;
@@ -198,6 +202,15 @@
   <div class="button-bar">
     <div class="bar-left">
       <AttachMenu onSelectContext={onToggleContext} {contextDisabled} />
+      {#if models.length > 0}
+        <ModelSelector
+          {models}
+          selectedModelId={store.modelId}
+          reasoningEffort={store.reasoningEffort}
+          onModelSelect={(modelId) => store.updateModelId(modelId)}
+          onReasoningSelect={(effort) => store.updateReasoningEffort(effort)}
+        />
+      {/if}
       {#if store.totalTokens > 0}
         <span class="token-count">
           ~{formatTokenCount(store.totalTokens)}{#if contextWindowSize > 0} / {formatTokenCount(contextWindowSize)}{/if}

@@ -33,6 +33,13 @@ export async function deleteModel(modelId: string): Promise<void> {
   return invoke("delete_model", { modelId });
 }
 
+export async function updateModelReasoningEffort(
+  modelId: string,
+  reasoningEffort: string | null,
+): Promise<void> {
+  return invoke("update_model_reasoning_effort", { modelId, reasoningEffort });
+}
+
 export async function updateNotifications(
   config: NotificationSettings,
 ): Promise<void> {

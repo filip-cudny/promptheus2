@@ -4,7 +4,7 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 use crate::models::settings::{
-    KeymapGroup, ModelConfig, NotificationSettings, Settings, SpeechToTextModel,
+    KeymapGroup, ModelConfig, ModelParameters, NotificationSettings, Settings, SpeechToTextModel,
 };
 use crate::services::ai::AiService;
 use crate::services::clipboard::ClipboardService;
@@ -126,6 +126,22 @@ pub async fn delete_model(
     let mut state = state.lock().await;
     state.config.delete_model(&model_id);
     rebuild_ai(&mut state);
+    save_and_emit(&state.config, &app)
+}
+
+#[tauri::command]
+pub async fn update_model_reasoning_effort(
+    app: AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    model_id: String,
+    reasoning_effort: Option<String>,
+) -> Result<(), String> {
+    let mut state = state.lock().await;
+    let settings = state.config.settings_mut();
+    if let Some(model) = settings.models.iter_mut().find(|m| m.id == model_id) {
+        let params = model.parameters.get_or_insert_with(ModelParameters::default);
+        params.reasoning_effort = reasoning_effort;
+    }
     save_and_emit(&state.config, &app)
 }
 

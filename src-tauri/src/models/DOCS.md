@@ -13,7 +13,7 @@ models/
 ├── context.rs      # ContextItem tagged enum (Text / Image variants)
 ├── message.rs      # ProcessedMessage, MessageContent, ContentPart — LLM message format
 └── history.rs      # HistoryEntryType, HistoryEntry, ConversationHistoryData,
-                    #   SerializedConversationTurn, SerializedConversationNode
+                    #   SerializedConversationNode, ImagePayload
 ```
 
 ## Conventions

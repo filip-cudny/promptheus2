@@ -586,6 +586,7 @@ pub fn run() {
             commands::settings::update_setting,
             commands::settings::add_model,
             commands::settings::update_model,
+            commands::settings::update_model_reasoning_effort,
             commands::settings::delete_model,
             commands::settings::update_notifications,
             commands::settings::update_speech_model,

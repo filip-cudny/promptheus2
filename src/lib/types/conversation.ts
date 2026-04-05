@@ -46,4 +46,6 @@ export interface TabState {
   execution_id: string | null;
   history_entry_id: string | null;
   pristine_input: string | null;
+  model_id: string | null;
+  reasoning_effort: string | null;
 }

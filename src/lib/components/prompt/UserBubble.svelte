@@ -207,7 +207,6 @@
 
   .bubble-text :global(.skill-badge) {
     display: inline;
-    font-weight: 600;
     color: rgba(100, 160, 255, 0.9);
   }
 
