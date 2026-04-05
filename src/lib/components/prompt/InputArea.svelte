@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import ContextSection from "./ContextSection.svelte";
   import AttachMenu from "./AttachMenu.svelte";
@@ -138,7 +139,18 @@
     }
   }
 
-  function handleKeydown(e: KeyboardEvent) {
+  async function handleKeydown(e: KeyboardEvent) {
+    if (e.key.toLowerCase() === "v" && e.shiftKey && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      try {
+        const text = await invoke<string>("get_clipboard_text");
+        if (text) {
+          document.execCommand("insertText", false, text);
+        }
+      } catch {}
+      return;
+    }
+
     if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       sendOrRegenerate();
