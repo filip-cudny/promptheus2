@@ -13,8 +13,8 @@ export interface TokenUsageData {
 }
 
 export interface ExecutionCallbacks {
-  onChunk: (delta: string, accumulated: string) => void;
-  onDone: (fullText: string, usage?: TokenUsageData) => void;
+  onChunk: (delta: string, accumulated: string, thinkingDelta: string | null, accumulatedThinking: string | null) => void;
+  onDone: (fullText: string, usage?: TokenUsageData, fullThinking?: string | null) => void;
   onError: (message: string) => void;
   onNodeUpdates?: (nodeId: string, updates: NodeUpdate[]) => void;
 }
@@ -28,13 +28,13 @@ export async function executeSkill(
   onEvent.onmessage = (event) => {
     switch (event.event) {
       case "chunk":
-        callbacks.onChunk(event.data.delta, event.data.accumulated);
+        callbacks.onChunk(event.data.delta, event.data.accumulated, event.data.thinking_delta, event.data.accumulated_thinking);
         break;
       case "done":
         callbacks.onDone(event.data.full_text, {
           prompt_tokens: event.data.prompt_tokens,
           completion_tokens: event.data.completion_tokens,
-        });
+        }, event.data.full_thinking);
         break;
       case "error":
         callbacks.onError(event.data.message);
@@ -95,13 +95,13 @@ export async function executeConversationFromTree(
   onEvent.onmessage = (event) => {
     switch (event.event) {
       case "chunk":
-        callbacks.onChunk(event.data.delta, event.data.accumulated);
+        callbacks.onChunk(event.data.delta, event.data.accumulated, event.data.thinking_delta, event.data.accumulated_thinking);
         break;
       case "done":
         callbacks.onDone(event.data.full_text, {
           prompt_tokens: event.data.prompt_tokens,
           completion_tokens: event.data.completion_tokens,
-        });
+        }, event.data.full_thinking);
         break;
       case "error":
         callbacks.onError(event.data.message);

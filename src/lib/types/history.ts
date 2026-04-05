@@ -14,6 +14,7 @@ export interface SerializedConversationNode {
   updates: NodeUpdate[];
   prompt_tokens?: number | null;
   completion_tokens?: number | null;
+  thinking?: string | null;
 }
 
 export interface ConversationHistoryData {

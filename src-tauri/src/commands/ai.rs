@@ -33,6 +33,7 @@ pub async fn complete_stream(
         .map_err(|e| e.to_string())?;
 
     let mut full_text = String::new();
+    let mut full_thinking = String::new();
     let mut prompt_tokens: Option<usize> = None;
     let mut completion_tokens: Option<usize> = None;
 
@@ -43,12 +44,18 @@ pub async fn complete_stream(
                     prompt_tokens = Some(usage.prompt_tokens);
                     completion_tokens = Some(usage.completion_tokens);
                 }
-                if !chunk.delta.is_empty() {
+                let has_content = !chunk.delta.is_empty() || chunk.thinking_delta.is_some();
+                if has_content {
                     full_text.clone_from(&chunk.accumulated);
+                    if let Some(ref acc) = chunk.accumulated_thinking {
+                        full_thinking.clone_from(acc);
+                    }
                     if on_event
                         .send(StreamEvent::Chunk {
                             delta: chunk.delta,
                             accumulated: chunk.accumulated,
+                            thinking_delta: chunk.thinking_delta,
+                            accumulated_thinking: chunk.accumulated_thinking,
                         })
                         .is_err()
                     {
@@ -65,8 +72,10 @@ pub async fn complete_stream(
         }
     }
 
+    let thinking = if full_thinking.is_empty() { None } else { Some(full_thinking) };
     let _ = on_event.send(StreamEvent::Done {
         full_text,
+        full_thinking: thinking,
         prompt_tokens,
         completion_tokens,
     });

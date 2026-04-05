@@ -84,6 +84,9 @@ pub struct ModelConfig {
 
     #[serde(default)]
     pub context_window_size: Option<u32>,
+
+    #[serde(default)]
+    pub api_mode: Option<ApiMode>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -101,6 +104,14 @@ pub enum Provider {
     Openai,
     Anthropic,
     Gemini,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ApiMode {
+    #[default]
+    Responses,
+    Completions,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

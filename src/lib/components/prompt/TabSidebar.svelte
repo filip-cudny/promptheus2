@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { X, MessageSquare, MessagesSquare, Mic } from "lucide-svelte";
+  import { X, MessageSquare, MessagesSquare, Mic, Circle } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import type { HistoryEntry } from "$lib/types";
+  import type { TabState } from "$lib/types/conversation";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { getHistoryStore } from "$lib/stores/history.svelte";
 
@@ -17,23 +18,98 @@
     onClose: () => void;
   } = $props();
 
-  function isEntryActive(entryId: string): boolean {
-    const tab = store.tabs.find(t => t.history_entry_id === entryId);
-    return tab?.tab_id === store.activeTabId;
+  type SidebarItem =
+    | { kind: "draft"; tab: TabState }
+    | { kind: "open"; tab: TabState; entry: HistoryEntry }
+    | { kind: "history"; entry: HistoryEntry };
+
+  const items = $derived.by(() => {
+    const openEntryIds = new Set<string>();
+    const result: SidebarItem[] = [];
+
+    for (const tab of store.tabs) {
+      if (tab.history_entry_id) {
+        openEntryIds.add(tab.history_entry_id);
+        const entry = historyStore.entries.find(e => e.id === tab.history_entry_id);
+        if (entry) {
+          result.push({ kind: "open", tab, entry });
+        } else {
+          result.push({ kind: "draft", tab });
+        }
+      } else {
+        result.push({ kind: "draft", tab });
+      }
+    }
+
+    for (const entry of historyStore.entries) {
+      if (!openEntryIds.has(entry.id)) {
+        result.push({ kind: "history", entry });
+      }
+    }
+
+    result.sort((a, b) => {
+      const tsA = itemSortKey(a);
+      const tsB = itemSortKey(b);
+      if (tsA === null && tsB === null) return 0;
+      if (tsA === null) return -1;
+      if (tsB === null) return 1;
+      return tsB.localeCompare(tsA);
+    });
+
+    return result;
+  });
+
+  function itemSortKey(item: SidebarItem): string | null {
+    if (item.kind === "draft") return null;
+    const entry = item.kind === "open" ? item.entry : item.entry;
+    return entry.updated_at ?? entry.created_at ?? entry.timestamp ?? null;
   }
 
-  async function handleEntryClick(entry: HistoryEntry) {
-    await store.restoreFromHistory(entry.id, false);
-    onClose();
+  function itemId(item: SidebarItem): string {
+    if (item.kind === "history") return item.entry.id;
+    return item.tab.tab_id;
   }
 
-  function entryTimestamp(entry: HistoryEntry): string | null {
+  function itemTitle(item: SidebarItem): string {
+    if (item.kind === "draft") return item.tab.tab_name;
+    const entry = item.kind === "open" ? item.entry : item.entry;
+    return entry.title ?? entry.skill_name ?? entry.input_content.slice(0, 60);
+  }
+
+  function itemTimestamp(item: SidebarItem): string | null {
+    if (item.kind === "draft") return null;
+    const entry = item.kind === "open" ? item.entry : item.entry;
     const raw = entry.updated_at ?? entry.created_at ?? entry.timestamp;
     return raw ? formatTimestamp(raw) : null;
   }
 
-  function entryTitle(entry: HistoryEntry): string {
-    return entry.title ?? entry.skill_name ?? entry.input_content.slice(0, 60);
+  function isItemActive(item: SidebarItem): boolean {
+    if (item.kind === "history") {
+      const tab = store.tabs.find(t => t.history_entry_id === item.entry.id);
+      return tab?.tab_id === store.activeTabId;
+    }
+    return item.tab.tab_id === store.activeTabId;
+  }
+
+  function isDraft(item: SidebarItem): boolean {
+    if (item.kind !== "draft") return false;
+    return !store.isTabClean(item.tab);
+  }
+
+  function handleItemClick(item: SidebarItem) {
+    if (item.kind === "history") {
+      store.restoreFromHistory(item.entry.id, false);
+    } else {
+      store.switchTab(item.tab.tab_id);
+    }
+    onClose();
+  }
+
+  function handleClose(e: MouseEvent, item: SidebarItem) {
+    e.stopPropagation();
+    if (item.kind !== "history") {
+      store.closeTab(item.tab.tab_id);
+    }
   }
 
   function formatTimestamp(raw: string): string {
@@ -64,27 +140,34 @@
   </div>
 
   <div class="tab-list">
-    {#each historyStore.entries as entry (entry.id)}
-      {@const ts = entryTimestamp(entry)}
+    {#each items as item (itemId(item))}
+      {@const ts = itemTimestamp(item)}
       <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
       <div
         class="tab-item"
-        class:active={isEntryActive(entry.id)}
-        onclick={() => handleEntryClick(entry)}
+        class:active={isItemActive(item)}
+        onclick={() => handleItemClick(item)}
       >
-        {#if entry.entry_type === "speech"}
+        {#if isDraft(item)}
+          <Circle size={8} fill="currentColor" class="draft-dot" />
+        {:else if item.kind !== "draft" && (item.kind === "history" ? item.entry : item.entry).entry_type === "speech"}
           <Mic size={ICON_SIZE.sm} />
-        {:else if entry.is_multi_turn}
+        {:else if item.kind !== "draft" && (item.kind === "history" ? item.entry : item.entry).is_multi_turn}
           <MessagesSquare size={ICON_SIZE.sm} />
         {:else}
           <MessageSquare size={ICON_SIZE.sm} />
         {/if}
         <div class="tab-body">
-          <span class="tab-name">{entryTitle(entry)}</span>
+          <span class="tab-name">{itemTitle(item)}</span>
           {#if ts}
             <span class="tab-meta">{ts}</span>
           {/if}
         </div>
+        {#if item.kind !== "history" && store.tabs.length > 1}
+          <button class="tab-close-btn" onclick={(e) => handleClose(e, item)}>
+            <X size={12} />
+          </button>
+        {/if}
       </div>
     {/each}
   </div>
@@ -212,5 +295,36 @@
     font-size: 11px;
     font-weight: 400;
     color: rgba(255, 255, 255, 0.3);
+  }
+
+  .tab-close-btn {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    opacity: 0;
+    flex-shrink: 0;
+  }
+
+  .tab-item:hover .tab-close-btn {
+    opacity: 1;
+  }
+
+  .tab-close-btn:hover {
+    color: #e0e0e0;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  :global(.draft-dot) {
+    color: #d97706;
+    flex-shrink: 0;
+    margin-top: 4px;
   }
 </style>

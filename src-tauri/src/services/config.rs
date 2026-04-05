@@ -460,6 +460,7 @@ mod tests {
             base_url: None,
             parameters: None,
             context_window_size: None,
+            api_mode: None,
         };
         let settings = Settings {
             models: vec![model.clone(), model],
@@ -515,6 +516,7 @@ mod tests {
             base_url: None,
             parameters: None,
             context_window_size: None,
+            api_mode: None,
         });
 
 
@@ -580,6 +582,7 @@ mod tests {
                 base_url: None,
                 parameters: None,
                 context_window_size: None,
+                api_mode: None,
             }],
             ..Default::default()
         };
@@ -605,6 +608,7 @@ mod tests {
             base_url: None,
             parameters: None,
             context_window_size: None,
+            api_mode: None,
         };
         let initial_count = service.settings().models.len();
         service.add_model(new_model.clone());
@@ -637,6 +641,7 @@ mod tests {
             base_url: None,
             parameters: None,
             context_window_size: None,
+            api_mode: None,
         };
         let count_before = service.settings().models.len();
         service.update_model("upsert-model", upsert_model);
@@ -669,6 +674,7 @@ mod tests {
                 base_url: Some("ftp://invalid".to_string()),
                 parameters: None,
                 context_window_size: None,
+                api_mode: None,
             }],
             ..Default::default()
         };
@@ -691,6 +697,7 @@ mod tests {
                 base_url: None,
                 parameters: None,
                 context_window_size: None,
+                api_mode: None,
             }],
             number_input_debounce_ms: 99999,
             ..Default::default()
@@ -717,6 +724,7 @@ mod tests {
                 base_url: None,
                 parameters: None,
                 context_window_size: None,
+                api_mode: None,
             }],
             ..Default::default()
         };

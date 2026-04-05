@@ -1,4 +1,5 @@
 pub mod openai;
+pub mod openai_responses;
 pub mod provider;
 pub mod sse;
 
@@ -9,9 +10,10 @@ use std::sync::Arc;
 use futures::Stream;
 
 use crate::models::message::ProcessedMessage;
-use crate::models::settings::{ModelConfig, ModelParameters, Provider};
+use crate::models::settings::{ApiMode, ModelConfig, ModelParameters, Provider};
 
 use self::openai::OpenAiProvider;
+use self::openai_responses::OpenAiResponsesProvider;
 use self::provider::{AiProvider, CompletionRequest, StreamChunk};
 
 #[derive(Debug, thiserror::Error)]
@@ -64,26 +66,33 @@ impl AiService {
 
         for model in models {
             match model.provider {
-                Provider::Openai => match OpenAiProvider::new(model) {
-                    Ok(provider) => {
-                        providers.insert(
-                            model.id.clone(),
-                            ProviderEntry {
-                                provider: Box::new(provider),
-                                model_name: model.model.clone(),
-                                parameters: model.parameters.clone().unwrap_or_default(),
-                            },
-                        );
+                Provider::Openai => {
+                    let api_mode = model.api_mode.clone().unwrap_or_default();
+                    let result: Result<Box<dyn AiProvider>, AiError> = match api_mode {
+                        ApiMode::Responses => OpenAiResponsesProvider::new(model).map(|p| Box::new(p) as Box<dyn AiProvider>),
+                        ApiMode::Completions => OpenAiProvider::new(model).map(|p| Box::new(p) as Box<dyn AiProvider>),
+                    };
+                    match result {
+                        Ok(provider) => {
+                            providers.insert(
+                                model.id.clone(),
+                                ProviderEntry {
+                                    provider,
+                                    model_name: model.model.clone(),
+                                    parameters: model.parameters.clone().unwrap_or_default(),
+                                },
+                            );
+                        }
+                        Err(e) => {
+                            log::warn!(
+                                "model '{}' unavailable: {}",
+                                model.display_name,
+                                e
+                            );
+                            unavailable_models.insert(model.id.clone(), e.to_string());
+                        }
                     }
-                    Err(e) => {
-                        log::warn!(
-                            "model '{}' unavailable: {}",
-                            model.display_name,
-                            e
-                        );
-                        unavailable_models.insert(model.id.clone(), e.to_string());
-                    }
-                },
+                }
                 Provider::Anthropic => {
                     unavailable_models
                         .insert(model.id.clone(), "Anthropic provider not yet supported".into());

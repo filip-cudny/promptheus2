@@ -3,6 +3,7 @@
   import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
+  import ThinkingBlock from "$lib/components/ui/ThinkingBlock.svelte";
   import { resizeTextarea } from "$lib/utils/autoResize";
   import { Copy, Check, RefreshCw, Trash2, ChevronLeft, ChevronRight, Pencil } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
@@ -13,6 +14,8 @@
     outputNumber,
     showDelete = false,
     isStreaming = false,
+    thinkingContent = "",
+    isThinkingActive = false,
     branchInfo = { current: 1, total: 1 },
     onRegenerate,
     onBranchPrev,
@@ -25,6 +28,8 @@
     outputNumber: number;
     showDelete: boolean;
     isStreaming: boolean;
+    thinkingContent: string;
+    isThinkingActive: boolean;
     branchInfo: { current: number; total: number };
     onRegenerate: (nodeId: string) => void;
     onBranchPrev: (nodeId: string) => void;
@@ -106,6 +111,10 @@
         </button>
       {/if}
     {/snippet}
+
+    {#if thinkingContent || isThinkingActive}
+      <ThinkingBlock {thinkingContent} {isThinkingActive} {isStreaming} />
+    {/if}
 
     {#if editMode}
       <div class="bubble-edit-field">

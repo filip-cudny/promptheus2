@@ -7,7 +7,7 @@ export const REASONING_LEVELS: readonly ReasoningLevel[] = ["none", "low", "medi
 export const REASONING_LEVEL_LABELS: Record<ReasoningLevel, string> = {
   none: "None",
   low: "Low",
-  medium: "Med",
+  medium: "Medium",
   high: "High",
 };
 

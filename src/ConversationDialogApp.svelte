@@ -69,7 +69,8 @@
     } else if (p.initial_input) {
       handleVoiceInput(p.skill_id, p.initial_input, p.auto_send_input);
     } else if (p.skill_id) {
-      store.openForSkill(p.skill_id, p.skill_name);
+      const draftPreserved = store.openForSkill(p.skill_id, p.skill_name);
+      if (draftPreserved) sidebarOpen = true;
     }
   }
 
@@ -108,7 +109,8 @@
     });
 
     unlistenOpenForSkill = await listen<{ skill_id: string; skill_name: string }>("open-for-skill", (event) => {
-      store.openForSkill(event.payload.skill_id, event.payload.skill_name);
+      const draftPreserved = store.openForSkill(event.payload.skill_id, event.payload.skill_name);
+      if (draftPreserved) sidebarOpen = true;
     });
 
     await autoShowContextIfNeeded();

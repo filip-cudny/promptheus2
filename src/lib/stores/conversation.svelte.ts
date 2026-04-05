@@ -55,6 +55,7 @@ export function createNode(
     updates: [],
     prompt_tokens: null,
     completion_tokens: null,
+    thinking: null,
   };
 }
 
@@ -137,6 +138,8 @@ function createTabState(tabName: string): TabState {
     pristine_input: null,
     model_id: null,
     reasoning_effort: null,
+    streamed_thinking: "",
+    is_thinking: false,
   };
 }
 
@@ -154,6 +157,7 @@ function serializeNodes(
     updates: node.updates,
     prompt_tokens: node.prompt_tokens,
     completion_tokens: node.completion_tokens,
+    thinking: node.thinking,
   }));
 }
 
@@ -204,7 +208,7 @@ export function createConversationStore(
   skillId: string,
   skillName: string,
 ) {
-  let tabs = $state<TabState[]>([createTabState("Chat 1")]);
+  let tabs = $state<TabState[]>([createTabState("New chat")]);
   let activeTabId = $state(tabs[0].tab_id);
 
   const activeTab = $derived(
@@ -222,6 +226,8 @@ export function createConversationStore(
   const inputTextAttachments = $derived(activeTab.input_text_attachments);
   const modelId = $derived(activeTab.model_id);
   const reasoningEffort = $derived(activeTab.reasoning_effort);
+  const streamedThinking = $derived(activeTab.streamed_thinking);
+  const isThinking = $derived(activeTab.is_thinking);
 
   const canSend = $derived.by(() => {
     if (activeTab.is_executing) return false;
@@ -256,12 +262,15 @@ export function createConversationStore(
   }
 
   $effect(() => {
+    const _streaming = activeTab.is_streaming;
     const lastUsage = getLastApiUsage();
     const apiTotal = lastUsage ? lastUsage.prompt + lastUsage.completion : null;
     const inputText = activeTab.input_text;
     const inputImages = activeTab.input_images;
     const inputAttachments = activeTab.input_text_attachments;
     const hasPendingInput = inputText.trim() || inputImages.length > 0 || inputAttachments.length > 0;
+
+    if (tokenDebounceTimer) clearTimeout(tokenDebounceTimer);
 
     if (apiTotal != null) {
       if (!hasPendingInput) {
@@ -365,19 +374,24 @@ export function createConversationStore(
       }));
 
       const callbacks: ExecutionCallbacks = {
-        onChunk: (_delta, accumulated) => {
+        onChunk: (_delta, accumulated, _thinkingDelta, accumulatedThinking) => {
           assistantNode.content = accumulated;
           tab.tree.nodes.set(assistantNode.node_id, assistantNode);
           tab.streamed_content = accumulated;
+          tab.streamed_thinking = accumulatedThinking ?? "";
+          tab.is_thinking = accumulatedThinking != null && accumulated === "";
         },
-        onDone: (fullText, usage) => {
+        onDone: (fullText, usage, fullThinking) => {
           assistantNode.content = fullText;
+          assistantNode.thinking = fullThinking ?? null;
           assistantNode.prompt_tokens = usage?.prompt_tokens ?? null;
           assistantNode.completion_tokens = usage?.completion_tokens ?? null;
           tab.tree.nodes.set(assistantNode.node_id, assistantNode);
           tab.is_executing = false;
           tab.is_streaming = false;
           tab.streamed_content = "";
+          tab.streamed_thinking = "";
+          tab.is_thinking = false;
           success = true;
           resultText = fullText;
         },
@@ -389,6 +403,8 @@ export function createConversationStore(
           tab.is_executing = false;
           tab.is_streaming = false;
           tab.streamed_content = "";
+          tab.streamed_thinking = "";
+          tab.is_thinking = false;
         },
         onNodeUpdates: (nodeId, updates) => {
           const node = tab.tree.nodes.get(nodeId);
@@ -413,6 +429,8 @@ export function createConversationStore(
       tab.is_executing = false;
       tab.is_streaming = false;
       tab.streamed_content = "";
+      tab.streamed_thinking = "";
+      tab.is_thinking = false;
     }
 
     if (success) {
@@ -464,7 +482,7 @@ export function createConversationStore(
     tab.input_text_attachments = [];
 
     const isFirstMessage = getMessagePairs(tab.tree).length === 1;
-    const hasDefaultTabName = /^Chat \d+$/.test(tab.tab_name);
+    const hasDefaultTabName = /^(Chat( \d+)?|New chat)$/.test(tab.tab_name);
     if (isFirstMessage && hasDefaultTabName && text) {
       generateConversationTitle(text)
         .then((title) => {
@@ -545,8 +563,10 @@ export function createConversationStore(
 
   function isTabClean(tab: TabState): boolean {
     if (tab.tree.current_path.length > 0) return false;
-    if (tab.input_text === "") return true;
-    return tab.pristine_input !== null && tab.input_text === tab.pristine_input;
+    const trimmed = tab.input_text.trimEnd();
+    if (trimmed === "") return true;
+    if (tab.pristine_input === null) return false;
+    return trimmed === tab.pristine_input.trimEnd();
   }
 
   function skillInputPrefix(skillId: string): string {
@@ -563,7 +583,7 @@ export function createConversationStore(
       tab.tab_name = skillName || "Chat";
       return false;
     } else {
-      const newTab = createTabState(skillName || `Chat ${tabs.length + 1}`);
+      const newTab = createTabState(skillName || "New chat");
       newTab.input_text = prefix;
       newTab.pristine_input = prefix || null;
       tabs.push(newTab);
@@ -578,7 +598,12 @@ export function createConversationStore(
   }
 
   function addTab(): void {
-    const newTab = createTabState(`Chat ${tabs.length + 1}`);
+    const existing = tabs.find(t => isTabClean(t));
+    if (existing) {
+      activeTabId = existing.tab_id;
+      return;
+    }
+    const newTab = createTabState("New chat");
     tabs.push(newTab);
     activeTabId = newTab.tab_id;
   }
@@ -597,6 +622,8 @@ export function createConversationStore(
     tab.is_executing = false;
     tab.is_streaming = false;
     tab.streamed_content = "";
+    tab.streamed_thinking = "";
+    tab.is_thinking = false;
   }
 
   function closeTab(tabId: string): void {
@@ -607,7 +634,7 @@ export function createConversationStore(
     stopTabExecution(closingTab);
 
     if (tabs.length <= 1) {
-      tabs[0] = createTabState("Chat 1");
+      tabs[0] = createTabState("New chat");
       activeTabId = tabs[0].tab_id;
       return;
     }
@@ -706,7 +733,7 @@ export function createConversationStore(
           reasoningEffort: tab.reasoning_effort,
         });
         tab.history_entry_id = entryId;
-        if (!/^Chat \d+$/.test(tab.tab_name)) {
+        if (!/^(Chat( \d+)?|New chat)$/.test(tab.tab_name)) {
           updateHistoryEntryTitle(entryId, tab.tab_name).catch(() => {});
         }
       }
@@ -761,6 +788,7 @@ export function createConversationStore(
             updates: serialized.updates ?? [],
             prompt_tokens: serialized.prompt_tokens ?? null,
             completion_tokens: serialized.completion_tokens ?? null,
+            thinking: serialized.thinking ?? null,
           });
         }
       } else if (entry.input_content) {
@@ -783,6 +811,7 @@ export function createConversationStore(
           updates: [],
           prompt_tokens: null,
           completion_tokens: null,
+          thinking: null,
         });
 
         if (entry.output_content) {
@@ -799,6 +828,7 @@ export function createConversationStore(
             updates: [],
             prompt_tokens: null,
             completion_tokens: null,
+            thinking: null,
           });
         }
       }
@@ -873,6 +903,12 @@ export function createConversationStore(
     },
     get reasoningEffort() {
       return reasoningEffort;
+    },
+    get streamedThinking() {
+      return streamedThinking;
+    },
+    get isThinking() {
+      return isThinking;
     },
     get totalTokens() {
       return totalTokens;

@@ -3,8 +3,8 @@ export type NodeUpdate =
   | { type: "context"; content: string; reason: string; image_refs: string[] };
 
 export type StreamEvent =
-  | { event: "chunk"; data: { delta: string; accumulated: string } }
-  | { event: "done"; data: { full_text: string; prompt_tokens: number | null; completion_tokens: number | null } }
+  | { event: "chunk"; data: { delta: string; accumulated: string; thinking_delta: string | null; accumulated_thinking: string | null } }
+  | { event: "done"; data: { full_text: string; full_thinking: string | null; prompt_tokens: number | null; completion_tokens: number | null } }
   | { event: "error"; data: { message: string } }
   | { event: "node_updates"; data: { node_id: string; updates: NodeUpdate[] } };
 

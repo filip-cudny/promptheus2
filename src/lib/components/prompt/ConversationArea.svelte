@@ -102,6 +102,8 @@
           outputNumber={pair.message_number}
           showDelete={false}
           isStreaming={streaming}
+          thinkingContent={streaming ? store.streamedThinking : (assistant.thinking ?? "")}
+          isThinkingActive={streaming && store.isThinking}
           branchInfo={store.getBranchInfo(assistant.node_id)}
           onRegenerate={() => store.regenerate(assistant.node_id)}
           onBranchPrev={() => store.switchBranch(assistant.node_id, -1)}

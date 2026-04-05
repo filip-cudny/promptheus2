@@ -90,6 +90,7 @@ mod tests {
                 base_url: None,
                 parameters: None,
                 context_window_size: None,
+                api_mode: None,
             }],
             ..Default::default()
         };

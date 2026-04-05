@@ -27,6 +27,8 @@ pub struct SerializedConversationNode {
     pub prompt_tokens: Option<usize>,
     #[serde(default)]
     pub completion_tokens: Option<usize>,
+    #[serde(default)]
+    pub thinking: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -146,6 +148,7 @@ mod tests {
                         updates: vec![],
                         prompt_tokens: None,
                         completion_tokens: None,
+                        thinking: None,
                     },
                     SerializedConversationNode {
                         node_id: "node-reply".into(),
@@ -157,6 +160,7 @@ mod tests {
                         updates: vec![],
                         prompt_tokens: None,
                         completion_tokens: None,
+                        thinking: None,
                     },
                 ],
                 root_node_id: Some("node-root".into()),

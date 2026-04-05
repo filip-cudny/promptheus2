@@ -108,6 +108,7 @@ pub async fn execute_skill(
         match stream {
             Ok(mut stream) => {
                 let mut full_text = String::new();
+                let mut full_thinking = String::new();
                 let mut stream_error: Option<String> = None;
                 let mut prompt_tokens: Option<usize> = None;
                 let mut completion_tokens: Option<usize> = None;
@@ -119,12 +120,18 @@ pub async fn execute_skill(
                                 prompt_tokens = Some(usage.prompt_tokens);
                                 completion_tokens = Some(usage.completion_tokens);
                             }
-                            if !chunk.delta.is_empty() {
+                            let has_content = !chunk.delta.is_empty() || chunk.thinking_delta.is_some();
+                            if has_content {
                                 full_text.clone_from(&chunk.accumulated);
+                                if let Some(ref acc) = chunk.accumulated_thinking {
+                                    full_thinking.clone_from(acc);
+                                }
                                 if on_event
                                     .send(StreamEvent::Chunk {
                                         delta: chunk.delta,
                                         accumulated: chunk.accumulated,
+                                        thinking_delta: chunk.thinking_delta,
+                                        accumulated_thinking: chunk.accumulated_thinking,
                                     })
                                     .is_err()
                                 {
@@ -146,8 +153,10 @@ pub async fn execute_skill(
                 match stream_error {
                     Some(err) => Err(err),
                     None => {
+                        let thinking = if full_thinking.is_empty() { None } else { Some(full_thinking) };
                         let _ = on_event.send(StreamEvent::Done {
                             full_text: full_text.clone(),
+                            full_thinking: thinking,
                             prompt_tokens,
                             completion_tokens,
                         });
@@ -182,6 +191,7 @@ pub async fn execute_skill(
                 updates: vec![],
                 prompt_tokens: None,
                 completion_tokens: None,
+                thinking: None,
             };
 
             let assistant_node = SerializedConversationNode {
@@ -194,6 +204,7 @@ pub async fn execute_skill(
                 updates: vec![],
                 prompt_tokens: None,
                 completion_tokens: None,
+                thinking: None,
             };
 
             state.history.add_conversation_entry(
@@ -519,6 +530,7 @@ pub async fn execute_conversation_from_tree(
         match stream {
             Ok(mut stream) => {
                 let mut full_text = String::new();
+                let mut full_thinking = String::new();
                 let mut stream_error: Option<String> = None;
                 let mut prompt_tokens: Option<usize> = None;
                 let mut completion_tokens: Option<usize> = None;
@@ -530,12 +542,18 @@ pub async fn execute_conversation_from_tree(
                                 prompt_tokens = Some(usage.prompt_tokens);
                                 completion_tokens = Some(usage.completion_tokens);
                             }
-                            if !chunk.delta.is_empty() {
+                            let has_content = !chunk.delta.is_empty() || chunk.thinking_delta.is_some();
+                            if has_content {
                                 full_text.clone_from(&chunk.accumulated);
+                                if let Some(ref acc) = chunk.accumulated_thinking {
+                                    full_thinking.clone_from(acc);
+                                }
                                 if on_event
                                     .send(StreamEvent::Chunk {
                                         delta: chunk.delta,
                                         accumulated: chunk.accumulated,
+                                        thinking_delta: chunk.thinking_delta,
+                                        accumulated_thinking: chunk.accumulated_thinking,
                                     })
                                     .is_err()
                                 {
@@ -557,8 +575,10 @@ pub async fn execute_conversation_from_tree(
                 match stream_error {
                     Some(err) => Err(err),
                     None => {
+                        let thinking = if full_thinking.is_empty() { None } else { Some(full_thinking) };
                         let _ = on_event.send(StreamEvent::Done {
                             full_text: full_text.clone(),
+                            full_thinking: thinking,
                             prompt_tokens,
                             completion_tokens,
                         });

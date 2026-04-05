@@ -538,6 +538,7 @@ mod tests {
                 updates: vec![],
                 prompt_tokens: None,
                 completion_tokens: None,
+                thinking: None,
             },
             SerializedConversationNode {
                 node_id: "a1".into(),
@@ -549,6 +550,7 @@ mod tests {
                 updates: vec![],
                 prompt_tokens: None,
                 completion_tokens: None,
+                thinking: None,
             },
         ]
     }
@@ -838,6 +840,7 @@ mod tests {
             updates: vec![],
             prompt_tokens: None,
             completion_tokens: None,
+            thinking: None,
         });
         let summary = SqliteHistoryService::build_input_summary(&nodes);
         assert!(summary.contains("second"));
@@ -864,6 +867,7 @@ mod tests {
             updates: vec![],
             prompt_tokens: None,
             completion_tokens: None,
+            thinking: None,
         }];
         assert!(SqliteHistoryService::build_output_summary(&nodes).is_none());
     }

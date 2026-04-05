@@ -12,6 +12,7 @@ export interface ConversationNode {
   updates: NodeUpdate[];
   prompt_tokens: number | null;
   completion_tokens: number | null;
+  thinking: string | null;
 }
 
 export interface ConversationImage {
@@ -48,4 +49,6 @@ export interface TabState {
   pristine_input: string | null;
   model_id: string | null;
   reasoning_effort: string | null;
+  streamed_thinking: string;
+  is_thinking: boolean;
 }

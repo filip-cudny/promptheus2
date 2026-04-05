@@ -141,6 +141,8 @@ struct ChatCompletionChunkChoice {
 #[derive(Deserialize)]
 struct ChatCompletionDelta {
     content: Option<String>,
+    reasoning_content: Option<String>,
+    reasoning: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -218,8 +220,8 @@ impl AiProvider for OpenAiProvider {
         let sse_stream = parse_sse_stream(response);
 
         let stream = futures::stream::unfold(
-            (sse_stream, String::new()),
-            |(mut sse_stream, mut accumulated)| async move {
+            (sse_stream, String::new(), String::new()),
+            |(mut sse_stream, mut accumulated, mut accumulated_thinking)| async move {
                 loop {
                     match sse_stream.next().await {
                         Some(Ok(data)) => {
@@ -233,30 +235,41 @@ impl AiProvider for OpenAiProvider {
                                 completion_tokens: u.completion_tokens,
                             });
 
-                            let delta = chunk
-                                .choices
-                                .first()
-                                .and_then(|c| c.delta.content.as_deref())
+                            let choice_delta = chunk.choices.first().map(|c| &c.delta);
+
+                            let delta = choice_delta
+                                .and_then(|d| d.content.as_deref())
                                 .unwrap_or("");
 
-                            if delta.is_empty() && usage.is_none() {
+                            let thinking = choice_delta
+                                .and_then(|d| d.reasoning_content.as_deref().or(d.reasoning.as_deref()))
+                                .unwrap_or("");
+
+                            if delta.is_empty() && thinking.is_empty() && usage.is_none() {
                                 continue;
                             }
 
                             accumulated.push_str(delta);
+                            accumulated_thinking.push_str(thinking);
+
+                            let thinking_delta = if thinking.is_empty() { None } else { Some(thinking.to_string()) };
+                            let acc_thinking = if accumulated_thinking.is_empty() { None } else { Some(accumulated_thinking.clone()) };
+
                             return Some((
                                 Ok(StreamChunk {
                                     delta: delta.to_string(),
                                     accumulated: accumulated.clone(),
+                                    thinking_delta,
+                                    accumulated_thinking: acc_thinking,
                                     usage,
                                 }),
-                                (sse_stream, accumulated),
+                                (sse_stream, accumulated, accumulated_thinking),
                             ));
                         }
                         Some(Err(e)) => {
                             return Some((
                                 Err(AiError::Stream(e.to_string())),
-                                (sse_stream, accumulated),
+                                (sse_stream, accumulated, accumulated_thinking),
                             ));
                         }
                         None => return None,

@@ -17,6 +17,8 @@ pub struct CompletionRequest {
 pub struct StreamChunk {
     pub delta: String,
     pub accumulated: String,
+    pub thinking_delta: Option<String>,
+    pub accumulated_thinking: Option<String>,
     pub usage: Option<TokenUsage>,
 }
 
