@@ -6,7 +6,7 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 use tokio_stream::StreamExt;
 
-use crate::models::message::{MessageContent, ProcessedMessage};
+use crate::models::message::{ContentPart, MessageContent, ProcessedMessage};
 use crate::models::settings::ModelConfig;
 
 use super::provider::{AiProvider, CompletionRequest, StreamChunk, TokenUsage};
@@ -60,9 +60,35 @@ impl OpenAiResponsesProvider {
     }
 }
 
+fn to_responses_message(msg: &ProcessedMessage) -> serde_json::Value {
+    let content = match &msg.content {
+        MessageContent::Text(text) => serde_json::json!(text),
+        MessageContent::Parts(parts) => {
+            let mapped: Vec<serde_json::Value> = parts
+                .iter()
+                .map(|part| match part {
+                    ContentPart::Text { text } => serde_json::json!({
+                        "type": "input_text",
+                        "text": text,
+                    }),
+                    ContentPart::ImageUrl { image_url } => serde_json::json!({
+                        "type": "input_image",
+                        "image_url": image_url.url,
+                    }),
+                })
+                .collect();
+            serde_json::json!(mapped)
+        }
+    };
+    serde_json::json!({
+        "role": msg.role,
+        "content": content,
+    })
+}
+
 fn build_request_body(request: &CompletionRequest, stream: bool) -> serde_json::Value {
     let mut instructions: Option<String> = None;
-    let input_messages: Vec<&ProcessedMessage> = request
+    let input_messages: Vec<serde_json::Value> = request
         .messages
         .iter()
         .filter(|m| {
@@ -78,6 +104,7 @@ fn build_request_body(request: &CompletionRequest, stream: bool) -> serde_json::
                 true
             }
         })
+        .map(|m| to_responses_message(m))
         .collect();
 
     let mut body = serde_json::json!({
@@ -106,7 +133,7 @@ fn build_request_body(request: &CompletionRequest, stream: bool) -> serde_json::
     if let Some(ref effort) = request.parameters.reasoning_effort {
         let mut reasoning = serde_json::json!({ "effort": effort });
         if effort != "none" {
-            reasoning["summary"] = serde_json::json!("detailed");
+            reasoning["summary"] = serde_json::json!("auto");
         }
         obj.insert("reasoning".into(), reasoning);
     }

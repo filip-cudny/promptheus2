@@ -1,6 +1,7 @@
 <script lang="ts">
   import { getSkillsStore } from "$lib/stores/skills.svelte";
   import { highlightSkills, fuzzyMatch } from "$lib/utils/skillHighlight";
+  import { resizeTextarea } from "$lib/utils/autoResize";
   import type { SkillSummary } from "$lib/types";
 
   let {
@@ -69,6 +70,11 @@
     );
     return hasMatch ? "hl-skill-partial" : null;
   }
+
+  $effect(() => {
+    text;
+    if (textarea) requestAnimationFrame(() => resizeTextarea(textarea!));
+  });
 
   function handleInput() {
     if (textarea) text = textarea.value;

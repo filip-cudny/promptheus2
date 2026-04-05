@@ -34,7 +34,7 @@ export interface MessagePair {
 
 export interface TabState {
   tab_id: string;
-  tab_name: string;
+  tab_name: string | null;
   tree: ConversationTree;
   context_text: string;
   context_images: ConversationImage[];

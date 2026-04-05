@@ -15,6 +15,7 @@ import {
   updateHistoryEntryTitle,
   getHistoryEntry,
 } from "$lib/services/history";
+import { getSettings, updateSetting, updateModelReasoningEffort } from "$lib/services/settings";
 import { hasSkillReferences } from "$lib/utils/skillDisplay";
 import type {
   ConversationNode,
@@ -120,7 +121,11 @@ export function switchBranchInTree(
   }
 }
 
-function createTabState(tabName: string): TabState {
+function createTabState(
+  tabName: string | null = null,
+  modelId: string | null = null,
+  reasoningEffort: string | null = null,
+): TabState {
   return {
     tab_id: generateId(),
     tab_name: tabName,
@@ -136,8 +141,8 @@ function createTabState(tabName: string): TabState {
     execution_id: null,
     history_entry_id: null,
     pristine_input: null,
-    model_id: null,
-    reasoning_effort: null,
+    model_id: modelId,
+    reasoning_effort: reasoningEffort,
     streamed_thinking: "",
     is_thinking: false,
   };
@@ -208,7 +213,10 @@ export function createConversationStore(
   skillId: string,
   skillName: string,
 ) {
-  let tabs = $state<TabState[]>([createTabState("New chat")]);
+  let windowDefaultModelId = $state<string | null>(null);
+  let windowDefaultReasoningEffort = $state<string | null>(null);
+
+  let tabs = $state<TabState[]>([createTabState()]);
   let activeTabId = $state(tabs[0].tab_id);
 
   const activeTab = $derived(
@@ -482,11 +490,10 @@ export function createConversationStore(
     tab.input_text_attachments = [];
 
     const isFirstMessage = getMessagePairs(tab.tree).length === 1;
-    const hasDefaultTabName = /^(Chat( \d+)?|New chat)$/.test(tab.tab_name);
-    if (isFirstMessage && hasDefaultTabName && text) {
+    if (isFirstMessage && tab.tab_name === null && text) {
       generateConversationTitle(text)
         .then((title) => {
-          if (title && hasDefaultTabName) {
+          if (title && tab.tab_name === null) {
             tab.tab_name = title;
             if (tab.history_entry_id) {
               updateHistoryEntryTitle(tab.history_entry_id, title).catch(() => {});
@@ -580,10 +587,10 @@ export function createConversationStore(
     if (tab && isTabClean(tab)) {
       tab.input_text = prefix;
       tab.pristine_input = prefix || null;
-      tab.tab_name = skillName || "Chat";
+      tab.tab_name = skillName || null;
       return false;
     } else {
-      const newTab = createTabState(skillName || "New chat");
+      const newTab = createTabState(skillName || null, windowDefaultModelId, windowDefaultReasoningEffort);
       newTab.input_text = prefix;
       newTab.pristine_input = prefix || null;
       tabs.push(newTab);
@@ -603,7 +610,7 @@ export function createConversationStore(
       activeTabId = existing.tab_id;
       return;
     }
-    const newTab = createTabState("New chat");
+    const newTab = createTabState(null, windowDefaultModelId, windowDefaultReasoningEffort);
     tabs.push(newTab);
     activeTabId = newTab.tab_id;
   }
@@ -634,7 +641,7 @@ export function createConversationStore(
     stopTabExecution(closingTab);
 
     if (tabs.length <= 1) {
-      tabs[0] = createTabState("New chat");
+      tabs[0] = createTabState("New chat", windowDefaultModelId, windowDefaultReasoningEffort);
       activeTabId = tabs[0].tab_id;
       return;
     }
@@ -687,12 +694,38 @@ export function createConversationStore(
 
   function updateModelId(id: string | null): void {
     const tab = getTab(activeTabId);
-    if (tab) tab.model_id = id;
+    if (!tab) return;
+    tab.model_id = id;
+    windowDefaultModelId = id;
+    if (id) {
+      updateSetting("default_model", id);
+    }
   }
 
   function updateReasoningEffort(effort: string | null): void {
     const tab = getTab(activeTabId);
-    if (tab) tab.reasoning_effort = effort;
+    if (!tab) return;
+    tab.reasoning_effort = effort;
+    windowDefaultReasoningEffort = effort;
+    const modelId = tab.model_id ?? windowDefaultModelId;
+    if (modelId) {
+      updateModelReasoningEffort(modelId, effort);
+    }
+  }
+
+  async function initFromSettings(): Promise<void> {
+    try {
+      const settings = await getSettings();
+      const defaultId = settings.default_model ?? null;
+      windowDefaultModelId = defaultId;
+      const defaultModel = defaultId ? settings.models.find(m => m.id === defaultId) : undefined;
+      const defaultEffort = defaultModel?.parameters?.reasoning_effort ?? null;
+      windowDefaultReasoningEffort = defaultEffort;
+      for (const tab of tabs) {
+        if (tab.model_id === null) tab.model_id = defaultId;
+        if (tab.reasoning_effort === null && defaultEffort) tab.reasoning_effort = defaultEffort;
+      }
+    } catch {}
   }
 
   async function saveToHistory(): Promise<void> {
@@ -733,7 +766,7 @@ export function createConversationStore(
           reasoningEffort: tab.reasoning_effort,
         });
         tab.history_entry_id = entryId;
-        if (!/^(Chat( \d+)?|New chat)$/.test(tab.tab_name)) {
+        if (tab.tab_name !== null) {
           updateHistoryEntryTitle(entryId, tab.tab_name).catch(() => {});
         }
       }
@@ -939,6 +972,7 @@ export function createConversationStore(
     updateInputTextAttachments,
     updateModelId,
     updateReasoningEffort,
+    initFromSettings,
     saveToHistory,
     restoreFromHistory,
     isTabClean,

@@ -90,6 +90,7 @@
   onMount(async () => {
     skillsStore.init();
     historyStore.init();
+    await store.initFromSettings();
     loadModelInfo();
 
     const initParams = await invoke<DialogInitParams | null>("get_dialog_init_params");
