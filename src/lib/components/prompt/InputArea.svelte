@@ -197,8 +197,8 @@
   <div class="input-field">
     {#if localTextAttachments.length > 0 || localImages.length > 0}
       <div class="attachment-row">
-        <TextChipBar bind:textAttachments={localTextAttachments} readonly={false} />
-        <ImageChipBar bind:images={localImages} readonly={false} />
+        <TextChipBar bind:textAttachments={localTextAttachments} readonly={false} variant="small" />
+        <ImageChipBar bind:images={localImages} readonly={false} variant="small" />
       </div>
     {/if}
     <SkillEditable
@@ -291,11 +291,10 @@
 
   .attachment-row {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 6px;
     padding: 6px 0 2px;
-    max-height: 15vh;
-    overflow-y: auto;
+    overflow-x: auto;
   }
 
   .input-field :global(.input-editable) {

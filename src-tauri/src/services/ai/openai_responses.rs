@@ -232,7 +232,7 @@ impl AiProvider for OpenAiResponsesProvider {
             .await
             .map_err(|e| AiError::Request(format!("failed to read response: {e}")))?;
 
-        log::debug!("responses: complete response: {}", &response_text[..response_text.len().min(500)]);
+        log::debug!("responses: complete response_len={}", response_text.len());
 
         let parsed: NonStreamingResponse = serde_json::from_str(&response_text)
             .map_err(|e| AiError::Request(format!("failed to parse response: {e}")))?;
@@ -282,21 +282,21 @@ impl AiProvider for OpenAiResponsesProvider {
                 loop {
                     match sse_stream.next().await {
                         Some(Ok(data)) => {
-                            log::trace!("responses: raw SSE: {}", &data[..data.len().min(300)]);
+                            log::trace!("responses: SSE event len={}", data.len());
                             let event: ResponseEvent = match serde_json::from_str(&data) {
                                 Ok(e) => e,
                                 Err(e) => {
-                                    log::warn!("responses: failed to parse SSE event: {e} | data: {}", &data[..data.len().min(200)]);
+                                    log::warn!("responses: failed to parse SSE event: {e}");
                                     continue;
                                 }
                             };
 
-                            log::debug!("responses: event_type={}, has_delta={}", event.event_type, event.delta.is_some());
+                            log::trace!("responses: event_type={}, has_delta={}", event.event_type, event.delta.is_some());
 
                             match event.event_type.as_str() {
                                 "response.reasoning_summary_text.delta" => {
                                     let thinking = event.delta.unwrap_or_default();
-                                    log::debug!("responses: reasoning delta len={}", thinking.len());
+                                    log::trace!("responses: reasoning delta len={}", thinking.len());
                                     if thinking.is_empty() {
                                         continue;
                                     }

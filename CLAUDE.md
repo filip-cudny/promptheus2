@@ -10,7 +10,12 @@ Desktop application built with **Tauri 2**.
 
 ## Logging
 
-Add log statements **during implementation**, not as a separate step. When writing or modifying any service, command, or store, include appropriate logging inline.
+Add log statements **during implementation**, not as a separate step. When writing or modifying any service, command, or store, include appropriate logging inline following the guides below. Do not add temporary debug logs — use proper levels and increase verbosity at runtime with `RUST_LOG`:
+
+```bash
+RUST_LOG=app_lib::services::ai=trace pnpm tauri dev   # trace for one module
+RUST_LOG=app_lib=trace,hyper=warn pnpm tauri dev       # app at trace, silence noisy crates
+```
 
 Before adding logs, load only the guide you need from `docs/`:
 

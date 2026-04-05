@@ -4,6 +4,9 @@ use serde::Serialize;
 use tauri::{Emitter, Manager};
 
 use crate::services::dock::DockManager;
+use crate::services::monitor::find_monitor_at;
+
+const MAX_SIZE: f64 = 400.0;
 
 struct PendingImage {
     data: String,
@@ -32,10 +35,29 @@ pub async fn open_image_preview(
         Some(PendingImage { data, media_type });
 
     if let Ok(pos) = win.cursor_position() {
-        let _ = win.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-            x: pos.x as i32,
-            y: pos.y as i32,
-        }));
+        let cx = pos.x as i32;
+        let cy = pos.y as i32;
+
+        let (x, y) = if let Ok(monitor) = find_monitor_at(&app, cx, cy) {
+            let work = monitor.work_area();
+            let scale = monitor.scale_factor();
+            let win_size = (MAX_SIZE * scale) as i32;
+
+            let right_edge = work.position.x + work.size.width as i32;
+            let bottom_edge = work.position.y + work.size.height as i32;
+
+            let mut x = cx;
+            let mut y = cy;
+            if x + win_size > right_edge { x = right_edge - win_size; }
+            if y + win_size > bottom_edge { y = bottom_edge - win_size; }
+            if x < work.position.x { x = work.position.x; }
+            if y < work.position.y { y = work.position.y; }
+            (x, y)
+        } else {
+            (cx, cy)
+        };
+
+        let _ = win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
     }
 
     let already_visible = win.is_visible().unwrap_or(false);

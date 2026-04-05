@@ -5,13 +5,17 @@
 
   const PREVIEW_MAX_CHARS = 200;
 
+  type Variant = "default" | "small";
+
   let {
     textAttachments = $bindable(),
     readonly = false,
+    variant = "default" as Variant,
     onremove,
   }: {
     textAttachments: string[];
     readonly?: boolean;
+    variant?: Variant;
     onremove?: (index: number) => void;
   } = $props();
 
@@ -35,7 +39,7 @@
 </script>
 
 {#each textAttachments as text, idx}
-  <AttachmentChip label="Text #{idx + 1}" {readonly} onclick={() => openPreview(text, idx)} onremove={() => removeAttachment(idx)}>
+  <AttachmentChip label="Text #{idx + 1}" {readonly} {variant} onclick={() => openPreview(text, idx)} onremove={() => removeAttachment(idx)}>
     {#snippet content()}
       <span class="chip-preview">{truncate(text)}</span>
     {/snippet}
@@ -49,7 +53,7 @@
     color: rgba(255, 255, 255, 0.55);
     overflow: hidden;
     word-break: break-word;
-    padding: 6px 6px 0;
+    padding: 4px 4px 0;
     height: 100%;
   }
 </style>
