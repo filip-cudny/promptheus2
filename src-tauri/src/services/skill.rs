@@ -155,6 +155,8 @@ fn parse_skill_file(path: &Path, dir_name: &str) -> Result<Skill, SkillError> {
         name: fm.name,
         display_name,
         description: fm.description,
+        model: fm.model,
+        parameters: fm.parameters,
         body: body.trim().to_string(),
         file_path: path.to_path_buf(),
     })

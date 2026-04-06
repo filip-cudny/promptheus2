@@ -41,7 +41,7 @@ pub async fn execute_skill(
 ) -> Result<(), String> {
     let start_time = Instant::now();
 
-    let (execution_id, model_id, model_display_name, skill_display_name, input_content, messages, ai) = {
+    let (execution_id, model_id, model_display_name, skill_display_name, input_content, messages, ai, skill_param_overrides) = {
         let mut state = state.lock().await;
 
         let execution_id = state
@@ -56,7 +56,7 @@ pub async fn execute_skill(
             })?;
         let skill_display_name = skill.display_name.clone();
 
-        let model_id = PromptExecutionService::resolve_model(&state.config, None)
+        let model_id = PromptExecutionService::resolve_model(&state.config, skill.model.as_deref())
             .map_err(|e| {
                 state.prompt_execution.finish_execution();
                 e.to_string()
@@ -88,8 +88,9 @@ pub async fn execute_skill(
         );
 
         let ai = state.ai.clone();
+        let skill_param_overrides = skill.parameters.as_ref().map(ModelParameters::from_map);
 
-        (execution_id, model_id, model_display_name, skill_display_name, input_content, messages, ai)
+        (execution_id, model_id, model_display_name, skill_display_name, input_content, messages, ai, skill_param_overrides)
     };
 
     let _ = app.emit(
@@ -101,7 +102,7 @@ pub async fn execute_skill(
 
     let stream_result = {
         let stream = ai
-            .complete_stream(&model_id, messages, None)
+            .complete_stream(&model_id, messages, skill_param_overrides)
             .await
             .map_err(|e| e.to_string());
 

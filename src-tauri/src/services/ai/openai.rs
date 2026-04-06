@@ -93,6 +93,10 @@ fn build_request_body(
         obj.insert("reasoning_effort".into(), serde_json::json!(re));
     }
 
+    for (key, value) in &request.parameters.extra {
+        obj.insert(key.clone(), value.clone());
+    }
+
     body
 }
 
@@ -152,6 +156,10 @@ struct ChunkUsage {
 
 #[async_trait]
 impl AiProvider for OpenAiProvider {
+    fn supported_params(&self) -> &'static [&'static str] {
+        &["temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty", "reasoning_effort"]
+    }
+
     async fn complete(&self, request: CompletionRequest) -> Result<String, AiError> {
         let url = format!("{}/chat/completions", self.base_url);
         let body = build_request_body(&request, false);

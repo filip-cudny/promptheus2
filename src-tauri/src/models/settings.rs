@@ -117,7 +117,7 @@ pub enum ApiMode {
     Completions,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelParameters {
     #[serde(default)]
     pub temperature: Option<f64>,
@@ -136,6 +136,54 @@ pub struct ModelParameters {
 
     #[serde(default)]
     pub reasoning_effort: Option<String>,
+
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
+}
+
+impl Default for ModelParameters {
+    fn default() -> Self {
+        Self {
+            temperature: None,
+            max_tokens: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            reasoning_effort: None,
+            extra: HashMap::new(),
+        }
+    }
+}
+
+impl ModelParameters {
+    pub fn active_known_params(&self) -> Vec<&'static str> {
+        let mut active = Vec::new();
+        if self.temperature.is_some() { active.push("temperature"); }
+        if self.max_tokens.is_some() { active.push("max_tokens"); }
+        if self.top_p.is_some() { active.push("top_p"); }
+        if self.frequency_penalty.is_some() { active.push("frequency_penalty"); }
+        if self.presence_penalty.is_some() { active.push("presence_penalty"); }
+        if self.reasoning_effort.is_some() { active.push("reasoning_effort"); }
+        active
+    }
+
+    pub fn from_map(map: &HashMap<String, serde_json::Value>) -> Self {
+        let mut params = Self::default();
+        let mut extra = HashMap::new();
+        for (key, value) in map {
+            match key.as_str() {
+                "temperature" => params.temperature = value.as_f64(),
+                "max_tokens" => params.max_tokens = value.as_u64().map(|v| v as u32),
+                "top_p" => params.top_p = value.as_f64(),
+                "frequency_penalty" => params.frequency_penalty = value.as_f64(),
+                "presence_penalty" => params.presence_penalty = value.as_f64(),
+                "reasoning_effort" => params.reasoning_effort = value.as_str().map(String::from),
+                _ => { extra.insert(key.clone(), value.clone()); }
+            }
+        }
+        params.extra = extra;
+        params
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -29,6 +29,8 @@ pub struct TokenUsage {
 
 #[async_trait]
 pub trait AiProvider: Send + Sync {
+    fn supported_params(&self) -> &'static [&'static str];
+
     async fn complete(&self, request: CompletionRequest) -> Result<String, AiError>;
 
     async fn complete_stream(

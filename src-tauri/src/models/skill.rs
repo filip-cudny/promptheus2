@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -7,6 +8,9 @@ pub struct SkillFrontmatter {
     pub name: String,
     pub description: Option<String>,
     pub display_name: Option<String>,
+    pub model: Option<String>,
+    #[serde(default)]
+    pub parameters: Option<HashMap<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -14,6 +18,9 @@ pub struct Skill {
     pub name: String,
     pub display_name: String,
     pub description: Option<String>,
+    pub model: Option<String>,
+    #[serde(skip)]
+    pub parameters: Option<HashMap<String, serde_json::Value>>,
     pub body: String,
     #[serde(skip)]
     pub file_path: PathBuf,

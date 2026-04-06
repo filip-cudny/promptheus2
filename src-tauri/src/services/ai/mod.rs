@@ -118,6 +118,7 @@ impl AiService {
         messages: Vec<ProcessedMessage>,
     ) -> Result<String, AiError> {
         let entry = self.get_provider(model_id)?;
+        validate_params(&entry.parameters, entry.provider.as_ref(), &entry.model_name);
         let request = CompletionRequest {
             model: entry.model_name.clone(),
             messages,
@@ -137,6 +138,7 @@ impl AiService {
             Some(overrides) => merge_parameters(&entry.parameters, &overrides),
             None => entry.parameters.clone(),
         };
+        validate_params(&parameters, entry.provider.as_ref(), &entry.model_name);
         let request = CompletionRequest {
             model: entry.model_name.clone(),
             messages,
@@ -169,6 +171,8 @@ impl AiService {
 }
 
 fn merge_parameters(base: &ModelParameters, overrides: &ModelParameters) -> ModelParameters {
+    let mut extra = base.extra.clone();
+    extra.extend(overrides.extra.clone());
     ModelParameters {
         temperature: overrides.temperature.or(base.temperature),
         max_tokens: overrides.max_tokens.or(base.max_tokens),
@@ -176,5 +180,18 @@ fn merge_parameters(base: &ModelParameters, overrides: &ModelParameters) -> Mode
         frequency_penalty: overrides.frequency_penalty.or(base.frequency_penalty),
         presence_penalty: overrides.presence_penalty.or(base.presence_penalty),
         reasoning_effort: overrides.reasoning_effort.clone().or(base.reasoning_effort.clone()),
+        extra,
+    }
+}
+
+fn validate_params(params: &ModelParameters, provider: &dyn AiProvider, model: &str) {
+    let supported = provider.supported_params();
+    for name in params.active_known_params() {
+        if !supported.contains(&name) {
+            log::warn!("{model}: parameter '{name}' not supported by this provider, ignoring");
+        }
+    }
+    for (key, value) in &params.extra {
+        log::debug!("{model}: passing through custom parameter '{key}': {value}");
     }
 }

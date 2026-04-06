@@ -331,6 +331,8 @@ mod tests {
             name: name.to_string(),
             display_name: name.to_string(),
             description: None,
+            model: None,
+            parameters: None,
             body: body.to_string(),
             file_path: PathBuf::new(),
         }

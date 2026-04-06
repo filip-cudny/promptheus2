@@ -138,11 +138,8 @@ fn build_request_body(request: &CompletionRequest, stream: bool, store: bool) ->
         obj.insert("reasoning".into(), reasoning);
     }
 
-    if request.parameters.frequency_penalty.is_some() {
-        log::warn!("responses: frequency_penalty is not supported by the Responses API, ignoring");
-    }
-    if request.parameters.presence_penalty.is_some() {
-        log::warn!("responses: presence_penalty is not supported by the Responses API, ignoring");
+    for (key, value) in &request.parameters.extra {
+        obj.insert(key.clone(), value.clone());
     }
 
     log::debug!(
@@ -210,6 +207,10 @@ struct ResponseUsage {
 
 #[async_trait]
 impl AiProvider for OpenAiResponsesProvider {
+    fn supported_params(&self) -> &'static [&'static str] {
+        &["temperature", "max_tokens", "top_p", "reasoning_effort"]
+    }
+
     async fn complete(&self, request: CompletionRequest) -> Result<String, AiError> {
         let url = format!("{}/responses", self.base_url);
         let body = build_request_body(&request, false, self.store);
