@@ -1,9 +1,11 @@
 <script lang="ts">
-  import type { ConversationNode } from "$lib/types/conversation";
+  import type { ConversationNode, ContentSegment } from "$lib/types/conversation";
+  import type { ToolCall } from "$lib/types/ai";
   import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
   import ThinkingBlock from "$lib/components/ui/ThinkingBlock.svelte";
+  import ToolCallItem from "./ToolCallItem.svelte";
   import { resizeTextarea } from "$lib/utils/autoResize";
   import { Copy, Check, RefreshCw, Trash2, ChevronLeft, ChevronRight, Pencil, AlertCircle } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
@@ -17,11 +19,15 @@
     thinkingContent = "",
     isThinkingActive = false,
     branchInfo = { current: 1, total: 1 },
+    activeToolCalls = [],
     onRegenerate,
     onBranchPrev,
     onBranchNext,
     onContentChange,
     onDelete,
+    onToolCallApprove,
+    onToolCallReject,
+    onToolCallRetry,
   }: {
     node: ConversationNode;
     displayContent: string;
@@ -31,12 +37,49 @@
     thinkingContent: string;
     isThinkingActive: boolean;
     branchInfo: { current: number; total: number };
+    activeToolCalls: ToolCall[];
     onRegenerate: (nodeId: string) => void;
     onBranchPrev: (nodeId: string) => void;
     onBranchNext: (nodeId: string) => void;
     onContentChange: (content: string) => void;
     onDelete: (nodeId: string) => void;
+    onToolCallApprove?: (toolCallId: string) => void;
+    onToolCallReject?: (toolCallId: string) => void;
+    onToolCallRetry?: (toolCallId: string) => void;
   } = $props();
+
+  const TOOL_CALL_MARKER_PATTERN = /\{\{tool_call:([a-zA-Z0-9_-]+)\}\}/g;
+  const TOOL_CALL_MARKER_TEST = /\{\{tool_call:[a-zA-Z0-9_-]+\}\}/;
+
+  function parseContentSegments(content: string): ContentSegment[] {
+    const segments: ContentSegment[] = [];
+    let lastIndex = 0;
+
+    for (const match of content.matchAll(TOOL_CALL_MARKER_PATTERN)) {
+      if (match.index > lastIndex) {
+        segments.push({ type: "text", text: content.slice(lastIndex, match.index) });
+      }
+      segments.push({ type: "tool_call", tool_call_id: match[1] });
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < content.length) {
+      segments.push({ type: "text", text: content.slice(lastIndex) });
+    }
+
+    return segments;
+  }
+
+  let hasMarkers = $derived(TOOL_CALL_MARKER_TEST.test(displayContent));
+
+  let segments = $derived(hasMarkers ? parseContentSegments(displayContent) : []);
+
+  let allToolCalls = $derived.by(() => {
+    const map = new Map<string, ToolCall>();
+    for (const tc of node.tool_calls) map.set(tc.tool_call_id, tc);
+    for (const tc of activeToolCalls) map.set(tc.tool_call_id, tc);
+    return map;
+  });
 
   let collapsed = $state(false);
   let editMode = $state(false);
@@ -126,6 +169,22 @@
           rows="1"
         ></textarea>
       </div>
+    {:else if hasMarkers}
+      {#each segments as segment}
+        {#if segment.type === "text" && segment.text.trim()}
+          <MarkdownRenderer content={segment.text} {isStreaming} />
+        {:else if segment.type === "tool_call"}
+          {@const tc = allToolCalls.get(segment.tool_call_id)}
+          {#if tc}
+            <ToolCallItem
+              toolCall={tc}
+              onApprove={onToolCallApprove}
+              onReject={onToolCallReject}
+              onRetry={onToolCallRetry}
+            />
+          {/if}
+        {/if}
+      {/each}
     {:else if displayContent}
       <MarkdownRenderer content={displayContent} {isStreaming} />
     {/if}

@@ -1005,6 +1005,9 @@ export function createConversationStore(
     get hasActiveToolCalls() {
       return hasActiveToolCalls;
     },
+    get activeToolCalls() {
+      return activeTab.active_tool_calls;
+    },
     get totalTokens() {
       return totalTokens;
     },
