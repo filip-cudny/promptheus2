@@ -90,6 +90,9 @@ pub struct ModelConfig {
 
     #[serde(default = "default_true")]
     pub store: bool,
+
+    #[serde(default)]
+    pub enabled_tools: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]

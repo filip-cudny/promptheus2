@@ -270,6 +270,7 @@ impl AiProvider for OpenAiProvider {
                                     thinking_delta,
                                     accumulated_thinking: acc_thinking,
                                     usage,
+                                    tool_call_event: None,
                                 }),
                                 (sse_stream, accumulated, accumulated_thinking),
                             ));

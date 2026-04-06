@@ -462,6 +462,7 @@ mod tests {
             context_window_size: None,
             api_mode: None,
             store: true,
+            enabled_tools: vec![],
         };
         let settings = Settings {
             models: vec![model.clone(), model],
@@ -519,6 +520,7 @@ mod tests {
             context_window_size: None,
             api_mode: None,
             store: true,
+            enabled_tools: vec![],
         });
 
 
@@ -586,6 +588,7 @@ mod tests {
                 context_window_size: None,
                 api_mode: None,
                 store: true,
+                enabled_tools: vec![],
             }],
             ..Default::default()
         };
@@ -613,6 +616,7 @@ mod tests {
             context_window_size: None,
             api_mode: None,
             store: true,
+            enabled_tools: vec![],
         };
         let initial_count = service.settings().models.len();
         service.add_model(new_model.clone());
@@ -647,6 +651,7 @@ mod tests {
             context_window_size: None,
             api_mode: None,
             store: true,
+            enabled_tools: vec![],
         };
         let count_before = service.settings().models.len();
         service.update_model("upsert-model", upsert_model);
@@ -681,6 +686,7 @@ mod tests {
                 context_window_size: None,
                 api_mode: None,
                 store: true,
+                enabled_tools: vec![],
             }],
             ..Default::default()
         };
@@ -705,6 +711,7 @@ mod tests {
                 context_window_size: None,
                 api_mode: None,
                 store: true,
+                enabled_tools: vec![],
             }],
             number_input_debounce_ms: 99999,
             ..Default::default()
@@ -733,6 +740,7 @@ mod tests {
                 context_window_size: None,
                 api_mode: None,
                 store: true,
+                enabled_tools: vec![],
             }],
             ..Default::default()
         };

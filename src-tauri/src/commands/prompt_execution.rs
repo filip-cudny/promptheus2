@@ -8,8 +8,9 @@ use tokio_stream::StreamExt;
 
 use crate::commands::settings::AppState;
 use crate::services::config::ConfigService;
-use crate::models::ai::StreamEvent;
+use crate::models::ai::{StreamEvent, ToolCall, ToolCallStatus, ToolCallType};
 use crate::models::settings::ModelParameters;
+use crate::services::ai::provider::ToolCallEvent;
 use crate::models::history::SerializedConversationNode;
 use crate::models::message::{
     ConversationNodeForExecution, ImageData, MessageContent,
@@ -18,6 +19,51 @@ use crate::models::message::{
 use crate::services::notification::NotificationLevel;
 use crate::services::prompt_execution::PromptExecutionService;
 use crate::services::skill_execution;
+
+fn tool_display_name(tool_name: &str) -> &str {
+    match tool_name {
+        "web_search" => "Web Search",
+        other => other,
+    }
+}
+
+fn tool_type_from_name(tool_name: &str) -> ToolCallType {
+    match tool_name {
+        "web_search" => ToolCallType::WebSearch,
+        _ => ToolCallType::Custom,
+    }
+}
+
+fn emit_tool_call_event(on_event: &Channel<StreamEvent>, event: ToolCallEvent) {
+    match event {
+        ToolCallEvent::Started { tool_call_id, tool_name } => {
+            let display_name = tool_display_name(&tool_name).to_string();
+            let tool_type = tool_type_from_name(&tool_name);
+            let _ = on_event.send(StreamEvent::ToolCallStart {
+                tool_call: ToolCall {
+                    tool_call_id,
+                    tool_name,
+                    tool_display_name: display_name,
+                    tool_type,
+                    arguments: serde_json::Value::Null,
+                    result: None,
+                    error: None,
+                    status: ToolCallStatus::InProgress,
+                    requires_confirmation: false,
+                    started_at: Some(chrono::Utc::now().to_rfc3339()),
+                    completed_at: None,
+                },
+            });
+        }
+        ToolCallEvent::Done { tool_call_id, result, error } => {
+            let _ = on_event.send(StreamEvent::ToolCallDone {
+                tool_call_id,
+                result,
+                error,
+            });
+        }
+    }
+}
 
 #[derive(Clone, Serialize)]
 struct ExecutionStartedPayload {
@@ -120,6 +166,11 @@ pub async fn execute_skill(
                             if let Some(usage) = chunk.usage {
                                 prompt_tokens = Some(usage.prompt_tokens);
                                 completion_tokens = Some(usage.completion_tokens);
+                            }
+                            if let Some(tool_event) = chunk.tool_call_event {
+                                emit_tool_call_event(&on_event, tool_event);
+                                full_text.clone_from(&chunk.accumulated);
+                                continue;
                             }
                             let has_content = !chunk.delta.is_empty() || chunk.thinking_delta.is_some();
                             if has_content {
@@ -565,6 +616,11 @@ pub async fn execute_conversation_from_tree(
                             if let Some(usage) = chunk.usage {
                                 prompt_tokens = Some(usage.prompt_tokens);
                                 completion_tokens = Some(usage.completion_tokens);
+                            }
+                            if let Some(tool_event) = chunk.tool_call_event {
+                                emit_tool_call_event(&on_event, tool_event);
+                                full_text.clone_from(&chunk.accumulated);
+                                continue;
                             }
                             let has_content = !chunk.delta.is_empty() || chunk.thinking_delta.is_some();
                             if has_content {

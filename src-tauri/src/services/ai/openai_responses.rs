@@ -7,10 +7,11 @@ use serde::Deserialize;
 use tokio_stream::StreamExt;
 
 use crate::models::message::{ContentPart, MessageContent, ProcessedMessage};
-use crate::models::settings::ModelConfig;
+use crate::models::settings::{ApiMode, ModelConfig, Provider};
 
-use super::provider::{AiProvider, CompletionRequest, StreamChunk, TokenUsage};
+use super::provider::{AiProvider, CompletionRequest, StreamChunk, TokenUsage, ToolCallEvent};
 use super::sse::parse_sse_stream;
+use super::tools::ToolRegistry;
 use super::AiError;
 
 pub struct OpenAiResponsesProvider {
@@ -138,6 +139,15 @@ fn build_request_body(request: &CompletionRequest, stream: bool, store: bool) ->
         obj.insert("reasoning".into(), reasoning);
     }
 
+    if !request.tools.is_empty() {
+        let tools_json: Vec<serde_json::Value> = request
+            .tools
+            .iter()
+            .map(|t| ToolRegistry::to_request_payload(t, &Provider::Openai, &ApiMode::Responses))
+            .collect();
+        obj.insert("tools".into(), serde_json::json!(tools_json));
+    }
+
     for (key, value) in &request.parameters.extra {
         obj.insert(key.clone(), value.clone());
     }
@@ -191,6 +201,20 @@ struct ResponseEvent {
     delta: Option<String>,
     #[serde(default)]
     response: Option<ResponseWrapper>,
+    #[serde(default)]
+    item: Option<OutputItemEvent>,
+    #[serde(default)]
+    item_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct OutputItemEvent {
+    #[serde(rename = "type")]
+    item_type: Option<String>,
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    status: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -286,8 +310,8 @@ impl AiProvider for OpenAiResponsesProvider {
         let sse_stream = parse_sse_stream(response);
 
         let stream = futures::stream::unfold(
-            (sse_stream, String::new(), String::new()),
-            |(mut sse_stream, mut accumulated, mut accumulated_thinking)| async move {
+            (sse_stream, String::new(), String::new(), Vec::<String>::new()),
+            |(mut sse_stream, mut accumulated, mut accumulated_thinking, mut active_tool_call_ids)| async move {
                 loop {
                     match sse_stream.next().await {
                         Some(Ok(data)) => {
@@ -317,8 +341,9 @@ impl AiProvider for OpenAiResponsesProvider {
                                             thinking_delta: Some(thinking),
                                             accumulated_thinking: Some(accumulated_thinking.clone()),
                                             usage: None,
+                                            tool_call_event: None,
                                         }),
-                                        (sse_stream, accumulated, accumulated_thinking),
+                                        (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids),
                                     ));
                                 }
                                 "response.output_text.delta" => {
@@ -339,9 +364,61 @@ impl AiProvider for OpenAiResponsesProvider {
                                             thinking_delta: None,
                                             accumulated_thinking: acc_thinking,
                                             usage: None,
+                                            tool_call_event: None,
                                         }),
-                                        (sse_stream, accumulated, accumulated_thinking),
+                                        (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids),
                                     ));
+                                }
+                                "response.output_item.added" => {
+                                    if let Some(ref item) = event.item {
+                                        if item.item_type.as_deref() == Some("web_search_call") {
+                                            let tool_call_id = item.id.clone().unwrap_or_default();
+                                            log::debug!("responses: web_search_call started id={tool_call_id}");
+                                            active_tool_call_ids.push(tool_call_id.clone());
+                                            let marker = format!("{{{{tool_call:{tool_call_id}}}}}");
+                                            accumulated.push_str(&marker);
+                                            return Some((
+                                                Ok(StreamChunk {
+                                                    delta: String::new(),
+                                                    accumulated: accumulated.clone(),
+                                                    thinking_delta: None,
+                                                    accumulated_thinking: None,
+                                                    usage: None,
+                                                    tool_call_event: Some(ToolCallEvent::Started {
+                                                        tool_call_id,
+                                                        tool_name: "web_search".to_string(),
+                                                    }),
+                                                }),
+                                                (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids),
+                                            ));
+                                        }
+                                    }
+                                    continue;
+                                }
+                                "response.web_search_call.completed" => {
+                                    let tool_call_id = event.item_id
+                                        .or_else(|| event.item.and_then(|i| i.id))
+                                        .unwrap_or_default();
+                                    log::debug!("responses: web_search_call completed id={tool_call_id}");
+                                    active_tool_call_ids.retain(|id| id != &tool_call_id);
+                                    return Some((
+                                        Ok(StreamChunk {
+                                            delta: String::new(),
+                                            accumulated: accumulated.clone(),
+                                            thinking_delta: None,
+                                            accumulated_thinking: None,
+                                            usage: None,
+                                            tool_call_event: Some(ToolCallEvent::Done {
+                                                tool_call_id,
+                                                result: None,
+                                                error: None,
+                                            }),
+                                        }),
+                                        (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids),
+                                    ));
+                                }
+                                "response.web_search_call.in_progress" => {
+                                    continue;
                                 }
                                 "response.completed" => {
                                     let usage = event
@@ -359,8 +436,9 @@ impl AiProvider for OpenAiResponsesProvider {
                                                 thinking_delta: None,
                                                 accumulated_thinking: None,
                                                 usage,
+                                                tool_call_event: None,
                                             }),
-                                            (sse_stream, accumulated, accumulated_thinking),
+                                            (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids),
                                         ));
                                     }
                                     continue;
@@ -371,7 +449,7 @@ impl AiProvider for OpenAiResponsesProvider {
                         Some(Err(e)) => {
                             return Some((
                                 Err(AiError::Stream(e.to_string())),
-                                (sse_stream, accumulated, accumulated_thinking),
+                                (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids),
                             ));
                         }
                         None => return None,

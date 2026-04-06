@@ -92,6 +92,7 @@ mod tests {
                 context_window_size: None,
                 api_mode: None,
                 store: true,
+                enabled_tools: vec![],
             }],
             ..Default::default()
         };

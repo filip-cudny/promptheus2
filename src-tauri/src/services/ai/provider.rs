@@ -6,12 +6,14 @@ use futures::Stream;
 use crate::models::message::ProcessedMessage;
 use crate::models::settings::ModelParameters;
 
+use super::tools::BuiltInTool;
 use super::AiError;
 
 pub struct CompletionRequest {
     pub model: String,
     pub messages: Vec<ProcessedMessage>,
     pub parameters: ModelParameters,
+    pub tools: Vec<BuiltInTool>,
 }
 
 pub struct StreamChunk {
@@ -20,6 +22,20 @@ pub struct StreamChunk {
     pub thinking_delta: Option<String>,
     pub accumulated_thinking: Option<String>,
     pub usage: Option<TokenUsage>,
+    pub tool_call_event: Option<ToolCallEvent>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ToolCallEvent {
+    Started {
+        tool_call_id: String,
+        tool_name: String,
+    },
+    Done {
+        tool_call_id: String,
+        result: Option<String>,
+        error: Option<String>,
+    },
 }
 
 pub struct TokenUsage {

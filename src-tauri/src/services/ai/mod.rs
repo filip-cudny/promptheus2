@@ -2,6 +2,7 @@ pub mod openai;
 pub mod openai_responses;
 pub mod provider;
 pub mod sse;
+pub mod tools;
 
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -15,6 +16,7 @@ use crate::models::settings::{ApiMode, ModelConfig, ModelParameters, Provider};
 use self::openai::OpenAiProvider;
 use self::openai_responses::OpenAiResponsesProvider;
 use self::provider::{AiProvider, CompletionRequest, StreamChunk};
+use self::tools::ToolRegistry;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AiError {
@@ -47,6 +49,9 @@ struct ProviderEntry {
     provider: Box<dyn AiProvider>,
     model_name: String,
     parameters: ModelParameters,
+    enabled_tools: Vec<String>,
+    provider_type: Provider,
+    api_mode: ApiMode,
 }
 
 struct AiServiceInner {
@@ -80,6 +85,9 @@ impl AiService {
                                     provider,
                                     model_name: model.model.clone(),
                                     parameters: model.parameters.clone().unwrap_or_default(),
+                                    enabled_tools: model.enabled_tools.clone(),
+                                    provider_type: model.provider.clone(),
+                                    api_mode: api_mode.clone(),
                                 },
                             );
                         }
@@ -119,10 +127,16 @@ impl AiService {
     ) -> Result<String, AiError> {
         let entry = self.get_provider(model_id)?;
         validate_params(&entry.parameters, entry.provider.as_ref(), &entry.model_name);
+        let tools = ToolRegistry::resolve_tools(
+            &entry.enabled_tools,
+            &entry.provider_type,
+            &entry.api_mode,
+        );
         let request = CompletionRequest {
             model: entry.model_name.clone(),
             messages,
             parameters: entry.parameters.clone(),
+            tools,
         };
         entry.provider.complete(request).await
     }
@@ -139,10 +153,16 @@ impl AiService {
             None => entry.parameters.clone(),
         };
         validate_params(&parameters, entry.provider.as_ref(), &entry.model_name);
+        let tools = ToolRegistry::resolve_tools(
+            &entry.enabled_tools,
+            &entry.provider_type,
+            &entry.api_mode,
+        );
         let request = CompletionRequest {
             model: entry.model_name.clone(),
             messages,
             parameters,
+            tools,
         };
         entry.provider.complete_stream(request).await
     }
