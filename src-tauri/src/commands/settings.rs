@@ -19,6 +19,7 @@ use crate::services::prompt_execution::PromptExecutionService;
 use crate::services::skill::SkillService;
 use crate::services::speech::SpeechService;
 use crate::services::conversation_context::ConversationContextCache;
+use crate::services::tool_confirmation::ToolConfirmationService;
 use crate::services::ui_state::UiStateService;
 
 pub struct AppState {
@@ -36,6 +37,7 @@ pub struct AppState {
     pub speech: SpeechService,
     pub ui_state: UiStateService,
     pub conversation_context: ConversationContextCache,
+    pub tool_confirmation: ToolConfirmationService,
     pub recent_apps: VecDeque<String>,
 }
 

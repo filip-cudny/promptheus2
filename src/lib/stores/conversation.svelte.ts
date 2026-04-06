@@ -940,6 +940,90 @@ export function createConversationStore(
     }
   }
 
+  async function approveToolCall(toolCallId: string): Promise<void> {
+    const tab = getTab(activeTabId);
+    if (!tab) return;
+
+    try {
+      await invoke("respond_to_tool_call", { toolCallId, approved: true });
+    } catch (e) {
+      logError("Failed to approve tool call: " + e);
+      return;
+    }
+
+    tab.active_tool_calls = tab.active_tool_calls.map((tc) =>
+      tc.tool_call_id === toolCallId ? { ...tc, status: "in_progress" as const } : tc,
+    );
+    const path = tab.tree.current_path;
+    if (path.length > 0) {
+      const lastNode = tab.tree.nodes.get(path[path.length - 1]);
+      if (lastNode?.role === "assistant") {
+        lastNode.tool_calls = lastNode.tool_calls.map((tc) =>
+          tc.tool_call_id === toolCallId ? { ...tc, status: "in_progress" as const } : tc,
+        );
+        tab.tree.nodes.set(lastNode.node_id, lastNode);
+      }
+    }
+  }
+
+  async function rejectToolCall(toolCallId: string): Promise<void> {
+    const tab = getTab(activeTabId);
+    if (!tab) return;
+
+    try {
+      await invoke("respond_to_tool_call", { toolCallId, approved: false });
+    } catch (e) {
+      logError("Failed to reject tool call: " + e);
+      return;
+    }
+
+    tab.active_tool_calls = tab.active_tool_calls.filter(
+      (tc) => tc.tool_call_id !== toolCallId,
+    );
+    const path = tab.tree.current_path;
+    if (path.length > 0) {
+      const lastNode = tab.tree.nodes.get(path[path.length - 1]);
+      if (lastNode?.role === "assistant") {
+        lastNode.tool_calls = lastNode.tool_calls.map((tc) =>
+          tc.tool_call_id === toolCallId
+            ? { ...tc, status: "cancelled" as const, completed_at: new Date().toISOString() }
+            : tc,
+        );
+        tab.tree.nodes.set(lastNode.node_id, lastNode);
+      }
+    }
+  }
+
+  async function retryToolCall(toolCallId: string): Promise<void> {
+    const tab = getTab(activeTabId);
+    if (!tab) return;
+
+    try {
+      await invoke("retry_tool_call", { toolCallId });
+    } catch (e) {
+      logError("Failed to retry tool call: " + e);
+      return;
+    }
+
+    const path = tab.tree.current_path;
+    if (path.length > 0) {
+      const lastNode = tab.tree.nodes.get(path[path.length - 1]);
+      if (lastNode?.role === "assistant") {
+        lastNode.tool_calls = lastNode.tool_calls.map((tc) =>
+          tc.tool_call_id === toolCallId
+            ? { ...tc, status: "in_progress" as const, error: null, result: null }
+            : tc,
+        );
+        tab.tree.nodes.set(lastNode.node_id, lastNode);
+      }
+    }
+    tab.active_tool_calls = tab.active_tool_calls.map((tc) =>
+      tc.tool_call_id === toolCallId
+        ? { ...tc, status: "in_progress" as const, error: null, result: null }
+        : tc,
+    );
+  }
+
   function destroy(): void {
     for (const tab of tabs) {
       releaseConversationContext(tab.tab_id).catch(() => {});
@@ -1038,6 +1122,9 @@ export function createConversationStore(
     updateModelId,
     updateReasoningEffort,
     initFromSettings,
+    approveToolCall,
+    rejectToolCall,
+    retryToolCall,
     saveToHistory,
     restoreFromHistory,
     isTabClean,

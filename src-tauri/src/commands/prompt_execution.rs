@@ -396,6 +396,25 @@ pub async fn resolve_skill_input(
 }
 
 #[tauri::command]
+pub async fn respond_to_tool_call(
+    state: State<'_, Mutex<AppState>>,
+    tool_call_id: String,
+    approved: bool,
+) -> Result<(), String> {
+    let mut state = state.lock().await;
+    state.tool_confirmation.respond(&tool_call_id, approved)
+}
+
+#[tauri::command]
+pub async fn retry_tool_call(
+    state: State<'_, Mutex<AppState>>,
+    tool_call_id: String,
+) -> Result<(), String> {
+    let mut state = state.lock().await;
+    state.tool_confirmation.respond(&tool_call_id, true)
+}
+
+#[tauri::command]
 pub async fn execute_conversation_from_tree(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,

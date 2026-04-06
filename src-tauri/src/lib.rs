@@ -570,6 +570,7 @@ pub fn run() {
                 speech: SpeechService::new(),
                 ui_state: ui_state_service,
                 conversation_context: crate::services::conversation_context::ConversationContextCache::new(),
+                tool_confirmation: crate::services::tool_confirmation::ToolConfirmationService::new(),
                 recent_apps: std::collections::VecDeque::new(),
             }));
             Ok(())
@@ -626,6 +627,8 @@ pub fn run() {
             commands::prompt_execution::generate_conversation_title,
             commands::prompt_execution::resolve_skill_input,
             commands::prompt_execution::execute_conversation_from_tree,
+            commands::prompt_execution::respond_to_tool_call,
+            commands::prompt_execution::retry_tool_call,
             commands::conversation_dialog::open_conversation_dialog,
             commands::conversation_dialog::get_dialog_init_params,
             commands::skills::list_skills,

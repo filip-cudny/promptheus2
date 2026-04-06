@@ -18,4 +18,5 @@ pub mod skill_execution;
 pub mod speech;
 pub mod sqlite_history;
 pub mod tokenizer;
+pub mod tool_confirmation;
 pub mod ui_state;

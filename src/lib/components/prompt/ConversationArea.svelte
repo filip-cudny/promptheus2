@@ -111,6 +111,9 @@
           onBranchNext={() => store.switchBranch(assistant.node_id, 1)}
           onContentChange={(content) => store.updateNodeContent(assistant.node_id, content)}
           onDelete={() => {}}
+          onToolCallApprove={(id) => store.approveToolCall(id)}
+          onToolCallReject={(id) => store.rejectToolCall(id)}
+          onToolCallRetry={(id) => store.retryToolCall(id)}
         />
       {/if}
     {/each}
