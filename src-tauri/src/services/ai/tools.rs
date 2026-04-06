@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use serde_json::json;
 
 use crate::models::settings::{ApiMode, Provider};
@@ -47,6 +48,14 @@ impl ToolRegistry {
             .collect()
     }
 
+    pub fn format_web_search_result(action: &serde_json::Value) -> Option<String> {
+        let parsed: WebSearchAction = serde_json::from_value(action.clone()).ok()?;
+        if parsed.queries.is_empty() {
+            return None;
+        }
+        Some(parsed.queries.join("\n"))
+    }
+
     pub fn to_request_payload(
         tool: &BuiltInTool,
         provider: &Provider,
@@ -59,6 +68,12 @@ impl ToolRegistry {
             _ => unreachable!(),
         }
     }
+}
+
+#[derive(Deserialize)]
+struct WebSearchAction {
+    #[serde(default)]
+    queries: Vec<String>,
 }
 
 #[cfg(test)]

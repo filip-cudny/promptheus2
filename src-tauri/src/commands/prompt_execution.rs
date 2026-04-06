@@ -45,7 +45,7 @@ fn emit_tool_call_event(on_event: &Channel<StreamEvent>, event: ToolCallEvent) {
                     tool_name,
                     tool_display_name: display_name,
                     tool_type,
-                    arguments: serde_json::Value::Null,
+                    arguments: serde_json::json!({}),
                     result: None,
                     error: None,
                     status: ToolCallStatus::InProgress,

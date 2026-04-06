@@ -170,7 +170,7 @@
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    padding: 2px 6px;
+    padding: 3px 8px;
     background: #2a2a2a;
     border: 1px solid #3e3e3e;
     border-radius: 10px;
@@ -180,6 +180,11 @@
     white-space: nowrap;
     font-family: inherit;
     max-width: 140px;
+  }
+
+  .selector-chip :global(svg) {
+    flex-shrink: 0;
+    display: block;
   }
 
   .selector-chip:hover {

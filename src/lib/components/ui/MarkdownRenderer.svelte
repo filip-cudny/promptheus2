@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import morphdom from "morphdom";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import { renderMarkdown, extractCodeBlocks } from "$lib/utils/markdown";
   import { ICON_SIZE } from "$lib/constants/ui";
 
@@ -87,6 +88,14 @@
 
   function handleClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
+
+    const anchor = target.closest("a") as HTMLAnchorElement | null;
+    if (anchor?.href) {
+      e.preventDefault();
+      openUrl(anchor.href);
+      return;
+    }
+
     const copyBtn = target.closest("[data-copy-index]") as HTMLElement | null;
     if (!copyBtn) return;
 

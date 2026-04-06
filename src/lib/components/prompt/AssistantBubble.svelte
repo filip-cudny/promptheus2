@@ -5,7 +5,7 @@
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
   import ThinkingBlock from "$lib/components/ui/ThinkingBlock.svelte";
-  import ToolCallItem from "./ToolCallItem.svelte";
+  import ToolCallGroup from "./ToolCallGroup.svelte";
   import { resizeTextarea } from "$lib/utils/autoResize";
   import { Copy, Check, RefreshCw, Trash2, ChevronLeft, ChevronRight, Pencil, AlertCircle } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
@@ -79,6 +79,27 @@
     for (const tc of node.tool_calls) map.set(tc.tool_call_id, tc);
     for (const tc of activeToolCalls) map.set(tc.tool_call_id, tc);
     return map;
+  });
+
+  type RenderBlock =
+    | { kind: "text"; text: string }
+    | { kind: "tool_group"; toolCallIds: string[] };
+
+  let renderBlocks = $derived.by(() => {
+    const blocks: RenderBlock[] = [];
+    for (const seg of segments) {
+      if (seg.type === "text" && seg.text.trim()) {
+        blocks.push({ kind: "text", text: seg.text });
+      } else if (seg.type === "tool_call") {
+        const last = blocks[blocks.length - 1];
+        if (last && last.kind === "tool_group") {
+          last.toolCallIds.push(seg.tool_call_id);
+        } else {
+          blocks.push({ kind: "tool_group", toolCallIds: [seg.tool_call_id] });
+        }
+      }
+    }
+    return blocks;
   });
 
   let collapsed = $state(false);
@@ -170,14 +191,16 @@
         ></textarea>
       </div>
     {:else if hasMarkers}
-      {#each segments as segment}
-        {#if segment.type === "text" && segment.text.trim()}
-          <MarkdownRenderer content={segment.text} {isStreaming} />
-        {:else if segment.type === "tool_call"}
-          {@const tc = allToolCalls.get(segment.tool_call_id)}
-          {#if tc}
-            <ToolCallItem
-              toolCall={tc}
+      {#each renderBlocks as block}
+        {#if block.kind === "text"}
+          <MarkdownRenderer content={block.text} {isStreaming} />
+        {:else if block.kind === "tool_group"}
+          {@const groupToolCalls = block.toolCallIds
+            .map((id) => allToolCalls.get(id))
+            .filter((tc): tc is ToolCall => tc != null)}
+          {#if groupToolCalls.length > 0}
+            <ToolCallGroup
+              toolCalls={groupToolCalls}
               onApprove={onToolCallApprove}
               onReject={onToolCallReject}
               onRetry={onToolCallRetry}

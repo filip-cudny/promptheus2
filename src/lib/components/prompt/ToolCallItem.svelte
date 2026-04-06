@@ -50,7 +50,12 @@
   let isCompleted = $derived(toolCall.status === "completed");
   let isFailed = $derived(toolCall.status === "failed");
   let isCancelled = $derived(toolCall.status === "cancelled");
-  let isClickable = $derived(isCompleted || isFailed || isCancelled);
+  let hasExpandableContent = $derived(
+    (toolCall.arguments && Object.keys(toolCall.arguments).length > 0) ||
+    !!toolCall.result ||
+    !!toolCall.error
+  );
+  let isClickable = $derived((isCompleted || isFailed || isCancelled) && hasExpandableContent);
 
   $effect(() => {
     if (isInProgress && toolCall.started_at) {
@@ -165,7 +170,7 @@
   {#if expanded && isClickable}
     <div class="tool-call-details">
       <div class="details-separator"></div>
-      {#if Object.keys(toolCall.arguments).length > 0}
+      {#if toolCall.arguments && Object.keys(toolCall.arguments).length > 0}
         <div class="details-section">
           <span class="details-label">Input</span>
           <div class="details-content">
@@ -177,7 +182,7 @@
       {/if}
       {#if toolCall.result}
         <div class="details-section">
-          <span class="details-label">Output</span>
+          <span class="details-label">{toolCall.tool_type === "web_search" ? "Queries" : "Output"}</span>
           <div class="details-content result-scroll">{toolCall.result}</div>
         </div>
       {/if}

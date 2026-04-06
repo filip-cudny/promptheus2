@@ -232,6 +232,11 @@
     </div>
 
     <div class="bar-right">
+      {#if store.totalTokens > 0}
+        <span class="token-count" title="Context tokens">
+          ~{formatTokenCount(store.totalTokens)}{#if contextWindowSize > 0} / {formatTokenCount(contextWindowSize)}{/if}
+        </span>
+      {/if}
       {#if models.length > 0}
         <ModelSelector
           {models}
@@ -240,11 +245,6 @@
           onModelSelect={(modelId) => store.updateModelId(modelId)}
           onReasoningSelect={(effort) => store.updateReasoningEffort(effort)}
         />
-      {/if}
-      {#if store.totalTokens > 0}
-        <span class="token-count">
-          ~{formatTokenCount(store.totalTokens)}{#if contextWindowSize > 0} / {formatTokenCount(contextWindowSize)}{/if}
-        </span>
       {/if}
 
       <ActionIconButton
@@ -344,11 +344,13 @@
     color: rgba(255, 255, 255, 0.4);
     user-select: none;
     white-space: nowrap;
+    margin-right: 4px;
   }
 
   .bar-right {
     flex-shrink: 0;
     display: flex;
+    align-items: center;
     gap: 2px;
   }
 </style>

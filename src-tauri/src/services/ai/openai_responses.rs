@@ -215,6 +215,8 @@ struct OutputItemEvent {
     id: Option<String>,
     #[serde(default)]
     status: Option<String>,
+    #[serde(default)]
+    action: Option<serde_json::Value>,
 }
 
 #[derive(Deserialize)]
@@ -395,29 +397,38 @@ impl AiProvider for OpenAiResponsesProvider {
                                     }
                                     continue;
                                 }
-                                "response.web_search_call.completed" => {
-                                    let tool_call_id = event.item_id
-                                        .or_else(|| event.item.and_then(|i| i.id))
-                                        .unwrap_or_default();
-                                    log::debug!("responses: web_search_call completed id={tool_call_id}");
-                                    active_tool_call_ids.retain(|id| id != &tool_call_id);
-                                    return Some((
-                                        Ok(StreamChunk {
-                                            delta: String::new(),
-                                            accumulated: accumulated.clone(),
-                                            thinking_delta: None,
-                                            accumulated_thinking: None,
-                                            usage: None,
-                                            tool_call_event: Some(ToolCallEvent::Done {
-                                                tool_call_id,
-                                                result: None,
-                                                error: None,
-                                            }),
-                                        }),
-                                        (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids),
-                                    ));
+                                "response.output_item.done" => {
+                                    if let Some(ref item) = event.item {
+                                        if item.item_type.as_deref() == Some("web_search_call") {
+                                            let tool_call_id = item.id.clone().unwrap_or_default();
+                                            log::debug!("responses: web_search_call done id={tool_call_id}");
+                                            active_tool_call_ids.retain(|id| id != &tool_call_id);
+
+                                            let result = item.action.as_ref()
+                                                .and_then(ToolRegistry::format_web_search_result);
+
+                                            return Some((
+                                                Ok(StreamChunk {
+                                                    delta: String::new(),
+                                                    accumulated: accumulated.clone(),
+                                                    thinking_delta: None,
+                                                    accumulated_thinking: None,
+                                                    usage: None,
+                                                    tool_call_event: Some(ToolCallEvent::Done {
+                                                        tool_call_id,
+                                                        result,
+                                                        error: None,
+                                                    }),
+                                                }),
+                                                (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids),
+                                            ));
+                                        }
+                                    }
+                                    continue;
                                 }
-                                "response.web_search_call.in_progress" => {
+                                "response.web_search_call.completed"
+                                | "response.web_search_call.in_progress"
+                                | "response.web_search_call.searching" => {
                                     continue;
                                 }
                                 "response.completed" => {
