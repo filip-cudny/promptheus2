@@ -546,10 +546,10 @@ export function createConversationStore(
     tab.input_text_attachments = [];
 
     const isFirstMessage = getMessagePairs(tab.tree).length === 1;
-    if (isFirstMessage && tab.tab_name === null && text) {
+    if (isFirstMessage && text) {
       generateConversationTitle(text)
         .then((title) => {
-          if (title && tab.tab_name === null) {
+          if (title) {
             tab.tab_name = title;
             if (tab.history_entry_id) {
               updateHistoryEntryTitle(tab.history_entry_id, title).catch(() => {});

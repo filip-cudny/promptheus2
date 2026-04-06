@@ -22,7 +22,9 @@
   let frameCount = 0;
   let lastRenderedHtml = "";
 
-  let displayedText = $derived(content.slice(0, displayedLength));
+  let displayedText = $derived(
+    isStreaming ? content : content.slice(0, displayedLength),
+  );
   let isFullyRevealed = $derived(
     !isStreaming && displayedLength >= content.length,
   );
