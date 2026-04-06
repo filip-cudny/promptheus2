@@ -1,22 +1,30 @@
 <script lang="ts">
+  import { onMount, onDestroy } from "svelte";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { X, MessageSquare, MessagesSquare, Mic, Circle } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import { getConversations } from "$lib/services/history";
   import type { HistoryEntry } from "$lib/types";
   import type { TabState } from "$lib/types/conversation";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
-  import type { getHistoryStore } from "$lib/stores/history.svelte";
+
+  const PAGE_SIZE = 30;
 
   let {
     store,
-    historyStore,
     open,
     onClose,
   }: {
     store: ReturnType<typeof createConversationStore>;
-    historyStore: ReturnType<typeof getHistoryStore>;
     open: boolean;
     onClose: () => void;
   } = $props();
+
+  let conversations = $state<HistoryEntry[]>([]);
+  let hasMore = $state(true);
+  let loading = $state(false);
+  let tabListEl: HTMLDivElement | undefined = $state();
+  let unlistenHistoryChanged: UnlistenFn | undefined;
 
   type SidebarItem =
     | { kind: "draft"; tab: TabState }
@@ -30,7 +38,7 @@
     for (const tab of store.tabs) {
       if (tab.history_entry_id) {
         openEntryIds.add(tab.history_entry_id);
-        const entry = historyStore.entries.find(e => e.id === tab.history_entry_id);
+        const entry = conversations.find(e => e.id === tab.history_entry_id);
         if (entry) {
           result.push({ kind: "open", tab, entry });
         } else {
@@ -41,7 +49,7 @@
       }
     }
 
-    for (const entry of historyStore.entries) {
+    for (const entry of conversations) {
       if (!openEntryIds.has(entry.id)) {
         result.push({ kind: "history", entry });
       }
@@ -112,6 +120,46 @@
     }
   }
 
+  async function fetchPage(offset: number): Promise<HistoryEntry[]> {
+    return getConversations(offset, PAGE_SIZE);
+  }
+
+  async function resetAndLoad() {
+    loading = true;
+    const page = await fetchPage(0);
+    conversations = page;
+    hasMore = page.length >= PAGE_SIZE;
+    loading = false;
+  }
+
+  async function loadMore() {
+    if (loading || !hasMore) return;
+    loading = true;
+    const page = await fetchPage(conversations.length);
+    conversations = [...conversations, ...page];
+    hasMore = page.length >= PAGE_SIZE;
+    loading = false;
+  }
+
+  function handleScroll() {
+    if (!tabListEl || !hasMore || loading) return;
+    const { scrollTop, scrollHeight, clientHeight } = tabListEl;
+    if (scrollHeight - scrollTop - clientHeight < 100) {
+      loadMore();
+    }
+  }
+
+  onMount(async () => {
+    await resetAndLoad();
+    unlistenHistoryChanged = await listen("history-changed", () => {
+      resetAndLoad();
+    });
+  });
+
+  onDestroy(() => {
+    unlistenHistoryChanged?.();
+  });
+
   function formatTimestamp(raw: string): string {
     const date = new Date(raw);
     if (isNaN(date.getTime())) return raw;
@@ -139,7 +187,7 @@
     </button>
   </div>
 
-  <div class="tab-list">
+  <div class="tab-list" bind:this={tabListEl} onscroll={handleScroll}>
     {#each items as item (itemId(item))}
       {@const ts = itemTimestamp(item)}
       <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->

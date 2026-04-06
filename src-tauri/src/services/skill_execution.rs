@@ -318,6 +318,16 @@ pub fn build_messages_from_tree(
         }
     }
 
+    if let Some(last) = messages.last() {
+        if last.role == "assistant" {
+            if let MessageContent::Text(ref text) = last.content {
+                if text.is_empty() {
+                    messages.pop();
+                }
+            }
+        }
+    }
+
     messages
 }
 

@@ -195,6 +195,43 @@ impl SqliteHistoryService {
         Ok(())
     }
 
+    pub fn get_conversations(&self, offset: u32, limit: u32) -> Vec<HistoryEntry> {
+        let conn = self.db.conn();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, title, skill_id, skill_name, entry_type, input_content, output_content,
+                        success, error, is_multi_turn, quick_action, created_at, updated_at
+                 FROM conversations
+                 WHERE quick_action = 0
+                 ORDER BY COALESCE(updated_at, created_at) DESC, rowid DESC
+                 LIMIT ?1 OFFSET ?2",
+            )
+            .unwrap();
+
+        stmt.query_map(rusqlite::params![limit, offset], |row| {
+            Ok(HistoryEntry {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                skill_id: row.get(2)?,
+                skill_name: row.get(3)?,
+                entry_type: parse_entry_type(row.get::<_, String>(4)?.as_str()),
+                input_content: row.get(5)?,
+                output_content: row.get(6)?,
+                success: row.get(7)?,
+                error: row.get(8)?,
+                is_multi_turn: row.get(9)?,
+                quick_action: row.get(10)?,
+                created_at: row.get(11)?,
+                updated_at: row.get(12)?,
+                timestamp: row.get::<_, Option<String>>(11)?.unwrap_or_default(),
+                conversation_data: None,
+            })
+        })
+        .unwrap()
+        .filter_map(|r| r.ok())
+        .collect()
+    }
+
     pub fn get_history(&self) -> Vec<HistoryEntry> {
         let conn = self.db.conn();
         let mut stmt = conn

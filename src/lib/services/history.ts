@@ -11,6 +11,13 @@ export async function getHistory(): Promise<HistoryEntry[]> {
   return invoke("get_history");
 }
 
+export async function getConversations(
+  offset: number,
+  limit: number,
+): Promise<HistoryEntry[]> {
+  return invoke("get_conversations", { offset, limit });
+}
+
 export async function getHistoryEntry(
   entryId: string,
 ): Promise<HistoryEntry | null> {

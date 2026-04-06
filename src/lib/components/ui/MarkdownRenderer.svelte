@@ -69,8 +69,8 @@
   $effect(() => {
     if (isStreaming) {
       wasStreaming = true;
-    }
-    if (content.length > displayedLength) {
+      displayedLength = content.length;
+    } else if (content.length > displayedLength) {
       if (wasStreaming) {
         startAnimation();
       } else {

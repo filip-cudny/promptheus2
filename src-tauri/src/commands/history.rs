@@ -25,6 +25,16 @@ pub async fn get_history(state: State<'_, Mutex<AppState>>) -> Result<Vec<Histor
 }
 
 #[tauri::command]
+pub async fn get_conversations(
+    state: State<'_, Mutex<AppState>>,
+    offset: u32,
+    limit: u32,
+) -> Result<Vec<HistoryEntry>, String> {
+    let state = state.lock().await;
+    Ok(state.history.get_conversations(offset, limit))
+}
+
+#[tauri::command]
 pub async fn get_history_entry(
     state: State<'_, Mutex<AppState>>,
     entry_id: String,

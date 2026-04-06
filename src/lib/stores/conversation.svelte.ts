@@ -435,7 +435,9 @@ export function createConversationStore(
         onToolCallStart: (toolCall) => {
           tab.active_tool_calls = [...tab.active_tool_calls, toolCall];
           assistantNode.tool_calls = [...assistantNode.tool_calls, toolCall];
-          assistantNode.content += `{{tool_call:${toolCall.tool_call_id}}}`;
+          const marker = `{{tool_call:${toolCall.tool_call_id}}}`;
+          assistantNode.content += marker;
+          tab.streamed_content += marker;
           tab.tree.nodes.set(assistantNode.node_id, assistantNode);
         },
         onToolCallProgress: (toolCallId, partialResult) => {

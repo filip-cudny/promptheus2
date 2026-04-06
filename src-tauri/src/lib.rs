@@ -612,6 +612,7 @@ pub fn run() {
             commands::menu::show_context_menu_window,
             commands::menu::focus_context_menu,
             commands::history::get_history,
+            commands::history::get_conversations,
             commands::history::get_history_entry,
             commands::history::add_history_entry,
             commands::history::add_conversation_entry,

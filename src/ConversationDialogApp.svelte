@@ -10,7 +10,6 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import { PanelLeft, SquarePen } from "lucide-svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
-  import { getHistoryStore } from "$lib/stores/history.svelte";
   import ConversationArea from "$lib/components/prompt/ConversationArea.svelte";
   import InputArea from "$lib/components/prompt/InputArea.svelte";
   import TabSidebar from "$lib/components/prompt/TabSidebar.svelte";
@@ -25,7 +24,6 @@
   }
 
   const skillsStore = getSkillsStore();
-  const historyStore = getHistoryStore();
 
   const store = createConversationStore("", "Chat");
 
@@ -91,7 +89,6 @@
 
   onMount(async () => {
     skillsStore.init();
-    historyStore.init();
     await store.initFromSettings();
     loadModelInfo();
 
@@ -158,7 +155,6 @@
     unlistenContextChanged?.();
     unlistenVoiceInput?.();
     unlistenOpenForSkill?.();
-    historyStore.destroy();
     store.destroy();
   });
 </script>
@@ -183,7 +179,7 @@
   </div>
   <ConversationArea {store} />
   <InputArea {store} {models} {contextVisible} {contextDisabled} {contextInitialCollapsed} {contextWindowSize} {defaultModelId} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
-  <TabSidebar {store} {historyStore} open={sidebarOpen} onClose={() => sidebarOpen = false} />
+  <TabSidebar {store} open={sidebarOpen} onClose={() => sidebarOpen = false} />
 </div>
 
 <style>

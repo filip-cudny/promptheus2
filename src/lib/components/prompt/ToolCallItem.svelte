@@ -160,11 +160,9 @@
     </div>
   {/if}
 
-  {#if isInProgress}
+  {#if isInProgress && toolCall.result}
     <div class="in-progress-detail">
-      {#if toolCall.result}
-        <span class="partial-result">{toolCall.result}</span>
-      {/if}
+      <span class="partial-result">{toolCall.result}</span>
     </div>
   {/if}
 

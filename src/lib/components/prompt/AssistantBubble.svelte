@@ -83,15 +83,15 @@
     node.tool_calls.every((tc) => tc.status === "completed" || tc.status === "failed" || tc.status === "cancelled")
   );
 
-  let contentAfterLastToolMarker = $derived.by(() => {
-    const idx = displayContent.lastIndexOf("}}");
-    if (idx === -1) return displayContent;
-    return displayContent.slice(idx + 2).trim();
-  });
-
   let isProcessingToolResults = $derived(
-    isStreaming && !isThinkingActive && allToolCallsDone && contentAfterLastToolMarker.length === 0
+    isStreaming && !isThinkingActive && allToolCallsDone
   );
+
+  let isWaitingForContent = $derived(
+    isStreaming && !isThinkingActive && !thinkingContent && !displayContent && activeToolCalls.length === 0
+  );
+
+  let showGenerating = $derived(isProcessingToolResults || isWaitingForContent);
 
   let allToolCalls = $derived.by(() => {
     const map = new Map<string, ToolCall>();
@@ -220,6 +220,7 @@
           {#if groupToolCalls.length > 0}
             <ToolCallGroup
               toolCalls={groupToolCalls}
+              {isStreaming}
               onApprove={onToolCallApprove}
               onReject={onToolCallReject}
               onRetry={onToolCallRetry}
@@ -231,7 +232,7 @@
       <MarkdownRenderer content={displayContent} {isStreaming} />
     {/if}
 
-    {#if isProcessingToolResults}
+    {#if showGenerating}
       <div class="processing-indicator" role="status" aria-live="polite">
         <span class="processing-label">Generating</span>
       </div>

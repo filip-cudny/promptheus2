@@ -7,11 +7,13 @@
 
   let {
     toolCalls,
+    isStreaming = false,
     onApprove,
     onReject,
     onRetry,
   }: {
     toolCalls: ToolCall[];
+    isStreaming?: boolean;
     onApprove?: (toolCallId: string) => void;
     onReject?: (toolCallId: string) => void;
     onRetry?: (toolCallId: string) => void;
@@ -40,13 +42,13 @@
     if (anyActive) {
       wasActive = true;
     }
-    if (allCompleted && wasActive) {
+    if (allCompleted && wasActive && !isStreaming) {
       expanded = false;
     }
   });
 </script>
 
-{#if anyActive}
+{#if anyActive || (isStreaming && wasActive)}
   <div class="tool-group">
     <div class="tool-group-header-active">
       <Wrench size={ICON_SIZE.sm} />
