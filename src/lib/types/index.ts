@@ -37,6 +37,7 @@ export interface ModelConfig {
   base_url: string | null;
   parameters: ModelParameters | null;
   context_window_size: number | null;
+  enabled_tools: string[];
 }
 
 export type ApiKeySource = "env" | "direct";

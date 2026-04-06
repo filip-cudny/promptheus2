@@ -28,7 +28,7 @@ pub async fn complete_stream(
 ) -> Result<(), String> {
     let ai = state.lock().await.ai.clone();
     let mut stream = ai
-        .complete_stream(&model_id, messages, None)
+        .complete_stream(&model_id, messages, None, None)
         .await
         .map_err(|e| e.to_string())?;
 

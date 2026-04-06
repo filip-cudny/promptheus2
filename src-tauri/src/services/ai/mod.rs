@@ -146,6 +146,7 @@ impl AiService {
         model_id: &str,
         messages: Vec<ProcessedMessage>,
         parameter_overrides: Option<ModelParameters>,
+        tools_override: Option<Vec<String>>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk, AiError>> + Send>>, AiError> {
         let entry = self.get_provider(model_id)?;
         let parameters = match parameter_overrides {
@@ -153,8 +154,9 @@ impl AiService {
             None => entry.parameters.clone(),
         };
         validate_params(&parameters, entry.provider.as_ref(), &entry.model_name);
+        let requested_tools = tools_override.as_deref().unwrap_or(&entry.enabled_tools);
         let tools = ToolRegistry::resolve_tools(
-            &entry.enabled_tools,
+            requested_tools,
             &entry.provider_type,
             &entry.api_mode,
         );

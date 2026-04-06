@@ -37,6 +37,7 @@
   let contextInitialCollapsed = $state(false);
   let contextWindowSize = $state(0);
   let models = $state<ModelConfig[]>([]);
+  let defaultModelId = $state<string | null>(null);
 
   let unlistenRestore: UnlistenFn | undefined;
   let unlistenContextChanged: UnlistenFn | undefined;
@@ -78,6 +79,7 @@
     try {
       const settings = await getSettings();
       models = settings.models;
+      defaultModelId = settings.default_model ?? null;
       const tabModelId = store.modelId;
       const activeModelId = tabModelId ?? settings.default_model;
       const activeModel = settings.models.find((m) => m.id === activeModelId);
@@ -180,7 +182,7 @@
     </button>
   </div>
   <ConversationArea {store} />
-  <InputArea {store} {models} {contextVisible} {contextDisabled} {contextInitialCollapsed} {contextWindowSize} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
+  <InputArea {store} {models} {contextVisible} {contextDisabled} {contextInitialCollapsed} {contextWindowSize} {defaultModelId} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
   <TabSidebar {store} {historyStore} open={sidebarOpen} onClose={() => sidebarOpen = false} />
 </div>
 

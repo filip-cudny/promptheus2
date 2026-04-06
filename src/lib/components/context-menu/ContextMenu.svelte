@@ -365,6 +365,7 @@
                 base_url: null,
                 parameters: m.reasoning_effort ? { temperature: null, max_tokens: null, top_p: null, frequency_penalty: null, presence_penalty: null, reasoning_effort: m.reasoning_effort } : null,
                 context_window_size: null,
+                enabled_tools: [],
               }))}
               selectedModelId={modelsDefaultModelId}
               reasoningEffort={modelsReasoningEffort}

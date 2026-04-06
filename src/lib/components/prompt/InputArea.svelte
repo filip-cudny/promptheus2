@@ -29,6 +29,7 @@
     onContextAutoShow,
     onCloseContext,
     onToggleContext,
+    defaultModelId = null,
   }: {
     store: ReturnType<typeof createConversationStore>;
     models?: ModelConfig[];
@@ -40,7 +41,15 @@
     onContextAutoShow: () => void;
     onCloseContext: () => void;
     onToggleContext: () => void;
+    defaultModelId?: string | null;
   } = $props();
+
+  const webSearchAvailable = $derived.by(() => {
+    const activeModelId = store.modelId ?? defaultModelId;
+    if (!activeModelId) return false;
+    const model = models.find((m) => m.id === activeModelId);
+    return model?.enabled_tools?.includes("web_search") ?? false;
+  });
 
   let localText = $state("");
   let localImages = $state<ConversationImage[]>([]);
@@ -213,7 +222,16 @@
 
   <div class="button-bar">
     <div class="bar-left">
-      <AttachMenu onSelectContext={onToggleContext} {contextDisabled} />
+      <AttachMenu
+        onSelectContext={onToggleContext}
+        onToggleWebSearch={() => store.toggleWebSearch(!store.webSearchEnabled)}
+        {contextDisabled}
+        webSearchEnabled={store.webSearchEnabled}
+        webSearchAvailable={webSearchAvailable}
+      />
+    </div>
+
+    <div class="bar-right">
       {#if models.length > 0}
         <ModelSelector
           {models}
@@ -228,9 +246,7 @@
           ~{formatTokenCount(store.totalTokens)}{#if contextWindowSize > 0} / {formatTokenCount(contextWindowSize)}{/if}
         </span>
       {/if}
-    </div>
 
-    <div class="bar-right">
       <ActionIconButton
         icon={CopyCheck}
         onclick={onSendAndCopy}

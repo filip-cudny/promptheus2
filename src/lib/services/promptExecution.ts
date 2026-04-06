@@ -106,6 +106,7 @@ export async function executeConversationFromTree(
     skillName?: string;
     modelId?: string;
     reasoningEffort?: string;
+    toolsOverride?: string[];
   },
 ): Promise<void> {
   const onEvent = new Channel<StreamEvent>();
@@ -149,6 +150,7 @@ export async function executeConversationFromTree(
     skillName: options.skillName ?? null,
     modelId: options.modelId ?? null,
     reasoningEffort: options.reasoningEffort ?? null,
+    toolsOverride: options.toolsOverride ?? null,
     onEvent,
   });
 }

@@ -55,6 +55,7 @@ export interface TabState {
   streamed_thinking: string;
   is_thinking: boolean;
   active_tool_calls: ToolCall[];
+  web_search_enabled: boolean;
 }
 
 export type ContentSegment =

@@ -148,7 +148,7 @@ pub async fn execute_skill(
 
     let stream_result = {
         let stream = ai
-            .complete_stream(&model_id, messages, skill_param_overrides)
+            .complete_stream(&model_id, messages, skill_param_overrides, None)
             .await
             .map_err(|e| e.to_string());
 
@@ -477,6 +477,7 @@ pub async fn execute_conversation_from_tree(
     skill_name: Option<String>,
     model_id: Option<String>,
     reasoning_effort: Option<String>,
+    tools_override: Option<Vec<String>>,
     on_event: Channel<StreamEvent>,
 ) -> Result<(), String> {
     let start_time = Instant::now();
@@ -598,7 +599,7 @@ pub async fn execute_conversation_from_tree(
 
     let stream_result = {
         let stream = ai
-            .complete_stream(&resolved_model_id, all_messages, param_overrides)
+            .complete_stream(&resolved_model_id, all_messages, param_overrides, tools_override)
             .await
             .map_err(|e| e.to_string());
 

@@ -149,6 +149,7 @@ function createTabState(
     streamed_thinking: "",
     is_thinking: false,
     active_tool_calls: [],
+    web_search_enabled: false,
   };
 }
 
@@ -244,6 +245,7 @@ export function createConversationStore(
   const streamedThinking = $derived(activeTab.streamed_thinking);
   const isThinking = $derived(activeTab.is_thinking);
   const hasActiveToolCalls = $derived(activeTab.active_tool_calls.length > 0);
+  const webSearchEnabled = $derived(activeTab.web_search_enabled);
 
   const canSend = $derived.by(() => {
     if (activeTab.is_executing) return false;
@@ -469,6 +471,8 @@ export function createConversationStore(
         },
       };
 
+      const toolsOverride = tab.web_search_enabled ? ["web_search"] : [];
+
       await executeConversationFromTree(nodes, callbacks, {
         contextText: tab.context_text || undefined,
         contextImages,
@@ -477,6 +481,7 @@ export function createConversationStore(
         skillName,
         modelId: tab.model_id || undefined,
         reasoningEffort: tab.reasoning_effort || undefined,
+        toolsOverride,
       });
     } catch (e) {
       logError("Failed to execute: " + e);
@@ -761,6 +766,12 @@ export function createConversationStore(
     if (modelId) {
       updateModelReasoningEffort(modelId, effort);
     }
+  }
+
+  function toggleWebSearch(enabled: boolean): void {
+    const tab = getTab(activeTabId);
+    if (!tab) return;
+    tab.web_search_enabled = enabled;
   }
 
   async function initFromSettings(): Promise<void> {
@@ -1092,6 +1103,9 @@ export function createConversationStore(
     get activeToolCalls() {
       return activeTab.active_tool_calls;
     },
+    get webSearchEnabled() {
+      return webSearchEnabled;
+    },
     get totalTokens() {
       return totalTokens;
     },
@@ -1121,6 +1135,7 @@ export function createConversationStore(
     updateInputTextAttachments,
     updateModelId,
     updateReasoningEffort,
+    toggleWebSearch,
     initFromSettings,
     approveToolCall,
     rejectToolCall,
