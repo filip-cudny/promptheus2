@@ -181,7 +181,7 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
         tauri::WebviewUrl::App("image-preview.html".into()),
     )
     .title("")
-    .inner_size(400.0, 400.0)
+    .inner_size(800.0, 800.0)
     .resizable(false)
     .decorations(false)
     .transparent(true)
@@ -636,6 +636,7 @@ pub fn run() {
             commands::history_dialog::open_history_dialog,
             commands::image_preview::open_image_preview,
             commands::image_preview::get_pending_image,
+            commands::image_preview::get_image_preview_work_area,
             commands::text_preview::open_text_preview,
             commands::text_preview::get_pending_text,
             commands::text_preview::save_text_preview_geometry,

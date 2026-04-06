@@ -2,9 +2,18 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-  import { LogicalSize } from "@tauri-apps/api/dpi";
+  import { LogicalSize, LogicalPosition } from "@tauri-apps/api/dpi";
 
-  const MAX_SIZE = 400;
+  interface WorkArea {
+    cursorX: number;
+    cursorY: number;
+    workX: number;
+    workY: number;
+    workWidth: number;
+    workHeight: number;
+  }
+
+  const MAX_SIZE = 800;
   const ANIM_MS = 150;
 
   let src = $state("");
@@ -24,11 +33,36 @@
     img.src = dataUri;
     await img.decode();
 
-    const ratio = img.naturalWidth / img.naturalHeight;
-    const width = ratio >= 1 ? MAX_SIZE : Math.round(MAX_SIZE * ratio);
-    const height = ratio >= 1 ? Math.round(MAX_SIZE / ratio) : MAX_SIZE;
+    let width = img.naturalWidth;
+    let height = img.naturalHeight;
+    const longest = Math.max(width, height);
+    if (longest > MAX_SIZE) {
+      const scale = MAX_SIZE / longest;
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+    }
 
     await win.setSize(new LogicalSize(width, height));
+
+    try {
+      const wa = await invoke<WorkArea>("get_image_preview_work_area");
+      const rightEdge = wa.workX + wa.workWidth;
+      const bottomEdge = wa.workY + wa.workHeight;
+
+      let x = wa.cursorX;
+      let y = wa.cursorY;
+      if (x + width > rightEdge) x = rightEdge - width;
+      if (y + height > bottomEdge) y = bottomEdge - height;
+      if (x < wa.workX) x = wa.workX;
+      if (y < wa.workY) y = wa.workY;
+
+      await win.setPosition(new LogicalPosition(x, y));
+    } catch {
+      // fallback: no repositioning
+    }
+
+    await win.show();
+    await win.setFocus();
     src = dataUri;
     requestAnimationFrame(() => (visible = true));
   }
