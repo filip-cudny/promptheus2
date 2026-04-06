@@ -1,4 +1,4 @@
-import type { NodeUpdate } from "$lib/types/ai";
+import type { NodeUpdate, ToolCall } from "$lib/types/ai";
 
 export interface ConversationNode {
   node_id: string;
@@ -15,6 +15,7 @@ export interface ConversationNode {
   thinking: string | null;
   error: string | null;
   cancelled: boolean;
+  tool_calls: ToolCall[];
 }
 
 export interface ConversationImage {
@@ -53,4 +54,9 @@ export interface TabState {
   reasoning_effort: string | null;
   streamed_thinking: string;
   is_thinking: boolean;
+  active_tool_calls: ToolCall[];
 }
+
+export type ContentSegment =
+  | { type: "text"; text: string }
+  | { type: "tool_call"; tool_call_id: string };

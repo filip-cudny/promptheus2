@@ -3,6 +3,7 @@ import type {
   StreamEvent,
   ConversationNodeForExecution,
   ImageData,
+  ToolCall,
 } from "$lib/types/ai";
 
 import type { NodeUpdate } from "$lib/types/ai";
@@ -17,6 +18,10 @@ export interface ExecutionCallbacks {
   onDone: (fullText: string, usage?: TokenUsageData, fullThinking?: string | null) => void;
   onError: (message: string) => void;
   onNodeUpdates?: (nodeId: string, updates: NodeUpdate[]) => void;
+  onToolCallStart?: (toolCall: ToolCall) => void;
+  onToolCallProgress?: (toolCallId: string, partialResult: string) => void;
+  onToolCallDone?: (toolCallId: string, result: string | null, error: string | null) => void;
+  onToolCallConfirmation?: (toolCallId: string) => void;
 }
 
 export async function executeSkill(

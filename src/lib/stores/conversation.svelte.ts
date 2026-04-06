@@ -59,6 +59,7 @@ export function createNode(
     thinking: null,
     error: null,
     cancelled: false,
+    tool_calls: [],
   };
 }
 
@@ -147,6 +148,7 @@ function createTabState(
     reasoning_effort: reasoningEffort,
     streamed_thinking: "",
     is_thinking: false,
+    active_tool_calls: [],
   };
 }
 
@@ -167,6 +169,7 @@ function serializeNodes(
     thinking: node.thinking,
     error: node.error,
     cancelled: node.cancelled,
+    tool_calls: node.tool_calls,
   }));
 }
 
@@ -829,6 +832,7 @@ export function createConversationStore(
             thinking: serialized.thinking ?? null,
             error: serialized.error ?? null,
             cancelled: serialized.cancelled ?? false,
+            tool_calls: serialized.tool_calls ?? [],
           });
         }
       } else if (entry.input_content) {
@@ -854,6 +858,7 @@ export function createConversationStore(
           thinking: null,
           error: null,
           cancelled: false,
+          tool_calls: [],
         });
 
         if (entry.output_content) {
@@ -873,6 +878,7 @@ export function createConversationStore(
             thinking: null,
             error: null,
             cancelled: false,
+            tool_calls: [],
           });
         }
       }
