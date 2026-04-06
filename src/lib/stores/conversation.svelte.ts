@@ -243,6 +243,7 @@ export function createConversationStore(
   const reasoningEffort = $derived(activeTab.reasoning_effort);
   const streamedThinking = $derived(activeTab.streamed_thinking);
   const isThinking = $derived(activeTab.is_thinking);
+  const hasActiveToolCalls = $derived(activeTab.active_tool_calls.length > 0);
 
   const canSend = $derived.by(() => {
     if (activeTab.is_executing) return false;
@@ -407,6 +408,7 @@ export function createConversationStore(
           tab.streamed_content = "";
           tab.streamed_thinking = "";
           tab.is_thinking = false;
+          tab.active_tool_calls = [];
           success = true;
           resultText = fullText;
         },
@@ -419,6 +421,7 @@ export function createConversationStore(
           tab.streamed_content = "";
           tab.streamed_thinking = "";
           tab.is_thinking = false;
+          tab.active_tool_calls = [];
         },
         onNodeUpdates: (nodeId, updates) => {
           const node = tab.tree.nodes.get(nodeId);
@@ -426,6 +429,43 @@ export function createConversationStore(
             node.updates = updates;
             tab.tree.nodes.set(nodeId, node);
           }
+        },
+        onToolCallStart: (toolCall) => {
+          tab.active_tool_calls = [...tab.active_tool_calls, toolCall];
+          assistantNode.tool_calls = [...assistantNode.tool_calls, toolCall];
+          assistantNode.content += `{{tool_call:${toolCall.tool_call_id}}}`;
+          tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+        },
+        onToolCallProgress: (toolCallId, partialResult) => {
+          tab.active_tool_calls = tab.active_tool_calls.map((tc) =>
+            tc.tool_call_id === toolCallId ? { ...tc, result: partialResult } : tc,
+          );
+        },
+        onToolCallDone: (toolCallId, result, error) => {
+          const status = error ? "failed" : "completed";
+          const now = new Date().toISOString();
+          assistantNode.tool_calls = assistantNode.tool_calls.map((tc) =>
+            tc.tool_call_id === toolCallId
+              ? { ...tc, status, result, error, completed_at: now }
+              : tc,
+          );
+          tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+          tab.active_tool_calls = tab.active_tool_calls.filter(
+            (tc) => tc.tool_call_id !== toolCallId,
+          );
+        },
+        onToolCallConfirmation: (toolCallId) => {
+          tab.active_tool_calls = tab.active_tool_calls.map((tc) =>
+            tc.tool_call_id === toolCallId
+              ? { ...tc, status: "pending", requires_confirmation: true }
+              : tc,
+          );
+          assistantNode.tool_calls = assistantNode.tool_calls.map((tc) =>
+            tc.tool_call_id === toolCallId
+              ? { ...tc, status: "pending", requires_confirmation: true }
+              : tc,
+          );
+          tab.tree.nodes.set(assistantNode.node_id, assistantNode);
         },
       };
 
@@ -447,6 +487,7 @@ export function createConversationStore(
       tab.streamed_content = "";
       tab.streamed_thinking = "";
       tab.is_thinking = false;
+      tab.active_tool_calls = [];
     }
 
     if (success) {
@@ -639,6 +680,7 @@ export function createConversationStore(
     tab.streamed_content = "";
     tab.streamed_thinking = "";
     tab.is_thinking = false;
+    tab.active_tool_calls = [];
   }
 
   function closeTab(tabId: string): void {
@@ -959,6 +1001,9 @@ export function createConversationStore(
     },
     get isThinking() {
       return isThinking;
+    },
+    get hasActiveToolCalls() {
+      return hasActiveToolCalls;
     },
     get totalTokens() {
       return totalTokens;

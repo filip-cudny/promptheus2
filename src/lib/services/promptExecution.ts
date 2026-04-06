@@ -44,6 +44,18 @@ export async function executeSkill(
       case "error":
         callbacks.onError(event.data.message);
         break;
+      case "tool_call_start":
+        callbacks.onToolCallStart?.(event.data.tool_call);
+        break;
+      case "tool_call_progress":
+        callbacks.onToolCallProgress?.(event.data.tool_call_id, event.data.partial_result);
+        break;
+      case "tool_call_done":
+        callbacks.onToolCallDone?.(event.data.tool_call_id, event.data.result, event.data.error);
+        break;
+      case "tool_call_confirmation":
+        callbacks.onToolCallConfirmation?.(event.data.tool_call_id);
+        break;
     }
   };
   return invoke("execute_skill", {
@@ -113,6 +125,18 @@ export async function executeConversationFromTree(
         break;
       case "node_updates":
         callbacks.onNodeUpdates?.(event.data.node_id, event.data.updates);
+        break;
+      case "tool_call_start":
+        callbacks.onToolCallStart?.(event.data.tool_call);
+        break;
+      case "tool_call_progress":
+        callbacks.onToolCallProgress?.(event.data.tool_call_id, event.data.partial_result);
+        break;
+      case "tool_call_done":
+        callbacks.onToolCallDone?.(event.data.tool_call_id, event.data.result, event.data.error);
+        break;
+      case "tool_call_confirmation":
+        callbacks.onToolCallConfirmation?.(event.data.tool_call_id);
         break;
     }
   };
