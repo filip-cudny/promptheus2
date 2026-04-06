@@ -1,6 +1,42 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::models::message::NodeUpdate;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallType {
+    WebSearch,
+    CodeExecution,
+    FileRead,
+    FileWrite,
+    ApiCall,
+    Custom,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCall {
+    pub tool_call_id: String,
+    pub tool_name: String,
+    pub tool_display_name: String,
+    pub tool_type: ToolCallType,
+    pub arguments: serde_json::Value,
+    pub result: Option<String>,
+    pub error: Option<String>,
+    pub status: ToolCallStatus,
+    pub requires_confirmation: bool,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+}
 
 #[derive(Clone, Serialize)]
 #[serde(tag = "event", content = "data", rename_all = "snake_case")]
@@ -17,6 +53,26 @@ pub enum StreamEvent {
         prompt_tokens: Option<usize>,
         completion_tokens: Option<usize>,
     },
-    Error { message: String },
-    NodeUpdates { node_id: String, updates: Vec<NodeUpdate> },
+    Error {
+        message: String,
+    },
+    NodeUpdates {
+        node_id: String,
+        updates: Vec<NodeUpdate>,
+    },
+    ToolCallStart {
+        tool_call: ToolCall,
+    },
+    ToolCallProgress {
+        tool_call_id: String,
+        partial_result: String,
+    },
+    ToolCallDone {
+        tool_call_id: String,
+        result: Option<String>,
+        error: Option<String>,
+    },
+    ToolCallConfirmation {
+        tool_call_id: String,
+    },
 }
