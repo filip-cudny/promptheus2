@@ -74,6 +74,25 @@
 
   let segments = $derived(hasMarkers ? parseContentSegments(displayContent) : []);
 
+  let hasToolCalls = $derived(node.tool_calls.length > 0 || activeToolCalls.length > 0);
+
+  let allToolCallsDone = $derived(
+    hasToolCalls &&
+    activeToolCalls.length === 0 &&
+    node.tool_calls.length > 0 &&
+    node.tool_calls.every((tc) => tc.status === "completed" || tc.status === "failed" || tc.status === "cancelled")
+  );
+
+  let contentAfterLastToolMarker = $derived.by(() => {
+    const idx = displayContent.lastIndexOf("}}");
+    if (idx === -1) return displayContent;
+    return displayContent.slice(idx + 2).trim();
+  });
+
+  let isProcessingToolResults = $derived(
+    isStreaming && !isThinkingActive && allToolCallsDone && contentAfterLastToolMarker.length === 0
+  );
+
   let allToolCalls = $derived.by(() => {
     const map = new Map<string, ToolCall>();
     for (const tc of node.tool_calls) map.set(tc.tool_call_id, tc);
@@ -210,6 +229,12 @@
       {/each}
     {:else if displayContent}
       <MarkdownRenderer content={displayContent} {isStreaming} />
+    {/if}
+
+    {#if isProcessingToolResults}
+      <div class="processing-indicator" role="status" aria-live="polite">
+        <span class="processing-label">Generating</span>
+      </div>
     {/if}
 
     {#if node.error}
@@ -396,5 +421,40 @@
     font-size: 11px;
     font-style: italic;
     color: rgba(255, 255, 255, 0.3);
+  }
+
+  .processing-indicator {
+    display: flex;
+    align-items: center;
+    padding: 6px 0;
+  }
+
+  .processing-label {
+    font-size: 13px;
+    font-weight: 600;
+    background: linear-gradient(
+      90deg,
+      rgba(91, 141, 217, 0.6) 0%,
+      rgba(150, 190, 240, 0.9) 50%,
+      rgba(91, 141, 217, 0.6) 100%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: processingShimmer 2s linear infinite;
+  }
+
+  @keyframes processingShimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .processing-label {
+      animation: none;
+      background: none;
+      -webkit-text-fill-color: #96bef0;
+    }
   }
 </style>

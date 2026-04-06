@@ -127,16 +127,11 @@ impl AiService {
     ) -> Result<String, AiError> {
         let entry = self.get_provider(model_id)?;
         validate_params(&entry.parameters, entry.provider.as_ref(), &entry.model_name);
-        let tools = ToolRegistry::resolve_tools(
-            &entry.enabled_tools,
-            &entry.provider_type,
-            &entry.api_mode,
-        );
         let request = CompletionRequest {
             model: entry.model_name.clone(),
             messages,
             parameters: entry.parameters.clone(),
-            tools,
+            tools: vec![],
         };
         entry.provider.complete(request).await
     }
@@ -154,12 +149,14 @@ impl AiService {
             None => entry.parameters.clone(),
         };
         validate_params(&parameters, entry.provider.as_ref(), &entry.model_name);
-        let requested_tools = tools_override.as_deref().unwrap_or(&entry.enabled_tools);
-        let tools = ToolRegistry::resolve_tools(
-            requested_tools,
-            &entry.provider_type,
-            &entry.api_mode,
-        );
+        let tools = match tools_override {
+            Some(ref requested) => ToolRegistry::resolve_tools(
+                requested,
+                &entry.provider_type,
+                &entry.api_mode,
+            ),
+            None => vec![],
+        };
         let request = CompletionRequest {
             model: entry.model_name.clone(),
             messages,

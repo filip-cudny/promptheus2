@@ -1,19 +1,13 @@
 <script lang="ts">
-  import { Plus, FileText, Globe } from "lucide-svelte";
+  import { Plus, FileText } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
     onSelectContext,
-    onToggleWebSearch,
     contextDisabled = false,
-    webSearchEnabled = false,
-    webSearchAvailable = false,
   }: {
     onSelectContext: () => void;
-    onToggleWebSearch: () => void;
     contextDisabled?: boolean;
-    webSearchEnabled?: boolean;
-    webSearchAvailable?: boolean;
   } = $props();
 
   let menuOpen = $state(false);
@@ -29,12 +23,6 @@
     if (contextDisabled) return;
     menuOpen = false;
     onSelectContext();
-  }
-
-  function handleWebSearchClick() {
-    if (!webSearchAvailable) return;
-    menuOpen = false;
-    onToggleWebSearch();
   }
 </script>
 
@@ -58,18 +46,6 @@
       >
         <FileText size={ICON_SIZE.md} />
         <span>Context</span>
-      </button>
-      <button
-        class="menu-item"
-        class:disabled={!webSearchAvailable}
-        class:active={webSearchEnabled}
-        onclick={handleWebSearchClick}
-      >
-        <Globe size={ICON_SIZE.md} />
-        <span>Web Search</span>
-        {#if webSearchEnabled}
-          <span class="check">✓</span>
-        {/if}
       </button>
     </div>
   {/if}
@@ -138,13 +114,4 @@
     cursor: not-allowed;
   }
 
-  .menu-item.active {
-    color: #5b8dd9;
-  }
-
-  .check {
-    margin-left: auto;
-    font-size: 12px;
-    color: #5b8dd9;
-  }
 </style>

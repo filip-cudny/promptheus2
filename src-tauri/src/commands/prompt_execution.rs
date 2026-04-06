@@ -246,6 +246,8 @@ pub async fn execute_skill(
                 thinking: None,
                 error: None,
                 cancelled: false,
+                tool_calls: vec![],
+                text_attachments: vec![],
             };
 
             let assistant_node = SerializedConversationNode {
@@ -261,6 +263,8 @@ pub async fn execute_skill(
                 thinking: None,
                 error: None,
                 cancelled: false,
+                tool_calls: vec![],
+                text_attachments: vec![],
             };
 
             state.history.add_conversation_entry(

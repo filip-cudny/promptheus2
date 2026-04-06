@@ -541,6 +541,8 @@ mod tests {
                 thinking: None,
                 error: None,
                 cancelled: false,
+                tool_calls: vec![],
+                text_attachments: vec![],
             },
             SerializedConversationNode {
                 node_id: "a1".into(),
@@ -555,6 +557,8 @@ mod tests {
                 thinking: None,
                 error: None,
                 cancelled: false,
+                tool_calls: vec![],
+                text_attachments: vec![],
             },
         ]
     }
@@ -847,6 +851,8 @@ mod tests {
             thinking: None,
             error: None,
             cancelled: false,
+            tool_calls: vec![],
+            text_attachments: vec![],
         });
         let summary = SqliteHistoryService::build_input_summary(&nodes);
         assert!(summary.contains("second"));
@@ -876,6 +882,8 @@ mod tests {
             thinking: None,
             error: None,
             cancelled: false,
+            tool_calls: vec![],
+            text_attachments: vec![],
         }];
         assert!(SqliteHistoryService::build_output_summary(&nodes).is_none());
     }

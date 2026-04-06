@@ -9,10 +9,10 @@
   import TextChipBar from "$lib/components/ui/TextChipBar.svelte";
   import SkillEditable from "$lib/components/ui/SkillEditable.svelte";
   import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
-  import { SendHorizonal, RefreshCw, Square, CopyCheck } from "lucide-svelte";
+  import { SendHorizonal, RefreshCw, Square, CopyCheck, Globe } from "lucide-svelte";
   import { getImageFromPasteEvent, extractTextAttachment } from "$lib/utils/paste";
   import { formatTokenCount } from "$lib/utils/contextWindow";
-  import { TEXT_ATTACHMENT_CHAR_THRESHOLD } from "$lib/constants/ui";
+  import { ICON_SIZE, TEXT_ATTACHMENT_CHAR_THRESHOLD } from "$lib/constants/ui";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
@@ -224,11 +224,18 @@
     <div class="bar-left">
       <AttachMenu
         onSelectContext={onToggleContext}
-        onToggleWebSearch={() => store.toggleWebSearch(!store.webSearchEnabled)}
         {contextDisabled}
-        webSearchEnabled={store.webSearchEnabled}
-        webSearchAvailable={webSearchAvailable}
       />
+      {#if webSearchAvailable}
+        <button
+          class="web-search-btn"
+          class:active={store.webSearchEnabled}
+          onclick={() => store.toggleWebSearch(!store.webSearchEnabled)}
+          title="Toggle web search"
+        >
+          <Globe size={ICON_SIZE.md} />
+        </button>
+      {/if}
     </div>
 
     <div class="bar-right">
@@ -352,5 +359,29 @@
     display: flex;
     align-items: center;
     gap: 2px;
+  }
+
+  .web-search-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: #aaa;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    flex-shrink: 0;
+  }
+
+  .web-search-btn:hover {
+    color: #e0e0e0;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .web-search-btn.active {
+    color: #5b8dd9;
   }
 </style>

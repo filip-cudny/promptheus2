@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::models::ai::ToolCall;
 use crate::models::message::{ImageData, NodeUpdate};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -33,6 +34,10 @@ pub struct SerializedConversationNode {
     pub error: Option<String>,
     #[serde(default)]
     pub cancelled: bool,
+    #[serde(default)]
+    pub tool_calls: Vec<ToolCall>,
+    #[serde(default)]
+    pub text_attachments: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -155,6 +160,8 @@ mod tests {
                         thinking: None,
                         error: None,
                         cancelled: false,
+                        tool_calls: vec![],
+                        text_attachments: vec![],
                     },
                     SerializedConversationNode {
                         node_id: "node-reply".into(),
@@ -169,6 +176,8 @@ mod tests {
                         thinking: None,
                         error: None,
                         cancelled: false,
+                        tool_calls: vec![],
+                        text_attachments: vec![],
                     },
                 ],
                 root_node_id: Some("node-root".into()),

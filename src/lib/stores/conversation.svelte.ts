@@ -495,7 +495,7 @@ export function createConversationStore(
       tab.active_tool_calls = [];
     }
 
-    if (success) {
+    if (success || assistantNode.cancelled) {
       await saveToHistory();
     }
 
@@ -677,6 +677,7 @@ export function createConversationStore(
       const lastNode = tab.tree.nodes.get(path[path.length - 1]);
       if (lastNode && lastNode.role === "assistant") {
         lastNode.cancelled = true;
+        tab.tree.nodes.set(lastNode.node_id, lastNode);
       }
     }
 

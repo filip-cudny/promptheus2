@@ -197,7 +197,7 @@
   }
 
   .reasoning-chip {
-    max-width: 90px;
+    max-width: 120px;
   }
 
   .chip-label {

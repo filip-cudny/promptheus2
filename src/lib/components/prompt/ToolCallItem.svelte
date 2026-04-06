@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
+  import { slide } from "svelte/transition";
   import type { ToolCall, ToolCallType } from "$lib/types/ai";
   import {
     Search,
@@ -112,7 +113,7 @@
     aria-expanded={isClickable ? expanded : undefined}
   >
     <span class="tool-icon">
-      <ToolIcon size={ICON_SIZE.sm} />
+      <ToolIcon size={ICON_SIZE.md} />
     </span>
     <span class="tool-name">{toolCall.tool_display_name}</span>
     <span class="tool-status">
@@ -168,7 +169,7 @@
   {/if}
 
   {#if expanded && isClickable}
-    <div class="tool-call-details">
+    <div class="tool-call-details" transition:slide={{ duration: 200 }}>
       <div class="details-separator"></div>
       {#if toolCall.arguments && Object.keys(toolCall.arguments).length > 0}
         <div class="details-section">
@@ -375,10 +376,6 @@
   .tool-call-details {
     max-height: 400px;
     overflow: hidden;
-    opacity: 1;
-    transition:
-      max-height 200ms ease-out,
-      opacity 150ms ease-in;
   }
 
   .details-separator {
