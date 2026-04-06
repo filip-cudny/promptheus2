@@ -13,6 +13,8 @@ export interface ConversationNode {
   prompt_tokens: number | null;
   completion_tokens: number | null;
   thinking: string | null;
+  error: string | null;
+  cancelled: boolean;
 }
 
 export interface ConversationImage {

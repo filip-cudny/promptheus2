@@ -192,6 +192,8 @@ pub async fn execute_skill(
                 prompt_tokens: None,
                 completion_tokens: None,
                 thinking: None,
+                error: None,
+                cancelled: false,
             };
 
             let assistant_node = SerializedConversationNode {
@@ -205,6 +207,8 @@ pub async fn execute_skill(
                 prompt_tokens: None,
                 completion_tokens: None,
                 thinking: None,
+                error: None,
+                cancelled: false,
             };
 
             state.history.add_conversation_entry(

@@ -539,6 +539,8 @@ mod tests {
                 prompt_tokens: None,
                 completion_tokens: None,
                 thinking: None,
+                error: None,
+                cancelled: false,
             },
             SerializedConversationNode {
                 node_id: "a1".into(),
@@ -551,6 +553,8 @@ mod tests {
                 prompt_tokens: None,
                 completion_tokens: None,
                 thinking: None,
+                error: None,
+                cancelled: false,
             },
         ]
     }
@@ -841,6 +845,8 @@ mod tests {
             prompt_tokens: None,
             completion_tokens: None,
             thinking: None,
+            error: None,
+            cancelled: false,
         });
         let summary = SqliteHistoryService::build_input_summary(&nodes);
         assert!(summary.contains("second"));
@@ -868,6 +874,8 @@ mod tests {
             prompt_tokens: None,
             completion_tokens: None,
             thinking: None,
+            error: None,
+            cancelled: false,
         }];
         assert!(SqliteHistoryService::build_output_summary(&nodes).is_none());
     }

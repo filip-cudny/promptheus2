@@ -48,7 +48,6 @@ impl OpenAiProvider {
         let http_client = reqwest::Client::builder()
             .default_headers(headers)
             .connect_timeout(std::time::Duration::from_secs(10))
-            .timeout(std::time::Duration::from_secs(120))
             .build()
             .map_err(|e| AiError::Request(e.to_string()))?;
 
@@ -161,6 +160,7 @@ impl AiProvider for OpenAiProvider {
             .http_client
             .post(&url)
             .json(&body)
+            .timeout(std::time::Duration::from_secs(120))
             .send()
             .await
             .map_err(|e| {

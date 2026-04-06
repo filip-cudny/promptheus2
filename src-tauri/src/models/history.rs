@@ -29,6 +29,10 @@ pub struct SerializedConversationNode {
     pub completion_tokens: Option<usize>,
     #[serde(default)]
     pub thinking: Option<String>,
+    #[serde(default)]
+    pub error: Option<String>,
+    #[serde(default)]
+    pub cancelled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,6 +153,8 @@ mod tests {
                         prompt_tokens: None,
                         completion_tokens: None,
                         thinking: None,
+                        error: None,
+                        cancelled: false,
                     },
                     SerializedConversationNode {
                         node_id: "node-reply".into(),
@@ -161,6 +167,8 @@ mod tests {
                         prompt_tokens: None,
                         completion_tokens: None,
                         thinking: None,
+                        error: None,
+                        cancelled: false,
                     },
                 ],
                 root_node_id: Some("node-root".into()),

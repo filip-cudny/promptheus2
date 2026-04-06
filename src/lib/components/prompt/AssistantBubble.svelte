@@ -5,7 +5,7 @@
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
   import ThinkingBlock from "$lib/components/ui/ThinkingBlock.svelte";
   import { resizeTextarea } from "$lib/utils/autoResize";
-  import { Copy, Check, RefreshCw, Trash2, ChevronLeft, ChevronRight, Pencil } from "lucide-svelte";
+  import { Copy, Check, RefreshCw, Trash2, ChevronLeft, ChevronRight, Pencil, AlertCircle } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
@@ -126,8 +126,21 @@
           rows="1"
         ></textarea>
       </div>
-    {:else}
+    {:else if displayContent}
       <MarkdownRenderer content={displayContent} {isStreaming} />
+    {/if}
+
+    {#if node.error}
+      <div class="error-banner">
+        <AlertCircle size={ICON_SIZE.sm} />
+        <span class="error-text">{node.error}</span>
+        <button class="retry-btn" onclick={() => onRegenerate(node.node_id)}>
+          <RefreshCw size={ICON_SIZE.sm} />
+          Retry
+        </button>
+      </div>
+    {:else if node.cancelled}
+      <span class="cancelled-hint">Response interrupted</span>
     {/if}
   </CollapsibleSection>
 </div>
@@ -251,5 +264,55 @@
 
   .bubble-textarea:focus {
     outline: none;
+  }
+
+  .error-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 8px 10px;
+    background: rgba(220, 60, 60, 0.08);
+    border-radius: 4px;
+    color: #e55;
+    font-size: 12px;
+  }
+
+  .error-banner :global(svg:first-child) {
+    flex-shrink: 0;
+  }
+
+  .error-text {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: break-word;
+  }
+
+  .retry-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .retry-btn:hover {
+    background: rgba(220, 60, 60, 0.15);
+    color: #e55;
+  }
+
+  .cancelled-hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    font-style: italic;
+    color: rgba(255, 255, 255, 0.3);
   }
 </style>

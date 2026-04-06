@@ -461,6 +461,7 @@ mod tests {
             parameters: None,
             context_window_size: None,
             api_mode: None,
+            store: true,
         };
         let settings = Settings {
             models: vec![model.clone(), model],
@@ -517,6 +518,7 @@ mod tests {
             parameters: None,
             context_window_size: None,
             api_mode: None,
+            store: true,
         });
 
 
@@ -583,6 +585,7 @@ mod tests {
                 parameters: None,
                 context_window_size: None,
                 api_mode: None,
+                store: true,
             }],
             ..Default::default()
         };
@@ -609,6 +612,7 @@ mod tests {
             parameters: None,
             context_window_size: None,
             api_mode: None,
+            store: true,
         };
         let initial_count = service.settings().models.len();
         service.add_model(new_model.clone());
@@ -642,6 +646,7 @@ mod tests {
             parameters: None,
             context_window_size: None,
             api_mode: None,
+            store: true,
         };
         let count_before = service.settings().models.len();
         service.update_model("upsert-model", upsert_model);
@@ -675,6 +680,7 @@ mod tests {
                 parameters: None,
                 context_window_size: None,
                 api_mode: None,
+                store: true,
             }],
             ..Default::default()
         };
@@ -698,6 +704,7 @@ mod tests {
                 parameters: None,
                 context_window_size: None,
                 api_mode: None,
+                store: true,
             }],
             number_input_debounce_ms: 99999,
             ..Default::default()
@@ -725,6 +732,7 @@ mod tests {
                 parameters: None,
                 context_window_size: None,
                 api_mode: None,
+                store: true,
             }],
             ..Default::default()
         };

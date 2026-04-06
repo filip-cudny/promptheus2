@@ -57,6 +57,8 @@ export function createNode(
     prompt_tokens: null,
     completion_tokens: null,
     thinking: null,
+    error: null,
+    cancelled: false,
   };
 }
 
@@ -163,6 +165,8 @@ function serializeNodes(
     prompt_tokens: node.prompt_tokens,
     completion_tokens: node.completion_tokens,
     thinking: node.thinking,
+    error: node.error,
+    cancelled: node.cancelled,
   }));
 }
 
@@ -405,8 +409,7 @@ export function createConversationStore(
         },
         onError: (message) => {
           logError("Execution error: " + message);
-          assistantNode.content =
-            assistantNode.content || `[error: ${message}]`;
+          assistantNode.error = message;
           tab.tree.nodes.set(assistantNode.node_id, assistantNode);
           tab.is_executing = false;
           tab.is_streaming = false;
@@ -434,6 +437,8 @@ export function createConversationStore(
       });
     } catch (e) {
       logError("Failed to execute: " + e);
+      assistantNode.error = e instanceof Error ? e.message : String(e);
+      tab.tree.nodes.set(assistantNode.node_id, assistantNode);
       tab.is_executing = false;
       tab.is_streaming = false;
       tab.streamed_content = "";
@@ -622,7 +627,7 @@ export function createConversationStore(
     if (path.length > 0) {
       const lastNode = tab.tree.nodes.get(path[path.length - 1]);
       if (lastNode && lastNode.role === "assistant") {
-        lastNode.content = (lastNode.content || "") + " [cancelled]";
+        lastNode.cancelled = true;
       }
     }
 
@@ -822,6 +827,8 @@ export function createConversationStore(
             prompt_tokens: serialized.prompt_tokens ?? null,
             completion_tokens: serialized.completion_tokens ?? null,
             thinking: serialized.thinking ?? null,
+            error: serialized.error ?? null,
+            cancelled: serialized.cancelled ?? false,
           });
         }
       } else if (entry.input_content) {
@@ -845,6 +852,8 @@ export function createConversationStore(
           prompt_tokens: null,
           completion_tokens: null,
           thinking: null,
+          error: null,
+          cancelled: false,
         });
 
         if (entry.output_content) {
@@ -862,6 +871,8 @@ export function createConversationStore(
             prompt_tokens: null,
             completion_tokens: null,
             thinking: null,
+            error: null,
+            cancelled: false,
           });
         }
       }

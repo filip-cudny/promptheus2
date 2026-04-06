@@ -16,6 +16,7 @@ use super::AiError;
 pub struct OpenAiResponsesProvider {
     http_client: reqwest::Client,
     base_url: String,
+    store: bool,
 }
 
 impl OpenAiResponsesProvider {
@@ -49,13 +50,13 @@ impl OpenAiResponsesProvider {
         let http_client = reqwest::Client::builder()
             .default_headers(headers)
             .connect_timeout(std::time::Duration::from_secs(10))
-            .timeout(std::time::Duration::from_secs(120))
             .build()
             .map_err(|e| AiError::Request(e.to_string()))?;
 
         Ok(Self {
             http_client,
             base_url,
+            store: model.store,
         })
     }
 }
@@ -86,13 +87,13 @@ fn to_responses_message(msg: &ProcessedMessage) -> serde_json::Value {
     })
 }
 
-fn build_request_body(request: &CompletionRequest, stream: bool) -> serde_json::Value {
+fn build_request_body(request: &CompletionRequest, stream: bool, store: bool) -> serde_json::Value {
     let mut instructions: Option<String> = None;
     let input_messages: Vec<serde_json::Value> = request
         .messages
         .iter()
         .filter(|m| {
-            if m.role == "system" {
+            if m.role == "system" || m.role == "developer" {
                 if let MessageContent::Text(ref text) = m.content {
                     instructions = Some(match instructions.take() {
                         Some(existing) => format!("{existing}\n{text}"),
@@ -111,14 +112,13 @@ fn build_request_body(request: &CompletionRequest, stream: bool) -> serde_json::
         "model": request.model,
         "input": input_messages,
         "stream": stream,
+        "store": store,
     });
 
     let obj = body.as_object_mut().unwrap();
     if let Some(instructions) = instructions {
         obj.insert("instructions".into(), serde_json::json!(instructions));
     }
-
-    let obj = body.as_object_mut().unwrap();
 
     if let Some(temp) = request.parameters.temperature {
         obj.insert("temperature".into(), serde_json::json!(temp));
@@ -136,6 +136,13 @@ fn build_request_body(request: &CompletionRequest, stream: bool) -> serde_json::
             reasoning["summary"] = serde_json::json!("auto");
         }
         obj.insert("reasoning".into(), reasoning);
+    }
+
+    if request.parameters.frequency_penalty.is_some() {
+        log::warn!("responses: frequency_penalty is not supported by the Responses API, ignoring");
+    }
+    if request.parameters.presence_penalty.is_some() {
+        log::warn!("responses: presence_penalty is not supported by the Responses API, ignoring");
     }
 
     log::debug!(
@@ -205,12 +212,13 @@ struct ResponseUsage {
 impl AiProvider for OpenAiResponsesProvider {
     async fn complete(&self, request: CompletionRequest) -> Result<String, AiError> {
         let url = format!("{}/responses", self.base_url);
-        let body = build_request_body(&request, false);
+        let body = build_request_body(&request, false, self.store);
 
         let response = self
             .http_client
             .post(&url)
             .json(&body)
+            .timeout(std::time::Duration::from_secs(120))
             .send()
             .await
             .map_err(|e| {
@@ -252,7 +260,7 @@ impl AiProvider for OpenAiResponsesProvider {
         request: CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk, AiError>> + Send>>, AiError> {
         let url = format!("{}/responses", self.base_url);
-        let body = build_request_body(&request, true);
+        let body = build_request_body(&request, true, self.store);
 
         let response = self
             .http_client

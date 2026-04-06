@@ -87,6 +87,9 @@ pub struct ModelConfig {
 
     #[serde(default)]
     pub api_mode: Option<ApiMode>,
+
+    #[serde(default = "default_true")]
+    pub store: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
