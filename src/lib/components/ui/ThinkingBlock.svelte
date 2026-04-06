@@ -9,10 +9,12 @@
     thinkingContent,
     isThinkingActive,
     isStreaming = false,
+    thinkingDuration = null,
   }: {
     thinkingContent: string;
     isThinkingActive: boolean;
     isStreaming: boolean;
+    thinkingDuration?: number | null;
   } = $props();
 
   let expanded = $state(false);
@@ -78,7 +80,7 @@
         <ChevronRight size={ICON_SIZE.sm} />
       {/if}
       <span class="thinking-summary">
-        Thought{#if finalElapsed != null}&nbsp;for {formatElapsed(finalElapsed)}{/if}
+        Thought{#if finalElapsed != null}&nbsp;for {formatElapsed(finalElapsed)}{:else if thinkingDuration != null}&nbsp;for {formatElapsed(thinkingDuration)}{/if}
       </span>
     </button>
     {#if expanded}

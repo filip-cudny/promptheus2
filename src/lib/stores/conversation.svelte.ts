@@ -4,10 +4,12 @@ import { generateId } from "$lib/utils/id";
 import {
   executeConversationFromTree,
   generateConversationTitle,
+  reconnectToExecution,
   releaseConversationContext,
   resolveSkillInput,
   seedConversationContext,
   type ExecutionCallbacks,
+  type ExecutionSnapshot,
 } from "$lib/services/promptExecution";
 import {
   addConversationEntry,
@@ -57,6 +59,7 @@ export function createNode(
     prompt_tokens: null,
     completion_tokens: null,
     thinking: null,
+    thinking_duration: null,
     error: null,
     cancelled: false,
     tool_calls: [],
@@ -148,6 +151,7 @@ function createTabState(
     reasoning_effort: reasoningEffort,
     streamed_thinking: "",
     is_thinking: false,
+    thinking_started_at: null,
     active_tool_calls: [],
     web_search_enabled: false,
   };
@@ -168,6 +172,7 @@ function serializeNodes(
     prompt_tokens: node.prompt_tokens,
     completion_tokens: node.completion_tokens,
     thinking: node.thinking,
+    thinking_duration: node.thinking_duration,
     error: node.error,
     cancelled: node.cancelled,
     tool_calls: node.tool_calls,
@@ -397,11 +402,20 @@ export function createConversationStore(
           tab.tree.nodes.set(assistantNode.node_id, assistantNode);
           tab.streamed_content = accumulated;
           tab.streamed_thinking = accumulatedThinking ?? "";
+          const wasThinking = tab.is_thinking;
           tab.is_thinking = accumulatedThinking != null && accumulated === "";
+          if (tab.is_thinking && !wasThinking) {
+            tab.thinking_started_at = Date.now();
+          } else if (!tab.is_thinking && wasThinking && tab.thinking_started_at) {
+            assistantNode.thinking_duration = Math.floor((Date.now() - tab.thinking_started_at) / 1000);
+          }
         },
         onDone: (fullText, usage, fullThinking) => {
           assistantNode.content = fullText;
           assistantNode.thinking = fullThinking ?? null;
+          if (tab.thinking_started_at && !assistantNode.thinking_duration) {
+            assistantNode.thinking_duration = Math.floor((Date.now() - tab.thinking_started_at) / 1000);
+          }
           assistantNode.prompt_tokens = usage?.prompt_tokens ?? null;
           assistantNode.completion_tokens = usage?.completion_tokens ?? null;
           tab.tree.nodes.set(assistantNode.node_id, assistantNode);
@@ -410,12 +424,16 @@ export function createConversationStore(
           tab.streamed_content = "";
           tab.streamed_thinking = "";
           tab.is_thinking = false;
+          tab.thinking_started_at = null;
           tab.active_tool_calls = [];
           success = true;
           resultText = fullText;
         },
         onError: (message) => {
           logError("Execution error: " + message);
+          if (tab.thinking_started_at && !assistantNode.thinking_duration) {
+            assistantNode.thinking_duration = Math.floor((Date.now() - tab.thinking_started_at) / 1000);
+          }
           assistantNode.error = message;
           tab.tree.nodes.set(assistantNode.node_id, assistantNode);
           tab.is_executing = false;
@@ -423,6 +441,7 @@ export function createConversationStore(
           tab.streamed_content = "";
           tab.streamed_thinking = "";
           tab.is_thinking = false;
+          tab.thinking_started_at = null;
           tab.active_tool_calls = [];
         },
         onNodeUpdates: (nodeId, updates) => {
@@ -494,6 +513,7 @@ export function createConversationStore(
       tab.streamed_content = "";
       tab.streamed_thinking = "";
       tab.is_thinking = false;
+      tab.thinking_started_at = null;
       tab.active_tool_calls = [];
     }
 
@@ -502,6 +522,127 @@ export function createConversationStore(
     }
 
     return { success, result: resultText };
+  }
+
+  async function tryReconnect(): Promise<boolean> {
+    const tab = getTab(activeTabId);
+    if (!tab) return false;
+
+    let assistantNode: ConversationNode | null = null;
+
+    const snapshot = await reconnectToExecution({
+      onChunk: (_delta, accumulated, _thinkingDelta, accumulatedThinking) => {
+        if (!assistantNode) return;
+        assistantNode.content = accumulated;
+        tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+        tab.streamed_content = accumulated;
+        tab.streamed_thinking = accumulatedThinking ?? "";
+        const wasThinking = tab.is_thinking;
+        tab.is_thinking = accumulatedThinking != null && accumulated === "";
+        if (tab.is_thinking && !wasThinking) {
+          tab.thinking_started_at = Date.now();
+        } else if (!tab.is_thinking && wasThinking && tab.thinking_started_at) {
+          assistantNode.thinking_duration = Math.floor((Date.now() - tab.thinking_started_at) / 1000);
+        }
+      },
+      onDone: (fullText, usage, fullThinking) => {
+        if (!assistantNode) return;
+        assistantNode.content = fullText;
+        assistantNode.thinking = fullThinking ?? null;
+        if (tab.thinking_started_at && !assistantNode.thinking_duration) {
+          assistantNode.thinking_duration = Math.floor((Date.now() - tab.thinking_started_at) / 1000);
+        }
+        assistantNode.prompt_tokens = usage?.prompt_tokens ?? null;
+        assistantNode.completion_tokens = usage?.completion_tokens ?? null;
+        tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+        tab.is_executing = false;
+        tab.is_streaming = false;
+        tab.streamed_content = "";
+        tab.streamed_thinking = "";
+        tab.is_thinking = false;
+        tab.thinking_started_at = null;
+        tab.active_tool_calls = [];
+        saveToHistory();
+      },
+      onError: (message) => {
+        if (!assistantNode) return;
+        logError("Reconnected execution error: " + message);
+        if (tab.thinking_started_at && !assistantNode.thinking_duration) {
+          assistantNode.thinking_duration = Math.floor((Date.now() - tab.thinking_started_at) / 1000);
+        }
+        assistantNode.error = message;
+        tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+        tab.is_executing = false;
+        tab.is_streaming = false;
+        tab.streamed_content = "";
+        tab.streamed_thinking = "";
+        tab.is_thinking = false;
+        tab.thinking_started_at = null;
+        tab.active_tool_calls = [];
+      },
+      onToolCallStart: (toolCall) => {
+        if (!assistantNode) return;
+        tab.active_tool_calls = [...tab.active_tool_calls, toolCall];
+        assistantNode.tool_calls = [...assistantNode.tool_calls, toolCall];
+        const marker = `{{tool_call:${toolCall.tool_call_id}}}`;
+        assistantNode.content += marker;
+        tab.streamed_content += marker;
+        tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+      },
+      onToolCallProgress: (toolCallId, partialResult) => {
+        tab.active_tool_calls = tab.active_tool_calls.map((tc) =>
+          tc.tool_call_id === toolCallId ? { ...tc, result: partialResult } : tc,
+        );
+      },
+      onToolCallDone: (toolCallId, result, error) => {
+        if (!assistantNode) return;
+        const status = error ? "failed" : "completed";
+        const now = new Date().toISOString();
+        assistantNode.tool_calls = assistantNode.tool_calls.map((tc) =>
+          tc.tool_call_id === toolCallId
+            ? { ...tc, status, result, error, completed_at: now }
+            : tc,
+        );
+        tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+        tab.active_tool_calls = tab.active_tool_calls.filter(
+          (tc) => tc.tool_call_id !== toolCallId,
+        );
+      },
+    });
+
+    if (!snapshot) return false;
+
+    const userNode = createNode("user", snapshot.user_message, null);
+    tab.tree.nodes.set(userNode.node_id, userNode);
+    tab.tree.root_node_id = userNode.node_id;
+    tab.tree.current_path = [userNode.node_id];
+
+    assistantNode = createNode("assistant", snapshot.accumulated_text, userNode.node_id);
+    assistantNode.tool_calls = snapshot.tool_calls;
+    tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+    userNode.children.push(assistantNode.node_id);
+    tab.tree.current_path.push(assistantNode.node_id);
+
+    if (snapshot.finished) {
+      assistantNode.thinking = snapshot.accumulated_thinking ?? null;
+      assistantNode.prompt_tokens = snapshot.prompt_tokens ?? null;
+      assistantNode.completion_tokens = snapshot.completion_tokens ?? null;
+      if (snapshot.error) {
+        assistantNode.error = snapshot.error;
+      }
+      await saveToHistory();
+    } else {
+      tab.is_executing = true;
+      tab.is_streaming = true;
+      tab.streamed_content = snapshot.accumulated_text;
+      tab.streamed_thinking = snapshot.accumulated_thinking ?? "";
+      tab.is_thinking = snapshot.is_thinking;
+      tab.active_tool_calls = snapshot.tool_calls.filter(
+        (tc) => tc.status === "in_progress" || tc.status === "pending",
+      );
+    }
+
+    return true;
   }
 
   async function sendMessage(): Promise<{ success: boolean; result: string }> {
@@ -688,6 +829,7 @@ export function createConversationStore(
     tab.streamed_content = "";
     tab.streamed_thinking = "";
     tab.is_thinking = false;
+    tab.thinking_started_at = null;
     tab.active_tool_calls = [];
   }
 
@@ -886,6 +1028,7 @@ export function createConversationStore(
             prompt_tokens: serialized.prompt_tokens ?? null,
             completion_tokens: serialized.completion_tokens ?? null,
             thinking: serialized.thinking ?? null,
+            thinking_duration: serialized.thinking_duration ?? null,
             error: serialized.error ?? null,
             cancelled: serialized.cancelled ?? false,
             tool_calls: serialized.tool_calls ?? [],
@@ -912,6 +1055,7 @@ export function createConversationStore(
           prompt_tokens: null,
           completion_tokens: null,
           thinking: null,
+          thinking_duration: null,
           error: null,
           cancelled: false,
           tool_calls: [],
@@ -932,6 +1076,7 @@ export function createConversationStore(
             prompt_tokens: null,
             completion_tokens: null,
             thinking: null,
+            thinking_duration: null,
             error: null,
             cancelled: false,
             tool_calls: [],
@@ -1140,6 +1285,7 @@ export function createConversationStore(
     updateReasoningEffort,
     toggleWebSearch,
     initFromSettings,
+    tryReconnect,
     approveToolCall,
     rejectToolCall,
     retryToolCall,

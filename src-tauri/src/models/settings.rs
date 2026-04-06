@@ -27,6 +27,9 @@ pub struct Settings {
     #[serde(default)]
     pub default_model: Option<String>,
 
+    #[serde(default)]
+    pub quick_action_default_model: Option<String>,
+
     #[serde(default = "default_debounce_ms")]
     pub number_input_debounce_ms: u32,
 
@@ -325,6 +328,7 @@ impl Default for Settings {
             notifications: NotificationSettings::default(),
             speech_to_text_model: None,
             default_model: None,
+            quick_action_default_model: None,
             number_input_debounce_ms: 200,
             models: Vec::new(),
             keymaps: Vec::new(),

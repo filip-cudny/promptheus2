@@ -1,23 +1,27 @@
+use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Instant;
 
 use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
-use tokio_stream::StreamExt;
+use tokio::sync::Mutex as TokioMutex;
+use tokio_stream::{Stream, StreamExt};
 
 use crate::commands::settings::AppState;
 use crate::services::config::ConfigService;
 use crate::models::ai::{StreamEvent, ToolCall, ToolCallStatus, ToolCallType};
 use crate::models::settings::ModelParameters;
-use crate::services::ai::provider::ToolCallEvent;
+use crate::services::ai::AiError;
+use crate::services::ai::provider::{StreamChunk, ToolCallEvent};
 use crate::models::history::SerializedConversationNode;
 use crate::models::message::{
     ConversationNodeForExecution, ImageData, MessageContent,
     NodeUpdate, ProcessedMessage,
 };
 use crate::services::notification::NotificationLevel;
-use crate::services::prompt_execution::PromptExecutionService;
+use crate::services::prompt_execution::{ExecutionSnapshot, LiveExecution, PromptExecutionService};
 use crate::services::skill_execution;
 
 fn tool_display_name(tool_name: &str) -> &str {
@@ -34,35 +38,130 @@ fn tool_type_from_name(tool_name: &str) -> ToolCallType {
     }
 }
 
-fn emit_tool_call_event(on_event: &Channel<StreamEvent>, event: ToolCallEvent) {
-    match event {
-        ToolCallEvent::Started { tool_call_id, tool_name } => {
-            let display_name = tool_display_name(&tool_name).to_string();
-            let tool_type = tool_type_from_name(&tool_name);
-            let _ = on_event.send(StreamEvent::ToolCallStart {
-                tool_call: ToolCall {
-                    tool_call_id,
-                    tool_name,
-                    tool_display_name: display_name,
-                    tool_type,
-                    arguments: serde_json::json!({}),
-                    result: None,
-                    error: None,
-                    status: ToolCallStatus::InProgress,
-                    requires_confirmation: false,
-                    started_at: Some(chrono::Utc::now().to_rfc3339()),
-                    completed_at: None,
-                },
-            });
+struct StreamResult {
+    full_text: String,
+    full_thinking: Option<String>,
+    prompt_tokens: Option<usize>,
+    completion_tokens: Option<usize>,
+}
+
+async fn run_stream_loop(
+    mut stream: Pin<Box<dyn Stream<Item = Result<StreamChunk, AiError>> + Send>>,
+    live: Arc<TokioMutex<LiveExecution>>,
+) -> Result<StreamResult, String> {
+    let mut full_text = String::new();
+    let mut full_thinking = String::new();
+    let mut prompt_tokens: Option<usize> = None;
+    let mut completion_tokens: Option<usize> = None;
+
+    while let Some(result) = stream.next().await {
+        match result {
+            Ok(chunk) => {
+                if let Some(usage) = chunk.usage {
+                    prompt_tokens = Some(usage.prompt_tokens);
+                    completion_tokens = Some(usage.completion_tokens);
+                }
+
+                if let Some(tool_event) = chunk.tool_call_event {
+                    full_text.clone_from(&chunk.accumulated);
+                    let mut live = live.lock().await;
+                    live.snapshot.accumulated_text.clone_from(&chunk.accumulated);
+
+                    match tool_event {
+                        ToolCallEvent::Started { tool_call_id, tool_name } => {
+                            let display_name = tool_display_name(&tool_name).to_string();
+                            let tool_type = tool_type_from_name(&tool_name);
+                            let tc = ToolCall {
+                                tool_call_id,
+                                tool_name,
+                                tool_display_name: display_name,
+                                tool_type,
+                                arguments: serde_json::json!({}),
+                                result: None,
+                                error: None,
+                                status: ToolCallStatus::InProgress,
+                                requires_confirmation: false,
+                                started_at: Some(chrono::Utc::now().to_rfc3339()),
+                                completed_at: None,
+                            };
+                            live.snapshot.tool_calls.push(tc.clone());
+                            if let Some(ref ch) = live.channel {
+                                if ch.send(StreamEvent::ToolCallStart { tool_call: tc }).is_err() {
+                                    live.channel = None;
+                                }
+                            }
+                        }
+                        ToolCallEvent::Done { tool_call_id, result, error } => {
+                            if let Some(tc) = live.snapshot.tool_calls.iter_mut().find(|t| t.tool_call_id == tool_call_id) {
+                                tc.status = if error.is_some() { ToolCallStatus::Failed } else { ToolCallStatus::Completed };
+                                tc.result.clone_from(&result);
+                                tc.error.clone_from(&error);
+                                tc.completed_at = Some(chrono::Utc::now().to_rfc3339());
+                            }
+                            if let Some(ref ch) = live.channel {
+                                if ch.send(StreamEvent::ToolCallDone { tool_call_id, result, error }).is_err() {
+                                    live.channel = None;
+                                }
+                            }
+                        }
+                    }
+                    continue;
+                }
+
+                let has_content = !chunk.delta.is_empty() || chunk.thinking_delta.is_some();
+                if has_content {
+                    full_text.clone_from(&chunk.accumulated);
+                    if let Some(ref acc) = chunk.accumulated_thinking {
+                        full_thinking.clone_from(acc);
+                    }
+
+                    let mut live = live.lock().await;
+                    live.snapshot.accumulated_text.clone_from(&chunk.accumulated);
+                    live.snapshot.accumulated_thinking = chunk.accumulated_thinking.clone();
+                    live.snapshot.is_thinking = chunk.accumulated_thinking.is_some() && chunk.accumulated.is_empty();
+
+                    if let Some(ref ch) = live.channel {
+                        if ch.send(StreamEvent::Chunk {
+                            delta: chunk.delta,
+                            accumulated: chunk.accumulated,
+                            thinking_delta: chunk.thinking_delta,
+                            accumulated_thinking: chunk.accumulated_thinking,
+                        }).is_err() {
+                            live.channel = None;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                let msg = e.to_string();
+                let mut live = live.lock().await;
+                live.snapshot.finished = true;
+                live.snapshot.error = Some(msg.clone());
+                if let Some(ref ch) = live.channel {
+                    let _ = ch.send(StreamEvent::Error { message: msg.clone() });
+                }
+                return Err(msg);
+            }
         }
-        ToolCallEvent::Done { tool_call_id, result, error } => {
-            let _ = on_event.send(StreamEvent::ToolCallDone {
-                tool_call_id,
-                result,
-                error,
+    }
+
+    let thinking = if full_thinking.is_empty() { None } else { Some(full_thinking) };
+    {
+        let mut live = live.lock().await;
+        live.snapshot.finished = true;
+        live.snapshot.prompt_tokens = prompt_tokens;
+        live.snapshot.completion_tokens = completion_tokens;
+        if let Some(ref ch) = live.channel {
+            let _ = ch.send(StreamEvent::Done {
+                full_text: full_text.clone(),
+                full_thinking: thinking.clone(),
+                prompt_tokens,
+                completion_tokens,
             });
         }
     }
+
+    Ok(StreamResult { full_text, full_thinking: thinking, prompt_tokens, completion_tokens })
 }
 
 #[derive(Clone, Serialize)]
@@ -102,7 +201,7 @@ pub async fn execute_skill(
             })?;
         let skill_display_name = skill.display_name.clone();
 
-        let model_id = PromptExecutionService::resolve_model(&state.config, skill.model.as_deref())
+        let model_id = PromptExecutionService::resolve_quick_action_model(&state.config, skill.model.as_deref())
             .map_err(|e| {
                 state.prompt_execution.finish_execution();
                 e.to_string()
@@ -139,6 +238,12 @@ pub async fn execute_skill(
         (execution_id, model_id, model_display_name, skill_display_name, input_content, messages, ai, skill_param_overrides)
     };
 
+    let user_display_text = format!("/{skill_name} {input_content}");
+    let live_execution = {
+        let mut state = state.lock().await;
+        state.prompt_execution.start_live(&execution_id, user_display_text.clone(), on_event)
+    };
+
     let _ = app.emit(
         "execution-started",
         ExecutionStartedPayload {
@@ -153,69 +258,7 @@ pub async fn execute_skill(
             .map_err(|e| e.to_string());
 
         match stream {
-            Ok(mut stream) => {
-                let mut full_text = String::new();
-                let mut full_thinking = String::new();
-                let mut stream_error: Option<String> = None;
-                let mut prompt_tokens: Option<usize> = None;
-                let mut completion_tokens: Option<usize> = None;
-
-                while let Some(result) = stream.next().await {
-                    match result {
-                        Ok(chunk) => {
-                            if let Some(usage) = chunk.usage {
-                                prompt_tokens = Some(usage.prompt_tokens);
-                                completion_tokens = Some(usage.completion_tokens);
-                            }
-                            if let Some(tool_event) = chunk.tool_call_event {
-                                emit_tool_call_event(&on_event, tool_event);
-                                full_text.clone_from(&chunk.accumulated);
-                                continue;
-                            }
-                            let has_content = !chunk.delta.is_empty() || chunk.thinking_delta.is_some();
-                            if has_content {
-                                full_text.clone_from(&chunk.accumulated);
-                                if let Some(ref acc) = chunk.accumulated_thinking {
-                                    full_thinking.clone_from(acc);
-                                }
-                                if on_event
-                                    .send(StreamEvent::Chunk {
-                                        delta: chunk.delta,
-                                        accumulated: chunk.accumulated,
-                                        thinking_delta: chunk.thinking_delta,
-                                        accumulated_thinking: chunk.accumulated_thinking,
-                                    })
-                                    .is_err()
-                                {
-                                    break;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            let msg = e.to_string();
-                            let _ = on_event.send(StreamEvent::Error {
-                                message: msg.clone(),
-                            });
-                            stream_error = Some(msg);
-                            break;
-                        }
-                    }
-                }
-
-                match stream_error {
-                    Some(err) => Err(err),
-                    None => {
-                        let thinking = if full_thinking.is_empty() { None } else { Some(full_thinking) };
-                        let _ = on_event.send(StreamEvent::Done {
-                            full_text: full_text.clone(),
-                            full_thinking: thinking,
-                            prompt_tokens,
-                            completion_tokens,
-                        });
-                        Ok(full_text)
-                    }
-                }
-            }
+            Ok(stream) => run_stream_loop(stream, live_execution).await,
             Err(e) => Err(e),
         }
     };
@@ -223,15 +266,14 @@ pub async fn execute_skill(
     let mut state = state.lock().await;
 
     match stream_result {
-        Ok(full_text) => {
+        Ok(result) => {
+            let full_text = result.full_text;
             let _ = state.clipboard.set_text(&full_text);
             let elapsed = start_time.elapsed();
 
             let now = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
             let user_node_id = format!("skill-user-{}", uuid::Uuid::new_v4());
             let assistant_node_id = format!("skill-asst-{}", uuid::Uuid::new_v4());
-
-            let user_display_text = format!("/{skill_name} {input_content}");
 
             let user_node = SerializedConversationNode {
                 node_id: user_node_id.clone(),
@@ -244,6 +286,7 @@ pub async fn execute_skill(
                 prompt_tokens: None,
                 completion_tokens: None,
                 thinking: None,
+                thinking_duration: None,
                 error: None,
                 cancelled: false,
                 tool_calls: vec![],
@@ -261,6 +304,7 @@ pub async fn execute_skill(
                 prompt_tokens: None,
                 completion_tokens: None,
                 thinking: None,
+                thinking_duration: None,
                 error: None,
                 cancelled: false,
                 tool_calls: vec![],
@@ -590,6 +634,16 @@ pub async fn execute_conversation_from_tree(
         )
     };
 
+    let user_message = nodes.iter().rev()
+        .find(|n| n.role == "user")
+        .map(|n| n.content.clone())
+        .unwrap_or_default();
+
+    let live_execution = {
+        let mut state = state.lock().await;
+        state.prompt_execution.start_live(&execution_id, user_message, on_event.clone())
+    };
+
     if let Some((node_id, updates)) = updates_for_event {
         let _ = on_event.send(StreamEvent::NodeUpdates { node_id, updates });
     }
@@ -608,69 +662,7 @@ pub async fn execute_conversation_from_tree(
             .map_err(|e| e.to_string());
 
         match stream {
-            Ok(mut stream) => {
-                let mut full_text = String::new();
-                let mut full_thinking = String::new();
-                let mut stream_error: Option<String> = None;
-                let mut prompt_tokens: Option<usize> = None;
-                let mut completion_tokens: Option<usize> = None;
-
-                while let Some(result) = stream.next().await {
-                    match result {
-                        Ok(chunk) => {
-                            if let Some(usage) = chunk.usage {
-                                prompt_tokens = Some(usage.prompt_tokens);
-                                completion_tokens = Some(usage.completion_tokens);
-                            }
-                            if let Some(tool_event) = chunk.tool_call_event {
-                                emit_tool_call_event(&on_event, tool_event);
-                                full_text.clone_from(&chunk.accumulated);
-                                continue;
-                            }
-                            let has_content = !chunk.delta.is_empty() || chunk.thinking_delta.is_some();
-                            if has_content {
-                                full_text.clone_from(&chunk.accumulated);
-                                if let Some(ref acc) = chunk.accumulated_thinking {
-                                    full_thinking.clone_from(acc);
-                                }
-                                if on_event
-                                    .send(StreamEvent::Chunk {
-                                        delta: chunk.delta,
-                                        accumulated: chunk.accumulated,
-                                        thinking_delta: chunk.thinking_delta,
-                                        accumulated_thinking: chunk.accumulated_thinking,
-                                    })
-                                    .is_err()
-                                {
-                                    break;
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            let msg = e.to_string();
-                            let _ = on_event.send(StreamEvent::Error {
-                                message: msg.clone(),
-                            });
-                            stream_error = Some(msg);
-                            break;
-                        }
-                    }
-                }
-
-                match stream_error {
-                    Some(err) => Err(err),
-                    None => {
-                        let thinking = if full_thinking.is_empty() { None } else { Some(full_thinking) };
-                        let _ = on_event.send(StreamEvent::Done {
-                            full_text: full_text.clone(),
-                            full_thinking: thinking,
-                            prompt_tokens,
-                            completion_tokens,
-                        });
-                        Ok(full_text)
-                    }
-                }
-            }
+            Ok(stream) => run_stream_loop(stream, live_execution).await,
             Err(e) => Err(e),
         }
     };
@@ -678,7 +670,7 @@ pub async fn execute_conversation_from_tree(
     let mut state = state.lock().await;
 
     match stream_result {
-        Ok(_full_text) => {
+        Ok(_result) => {
             state.prompt_execution.finish_execution();
             let _ = app.emit(
                 "execution-completed",
@@ -713,3 +705,27 @@ pub async fn execute_conversation_from_tree(
     }
 }
 
+
+#[tauri::command]
+pub async fn reconnect_to_execution(
+    state: State<'_, Mutex<AppState>>,
+    on_event: Channel<StreamEvent>,
+) -> Result<Option<ExecutionSnapshot>, String> {
+    let live_arc = {
+        let state = state.lock().await;
+        state.prompt_execution.live.clone()
+    };
+
+    let Some(live_arc) = live_arc else {
+        return Ok(None);
+    };
+
+    let mut live = live_arc.lock().await;
+    let snapshot = live.snapshot.clone();
+
+    if !snapshot.finished {
+        live.channel = Some(on_event);
+    }
+
+    Ok(Some(snapshot))
+}

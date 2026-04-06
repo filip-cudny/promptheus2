@@ -24,13 +24,8 @@ export interface ExecutionCallbacks {
   onToolCallConfirmation?: (toolCallId: string) => void;
 }
 
-export async function executeSkill(
-  skillName: string,
-  callbacks: ExecutionCallbacks,
-  inputOverride?: string,
-): Promise<void> {
-  const onEvent = new Channel<StreamEvent>();
-  onEvent.onmessage = (event) => {
+function routeStreamEvent(callbacks: ExecutionCallbacks): (event: StreamEvent) => void {
+  return (event) => {
     switch (event.event) {
       case "chunk":
         callbacks.onChunk(event.data.delta, event.data.accumulated, event.data.thinking_delta, event.data.accumulated_thinking);
@@ -43,6 +38,9 @@ export async function executeSkill(
         break;
       case "error":
         callbacks.onError(event.data.message);
+        break;
+      case "node_updates":
+        callbacks.onNodeUpdates?.(event.data.node_id, event.data.updates);
         break;
       case "tool_call_start":
         callbacks.onToolCallStart?.(event.data.tool_call);
@@ -58,6 +56,15 @@ export async function executeSkill(
         break;
     }
   };
+}
+
+export async function executeSkill(
+  skillName: string,
+  callbacks: ExecutionCallbacks,
+  inputOverride?: string,
+): Promise<void> {
+  const onEvent = new Channel<StreamEvent>();
+  onEvent.onmessage = routeStreamEvent(callbacks);
   return invoke("execute_skill", {
     skillName,
     inputOverride: inputOverride ?? null,
@@ -110,37 +117,7 @@ export async function executeConversationFromTree(
   },
 ): Promise<void> {
   const onEvent = new Channel<StreamEvent>();
-  onEvent.onmessage = (event) => {
-    switch (event.event) {
-      case "chunk":
-        callbacks.onChunk(event.data.delta, event.data.accumulated, event.data.thinking_delta, event.data.accumulated_thinking);
-        break;
-      case "done":
-        callbacks.onDone(event.data.full_text, {
-          prompt_tokens: event.data.prompt_tokens,
-          completion_tokens: event.data.completion_tokens,
-        }, event.data.full_thinking);
-        break;
-      case "error":
-        callbacks.onError(event.data.message);
-        break;
-      case "node_updates":
-        callbacks.onNodeUpdates?.(event.data.node_id, event.data.updates);
-        break;
-      case "tool_call_start":
-        callbacks.onToolCallStart?.(event.data.tool_call);
-        break;
-      case "tool_call_progress":
-        callbacks.onToolCallProgress?.(event.data.tool_call_id, event.data.partial_result);
-        break;
-      case "tool_call_done":
-        callbacks.onToolCallDone?.(event.data.tool_call_id, event.data.result, event.data.error);
-        break;
-      case "tool_call_confirmation":
-        callbacks.onToolCallConfirmation?.(event.data.tool_call_id);
-        break;
-    }
-  };
+  onEvent.onmessage = routeStreamEvent(callbacks);
   return invoke("execute_conversation_from_tree", {
     nodes,
     contextText: options.contextText ?? null,
@@ -153,4 +130,25 @@ export async function executeConversationFromTree(
     toolsOverride: options.toolsOverride ?? null,
     onEvent,
   });
+}
+
+export interface ExecutionSnapshot {
+  execution_id: string;
+  user_message: string;
+  accumulated_text: string;
+  accumulated_thinking: string | null;
+  tool_calls: ToolCall[];
+  is_thinking: boolean;
+  finished: boolean;
+  error: string | null;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+}
+
+export async function reconnectToExecution(
+  callbacks: ExecutionCallbacks,
+): Promise<ExecutionSnapshot | null> {
+  const onEvent = new Channel<StreamEvent>();
+  onEvent.onmessage = routeStreamEvent(callbacks);
+  return invoke("reconnect_to_execution", { onEvent });
 }

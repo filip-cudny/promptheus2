@@ -138,7 +138,8 @@ impl MenuCoordinator {
             return Vec::new();
         }
 
-        let default_model_id = settings.default_model.clone();
+        let default_model_id = settings.quick_action_default_model.clone()
+            .or_else(|| settings.default_model.clone());
 
         let default_reasoning_effort = default_model_id
             .as_ref()

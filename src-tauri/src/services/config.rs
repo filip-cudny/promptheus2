@@ -45,6 +45,10 @@ impl ConfigService {
             settings.default_model = Some(settings.models[0].id.clone());
         }
 
+        if settings.quick_action_default_model.is_none() {
+            settings.quick_action_default_model = settings.default_model.clone();
+        }
+
         validate(&settings)?;
 
         Ok(ConfigService {
@@ -158,6 +162,10 @@ impl ConfigService {
             settings.default_model = Some(settings.models[0].id.clone());
         }
 
+        if settings.quick_action_default_model.is_none() {
+            settings.quick_action_default_model = settings.default_model.clone();
+        }
+
         validate(&settings)?;
         self.settings = settings;
         log::debug!("settings reloaded");
@@ -192,6 +200,9 @@ impl ConfigService {
             }
             "default_model" => {
                 self.settings.default_model = value.as_str().map(|s| s.to_string());
+            }
+            "quick_action_default_model" => {
+                self.settings.quick_action_default_model = value.as_str().map(|s| s.to_string());
             }
             "number_input_debounce_ms" => {
                 if let Some(v) = value.as_u64() {

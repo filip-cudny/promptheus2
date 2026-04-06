@@ -13,6 +13,7 @@ export interface ConversationNode {
   prompt_tokens: number | null;
   completion_tokens: number | null;
   thinking: string | null;
+  thinking_duration: number | null;
   error: string | null;
   cancelled: boolean;
   tool_calls: ToolCall[];
@@ -54,6 +55,7 @@ export interface TabState {
   reasoning_effort: string | null;
   streamed_thinking: string;
   is_thinking: boolean;
+  thinking_started_at: number | null;
   active_tool_calls: ToolCall[];
   web_search_enabled: boolean;
 }

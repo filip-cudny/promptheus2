@@ -92,8 +92,10 @@
     await store.initFromSettings();
     loadModelInfo();
 
+    const reconnected = await store.tryReconnect();
+
     const initParams = await invoke<DialogInitParams | null>("get_dialog_init_params");
-    if (initParams) {
+    if (!reconnected && initParams) {
       await applyInitParams(initParams);
     }
 

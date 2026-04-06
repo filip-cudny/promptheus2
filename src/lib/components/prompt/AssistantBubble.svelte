@@ -196,7 +196,7 @@
     {/snippet}
 
     {#if thinkingContent || isThinkingActive}
-      <ThinkingBlock {thinkingContent} {isThinkingActive} {isStreaming} />
+      <ThinkingBlock {thinkingContent} {isThinkingActive} {isStreaming} thinkingDuration={node.thinking_duration} />
     {/if}
 
     {#if editMode}

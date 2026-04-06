@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from "svelte";
+  import { slide } from "svelte/transition";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { debug as logDebug } from "@tauri-apps/plugin-log";
@@ -9,7 +10,7 @@
   import ContextSection from "./ContextSection.svelte";
   import LastInteractionSection from "./LastInteractionSection.svelte";
   import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
-  import { Info, MessageSquare, MessageSquareShare, Mic, Square } from "lucide-svelte";
+  import { ChevronRight, Info, MessageSquare, MessageSquareShare, Mic, Square } from "lucide-svelte";
   import { openConversationDialog } from "$lib/services/conversationDialog";
   import { isExecuting } from "$lib/stores/execution.svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
@@ -105,6 +106,7 @@
 
   let menuEl: HTMLDivElement | undefined = $state();
   let expandedDescriptionId = $state("");
+  let settingsModelExpanded = $state(false);
   let hoverEnabled = $state(false);
   let shiftHeld = $state(false);
 
@@ -205,10 +207,14 @@
     const gen = ++resizeGeneration;
     await tick();
     if (gen !== resizeGeneration) return;
+    resizeWindowImmediate();
+  }
+
+  function resizeWindowImmediate() {
     if (!menuEl || !isVisible()) return;
     const height = menuEl.scrollHeight + 2;
     const win = getCurrentWebviewWindow();
-    await win.setSize(new LogicalSize(MENU_WIDTH, height));
+    win.setSize(new LogicalSize(MENU_WIDTH, height));
   }
 
   function handleMouseMove() {
@@ -224,6 +230,7 @@
 
   $effect(() => {
     void expandedDescriptionId;
+    void settingsModelExpanded;
     void menuItems;
     if (menuVisible && menuItems.length > 0) {
       resizeWindow();
@@ -247,11 +254,11 @@
       currentSection.items.push({ item, globalIndex: i });
     }
 
-    return groups;
+    return groups.filter((g) => g.sectionId !== "models");
   });
 
   let menuVisible = $derived(isVisible());
-  $effect(() => { if (!menuVisible) expandedDescriptionId = ""; });
+  $effect(() => { if (!menuVisible) { expandedDescriptionId = ""; settingsModelExpanded = false; } });
 
   $effect(() => {
     const items = getItems();
@@ -263,6 +270,10 @@
         modelsReasoningEffort = data.default_reasoning_effort;
       }
     }
+  });
+  let modelsData = $derived.by(() => {
+    const modelsItem = getItems().find((i) => i.item_type === "models");
+    return modelsItem ? extractModelsData(modelsItem) : null;
   });
   let menuItems = $derived(getItems());
   let allSkillItems = $derived(getAllSkillItems());
@@ -348,49 +359,69 @@
           </button>
         </div>
       {/if}
-      {#if section.sectionId === "models"}
-        {@const modelsItem = section.items[0]?.item}
-        {@const modelsData = modelsItem ? extractModelsData(modelsItem) : null}
-        {#if modelsData && modelsData.models.length > 0}
-          <div class="models-row" onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}>
-            <ModelSelector
-              models={modelsData.models.map((m) => ({
-                id: m.id,
-                model: m.model,
-                display_name: m.display_name,
-                provider: m.provider,
-                api_key_source: "env" as const,
-                api_key_env: null,
-                api_key: null,
-                base_url: null,
-                parameters: m.reasoning_effort ? { temperature: null, max_tokens: null, top_p: null, frequency_penalty: null, presence_penalty: null, reasoning_effort: m.reasoning_effort } : null,
-                context_window_size: null,
-                enabled_tools: [],
-              }))}
-              selectedModelId={modelsDefaultModelId}
-              reasoningEffort={modelsReasoningEffort}
-              onModelSelect={async (modelId) => {
-                modelsDefaultModelId = modelId;
-                const model = modelsData.models.find((m) => m.id === modelId);
-                modelsReasoningEffort = model?.reasoning_effort ?? null;
-                await updateSetting("default_model", modelId);
-              }}
-              onReasoningSelect={async (effort) => {
-                modelsReasoningEffort = effort;
-                if (modelsDefaultModelId) {
-                  await updateModelReasoningEffort(modelsDefaultModelId, effort);
-                }
-              }}
-              preventDismiss={{ suppress: suppressClose, resume: resumeClose }}
-              onDropdownToggle={() => resizeWindow()}
-            />
-          </div>
-        {/if}
-      {/if}
       {#if section.sectionId === "skills"}
         <div data-section="skills-anchor"></div>
       {/if}
-      {#each section.sectionId === "chat" || section.sectionId === "models" ? [] : section.items as { item, globalIndex }}
+      {#if section.sectionId === "settings"}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="menu-item-row"
+          onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}
+        >
+          <button
+            class="menu-item settings-toggle"
+            role="menuitem"
+            tabindex={-1}
+            onclick={() => { settingsModelExpanded = !settingsModelExpanded; }}
+          >
+            <span class="settings-chevron" class:expanded={settingsModelExpanded}>
+              <ChevronRight size={ICON_SIZE.sm} />
+            </span>
+            <span class="item-label">Settings</span>
+          </button>
+        </div>
+        {#if settingsModelExpanded}
+          <div class="settings-subsection" transition:slide={{ duration: 150 }} onintrostart={() => resizeWindowImmediate()} onoutroend={() => resizeWindowImmediate()}>
+            {#if modelsData && modelsData.models.length > 0}
+              <div class="subsection-label">Quick Action Model</div>
+              <div class="models-row subsection-models" onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}>
+                <ModelSelector
+                  models={modelsData.models.map((m) => ({
+                    id: m.id,
+                    model: m.model,
+                    display_name: m.display_name,
+                    provider: m.provider,
+                    api_key_source: "env" as const,
+                    api_key_env: null,
+                    api_key: null,
+                    base_url: null,
+                    parameters: m.reasoning_effort ? { temperature: null, max_tokens: null, top_p: null, frequency_penalty: null, presence_penalty: null, reasoning_effort: m.reasoning_effort } : null,
+                    context_window_size: null,
+                    enabled_tools: [],
+                  }))}
+                  selectedModelId={modelsDefaultModelId}
+                  reasoningEffort={modelsReasoningEffort}
+                  onModelSelect={async (modelId) => {
+                    modelsDefaultModelId = modelId;
+                    const model = modelsData.models.find((m) => m.id === modelId);
+                    modelsReasoningEffort = model?.reasoning_effort ?? null;
+                    await updateSetting("quick_action_default_model", modelId);
+                  }}
+                  onReasoningSelect={async (effort) => {
+                    modelsReasoningEffort = effort;
+                    if (modelsDefaultModelId) {
+                      await updateModelReasoningEffort(modelsDefaultModelId, effort);
+                    }
+                  }}
+                  preventDismiss={{ suppress: suppressClose, resume: resumeClose }}
+                  onDropdownToggle={() => resizeWindow()}
+                />
+              </div>
+            {/if}
+          </div>
+        {/if}
+      {/if}
+      {#each section.sectionId === "chat" || section.sectionId === "settings" ? [] : section.items as { item, globalIndex }}
         {@const contextItems = extractContextItems(item)}
         {@const lastInteractionData = extractLastInteractionData(item)}
         {#if contextItems}
@@ -460,7 +491,7 @@
             {/if}
           </div>
           {#if expandedDescriptionId === item.id && item.tooltip}
-            <div class="description-row">{item.tooltip}</div>
+            <div class="description-row" transition:slide={{ duration: 150 }}>{item.tooltip}</div>
           {/if}
         {/if}
       {/each}
@@ -653,5 +684,34 @@
     color: rgba(255, 255, 255, 0.45);
     font-size: 12px;
     line-height: 1.3;
+  }
+
+  .settings-toggle {
+    gap: 4px;
+  }
+
+  .settings-chevron {
+    display: flex;
+    align-items: center;
+    transition: transform 150ms ease;
+    color: rgba(255, 255, 255, 0.4);
+  }
+
+  .settings-chevron.expanded {
+    transform: rotate(90deg);
+  }
+
+  .settings-subsection {
+    overflow: hidden;
+  }
+
+  .subsection-label {
+    padding: 4px 12px 2px 28px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  .subsection-models {
+    padding: 2px 12px 4px 28px;
   }
 </style>

@@ -19,7 +19,10 @@
     onRetry?: (toolCallId: string) => void;
   } = $props();
 
-  let expanded = $state(true);
+  let allCompletedOnMount = toolCalls.length > 0 &&
+    toolCalls.every((tc) => tc.status === "completed" || tc.status === "failed" || tc.status === "cancelled");
+
+  let expanded = $state(!allCompletedOnMount);
   let wasActive = $state(false);
 
   let allCompleted = $derived(

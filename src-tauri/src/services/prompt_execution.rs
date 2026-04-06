@@ -1,5 +1,11 @@
+use std::sync::Arc;
+
+use serde::Serialize;
+use tauri::ipc::Channel;
+use tokio::sync::Mutex as TokioMutex;
 use uuid::Uuid;
 
+use crate::models::ai::{StreamEvent, ToolCall};
 use crate::services::config::ConfigService;
 
 #[derive(Debug, thiserror::Error)]
@@ -11,9 +17,29 @@ pub enum ExecutionError {
     ModelNotFound(String),
 }
 
+#[derive(Clone, Serialize)]
+pub struct ExecutionSnapshot {
+    pub execution_id: String,
+    pub user_message: String,
+    pub accumulated_text: String,
+    pub accumulated_thinking: Option<String>,
+    pub tool_calls: Vec<ToolCall>,
+    pub is_thinking: bool,
+    pub finished: bool,
+    pub error: Option<String>,
+    pub prompt_tokens: Option<usize>,
+    pub completion_tokens: Option<usize>,
+}
+
+pub struct LiveExecution {
+    pub snapshot: ExecutionSnapshot,
+    pub channel: Option<Channel<StreamEvent>>,
+}
+
 pub struct PromptExecutionService {
     is_executing: bool,
     current_execution_id: Option<String>,
+    pub live: Option<Arc<TokioMutex<LiveExecution>>>,
 }
 
 impl PromptExecutionService {
@@ -21,6 +47,7 @@ impl PromptExecutionService {
         Self {
             is_executing: false,
             current_execution_id: None,
+            live: None,
         }
     }
 
@@ -42,9 +69,35 @@ impl PromptExecutionService {
         Ok(execution_id)
     }
 
+    pub fn start_live(
+        &mut self,
+        execution_id: &str,
+        user_message: String,
+        channel: Channel<StreamEvent>,
+    ) -> Arc<TokioMutex<LiveExecution>> {
+        let live = Arc::new(TokioMutex::new(LiveExecution {
+            snapshot: ExecutionSnapshot {
+                execution_id: execution_id.to_string(),
+                user_message,
+                accumulated_text: String::new(),
+                accumulated_thinking: None,
+                tool_calls: Vec::new(),
+                is_thinking: false,
+                finished: false,
+                error: None,
+                prompt_tokens: None,
+                completion_tokens: None,
+            },
+            channel: Some(channel),
+        }));
+        self.live = Some(Arc::clone(&live));
+        live
+    }
+
     pub fn finish_execution(&mut self) {
         self.is_executing = false;
         self.current_execution_id = None;
+        self.live = None;
     }
 
     pub fn resolve_model(
@@ -64,6 +117,28 @@ impl PromptExecutionService {
                 .settings()
                 .default_model
                 .clone()
+                .ok_or_else(|| ExecutionError::ModelNotFound("no default model configured".to_string())),
+        }
+    }
+
+    pub fn resolve_quick_action_model(
+        config: &ConfigService,
+        model_id: Option<&str>,
+    ) -> Result<String, ExecutionError> {
+        match model_id {
+            Some(id) => {
+                let exists = config.settings().models.iter().any(|m| m.id == id);
+                if exists {
+                    Ok(id.to_string())
+                } else {
+                    Err(ExecutionError::ModelNotFound(id.to_string()))
+                }
+            }
+            None => config
+                .settings()
+                .quick_action_default_model
+                .clone()
+                .or_else(|| config.settings().default_model.clone())
                 .ok_or_else(|| ExecutionError::ModelNotFound("no default model configured".to_string())),
         }
     }

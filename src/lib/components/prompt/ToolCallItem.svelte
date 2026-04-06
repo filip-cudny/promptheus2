@@ -316,6 +316,9 @@
     font-size: 11px;
     color: rgba(255, 255, 255, 0.35);
     flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+    min-width: 3ch;
+    text-align: right;
   }
 
   .tool-chevron {

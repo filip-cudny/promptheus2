@@ -628,6 +628,7 @@ pub fn run() {
             commands::prompt_execution::generate_conversation_title,
             commands::prompt_execution::resolve_skill_input,
             commands::prompt_execution::execute_conversation_from_tree,
+            commands::prompt_execution::reconnect_to_execution,
             commands::prompt_execution::respond_to_tool_call,
             commands::prompt_execution::retry_tool_call,
             commands::conversation_dialog::open_conversation_dialog,
