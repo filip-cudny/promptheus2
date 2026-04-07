@@ -112,7 +112,7 @@ impl SpeechService {
         Ok(sample_rate)
     }
 
-    pub fn stop_recording(&mut self) -> Result<(Vec<u8>, u32), SpeechError> {
+    pub fn stop_recording_raw(&mut self) -> Result<(Vec<i16>, u32), SpeechError> {
         if !self.is_recording {
             return Err(SpeechError::NotRecording);
         }
@@ -126,13 +126,11 @@ impl SpeechService {
             std::mem::take(&mut *buf)
         };
 
-        let wav_bytes = encode_wav(&samples, self.sample_rate)?;
         let sample_rate = self.sample_rate;
-
         self.is_recording = false;
         self.recording_action_id = None;
 
-        Ok((wav_bytes, sample_rate))
+        Ok((samples, sample_rate))
     }
 
     pub fn is_recording(&self) -> bool {
@@ -290,7 +288,7 @@ fn negotiate_sample_rate(device: &Device) -> Result<u32, SpeechError> {
     Ok(supported_configs[0].max_sample_rate())
 }
 
-fn encode_wav(samples: &[i16], sample_rate: u32) -> Result<Vec<u8>, SpeechError> {
+pub fn encode_wav(samples: &[i16], sample_rate: u32) -> Result<Vec<u8>, SpeechError> {
     let spec = hound::WavSpec {
         channels: 1,
         sample_rate,
@@ -350,7 +348,7 @@ mod tests {
     #[test]
     fn stop_without_recording_returns_error() {
         let mut service = SpeechService::new();
-        let result = service.stop_recording();
+        let result = service.stop_recording_raw();
         assert!(result.is_err());
     }
 

@@ -8,6 +8,8 @@ use crate::services::speech::{self, SpeechError};
 
 use super::settings::AppState;
 
+const MIN_RECORDING_SAMPLES_SECS: f64 = 2.0;
+
 #[derive(Clone, Serialize)]
 struct TranscriptionComplete {
     text: String,
@@ -40,16 +42,31 @@ pub async fn toggle_speech_recording(
     action_id: Option<String>,
 ) -> Result<(), String> {
     let was_recording;
-    let recording_result;
+    let raw_audio;
 
     {
         let mut s = state.lock().await;
+
+        if s.speech.is_transcribing() {
+            log::debug!("toggle_speech_recording: ignored, transcription in progress");
+            return Ok(());
+        }
+
         was_recording = s.speech.is_recording();
 
         if was_recording {
-            recording_result = Some(s.speech.stop_recording());
+            match s.speech.stop_recording_raw() {
+                Ok(audio) => {
+                    s.speech.set_transcribing(true);
+                    raw_audio = Some(audio);
+                }
+                Err(e) => {
+                    let _ = app.emit("speech-error", SpeechErrorEvent { message: e.to_string() });
+                    return Err(e.to_string());
+                }
+            }
         } else {
-            recording_result = None;
+            raw_audio = None;
             if let Err(e) = s.speech.start_recording(action_id) {
                 let _ = app.emit("speech-error", SpeechErrorEvent { message: e.to_string() });
                 return Err(e.to_string());
@@ -72,157 +89,193 @@ pub async fn toggle_speech_recording(
         return Ok(());
     }
 
-    let stop_result = recording_result.unwrap();
     let _ = app.emit("speech-recording-stopped", ());
 
-    match stop_result {
-        Ok((wav_bytes, _sample_rate)) => {
-            let speech_config = {
-                let mut s = state.lock().await;
-                let _ = s.notifications.notify(
-                    "speech_recording_stop",
-                    NotificationLevel::Info,
-                    "Processing Audio",
-                    Some("Transcribing your speech to text"),
-                    &s.config.settings().notifications,
+    let (samples, sample_rate) = raw_audio.unwrap();
+
+    let min_samples = (sample_rate as f64 * MIN_RECORDING_SAMPLES_SECS) as usize;
+    if samples.len() < min_samples {
+        log::debug!(
+            "toggle_speech_recording: recording too short ({} samples, need {}), discarding",
+            samples.len(),
+            min_samples,
+        );
+        let _ = app.emit(
+            "speech-transcription-complete",
+            TranscriptionComplete { text: String::new(), duration_secs: 0.0 },
+        );
+        let mut s = state.lock().await;
+        s.speech.set_transcribing(false);
+        s.speech.set_pending_prompt(None, None);
+        return Ok(());
+    }
+
+    let wav_bytes = tokio::task::spawn_blocking(move || {
+        speech::encode_wav(&samples, sample_rate)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| {
+        let _ = app.emit("speech-error", SpeechErrorEvent { message: e.to_string() });
+        e.to_string()
+    });
+
+    let wav_bytes = match wav_bytes {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            let mut s = state.lock().await;
+            s.speech.set_transcribing(false);
+            s.speech.set_pending_prompt(None, None);
+            return Err(e);
+        }
+    };
+
+    let speech_config = {
+        let mut s = state.lock().await;
+        let _ = s.notifications.notify(
+            "speech_recording_stop",
+            NotificationLevel::Info,
+            "Processing Audio",
+            Some("Transcribing your speech to text"),
+            &s.config.settings().notifications,
+        );
+
+        match s.config.settings().speech_to_text_model.clone() {
+            Some(config) => config,
+            None => {
+                s.speech.set_transcribing(false);
+                s.speech.set_pending_prompt(None, None);
+                let _ = app.emit("speech-error", SpeechErrorEvent {
+                    message: "Speech-to-text model not configured".into(),
+                });
+                return Err("Speech-to-text model not configured".into());
+            }
+        }
+    };
+
+    let app_clone = app.clone();
+
+    tokio::spawn(async move {
+        let state_inner = app_clone.state::<Mutex<AppState>>();
+        let start = std::time::Instant::now();
+        match speech::transcribe(wav_bytes, &speech_config).await {
+            Ok(text) => {
+                let duration_secs = start.elapsed().as_secs_f64();
+                let _ = app_clone.emit(
+                    "speech-transcription-complete",
+                    TranscriptionComplete {
+                        text: text.clone(),
+                        duration_secs,
+                    },
                 );
 
-                match s.config.settings().speech_to_text_model.clone() {
-                    Some(config) => {
-                        s.speech.set_transcribing(true);
-                        config
+                let pending = {
+                    let mut s = state_inner.lock().await;
+                    s.speech.take_pending_prompt()
+                };
+
+                if let Some(skill_id) = pending.0 {
+                    let _ = app_clone.emit(
+                        "speech-alternative-execute",
+                        AlternativeExecutePayload {
+                            skill_id,
+                            skill_name: pending.1.unwrap_or_default(),
+                            text: text.clone(),
+                        },
+                    );
+                } else {
+                    if let Err(e) = crate::services::clipboard::write_text(&app_clone, &text) {
+                        log::error!("Failed to copy transcription to clipboard: {e}");
                     }
-                    None => {
-                        let _ = app.emit("speech-error", SpeechErrorEvent {
-                            message: "Speech-to-text model not configured".into(),
-                        });
-                        return Err("Speech-to-text model not configured".into());
-                    }
+
+                    let mut s = state_inner.lock().await;
+                    s.history.add_entry(
+                        text.clone(),
+                        HistoryEntryType::Speech,
+                        Some(text),
+                        None,
+                        true,
+                        None,
+                        false,
+                        None,
+                        true,
+                    );
+
+                    let notification_settings = s.config.settings().notifications.clone();
+                    let duration_display = format!("Processed in {:.1}s", duration_secs);
+                    let _ = s.notifications.notify(
+                        "speech_transcription_success",
+                        NotificationLevel::Success,
+                        "Transcription completed",
+                        Some(duration_display),
+                        &notification_settings,
+                    );
                 }
-            };
 
-            let app_clone = app.clone();
+                let mut s = state_inner.lock().await;
+                s.speech.set_transcribing(false);
+            }
+            Err(SpeechError::NoSpeechDetected) => {
+                let _ = app_clone.emit(
+                    "speech-transcription-complete",
+                    TranscriptionComplete {
+                        text: String::new(),
+                        duration_secs: start.elapsed().as_secs_f64(),
+                    },
+                );
 
-            tokio::spawn(async move {
-                let state_inner = app_clone.state::<Mutex<AppState>>();
-                let start = std::time::Instant::now();
-                match speech::transcribe(wav_bytes, &speech_config).await {
-                    Ok(text) => {
-                        let duration_secs = start.elapsed().as_secs_f64();
-                        let _ = app_clone.emit(
-                            "speech-transcription-complete",
-                            TranscriptionComplete {
-                                text: text.clone(),
-                                duration_secs,
-                            },
-                        );
+                let mut s = state_inner.lock().await;
+                let had_pending = s.speech.take_pending_prompt().0.is_some();
 
-                        let mut s = state_inner.lock().await;
-                        s.speech.set_transcribing(false);
-                        let (pending_id, pending_name) = s.speech.take_pending_prompt();
+                let title = if had_pending {
+                    "Speech Execution Cancelled"
+                } else {
+                    "No Speech Detected"
+                };
+                let body = if had_pending {
+                    "No speech detected — prompt execution cancelled"
+                } else {
+                    "No speech was detected in the recording"
+                };
 
-                        if let Some(skill_id) = pending_id {
-                            let _ = app_clone.emit(
-                                "speech-alternative-execute",
-                                AlternativeExecutePayload {
-                                    skill_id,
-                                    skill_name: pending_name.unwrap_or_default(),
-                                    text: text.clone(),
-                                },
-                            );
-                        } else {
-                            if let Err(e) = s.clipboard.set_text(&text) {
-                                log::error!("Failed to copy transcription to clipboard: {e}");
-                            }
+                let notification_settings = s.config.settings().notifications.clone();
+                let _ = s.notifications.notify(
+                    "speech_transcription_success",
+                    NotificationLevel::Info,
+                    title,
+                    Some(body),
+                    &notification_settings,
+                );
 
-                            s.history.add_entry(
-                                text.clone(),
-                                HistoryEntryType::Speech,
-                                Some(text),
-                                None,
-                                true,
-                                None,
-                                false,
-                                None,
-                                true,
-                            );
+                s.speech.set_transcribing(false);
+            }
+            Err(e) => {
+                let message = e.to_string();
+                let _ = app_clone.emit(
+                    "speech-error",
+                    SpeechErrorEvent {
+                        message: message.clone(),
+                    },
+                );
 
-                            let notification_settings = s.config.settings().notifications.clone();
-                            let duration_display = format!("Processed in {:.1}s", duration_secs);
-                            let _ = s.notifications.notify(
-                                "speech_transcription_success",
-                                NotificationLevel::Success,
-                                "Transcription completed",
-                                Some(duration_display),
-                                &notification_settings,
-                            );
-                        }
-                    }
-                    Err(SpeechError::NoSpeechDetected) => {
-                        let _ = app_clone.emit(
-                            "speech-transcription-complete",
-                            TranscriptionComplete {
-                                text: String::new(),
-                                duration_secs: start.elapsed().as_secs_f64(),
-                            },
-                        );
+                let mut s = state_inner.lock().await;
+                s.speech.set_pending_prompt(None, None);
 
-                        let mut s = state_inner.lock().await;
-                        s.speech.set_transcribing(false);
-                        let had_pending = s.speech.take_pending_prompt().0.is_some();
+                let notification_settings = s.config.settings().notifications.clone();
+                let _ = s.notifications.notify(
+                    "speech_transcription_success",
+                    NotificationLevel::Error,
+                    "Transcription Error",
+                    Some(message),
+                    &notification_settings,
+                );
 
-                        let title = if had_pending {
-                            "Speech Execution Cancelled"
-                        } else {
-                            "No Speech Detected"
-                        };
-                        let body = if had_pending {
-                            "No speech detected — prompt execution cancelled"
-                        } else {
-                            "No speech was detected in the recording"
-                        };
-
-                        let notification_settings = s.config.settings().notifications.clone();
-                        let _ = s.notifications.notify(
-                            "speech_transcription_success",
-                            NotificationLevel::Info,
-                            title,
-                            Some(body),
-                            &notification_settings,
-                        );
-                    }
-                    Err(e) => {
-                        let message = e.to_string();
-                        let _ = app_clone.emit(
-                            "speech-error",
-                            SpeechErrorEvent {
-                                message: message.clone(),
-                            },
-                        );
-
-                        let mut s = state_inner.lock().await;
-                        s.speech.set_transcribing(false);
-                        s.speech.set_pending_prompt(None, None);
-
-                        let notification_settings = s.config.settings().notifications.clone();
-                        let _ = s.notifications.notify(
-                            "speech_transcription_success",
-                            NotificationLevel::Error,
-                            "Transcription Error",
-                            Some(message),
-                            &notification_settings,
-                        );
-                    }
-                }
-            });
-
-            Ok(())
+                s.speech.set_transcribing(false);
+            }
         }
-        Err(e) => {
-            let _ = app.emit("speech-error", SpeechErrorEvent { message: e.to_string() });
-            Err(e.to_string())
-        }
-    }
+    });
+
+    Ok(())
 }
 
 #[tauri::command]

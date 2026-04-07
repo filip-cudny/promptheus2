@@ -1,6 +1,8 @@
 use base64::Engine;
 use image::ImageBuffer;
 use std::io::Cursor;
+use tauri::AppHandle;
+use tauri_plugin_clipboard_manager::ClipboardExt;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClipboardError {
@@ -14,13 +16,15 @@ pub enum ClipboardError {
     ImageConversion(String),
 }
 
-pub struct ClipboardService;
+pub struct ClipboardService {
+    app: Option<AppHandle>,
+}
 
 impl ClipboardService {
-    pub fn new() -> Result<Self, ClipboardError> {
+    pub fn new(app: AppHandle) -> Result<Self, ClipboardError> {
         arboard::Clipboard::new()
             .map_err(|e| ClipboardError::Access(e.to_string()))?;
-        Ok(Self)
+        Ok(Self { app: Some(app) })
     }
 
     pub fn get_text(&self) -> Result<String, ClipboardError> {
@@ -40,9 +44,12 @@ impl ClipboardService {
     }
 
     pub fn set_text(&self, content: &str) -> Result<(), ClipboardError> {
+        if let Some(app) = &self.app {
+            return write_text(app, content);
+        }
+
         let mut clipboard = arboard::Clipboard::new()
             .map_err(|e| ClipboardError::Access(e.to_string()))?;
-
         clipboard
             .set_text(content)
             .map_err(|e| ClipboardError::Access(e.to_string()))
@@ -87,16 +94,73 @@ impl ClipboardService {
     }
 }
 
+pub fn write_text(app: &AppHandle, content: &str) -> Result<(), ClipboardError> {
+    #[cfg(target_os = "linux")]
+    {
+        match set_text_subprocess(content) {
+            Ok(()) => return Ok(()),
+            Err(e) => {
+                log::warn!("clipboard subprocess failed: {e}");
+            }
+        }
+    }
+
+    app.clipboard()
+        .write_text(content)
+        .map_err(|e| ClipboardError::Access(e.to_string()))
+}
+
+#[cfg(target_os = "linux")]
+fn set_text_subprocess(content: &str) -> Result<(), ClipboardError> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    let is_wayland = std::env::var("WAYLAND_DISPLAY").is_ok();
+
+    let (cmd, args): (&str, &[&str]) = if is_wayland {
+        ("wl-copy", &[])
+    } else {
+        ("xclip", &["-selection", "clipboard"])
+    };
+
+    let mut child = Command::new(cmd)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| ClipboardError::Access(format!("{cmd}: {e}")))?;
+
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(content.as_bytes())
+            .map_err(|e| ClipboardError::Access(e.to_string()))?;
+    }
+
+    let status = child
+        .wait()
+        .map_err(|e| ClipboardError::Access(e.to_string()))?;
+
+    if !status.success() {
+        return Err(ClipboardError::Access(format!(
+            "{cmd} exited with {}",
+            status
+        )));
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+impl ClipboardService {
+    pub fn without_app() -> Self {
+        Self { app: None }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    #[ignore]
-    fn create_clipboard_service() {
-        let service = ClipboardService::new();
-        assert!(service.is_ok());
-    }
 
     #[test]
     fn error_display() {

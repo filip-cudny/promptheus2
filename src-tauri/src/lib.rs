@@ -520,7 +520,7 @@ pub fn run() {
                 skills_dir.display()
             );
 
-            let clipboard_service = ClipboardService::new()
+            let clipboard_service = ClipboardService::new(app.handle().clone())
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             let notification_service = NotificationService::new(app.handle().clone());
             let mut menu_coordinator = MenuCoordinator::new();

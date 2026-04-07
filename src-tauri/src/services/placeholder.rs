@@ -290,7 +290,7 @@ mod tests {
     }
 
     fn dummy_clipboard() -> ClipboardService {
-        ClipboardService
+        ClipboardService::without_app()
     }
 
     #[test]
