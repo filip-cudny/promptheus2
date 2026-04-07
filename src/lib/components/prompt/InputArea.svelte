@@ -241,7 +241,7 @@
     <div class="bar-right">
       {#if store.totalTokens > 0}
         <span class="token-count" title="Context tokens">
-          ~{formatTokenCount(store.totalTokens)}{#if contextWindowSize > 0} / {formatTokenCount(contextWindowSize)}{/if}
+          ~{formatTokenCount(store.totalTokens)}{#if contextWindowSize > 0}&nbsp;/ {formatTokenCount(contextWindowSize)}{/if}
         </span>
       {/if}
       {#if models.length > 0}
@@ -351,14 +351,14 @@
     color: rgba(255, 255, 255, 0.4);
     user-select: none;
     white-space: nowrap;
-    margin-right: 4px;
+    margin-right: 2px;
   }
 
   .bar-right {
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 6px;
   }
 
   .web-search-btn {

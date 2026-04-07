@@ -33,9 +33,15 @@
   let contextVisible = $state(false);
   let contextDisabled = $state(false);
   let contextInitialCollapsed = $state(false);
-  let contextWindowSize = $state(0);
   let models = $state<ModelConfig[]>([]);
   let defaultModelId = $state<string | null>(null);
+
+  let contextWindowSize = $derived.by(() => {
+    const activeModelId = store.modelId ?? defaultModelId;
+    const activeModel = models.find((m) => m.id === activeModelId);
+    if (!activeModel) return 0;
+    return getContextWindowSize(activeModel.model, activeModel.context_window_size);
+  });
 
   let unlistenRestore: UnlistenFn | undefined;
   let unlistenContextChanged: UnlistenFn | undefined;
@@ -68,8 +74,7 @@
     } else if (p.initial_input) {
       handleVoiceInput(p.skill_id, p.initial_input, p.auto_send_input);
     } else if (p.skill_id) {
-      const draftPreserved = store.openForSkill(p.skill_id, p.skill_name);
-      if (draftPreserved) sidebarOpen = true;
+      store.openForSkill(p.skill_id, p.skill_name);
     }
   }
 
@@ -78,12 +83,6 @@
       const settings = await getSettings();
       models = settings.models;
       defaultModelId = settings.default_model ?? null;
-      const tabModelId = store.modelId;
-      const activeModelId = tabModelId ?? settings.default_model;
-      const activeModel = settings.models.find((m) => m.id === activeModelId);
-      if (activeModel) {
-        contextWindowSize = getContextWindowSize(activeModel.model, activeModel.context_window_size);
-      }
     } catch {}
   }
 
@@ -111,8 +110,7 @@
     });
 
     unlistenOpenForSkill = await listen<{ skill_id: string; skill_name: string }>("open-for-skill", (event) => {
-      const draftPreserved = store.openForSkill(event.payload.skill_id, event.payload.skill_name);
-      if (draftPreserved) sidebarOpen = true;
+      store.openForSkill(event.payload.skill_id, event.payload.skill_name);
     });
 
     await autoShowContextIfNeeded();
