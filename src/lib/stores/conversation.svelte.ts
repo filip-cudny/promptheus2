@@ -292,6 +292,7 @@ export function createConversationStore(
     const inputImages = activeTab.input_images;
     const inputAttachments = activeTab.input_text_attachments;
     const hasPendingInput = inputText.trim() || inputImages.length > 0 || inputAttachments.length > 0;
+    const toolNames = activeTab.web_search_enabled ? ["web_search"] : [];
 
     if (tokenDebounceTimer) clearTimeout(tokenDebounceTimer);
 
@@ -319,6 +320,7 @@ export function createConversationStore(
             contextText: null,
             contextImages: [],
             tabId,
+            toolNames: [],
           });
           totalTokens = apiTotal + inputTokens;
         } catch {
@@ -355,6 +357,7 @@ export function createConversationStore(
           contextText,
           contextImages,
           tabId,
+          toolNames,
         });
       } catch {
         totalTokens = 0;
@@ -622,6 +625,20 @@ export function createConversationStore(
     tab.tree.nodes.set(assistantNode.node_id, assistantNode);
     userNode.children.push(assistantNode.node_id);
     tab.tree.current_path.push(assistantNode.node_id);
+
+    const isFirstMessage = getMessagePairs(tab.tree).length === 1;
+    if (isFirstMessage && !tab.tab_name && snapshot.user_message) {
+      generateConversationTitle(snapshot.user_message)
+        .then((title) => {
+          if (title) {
+            tab.tab_name = title;
+            if (tab.history_entry_id) {
+              updateHistoryEntryTitle(tab.history_entry_id, title).catch(() => {});
+            }
+          }
+        })
+        .catch(() => {});
+    }
 
     if (snapshot.finished) {
       assistantNode.thinking = snapshot.accumulated_thinking ?? null;

@@ -73,6 +73,10 @@ impl AiService {
             match model.provider {
                 Provider::Openai => {
                     let api_mode = model.api_mode.clone().unwrap_or_default();
+                    log::info!(
+                        "model '{}': provider=openai, api_mode={api_mode:?}",
+                        model.display_name
+                    );
                     let result: Result<Box<dyn AiProvider>, AiError> = match api_mode {
                         ApiMode::Responses => OpenAiResponsesProvider::new(model).map(|p| Box::new(p) as Box<dyn AiProvider>),
                         ApiMode::Completions => OpenAiProvider::new(model).map(|p| Box::new(p) as Box<dyn AiProvider>),

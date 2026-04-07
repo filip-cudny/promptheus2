@@ -8,6 +8,7 @@ use crate::models::message::{
     ConversationNodeForExecution, ImageData, MessageContent, ProcessedMessage,
 };
 use crate::models::settings::Provider;
+use crate::services::ai::tools::ToolRegistry;
 use crate::services::skill_execution;
 use crate::services::tokenizer;
 
@@ -108,6 +109,7 @@ pub async fn count_conversation_tokens(
     context_text: Option<String>,
     context_images: Vec<ImageData>,
     tab_id: String,
+    tool_names: Vec<String>,
     state: State<'_, Mutex<AppState>>,
 ) -> Result<usize, String> {
     let (all_text, image_count, provider) = {
@@ -125,21 +127,42 @@ pub async fn count_conversation_tokens(
             })
             .collect();
 
-        let provider = crate::services::prompt_execution::PromptExecutionService::resolve_model(
+        let model_id = crate::services::prompt_execution::PromptExecutionService::resolve_model(
             &state.config,
             None,
         )
-        .ok()
-        .and_then(|model_id| {
+        .ok();
+
+        let model_config = model_id.as_ref().and_then(|id| {
             state
                 .config
                 .settings()
                 .models
                 .iter()
-                .find(|m| m.id == model_id)
-                .map(|m| m.provider.clone())
-        })
-        .unwrap_or_default();
+                .find(|m| &m.id == id)
+                .cloned()
+        });
+
+        let provider = model_config
+            .as_ref()
+            .map(|m| m.provider.clone())
+            .unwrap_or_default();
+
+        let api_mode = model_config
+            .as_ref()
+            .and_then(|m| m.api_mode.clone())
+            .unwrap_or_default();
+
+        let tools_text = if !tool_names.is_empty() {
+            let resolved = ToolRegistry::resolve_tools(&tool_names, &provider, &api_mode);
+            let payloads: Vec<serde_json::Value> = resolved
+                .iter()
+                .map(|t| ToolRegistry::to_request_payload(t, &provider, &api_mode))
+                .collect();
+            serde_json::to_string(&payloads).unwrap_or_default()
+        } else {
+            String::new()
+        };
 
         let active_app = state.active_app().to_string();
         let recent_apps = state.recent_apps_display();
@@ -165,7 +188,11 @@ pub async fn count_conversation_tokens(
         let mut all_messages = vec![system_message];
         all_messages.extend(tree_messages);
 
-        let all_text = extract_text_from_messages(&all_messages);
+        let mut all_text = extract_text_from_messages(&all_messages);
+        if !tools_text.is_empty() {
+            all_text.push('\n');
+            all_text.push_str(&tools_text);
+        }
         let image_count = count_images_in_messages(&all_messages);
 
         (all_text, image_count, provider)

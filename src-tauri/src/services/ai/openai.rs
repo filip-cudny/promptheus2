@@ -294,9 +294,14 @@ impl AiProvider for OpenAiProvider {
             loop {
                 match state.sse_stream.next().await {
                     Some(Ok(data)) => {
+                        log::trace!("completions chunk: {data}");
                         let chunk: ChatCompletionChunk = match serde_json::from_str(&data) {
                             Ok(c) => c,
-                            Err(_) => continue,
+                            Err(e) => {
+                                log::warn!("completions: failed to parse chunk: {e}");
+                                log::debug!("completions: raw data: {data}");
+                                continue;
+                            }
                         };
 
                         let usage = chunk.usage.map(|u| TokenUsage {
