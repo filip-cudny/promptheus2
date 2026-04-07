@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use serde::Serialize;
 use tauri::ipc::Channel;
+use tokio::sync::watch;
 use tokio::sync::Mutex as TokioMutex;
 use uuid::Uuid;
 
@@ -37,36 +38,66 @@ pub struct LiveExecution {
 }
 
 pub struct PromptExecutionService {
-    is_executing: bool,
-    current_execution_id: Option<String>,
+    skill_executing: bool,
+    skill_execution_id: Option<String>,
+    executing_skill_id: Option<String>,
+    cancel_sender: Option<watch::Sender<bool>>,
     pub live: Option<Arc<TokioMutex<LiveExecution>>>,
 }
 
 impl PromptExecutionService {
     pub fn new() -> Self {
         Self {
-            is_executing: false,
-            current_execution_id: None,
+            skill_executing: false,
+            skill_execution_id: None,
+            executing_skill_id: None,
+            cancel_sender: None,
             live: None,
         }
     }
 
     pub fn is_busy(&self) -> bool {
-        self.is_executing
+        self.skill_executing
     }
 
-    pub fn current_execution_id(&self) -> Option<&str> {
-        self.current_execution_id.as_deref()
+    pub fn executing_skill_id(&self) -> Option<&str> {
+        self.executing_skill_id.as_deref()
     }
 
-    pub fn start_execution(&mut self) -> Result<String, ExecutionError> {
-        if self.is_executing {
+    pub fn start_skill_execution(
+        &mut self,
+        skill_id: String,
+    ) -> Result<(String, watch::Receiver<bool>), ExecutionError> {
+        if self.skill_executing {
             return Err(ExecutionError::AlreadyExecuting);
         }
         let execution_id = Uuid::new_v4().to_string();
-        self.is_executing = true;
-        self.current_execution_id = Some(execution_id.clone());
-        Ok(execution_id)
+        let (tx, rx) = watch::channel(false);
+        self.skill_executing = true;
+        self.skill_execution_id = Some(execution_id.clone());
+        self.executing_skill_id = Some(skill_id);
+        self.cancel_sender = Some(tx);
+        Ok((execution_id, rx))
+    }
+
+    pub fn finish_skill_execution(&mut self) {
+        self.skill_executing = false;
+        self.skill_execution_id = None;
+        self.executing_skill_id = None;
+        self.cancel_sender = None;
+        self.live = None;
+    }
+
+    pub fn cancel_execution(&mut self) -> bool {
+        if let Some(sender) = &self.cancel_sender {
+            let _ = sender.send(true);
+            return true;
+        }
+        false
+    }
+
+    pub fn clear_live(&mut self) {
+        self.live = None;
     }
 
     pub fn start_live(
@@ -92,12 +123,6 @@ impl PromptExecutionService {
         }));
         self.live = Some(Arc::clone(&live));
         live
-    }
-
-    pub fn finish_execution(&mut self) {
-        self.is_executing = false;
-        self.current_execution_id = None;
-        self.live = None;
     }
 
     pub fn resolve_model(
@@ -178,31 +203,47 @@ mod tests {
     }
 
     #[test]
-    fn start_execution_succeeds_when_idle() {
+    fn start_skill_execution_succeeds_when_idle() {
         let mut svc = PromptExecutionService::new();
         assert!(!svc.is_busy());
-        let id = svc.start_execution().unwrap();
+        let (id, _rx) = svc.start_skill_execution("test-skill".to_string()).unwrap();
         assert!(!id.is_empty());
         assert!(svc.is_busy());
-        assert_eq!(svc.current_execution_id(), Some(id.as_str()));
+        assert_eq!(svc.executing_skill_id(), Some("test-skill"));
     }
 
     #[test]
-    fn start_execution_fails_when_busy() {
+    fn start_skill_execution_fails_when_busy() {
         let mut svc = PromptExecutionService::new();
-        svc.start_execution().unwrap();
-        let result = svc.start_execution();
+        svc.start_skill_execution("skill-1".to_string()).unwrap();
+        let result = svc.start_skill_execution("skill-2".to_string());
         assert!(matches!(result, Err(ExecutionError::AlreadyExecuting)));
     }
 
     #[test]
-    fn finish_execution_resets_state() {
+    fn finish_skill_execution_resets_state() {
         let mut svc = PromptExecutionService::new();
-        svc.start_execution().unwrap();
+        svc.start_skill_execution("test-skill".to_string()).unwrap();
         assert!(svc.is_busy());
-        svc.finish_execution();
+        svc.finish_skill_execution();
         assert!(!svc.is_busy());
-        assert!(svc.current_execution_id().is_none());
+        assert!(svc.executing_skill_id().is_none());
+    }
+
+    #[test]
+    fn cancel_execution_sends_signal() {
+        let mut svc = PromptExecutionService::new();
+        let (_id, mut rx) = svc.start_skill_execution("test-skill".to_string()).unwrap();
+        assert!(!*rx.borrow());
+        assert!(svc.cancel_execution());
+        assert!(rx.has_changed().unwrap());
+        assert!(*rx.borrow_and_update());
+    }
+
+    #[test]
+    fn cancel_execution_returns_false_when_idle() {
+        let mut svc = PromptExecutionService::new();
+        assert!(!svc.cancel_execution());
     }
 
     #[test]
@@ -226,9 +267,9 @@ mod tests {
     #[test]
     fn finish_allows_restart() {
         let mut svc = PromptExecutionService::new();
-        let id1 = svc.start_execution().unwrap();
-        svc.finish_execution();
-        let id2 = svc.start_execution().unwrap();
+        let (id1, _rx1) = svc.start_skill_execution("skill-1".to_string()).unwrap();
+        svc.finish_skill_execution();
+        let (id2, _rx2) = svc.start_skill_execution("skill-2".to_string()).unwrap();
         assert_ne!(id1, id2);
     }
 }

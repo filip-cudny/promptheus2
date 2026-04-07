@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { error } from "@tauri-apps/plugin-log";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { MenuItem } from "$lib/types/menu";
-import { startExecution, isExecuting } from "$lib/stores/execution.svelte";
+import { startExecution, isExecuting, getExecutingSkillId, cancelExecution } from "$lib/stores/execution.svelte";
 import { openConversationDialog } from "$lib/services/conversationDialog";
 
 interface WorkArea {
@@ -90,9 +90,13 @@ function getRecordingSkillId(): string | null {
 
 function applyItemStates(items: MenuItem[]): MenuItem[] {
   if (isExecuting()) {
-    return items.map((item) =>
-      item.item_type === "skill" ? { ...item, enabled: false } : item,
-    );
+    const executingId = getExecutingSkillId();
+    return items.map((item) => {
+      if (item.item_type !== "skill") return item;
+      const data = item.data as { skill_id: string } | null;
+      if (data?.skill_id === executingId) return item;
+      return { ...item, enabled: false };
+    });
   }
   if (_isRecording) {
     if (_recordingSkillId) {
@@ -203,6 +207,12 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
     if (!data?.skill_id) return;
 
     const skillId = data.skill_id;
+
+    if (isExecuting() && skillId === getExecutingSkillId()) {
+      await cancelExecution();
+      return;
+    }
+
     const isRecordingThis = _isRecording && _recordingSkillId === skillId;
     if (!itemEnabled && !isRecordingThis) return;
 

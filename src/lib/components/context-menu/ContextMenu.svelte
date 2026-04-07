@@ -10,9 +10,9 @@
   import ContextSection from "./ContextSection.svelte";
   import LastInteractionSection from "./LastInteractionSection.svelte";
   import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
-  import { ChevronRight, Info, MessageSquare, MessageSquareShare, Mic, Square } from "lucide-svelte";
+  import { ChevronRight, Info, MessageSquare, MessageSquareShare, Mic, Square, X } from "lucide-svelte";
   import { openConversationDialog } from "$lib/services/conversationDialog";
-  import { isExecuting } from "$lib/stores/execution.svelte";
+  import { isExecuting, getExecutingSkillId } from "$lib/stores/execution.svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { updateSetting, updateModelReasoningEffort } from "$lib/services/settings";
   import type { ModelConfig, Provider } from "$lib/types";
@@ -53,6 +53,12 @@
     if (!isRecording()) return false;
     const data = item.data as { skill_id: string } | null;
     return data?.skill_id === getRecordingSkillId();
+  }
+
+  function isExecutingSkill(item: MenuItem): boolean {
+    if (!isExecuting()) return false;
+    const data = item.data as { skill_id: string } | null;
+    return data?.skill_id === getExecutingSkillId();
   }
 
   type SectionGroup = {
@@ -297,7 +303,7 @@
 
     const win = getCurrentWebviewWindow();
     win.onFocusChanged(({ payload: focused }) => {
-      if (!focused && !isRecording()) {
+      if (!focused) {
         if (isSuppressed()) {
           resumeClose();
           return;
@@ -325,7 +331,7 @@
       {/if}
       {#if section.sectionId === "chat"}
         {@const chatRecording = isRecordingChat()}
-        {@const chatDisabled = (isRecording() && !chatRecording) || isExecuting()}
+        {@const chatDisabled = isRecording() && !chatRecording}
         <div class="chat-row" class:selected={chatRecording} role="menuitem" onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}>
           <button
             class="chat-button"
@@ -429,6 +435,7 @@
         {:else if lastInteractionData !== null}
           <LastInteractionSection data={lastInteractionData} />
         {:else}
+          {@const executingThis = item.item_type === "skill" && isExecutingSkill(item)}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="menu-item-row"
@@ -438,6 +445,7 @@
             <button
               class="menu-item"
               class:disabled={!item.enabled}
+              class:executing={executingThis}
               role="menuitem"
               aria-disabled={!item.enabled}
               tabindex={-1}
@@ -451,18 +459,26 @@
               {#if item.item_type === "skill"}
                 {@const skillIndex = allSkillItems.indexOf(item)}
                 {#if skillIndex >= 0}
-                  <span class="prompt-number">{skillIndex + 1}.</span>
+                  {#if executingThis}
+                    <span class="prompt-number executing"><X size={ICON_SIZE.sm} /></span>
+                  {:else if isRecordingThisSkill(item)}
+                    <span class="prompt-number executing"><Square size={ICON_SIZE.sm} /></span>
+                  {:else}
+                    <span class="prompt-number">{skillIndex + 1}.</span>
+                  {/if}
                 {/if}
               {/if}
               <span class="item-label">{item.label}</span>
             </button>
             {#if item.item_type === "skill"}
               {@const recordingThis = isRecordingThisSkill(item)}
-              {@const micDisabled = !item.enabled && !recordingThis}
+              {@const infoDisabled = executingThis || recordingThis}
+              {@const micDisabled = executingThis || (!item.enabled && !recordingThis)}
               {#if item.tooltip}
                 <button
                   class="action-btn info-btn"
-                  onclick={(e) => { e.stopPropagation(); expandedDescriptionId = expandedDescriptionId === item.id ? "" : item.id; }}
+                  class:disabled={infoDisabled}
+                  onclick={(e) => { e.stopPropagation(); if (!infoDisabled) expandedDescriptionId = expandedDescriptionId === item.id ? "" : item.id; }}
                 >
                   <Info size={ICON_SIZE.sm} />
                 </button>
@@ -470,16 +486,12 @@
               <button
                 class="action-btn mic-btn"
                 class:disabled={micDisabled}
-                class:shift-accent={shiftHeld && !micDisabled && !recordingThis}
+                class:shift-accent={shiftHeld && !micDisabled && !recordingThis && !executingThis}
                 title={recordingThis ? "Stop recording" : "Voice input"}
                 disabled={micDisabled}
                 onclick={() => startAlternativeExecution(globalIndex)}
               >
-                {#if recordingThis}
-                  <Square size={ICON_SIZE.md} />
-                {:else}
-                  <Mic size={ICON_SIZE.md} />
-                {/if}
+                <Mic size={ICON_SIZE.md} />
               </button>
               <button
                 class="action-btn dialog-btn"
@@ -606,6 +618,7 @@
     cursor: default;
   }
 
+
   .menu-item-row.selected:active {
     background: rgba(255, 255, 255, 0.15);
   }
@@ -625,6 +638,13 @@
     color: rgba(255, 255, 255, 0.25);
     font-size: 12px;
     margin-left: -4px;
+  }
+
+  .prompt-number.executing {
+    color: #e0e0e0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
   }
 
   .item-label {
@@ -651,6 +671,12 @@
 
   .action-btn.dialog-btn {
     margin-right: 8px;
+  }
+
+  .action-btn.cancel-hint {
+    margin-right: 8px;
+    cursor: default;
+    pointer-events: none;
   }
 
   .action-btn:hover {

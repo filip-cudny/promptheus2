@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { error as logError } from "@tauri-apps/plugin-log";
 import { executeSkill } from "$lib/services/promptExecution";
@@ -5,6 +6,7 @@ import { openConversationDialog } from "$lib/services/conversationDialog";
 
 let _isExecuting = $state(false);
 let _executionId = $state<string | null>(null);
+let _executingSkillId = $state<string | null>(null);
 let _streamedContent = $state("");
 
 let unlistenStarted: (() => void) | null = null;
@@ -19,6 +21,10 @@ function getExecutionId(): string | null {
   return _executionId;
 }
 
+function getExecutingSkillId(): string | null {
+  return _executingSkillId;
+}
+
 function getStreamedContent(): string {
   return _streamedContent;
 }
@@ -27,6 +33,7 @@ async function startExecution(
   skillName: string,
   inputOverride?: string,
 ): Promise<void> {
+  _executingSkillId = skillName;
   _streamedContent = "";
 
   try {
@@ -51,18 +58,31 @@ async function startExecution(
   }
 }
 
+async function cancelExecution(): Promise<boolean> {
+  try {
+    return await invoke<boolean>("cancel_skill_execution");
+  } catch (e) {
+    logError("Failed to cancel execution: " + e);
+    return false;
+  }
+}
+
 function resetExecution() {
   _isExecuting = false;
   _executionId = null;
+  _executingSkillId = null;
   _streamedContent = "";
 }
 
 async function init() {
-  unlistenStarted = await listen<{ execution_id: string }>(
+  unlistenStarted = await listen<{ execution_id: string; skill_id?: string }>(
     "execution-started",
     (event) => {
       _isExecuting = true;
       _executionId = event.payload.execution_id;
+      if (event.payload.skill_id) {
+        _executingSkillId = event.payload.skill_id;
+      }
     },
   );
 
@@ -70,9 +90,11 @@ async function init() {
     execution_id: string;
     success: boolean;
     error: string | null;
+    cancelled: boolean;
   }>("execution-completed", () => {
     _isExecuting = false;
     _executionId = null;
+    _executingSkillId = null;
     _streamedContent = "";
   });
 
@@ -113,8 +135,10 @@ function destroy() {
 export {
   isExecuting,
   getExecutionId,
+  getExecutingSkillId,
   getStreamedContent,
   startExecution,
+  cancelExecution,
   resetExecution,
   init,
   destroy,

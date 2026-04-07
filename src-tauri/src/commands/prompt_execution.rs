@@ -7,6 +7,7 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 use tokio::sync::Mutex as TokioMutex;
+use tokio::sync::watch;
 use tokio_stream::{Stream, StreamExt};
 
 use crate::commands::settings::AppState;
@@ -48,13 +49,38 @@ struct StreamResult {
 async fn run_stream_loop(
     mut stream: Pin<Box<dyn Stream<Item = Result<StreamChunk, AiError>> + Send>>,
     live: Arc<TokioMutex<LiveExecution>>,
+    cancel_rx: Option<watch::Receiver<bool>>,
 ) -> Result<StreamResult, String> {
     let mut full_text = String::new();
     let mut full_thinking = String::new();
     let mut prompt_tokens: Option<usize> = None;
     let mut completion_tokens: Option<usize> = None;
+    let mut cancel_rx = cancel_rx;
 
-    while let Some(result) = stream.next().await {
+    loop {
+        let chunk_result: Option<Result<StreamChunk, AiError>> = if let Some(ref mut rx) = cancel_rx {
+            tokio::select! {
+                biased;
+                result = rx.changed() => {
+                    if result.is_ok() && *rx.borrow() {
+                        let mut live = live.lock().await;
+                        live.snapshot.finished = true;
+                        live.snapshot.error = Some("Cancelled".to_string());
+                        if let Some(ref ch) = live.channel {
+                            let _ = ch.send(StreamEvent::Error { message: "Cancelled".to_string() });
+                        }
+                        return Err("Cancelled".to_string());
+                    }
+                    continue;
+                }
+                next = stream.next() => next,
+            }
+        } else {
+            stream.next().await
+        };
+
+        let Some(result) = chunk_result else { break };
+
         match result {
             Ok(chunk) => {
                 if let Some(usage) = chunk.usage {
@@ -167,6 +193,7 @@ async fn run_stream_loop(
 #[derive(Clone, Serialize)]
 struct ExecutionStartedPayload {
     execution_id: String,
+    skill_id: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -174,6 +201,7 @@ struct ExecutionCompletedPayload {
     execution_id: String,
     success: bool,
     error: Option<String>,
+    cancelled: bool,
 }
 
 #[tauri::command]
@@ -186,24 +214,24 @@ pub async fn execute_skill(
 ) -> Result<(), String> {
     let start_time = Instant::now();
 
-    let (execution_id, model_id, model_display_name, skill_display_name, input_content, messages, ai, skill_param_overrides) = {
+    let (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, input_content, messages, ai, skill_param_overrides) = {
         let mut state = state.lock().await;
 
-        let execution_id = state
+        let (execution_id, cancel_rx) = state
             .prompt_execution
-            .start_execution()
+            .start_skill_execution(skill_name.clone())
             .map_err(|e| e.to_string())?;
 
         let skill = skill_execution::resolve_skill_or_err(&state.skill_service, &skill_name)
             .map_err(|e| {
-                state.prompt_execution.finish_execution();
+                state.prompt_execution.finish_skill_execution();
                 e.to_string()
             })?;
         let skill_display_name = skill.display_name.clone();
 
         let model_id = PromptExecutionService::resolve_quick_action_model(&state.config, skill.model.as_deref())
             .map_err(|e| {
-                state.prompt_execution.finish_execution();
+                state.prompt_execution.finish_skill_execution();
                 e.to_string()
             })?;
 
@@ -219,7 +247,7 @@ pub async fn execute_skill(
         let input_content = match &input_override {
             Some(text) => text.clone(),
             None => state.clipboard.get_text().map_err(|e| {
-                state.prompt_execution.finish_execution();
+                state.prompt_execution.finish_skill_execution();
                 e.to_string()
             })?,
         };
@@ -235,7 +263,7 @@ pub async fn execute_skill(
         let ai = state.ai.clone();
         let skill_param_overrides = skill.parameters.as_ref().map(ModelParameters::from_map);
 
-        (execution_id, model_id, model_display_name, skill_display_name, input_content, messages, ai, skill_param_overrides)
+        (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, input_content, messages, ai, skill_param_overrides)
     };
 
     let user_display_text = format!("/{skill_name} {input_content}");
@@ -248,6 +276,7 @@ pub async fn execute_skill(
         "execution-started",
         ExecutionStartedPayload {
             execution_id: execution_id.clone(),
+            skill_id: Some(skill_name.clone()),
         },
     );
 
@@ -258,7 +287,7 @@ pub async fn execute_skill(
             .map_err(|e| e.to_string());
 
         match stream {
-            Ok(stream) => run_stream_loop(stream, live_execution).await,
+            Ok(stream) => run_stream_loop(stream, live_execution, Some(cancel_rx)).await,
             Err(e) => Err(e),
         }
     };
@@ -339,36 +368,50 @@ pub async fn execute_skill(
                 &state.config.settings().notifications,
             );
 
-            state.prompt_execution.finish_execution();
+            state.prompt_execution.finish_skill_execution();
             let _ = app.emit(
                 "execution-completed",
                 ExecutionCompletedPayload {
                     execution_id,
                     success: true,
                     error: None,
+                    cancelled: false,
                 },
             );
             Ok(())
         }
         Err(error) => {
-            let _ = state.notifications.notify(
-                "prompt_execution_error",
-                NotificationLevel::Error,
-                "Execution failed",
-                Some(error.as_str()),
-                &state.config.settings().notifications,
-            );
+            let is_cancelled = error == "Cancelled";
 
-            state.prompt_execution.finish_execution();
+            if is_cancelled {
+                let _ = state.notifications.notify(
+                    "prompt_execution_cancel",
+                    NotificationLevel::Info,
+                    "Prompt cancelled",
+                    None::<&str>,
+                    &state.config.settings().notifications,
+                );
+            } else {
+                let _ = state.notifications.notify(
+                    "prompt_execution_error",
+                    NotificationLevel::Error,
+                    "Execution failed",
+                    Some(error.as_str()),
+                    &state.config.settings().notifications,
+                );
+            }
+
+            state.prompt_execution.finish_skill_execution();
             let _ = app.emit(
                 "execution-completed",
                 ExecutionCompletedPayload {
                     execution_id,
                     success: false,
                     error: Some(error.clone()),
+                    cancelled: is_cancelled,
                 },
             );
-            Err(error)
+            if is_cancelled { Ok(()) } else { Err(error) }
         }
     }
 }
@@ -515,32 +558,26 @@ pub async fn retry_tool_call(
 
 #[tauri::command]
 pub async fn execute_conversation_from_tree(
-    app: AppHandle,
+    _app: AppHandle,
     state: State<'_, Mutex<AppState>>,
     mut nodes: Vec<ConversationNodeForExecution>,
     context_text: Option<String>,
     context_images: Vec<ImageData>,
     tab_id: String,
-    skill_id: Option<String>,
-    skill_name: Option<String>,
+    _skill_id: Option<String>,
+    _skill_name: Option<String>,
     model_id: Option<String>,
     reasoning_effort: Option<String>,
     tools_override: Option<Vec<String>>,
     on_event: Channel<StreamEvent>,
 ) -> Result<(), String> {
-    let start_time = Instant::now();
-
-    let (execution_id, resolved_model_id, model_display_name, all_messages, ai, updates_for_event, param_overrides) = {
+    let (execution_id, resolved_model_id, _model_display_name, all_messages, ai, updates_for_event, param_overrides) = {
         let mut state = state.lock().await;
 
-        let execution_id = state
-            .prompt_execution
-            .start_execution()
-            .map_err(|e| e.to_string())?;
+        let execution_id = uuid::Uuid::new_v4().to_string();
 
         let resolved_model_id =
             PromptExecutionService::resolve_model(&state.config, model_id.as_deref()).map_err(|e| {
-                state.prompt_execution.finish_execution();
                 e.to_string()
             })?;
 
@@ -648,13 +685,6 @@ pub async fn execute_conversation_from_tree(
         let _ = on_event.send(StreamEvent::NodeUpdates { node_id, updates });
     }
 
-    let _ = app.emit(
-        "execution-started",
-        ExecutionStartedPayload {
-            execution_id: execution_id.clone(),
-        },
-    );
-
     let stream_result = {
         let stream = ai
             .complete_stream(&resolved_model_id, all_messages, param_overrides, tools_override)
@@ -662,7 +692,7 @@ pub async fn execute_conversation_from_tree(
             .map_err(|e| e.to_string());
 
         match stream {
-            Ok(stream) => run_stream_loop(stream, live_execution).await,
+            Ok(stream) => run_stream_loop(stream, live_execution, None).await,
             Err(e) => Err(e),
         }
     };
@@ -671,15 +701,7 @@ pub async fn execute_conversation_from_tree(
 
     match stream_result {
         Ok(_result) => {
-            state.prompt_execution.finish_execution();
-            let _ = app.emit(
-                "execution-completed",
-                ExecutionCompletedPayload {
-                    execution_id,
-                    success: true,
-                    error: None,
-                },
-            );
+            state.prompt_execution.clear_live();
             Ok(())
         }
         Err(error) => {
@@ -691,15 +713,7 @@ pub async fn execute_conversation_from_tree(
                 &state.config.settings().notifications,
             );
 
-            state.prompt_execution.finish_execution();
-            let _ = app.emit(
-                "execution-completed",
-                ExecutionCompletedPayload {
-                    execution_id,
-                    success: false,
-                    error: Some(error.clone()),
-                },
-            );
+            state.prompt_execution.clear_live();
             Err(error)
         }
     }
@@ -728,4 +742,20 @@ pub async fn reconnect_to_execution(
     }
 
     Ok(Some(snapshot))
+}
+
+#[tauri::command]
+pub async fn cancel_skill_execution(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<bool, String> {
+    let mut state = state.lock().await;
+    Ok(state.prompt_execution.cancel_execution())
+}
+
+#[tauri::command]
+pub async fn get_executing_skill_id(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Option<String>, String> {
+    let state = state.lock().await;
+    Ok(state.prompt_execution.executing_skill_id().map(|s| s.to_string()))
 }
