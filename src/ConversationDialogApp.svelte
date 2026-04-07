@@ -25,7 +25,7 @@
 
   const skillsStore = getSkillsStore();
 
-  const store = createConversationStore("", "Chat");
+  const store = createConversationStore("", "");
 
   import type { ModelConfig } from "$lib/types";
 

@@ -336,7 +336,7 @@
                 await toggleChatRecording();
               } else {
                 await closeMenu();
-                await openConversationDialog("", "Chat");
+                await openConversationDialog("", "");
               }
             }}
           >

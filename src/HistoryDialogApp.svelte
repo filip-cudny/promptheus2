@@ -40,7 +40,7 @@
   });
 
   async function handleOpen(entry: HistoryEntry) {
-    await openConversationDialog(entry.skill_id ?? "", entry.title ?? entry.skill_name ?? "Chat", entry.id);
+    await openConversationDialog(entry.skill_id ?? "", entry.title ?? entry.skill_name ?? "", entry.id);
   }
 
   async function changePageSize(size: number) {

@@ -976,8 +976,8 @@ export function createConversationStore(
       } else {
         const entryId = await addConversationEntry({
           contextText: tab.context_text,
-          skillId,
-          skillName,
+          skillId: skillId || undefined,
+          skillName: skillId ? skillName : undefined,
           success: true,
           error: null,
           nodes,
@@ -1010,7 +1010,7 @@ export function createConversationStore(
       if (!entry) return;
 
       const newTab = createTabState(
-        entry.skill_name ?? `Restored`,
+        entry.title ?? entry.skill_name ?? null,
       );
       newTab.history_entry_id = entryId;
 

@@ -84,7 +84,7 @@ async function init() {
     const { skill_id, skill_name, text } = event.payload;
     const isChat = skill_id === "__chat__";
     if (isChat) {
-      openConversationDialog("", skill_name || skill_id, undefined, undefined, text, false).catch(
+      openConversationDialog("", "", undefined, undefined, text, false).catch(
         (e) => logError("Failed to open dialog for voice input: " + e),
       );
     } else {

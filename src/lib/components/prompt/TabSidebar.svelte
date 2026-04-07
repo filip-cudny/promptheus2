@@ -81,7 +81,7 @@
   function itemTitle(item: SidebarItem): string {
     if (item.kind === "draft") return item.tab.tab_name ?? "New chat";
     const entry = item.kind === "open" ? item.entry : item.entry;
-    return entry.title ?? entry.skill_name ?? entry.input_content.slice(0, 60);
+    return entry.title ?? entry.skill_name ?? "New chat";
   }
 
   function itemTimestamp(item: SidebarItem): string | null {

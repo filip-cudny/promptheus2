@@ -40,7 +40,7 @@
     const entry = data?.last_text_entry;
     if (!entry) return;
     await closeMenu();
-    await openConversationDialog(entry.skill_id ?? "", entry.skill_name ?? "Chat", entry.id, true);
+    await openConversationDialog(entry.skill_id ?? "", entry.skill_name ?? "", entry.id, true);
   }
 
   async function handleHistory() {
