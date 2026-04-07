@@ -69,12 +69,11 @@ fn show_notification_window(handle: &tauri::AppHandle) -> Result<(), String> {
         scale,
     });
 
-    let margin = (20.0 * scale) as i32;
     let win_width = (380.0 * scale) as i32;
     let win_height = (100.0 * scale) as i32;
 
-    let x = work_right - win_width - margin;
-    let y = work_bottom - win_height - margin;
+    let x = work_right - win_width;
+    let y = work_bottom - win_height;
 
     win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
         .map_err(|e| e.to_string())?;
@@ -131,12 +130,11 @@ pub async fn update_notification_window(
     }))
     .map_err(|e| e.to_string())?;
 
-    let margin = (20.0 * scale) as i32;
     let win_width = (380.0 * scale) as i32;
     let win_height = (new_height as f64 * scale) as i32;
 
-    let x = work_right - win_width - margin;
-    let y = work_bottom - win_height - margin;
+    let x = work_right - win_width;
+    let y = work_bottom - win_height;
 
     win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
         .map_err(|e| e.to_string())?;

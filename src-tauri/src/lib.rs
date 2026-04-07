@@ -409,18 +409,34 @@ async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
 pub fn run() {
     tauri::Builder::default()
         .plugin(
-            tauri_plugin_log::Builder::new()
-                .targets([
-                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
-                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                        file_name: None,
-                    }),
-                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
-                ])
-                .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
-                .level(log::LevelFilter::Info)
-                .level_for("app_lib", log::LevelFilter::Debug)
-                .build(),
+            {
+                let mut log_builder = tauri_plugin_log::Builder::new()
+                    .targets([
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                            file_name: None,
+                        }),
+                        tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Webview),
+                    ])
+                    .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
+                    .level(log::LevelFilter::Info)
+                    .level_for("app_lib", log::LevelFilter::Debug);
+
+                if let Ok(rust_log) = std::env::var("RUST_LOG") {
+                    for directive in rust_log.split(',') {
+                        let directive = directive.trim();
+                        if let Some((module, level_str)) = directive.split_once('=') {
+                            if let Ok(level) = level_str.parse::<log::LevelFilter>() {
+                                log_builder = log_builder.level_for(module.to_string(), level);
+                            }
+                        } else if let Ok(level) = directive.parse::<log::LevelFilter>() {
+                            log_builder = log_builder.level(level);
+                        }
+                    }
+                }
+
+                log_builder.build()
+            },
         )
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_opener::init())
