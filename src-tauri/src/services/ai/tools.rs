@@ -13,7 +13,9 @@ pub struct ToolRegistry;
 impl ToolRegistry {
     pub fn available_tools(provider: &Provider, api_mode: &ApiMode) -> Vec<BuiltInTool> {
         match (provider, api_mode) {
-            (Provider::Openai, ApiMode::Responses) => vec![BuiltInTool::WebSearch],
+            (Provider::Openai, ApiMode::Responses | ApiMode::Completions) => {
+                vec![BuiltInTool::WebSearch]
+            }
             _ => vec![],
         }
     }
@@ -65,6 +67,25 @@ impl ToolRegistry {
             (BuiltInTool::WebSearch, Provider::Openai, ApiMode::Responses) => {
                 json!({"type": "web_search_preview"})
             }
+            (BuiltInTool::WebSearch, Provider::Openai, ApiMode::Completions) => {
+                json!({
+                    "type": "function",
+                    "function": {
+                        "name": "web_search",
+                        "description": "Search the web for current information",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": {
+                                    "type": "string",
+                                    "description": "The search query"
+                                }
+                            },
+                            "required": ["query"]
+                        }
+                    }
+                })
+            }
             _ => unreachable!(),
         }
     }
@@ -87,9 +108,9 @@ mod tests {
     }
 
     #[test]
-    fn no_tools_on_openai_completions() {
+    fn web_search_available_on_openai_completions() {
         let tools = ToolRegistry::available_tools(&Provider::Openai, &ApiMode::Completions);
-        assert!(tools.is_empty());
+        assert_eq!(tools, vec![BuiltInTool::WebSearch]);
     }
 
     #[test]
@@ -102,7 +123,7 @@ mod tests {
     fn resolve_filters_unsupported() {
         let resolved = ToolRegistry::resolve_tools(
             &["web_search".to_string()],
-            &Provider::Openai,
+            &Provider::Anthropic,
             &ApiMode::Completions,
         );
         assert!(resolved.is_empty());
@@ -129,12 +150,23 @@ mod tests {
     }
 
     #[test]
-    fn web_search_payload() {
+    fn web_search_payload_responses() {
         let payload = ToolRegistry::to_request_payload(
             &BuiltInTool::WebSearch,
             &Provider::Openai,
             &ApiMode::Responses,
         );
         assert_eq!(payload, serde_json::json!({"type": "web_search_preview"}));
+    }
+
+    #[test]
+    fn web_search_payload_completions() {
+        let payload = ToolRegistry::to_request_payload(
+            &BuiltInTool::WebSearch,
+            &Provider::Openai,
+            &ApiMode::Completions,
+        );
+        assert_eq!(payload["type"], "function");
+        assert_eq!(payload["function"]["name"], "web_search");
     }
 }

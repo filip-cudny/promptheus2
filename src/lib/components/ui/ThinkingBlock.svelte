@@ -22,6 +22,13 @@
   let elapsed = $state(0);
   let finalElapsed: number | null = $state(null);
   let intervalId: ReturnType<typeof setInterval> | null = null;
+  let liveThinkingEl: HTMLDivElement | undefined = $state();
+
+  $effect(() => {
+    if (liveThinkingEl && thinkingContent) {
+      liveThinkingEl.scrollTop = liveThinkingEl.scrollHeight;
+    }
+  });
 
   $effect(() => {
     if (isThinkingActive) {
@@ -67,6 +74,11 @@
       <span class="thinking-timer">{formatElapsed(elapsed)}</span>
     {/if}
   </div>
+  {#if hasContent}
+    <div class="thinking-content thinking-content--live" bind:this={liveThinkingEl}>
+      <MarkdownRenderer content={thinkingContent} isStreaming={true} />
+    </div>
+  {/if}
 {:else if hasContent}
   <div class="thinking-completed">
     <button
@@ -168,5 +180,10 @@
     border-radius: 0 4px 4px 0;
     font-size: 13px;
     color: rgba(255, 255, 255, 0.6);
+  }
+
+  .thinking-content--live {
+    max-height: 300px;
+    overflow-anchor: auto;
   }
 </style>

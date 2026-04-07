@@ -8,8 +8,11 @@ use tokio_stream::StreamExt;
 
 use crate::models::settings::ModelConfig;
 
-use super::provider::{AiProvider, CompletionRequest, StreamChunk, TokenUsage};
+use crate::models::settings::{ApiMode, Provider};
+
+use super::provider::{AiProvider, CompletionRequest, StreamChunk, ToolCallEvent, TokenUsage};
 use super::sse::parse_sse_stream;
+use super::tools::ToolRegistry;
 use super::AiError;
 
 pub struct OpenAiProvider {
@@ -97,6 +100,15 @@ fn build_request_body(
         obj.insert(key.clone(), value.clone());
     }
 
+    if !request.tools.is_empty() {
+        let tools_json: Vec<serde_json::Value> = request
+            .tools
+            .iter()
+            .map(|t| ToolRegistry::to_request_payload(t, &Provider::Openai, &ApiMode::Completions))
+            .collect();
+        obj.insert("tools".into(), serde_json::json!(tools_json));
+    }
+
     body
 }
 
@@ -139,6 +151,7 @@ struct ChatCompletionChunk {
 #[derive(Deserialize)]
 struct ChatCompletionChunkChoice {
     delta: ChatCompletionDelta,
+    finish_reason: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -146,6 +159,20 @@ struct ChatCompletionDelta {
     content: Option<String>,
     reasoning_content: Option<String>,
     reasoning: Option<String>,
+    tool_calls: Option<Vec<ToolCallDelta>>,
+}
+
+#[derive(Deserialize)]
+struct ToolCallDelta {
+    index: usize,
+    id: Option<String>,
+    function: Option<FunctionCallDelta>,
+}
+
+#[derive(Deserialize)]
+struct FunctionCallDelta {
+    name: Option<String>,
+    arguments: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -227,65 +254,173 @@ impl AiProvider for OpenAiProvider {
 
         let sse_stream = parse_sse_stream(response);
 
-        let stream = futures::stream::unfold(
-            (sse_stream, String::new(), String::new()),
-            |(mut sse_stream, mut accumulated, mut accumulated_thinking)| async move {
-                loop {
-                    match sse_stream.next().await {
-                        Some(Ok(data)) => {
-                            let chunk: ChatCompletionChunk = match serde_json::from_str(&data) {
-                                Ok(c) => c,
-                                Err(_) => continue,
-                            };
+        struct UnfoldState {
+            sse_stream: Pin<Box<dyn Stream<Item = Result<String, reqwest::Error>> + Send>>,
+            accumulated: String,
+            accumulated_thinking: String,
+            tool_calls: Vec<AccumulatedToolCall>,
+            pending_tool_done_events: Vec<ToolCallEvent>,
+        }
 
-                            let usage = chunk.usage.map(|u| TokenUsage {
-                                prompt_tokens: u.prompt_tokens,
-                                completion_tokens: u.completion_tokens,
-                            });
+        struct AccumulatedToolCall {
+            id: String,
+            name: String,
+            arguments: String,
+        }
 
-                            let choice_delta = chunk.choices.first().map(|c| &c.delta);
+        let state = UnfoldState {
+            sse_stream,
+            accumulated: String::new(),
+            accumulated_thinking: String::new(),
+            tool_calls: Vec::new(),
+            pending_tool_done_events: Vec::new(),
+        };
 
-                            let delta = choice_delta
-                                .and_then(|d| d.content.as_deref())
-                                .unwrap_or("");
+        let stream = futures::stream::unfold(state, |mut state| async move {
+            if let Some(event) = state.pending_tool_done_events.pop() {
+                return Some((
+                    Ok(StreamChunk {
+                        delta: String::new(),
+                        accumulated: state.accumulated.clone(),
+                        thinking_delta: None,
+                        accumulated_thinking: None,
+                        usage: None,
+                        tool_call_event: Some(event),
+                    }),
+                    state,
+                ));
+            }
 
-                            let thinking = choice_delta
-                                .and_then(|d| d.reasoning_content.as_deref().or(d.reasoning.as_deref()))
-                                .unwrap_or("");
+            loop {
+                match state.sse_stream.next().await {
+                    Some(Ok(data)) => {
+                        let chunk: ChatCompletionChunk = match serde_json::from_str(&data) {
+                            Ok(c) => c,
+                            Err(_) => continue,
+                        };
 
-                            if delta.is_empty() && thinking.is_empty() && usage.is_none() {
-                                continue;
+                        let usage = chunk.usage.map(|u| TokenUsage {
+                            prompt_tokens: u.prompt_tokens,
+                            completion_tokens: u.completion_tokens,
+                        });
+
+                        let choice = chunk.choices.first();
+                        let choice_delta = choice.map(|c| &c.delta);
+                        let finish_reason = choice.and_then(|c| c.finish_reason.as_deref());
+
+                        if let Some(tool_call_deltas) = choice_delta.and_then(|d| d.tool_calls.as_ref()) {
+                            for tc_delta in tool_call_deltas {
+                                if let Some(ref id) = tc_delta.id {
+                                    let name = tc_delta
+                                        .function
+                                        .as_ref()
+                                        .and_then(|f| f.name.clone())
+                                        .unwrap_or_default();
+
+                                    while state.tool_calls.len() <= tc_delta.index {
+                                        state.tool_calls.push(AccumulatedToolCall {
+                                            id: String::new(),
+                                            name: String::new(),
+                                            arguments: String::new(),
+                                        });
+                                    }
+                                    state.tool_calls[tc_delta.index] = AccumulatedToolCall {
+                                        id: id.clone(),
+                                        name: name.clone(),
+                                        arguments: String::new(),
+                                    };
+
+                                    let marker = format!("{{{{tool_call:{id}}}}}");
+                                    state.accumulated.push_str(&marker);
+
+                                    return Some((
+                                        Ok(StreamChunk {
+                                            delta: marker,
+                                            accumulated: state.accumulated.clone(),
+                                            thinking_delta: None,
+                                            accumulated_thinking: None,
+                                            usage: None,
+                                            tool_call_event: Some(ToolCallEvent::Started {
+                                                tool_call_id: id.clone(),
+                                                tool_name: name,
+                                            }),
+                                        }),
+                                        state,
+                                    ));
+                                }
+
+                                if let Some(ref args) = tc_delta.function.as_ref().and_then(|f| f.arguments.clone()) {
+                                    if tc_delta.index < state.tool_calls.len() {
+                                        state.tool_calls[tc_delta.index].arguments.push_str(args);
+                                    }
+                                }
                             }
-
-                            accumulated.push_str(delta);
-                            accumulated_thinking.push_str(thinking);
-
-                            let thinking_delta = if thinking.is_empty() { None } else { Some(thinking.to_string()) };
-                            let acc_thinking = if accumulated_thinking.is_empty() { None } else { Some(accumulated_thinking.clone()) };
-
-                            return Some((
-                                Ok(StreamChunk {
-                                    delta: delta.to_string(),
-                                    accumulated: accumulated.clone(),
-                                    thinking_delta,
-                                    accumulated_thinking: acc_thinking,
-                                    usage,
-                                    tool_call_event: None,
-                                }),
-                                (sse_stream, accumulated, accumulated_thinking),
-                            ));
                         }
-                        Some(Err(e)) => {
-                            return Some((
-                                Err(AiError::Stream(e.to_string())),
-                                (sse_stream, accumulated, accumulated_thinking),
-                            ));
+
+                        if finish_reason == Some("tool_calls") {
+                            for tc in &state.tool_calls {
+                                if !tc.id.is_empty() {
+                                    state.pending_tool_done_events.push(ToolCallEvent::Done {
+                                        tool_call_id: tc.id.clone(),
+                                        result: Some(tc.arguments.clone()),
+                                        error: None,
+                                    });
+                                }
+                            }
+                            state.tool_calls.clear();
+
+                            if let Some(event) = state.pending_tool_done_events.pop() {
+                                return Some((
+                                    Ok(StreamChunk {
+                                        delta: String::new(),
+                                        accumulated: state.accumulated.clone(),
+                                        thinking_delta: None,
+                                        accumulated_thinking: None,
+                                        usage,
+                                        tool_call_event: Some(event),
+                                    }),
+                                    state,
+                                ));
+                            }
                         }
-                        None => return None,
+
+                        let delta = choice_delta
+                            .and_then(|d| d.content.as_deref())
+                            .unwrap_or("");
+
+                        let thinking = choice_delta
+                            .and_then(|d| d.reasoning_content.as_deref().or(d.reasoning.as_deref()))
+                            .unwrap_or("");
+
+                        if delta.is_empty() && thinking.is_empty() && usage.is_none() {
+                            continue;
+                        }
+
+                        state.accumulated.push_str(delta);
+                        state.accumulated_thinking.push_str(thinking);
+
+                        let thinking_delta = if thinking.is_empty() { None } else { Some(thinking.to_string()) };
+                        let acc_thinking = if state.accumulated_thinking.is_empty() { None } else { Some(state.accumulated_thinking.clone()) };
+
+                        return Some((
+                            Ok(StreamChunk {
+                                delta: delta.to_string(),
+                                accumulated: state.accumulated.clone(),
+                                thinking_delta,
+                                accumulated_thinking: acc_thinking,
+                                usage,
+                                tool_call_event: None,
+                            }),
+                            state,
+                        ));
                     }
+                    Some(Err(e)) => {
+                        return Some((Err(AiError::Stream(e.to_string())), state));
+                    }
+                    None => return None,
                 }
-            },
-        );
+            }
+        });
 
         Ok(Box::pin(stream))
     }
