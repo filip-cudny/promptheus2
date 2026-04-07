@@ -32,7 +32,7 @@
   );
 
   let displayName = $derived(
-    entry.title ?? entry.skill_name ?? (entry.entry_type === "speech" ? "Transcription" : "Unknown"),
+    entry.title ?? entry.skill_name ?? (entry.entry_type === "speech" ? "Transcription" : "Chat"),
   );
 
   let inputPreview = $derived(truncate(entry.input_content, 120));

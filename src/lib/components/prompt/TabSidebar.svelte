@@ -206,7 +206,7 @@
           <MessageSquare size={ICON_SIZE.sm} />
         {/if}
         <div class="tab-body">
-          <span class="tab-name">{itemTitle(item)}</span>
+          <span class="tab-name" title={itemTitle(item)}>{itemTitle(item)}</span>
           {#if ts}
             <span class="tab-meta">{ts}</span>
           {/if}

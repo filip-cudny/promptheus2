@@ -976,8 +976,8 @@ export function createConversationStore(
       } else {
         const entryId = await addConversationEntry({
           contextText: tab.context_text,
-          skillId: skillId || undefined,
-          skillName: skillId ? skillName : undefined,
+          skillId: skillId || null,
+          skillName: skillId ? skillName : null,
           success: true,
           error: null,
           nodes,
