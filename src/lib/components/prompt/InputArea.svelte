@@ -95,9 +95,11 @@
     if (skillEditable) {
       if (storeText === "") {
         skillEditable.setTextAndHighlight("");
+        skillEditable.resetUndoStack("");
         lastDomText = "";
       } else if (tabChanged || textChangedExternally) {
         skillEditable.setTextAndHighlight(storeText);
+        skillEditable.resetUndoStack(storeText);
         lastDomText = storeText;
         requestAnimationFrame(() => {
           skillEditable?.focus();

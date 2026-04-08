@@ -2,6 +2,7 @@
   import { getSkillsStore } from "$lib/stores/skills.svelte";
   import { highlightSkills, fuzzyMatch } from "$lib/utils/skillHighlight";
   import { resizeTextarea } from "$lib/utils/autoResize";
+  import { UndoStack } from "$lib/utils/undoStack";
   import type { SkillSummary } from "$lib/types";
 
   let {
@@ -28,6 +29,10 @@
   let autocompleteIndex = $state(0);
   let slashStart = $state(-1);
   let dropdownEl: HTMLDivElement | undefined = $state();
+
+  const undoStack = new UndoStack();
+  let isUndoRedoAction = false;
+  let snapshotTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
     if (showAutocomplete && dropdownEl) {
@@ -58,6 +63,58 @@
     textarea.selectionStart = textarea.selectionEnd = offset;
   }
 
+  export function resetUndoStack(seedText?: string) {
+    clearTimeout(snapshotTimer);
+    const cursor = seedText?.length ?? 0;
+    undoStack.reset(seedText != null ? { text: seedText, cursorStart: cursor, cursorEnd: cursor } : undefined);
+  }
+
+  function captureSnapshot() {
+    if (!textarea) return;
+    undoStack.push({
+      text: text,
+      cursorStart: textarea.selectionStart,
+      cursorEnd: textarea.selectionEnd,
+    });
+  }
+
+  function scheduleSnapshot() {
+    clearTimeout(snapshotTimer);
+    snapshotTimer = setTimeout(captureSnapshot, 300);
+  }
+
+  function flushSnapshot() {
+    if (snapshotTimer !== undefined) {
+      clearTimeout(snapshotTimer);
+      captureSnapshot();
+    }
+  }
+
+  function performUndo() {
+    flushSnapshot();
+    const entry = undoStack.undo();
+    if (!entry) return;
+    isUndoRedoAction = true;
+    text = entry.text;
+    requestAnimationFrame(() => {
+      if (!textarea) return;
+      textarea.selectionStart = entry.cursorStart;
+      textarea.selectionEnd = entry.cursorEnd;
+    });
+  }
+
+  function performRedo() {
+    const entry = undoStack.redo();
+    if (!entry) return;
+    isUndoRedoAction = true;
+    text = entry.text;
+    requestAnimationFrame(() => {
+      if (!textarea) return;
+      textarea.selectionStart = entry.cursorStart;
+      textarea.selectionEnd = entry.cursorEnd;
+    });
+  }
+
   function classifySkillToken(token: string, finished: boolean): string | null {
     const name = token.slice(1);
     if (!name) return "hl-skill-partial";
@@ -78,6 +135,11 @@
 
   function handleInput() {
     if (textarea) text = textarea.value;
+    if (isUndoRedoAction) {
+      isUndoRedoAction = false;
+    } else {
+      scheduleSnapshot();
+    }
     detectSlashCommand();
     oninput?.();
   }
@@ -135,6 +197,8 @@
   function insertSkill(skill: SkillSummary) {
     if (!textarea || slashStart < 0) return;
 
+    flushSnapshot();
+
     const cursorOffset = textarea.selectionStart;
     const before = text.slice(0, slashStart);
     const after = text.slice(cursorOffset);
@@ -142,6 +206,9 @@
 
     const newOffset = slashStart + skill.name.length + 2;
     closeAutocomplete();
+
+    undoStack.push({ text, cursorStart: newOffset, cursorEnd: newOffset });
+
     requestAnimationFrame(() => {
       if (!textarea) return;
       textarea.value = text;
@@ -151,6 +218,18 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key === "z" && !e.shiftKey) {
+      e.preventDefault();
+      performUndo();
+      return;
+    }
+    if (mod && e.key === "z" && e.shiftKey) {
+      e.preventDefault();
+      performRedo();
+      return;
+    }
+
     if (e.key === "Escape" && showAutocomplete) {
       e.preventDefault();
       closeAutocomplete();
