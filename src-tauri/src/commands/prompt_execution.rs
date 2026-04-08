@@ -343,7 +343,7 @@ pub async fn execute_skill(
             state.history.add_conversation_entry(
                 String::new(),
                 Some(skill_name),
-                Some(skill_display_name),
+                Some(skill_display_name.clone()),
                 true,
                 None,
                 vec![user_node, assistant_node],
