@@ -360,7 +360,7 @@ pub async fn execute_skill(
             let _ = state.notifications.notify(
                 "prompt_execution_success",
                 NotificationLevel::Success,
-                "Prompt executed",
+                &format!("{skill_display_name} completed"),
                 Some(format!(
                     "{model_display_name} · {:.1}s · copied to clipboard",
                     elapsed.as_secs_f64()

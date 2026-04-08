@@ -1,6 +1,7 @@
 use std::io::{Cursor, Seek, Write};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Device;
@@ -41,6 +42,7 @@ pub struct SpeechService {
     audio_buffer: Arc<Mutex<Vec<i16>>>,
     sample_rate: u32,
     stop_sender: Option<mpsc::Sender<()>>,
+    last_transcription_finished: Option<Instant>,
 }
 
 impl SpeechService {
@@ -54,6 +56,7 @@ impl SpeechService {
             audio_buffer: Arc::new(Mutex::new(Vec::new())),
             sample_rate: 16000,
             stop_sender: None,
+            last_transcription_finished: None,
         }
     }
 
@@ -156,6 +159,20 @@ impl SpeechService {
 
     pub fn take_pending_prompt(&mut self) -> (Option<String>, Option<String>) {
         (self.pending_skill_id.take(), self.pending_skill_name.take())
+    }
+
+    pub fn mark_transcription_finished(&mut self) {
+        self.last_transcription_finished = Some(Instant::now());
+    }
+
+    pub fn is_on_cooldown(&self) -> bool {
+        self.last_transcription_finished
+            .map(|t| t.elapsed().as_secs_f64() < 2.0)
+            .unwrap_or(false)
+    }
+
+    pub fn clear_cooldown(&mut self) {
+        self.last_transcription_finished = None;
     }
 }
 
@@ -404,6 +421,27 @@ mod tests {
         };
         let result = transcribe(vec![0; 44], &config).await;
         assert!(matches!(result, Err(SpeechError::ApiKeyMissing)));
+    }
+
+    #[test]
+    fn cooldown_inactive_on_new_service() {
+        let service = SpeechService::new();
+        assert!(!service.is_on_cooldown());
+    }
+
+    #[test]
+    fn cooldown_active_after_transcription_finished() {
+        let mut service = SpeechService::new();
+        service.mark_transcription_finished();
+        assert!(service.is_on_cooldown());
+    }
+
+    #[test]
+    fn cooldown_cleared_explicitly() {
+        let mut service = SpeechService::new();
+        service.mark_transcription_finished();
+        service.clear_cooldown();
+        assert!(!service.is_on_cooldown());
     }
 
     #[test]

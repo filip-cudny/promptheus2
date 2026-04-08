@@ -8,7 +8,7 @@ use crate::services::speech::{self, SpeechError};
 
 use super::settings::AppState;
 
-const MIN_RECORDING_SAMPLES_SECS: f64 = 2.0;
+const MIN_RECORDING_SAMPLES_SECS: f64 = 1.0;
 
 #[derive(Clone, Serialize)]
 struct TranscriptionComplete {
@@ -49,6 +49,27 @@ pub async fn toggle_speech_recording(
 
         if s.speech.is_transcribing() {
             log::debug!("toggle_speech_recording: ignored, transcription in progress");
+            let notification_settings = s.config.settings().notifications.clone();
+            let _ = s.notifications.notify(
+                "speech_recording_start",
+                NotificationLevel::Warning,
+                "Transcription in Progress",
+                Some("Please wait for the current transcription to finish"),
+                &notification_settings,
+            );
+            return Ok(());
+        }
+
+        if !s.speech.is_recording() && s.speech.is_on_cooldown() {
+            log::debug!("toggle_speech_recording: ignored, cooldown active");
+            let notification_settings = s.config.settings().notifications.clone();
+            let _ = s.notifications.notify(
+                "speech_recording_start",
+                NotificationLevel::Warning,
+                "Please Wait",
+                Some("Cooldown active — try again in a moment"),
+                &notification_settings,
+            );
             return Ok(());
         }
 
@@ -106,6 +127,7 @@ pub async fn toggle_speech_recording(
         );
         let mut s = state.lock().await;
         s.speech.set_transcribing(false);
+        s.speech.mark_transcription_finished();
         s.speech.set_pending_prompt(None, None);
         return Ok(());
     }
@@ -125,6 +147,7 @@ pub async fn toggle_speech_recording(
         Err(e) => {
             let mut s = state.lock().await;
             s.speech.set_transcribing(false);
+            s.speech.mark_transcription_finished();
             s.speech.set_pending_prompt(None, None);
             return Err(e);
         }
@@ -144,6 +167,7 @@ pub async fn toggle_speech_recording(
             Some(config) => config,
             None => {
                 s.speech.set_transcribing(false);
+                s.speech.mark_transcription_finished();
                 s.speech.set_pending_prompt(None, None);
                 let _ = app.emit("speech-error", SpeechErrorEvent {
                     message: "Speech-to-text model not configured".into(),
@@ -214,6 +238,7 @@ pub async fn toggle_speech_recording(
 
                 let mut s = state_inner.lock().await;
                 s.speech.set_transcribing(false);
+                s.speech.mark_transcription_finished();
             }
             Err(SpeechError::NoSpeechDetected) => {
                 let _ = app_clone.emit(
@@ -248,6 +273,7 @@ pub async fn toggle_speech_recording(
                 );
 
                 s.speech.set_transcribing(false);
+                s.speech.mark_transcription_finished();
             }
             Err(e) => {
                 let message = e.to_string();
@@ -271,6 +297,7 @@ pub async fn toggle_speech_recording(
                 );
 
                 s.speech.set_transcribing(false);
+                s.speech.mark_transcription_finished();
             }
         }
     });
