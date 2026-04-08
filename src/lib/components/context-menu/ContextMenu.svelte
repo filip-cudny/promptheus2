@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick } from "svelte";
-  import { slide } from "svelte/transition";
+  import { onMount, onDestroy, tick, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { debug as logDebug } from "@tauri-apps/plugin-log";
@@ -10,6 +9,7 @@
   import ContextSection from "./ContextSection.svelte";
   import LastInteractionSection from "./LastInteractionSection.svelte";
   import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
+  import FloatingPanel from "$lib/components/ui/FloatingPanel.svelte";
   import { ChevronRight, Info, MessageSquare, MessageSquareShare, Mic, Square, X } from "lucide-svelte";
   import { openConversationDialog } from "$lib/services/conversationDialog";
   import { isExecuting, getExecutingSkillId } from "$lib/stores/execution.svelte";
@@ -111,8 +111,10 @@
   let modelsReasoningEffort = $state<string | null>(null);
 
   let menuEl: HTMLDivElement | undefined = $state();
-  let expandedDescriptionId = $state("");
-  let settingsModelExpanded = $state(false);
+  let settingsOpen = $state(false);
+  let settingsAnchorEl: HTMLElement | undefined = $state();
+  let activeInfoId = $state("");
+  let activeInfoAnchorEl: HTMLElement | undefined = $state();
   let hoverEnabled = $state(false);
   let shiftHeld = $state(false);
 
@@ -123,7 +125,11 @@
     switch (e.key) {
       case "Escape":
         e.preventDefault();
-        closeMenu();
+        if (settingsOpen || activeInfoId) {
+          closePanels();
+        } else {
+          closeMenu();
+        }
         break;
       case "ArrowDown":
         e.preventDefault();
@@ -159,6 +165,7 @@
   const MENU_WIDTH = 320;
   let resizeGeneration = 0;
   let lastShownTrigger = 0;
+  let currentWindowPos = { x: 0, y: 0 };
 
   function getSkillsSectionOffset(): number {
     if (!menuEl) return 0;
@@ -197,6 +204,7 @@
     await win.setSize(new LogicalSize(MENU_WIDTH, height));
     if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
     if (wa) {
+      currentWindowPos = { x, y };
       await win.setPosition(new LogicalPosition(x, y));
       if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
     }
@@ -208,19 +216,25 @@
     logDebug(`[ctx-menu] opened at (${x}, ${y}), size ${MENU_WIDTH}x${height}`);
   }
 
-  async function resizeWindow() {
-    if (lastShownTrigger !== getOpenTrigger()) return;
-    const gen = ++resizeGeneration;
-    await tick();
-    if (gen !== resizeGeneration) return;
-    resizeWindowImmediate();
+  function closeSettingsPanel() {
+    if (settingsOpen) {
+      logDebug("[ctx-menu] closing settings panel");
+      settingsOpen = false;
+      resumeClose();
+    }
   }
 
-  function resizeWindowImmediate() {
-    if (!menuEl || !isVisible()) return;
-    const height = menuEl.scrollHeight + 2;
-    const win = getCurrentWebviewWindow();
-    win.setSize(new LogicalSize(MENU_WIDTH, height));
+  function closeInfoPanel() {
+    if (activeInfoId) {
+      logDebug(`[ctx-menu] closing info panel: ${activeInfoId}`);
+      activeInfoId = "";
+      resumeClose();
+    }
+  }
+
+  function closePanels() {
+    closeSettingsPanel();
+    closeInfoPanel();
   }
 
   function handleMouseMove() {
@@ -230,16 +244,8 @@
   $effect(() => {
     void getOpenTrigger();
     if (menuVisible && menuItems.length > 0) {
+      untrack(() => closePanels());
       resizeAndPositionWindow();
-    }
-  });
-
-  $effect(() => {
-    void expandedDescriptionId;
-    void settingsModelExpanded;
-    void menuItems;
-    if (menuVisible && menuItems.length > 0) {
-      resizeWindow();
     }
   });
 
@@ -264,7 +270,7 @@
   });
 
   let menuVisible = $derived(isVisible());
-  $effect(() => { if (!menuVisible) { expandedDescriptionId = ""; settingsModelExpanded = false; } });
+  $effect(() => { if (!menuVisible) closePanels(); });
 
   $effect(() => {
     const items = getItems();
@@ -311,6 +317,7 @@
         closeMenu();
       }
     });
+
   });
 
   onDestroy(() => {
@@ -372,60 +379,67 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="menu-item-row"
+          bind:this={settingsAnchorEl}
           onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}
         >
           <button
             class="menu-item settings-toggle"
             role="menuitem"
             tabindex={-1}
-            onclick={() => { settingsModelExpanded = !settingsModelExpanded; }}
+            onclick={() => {
+              if (settingsOpen) {
+                closeSettingsPanel();
+              } else {
+                closePanels();
+                logDebug("[ctx-menu] opening settings panel");
+                settingsOpen = true;
+                suppressClose();
+              }
+            }}
           >
-            <span class="settings-chevron" class:expanded={settingsModelExpanded}>
+            <span class="settings-chevron" class:expanded={settingsOpen}>
               <ChevronRight size={ICON_SIZE.sm} />
             </span>
             <span class="item-label">Settings</span>
           </button>
         </div>
-        {#if settingsModelExpanded}
-          <div class="settings-subsection" transition:slide={{ duration: 150 }} onintrostart={() => resizeWindowImmediate()} onoutroend={() => resizeWindowImmediate()}>
-            {#if modelsData && modelsData.models.length > 0}
-              <div class="subsection-label">Quick Action Model</div>
-              <div class="models-row subsection-models" onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}>
-                <ModelSelector
-                  models={modelsData.models.map((m) => ({
-                    id: m.id,
-                    model: m.model,
-                    display_name: m.display_name,
-                    provider: m.provider,
-                    api_key_source: "env" as const,
-                    api_key_env: null,
-                    api_key: null,
-                    base_url: null,
-                    parameters: m.reasoning_effort ? { temperature: null, max_tokens: null, top_p: null, frequency_penalty: null, presence_penalty: null, reasoning_effort: m.reasoning_effort } : null,
-                    context_window_size: null,
-                    enabled_tools: [],
-                  }))}
-                  selectedModelId={modelsDefaultModelId}
-                  reasoningEffort={modelsReasoningEffort}
-                  onModelSelect={async (modelId) => {
-                    modelsDefaultModelId = modelId;
-                    const model = modelsData.models.find((m) => m.id === modelId);
-                    modelsReasoningEffort = model?.reasoning_effort ?? null;
-                    await updateSetting("quick_action_default_model", modelId);
-                  }}
-                  onReasoningSelect={async (effort) => {
-                    modelsReasoningEffort = effort;
-                    if (modelsDefaultModelId) {
-                      await updateModelReasoningEffort(modelsDefaultModelId, effort);
-                    }
-                  }}
-                  preventDismiss={{ suppress: suppressClose, resume: resumeClose }}
-                  onDropdownToggle={() => resizeWindow()}
-                />
-              </div>
-            {/if}
-          </div>
-        {/if}
+        <FloatingPanel visible={settingsOpen} anchorEl={settingsAnchorEl} onclose={closeSettingsPanel}>
+          {#if modelsData && modelsData.models.length > 0}
+            <div class="panel-label">Quick Action Model</div>
+            <div class="models-row" onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}>
+              <ModelSelector
+                models={modelsData.models.map((m) => ({
+                  id: m.id,
+                  model: m.model,
+                  display_name: m.display_name,
+                  provider: m.provider,
+                  api_key_source: "env" as const,
+                  api_key_env: null,
+                  api_key: null,
+                  base_url: null,
+                  parameters: m.reasoning_effort ? { temperature: null, max_tokens: null, top_p: null, frequency_penalty: null, presence_penalty: null, reasoning_effort: m.reasoning_effort } : null,
+                  context_window_size: null,
+                  enabled_tools: [],
+                }))}
+                selectedModelId={modelsDefaultModelId}
+                reasoningEffort={modelsReasoningEffort}
+                onModelSelect={async (modelId) => {
+                  modelsDefaultModelId = modelId;
+                  const model = modelsData.models.find((m) => m.id === modelId);
+                  modelsReasoningEffort = model?.reasoning_effort ?? null;
+                  await updateSetting("quick_action_default_model", modelId);
+                }}
+                onReasoningSelect={async (effort) => {
+                  modelsReasoningEffort = effort;
+                  if (modelsDefaultModelId) {
+                    await updateModelReasoningEffort(modelsDefaultModelId, effort);
+                  }
+                }}
+                preventDismiss={{ suppress: suppressClose, resume: resumeClose }}
+              />
+            </div>
+          {/if}
+        </FloatingPanel>
       {/if}
       {#each section.sectionId === "chat" || section.sectionId === "settings" ? [] : section.items as { item, globalIndex }}
         {@const contextItems = extractContextItems(item)}
@@ -478,7 +492,19 @@
                 <button
                   class="action-btn info-btn"
                   class:disabled={infoDisabled}
-                  onclick={(e) => { e.stopPropagation(); if (!infoDisabled) expandedDescriptionId = expandedDescriptionId === item.id ? "" : item.id; }}
+                  class:active={activeInfoId === item.id}
+                  onclick={(e) => {
+                    e.stopPropagation();
+                    if (infoDisabled) return;
+                    if (activeInfoId === item.id) {
+                      closeInfoPanel();
+                    } else {
+                      closePanels();
+                      activeInfoId = item.id;
+                      activeInfoAnchorEl = e.currentTarget as HTMLElement;
+                      suppressClose();
+                    }
+                  }}
                 >
                   <Info size={ICON_SIZE.sm} />
                 </button>
@@ -502,9 +528,9 @@
               </button>
             {/if}
           </div>
-          {#if expandedDescriptionId === item.id && item.tooltip}
-            <div class="description-row" transition:slide={{ duration: 150 }}>{item.tooltip}</div>
-          {/if}
+          <FloatingPanel visible={activeInfoId === item.id} anchorEl={activeInfoAnchorEl} onclose={closeInfoPanel}>
+            <div class="info-panel-text">{item.tooltip}</div>
+          </FloatingPanel>
         {/if}
       {/each}
     {/each}
@@ -537,6 +563,8 @@
   .models-row {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
     padding: 4px 12px;
   }
 
@@ -705,13 +733,6 @@
     height: 18px;
   }
 
-  .description-row {
-    padding: 2px 12px 6px 40px;
-    color: rgba(255, 255, 255, 0.45);
-    font-size: 12px;
-    line-height: 1.3;
-  }
-
   .settings-toggle {
     gap: 4px;
   }
@@ -727,17 +748,19 @@
     transform: rotate(90deg);
   }
 
-  .settings-subsection {
-    overflow: hidden;
-  }
-
-  .subsection-label {
-    padding: 4px 12px 2px 28px;
+  .panel-label {
     font-size: 11px;
     color: rgba(255, 255, 255, 0.35);
+    margin-bottom: 4px;
   }
 
-  .subsection-models {
-    padding: 2px 12px 4px 28px;
+  .info-btn.active {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .info-panel-text {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+    line-height: 1.4;
   }
 </style>
