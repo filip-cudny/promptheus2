@@ -48,6 +48,13 @@
   let unlistenVoiceInput: UnlistenFn | undefined;
   let unlistenOpenForSkill: UnlistenFn | undefined;
 
+  function handleGlobalKeydown(e: KeyboardEvent) {
+    if (e.key === "Escape" && store.isExecuting) {
+      e.preventDefault();
+      store.abortExecution();
+    }
+  }
+
   async function autoShowContextIfNeeded() {
     if (contextDisabled || contextVisible) return;
     if (await hasContext()) {
@@ -87,6 +94,7 @@
   }
 
   onMount(async () => {
+    window.addEventListener("keydown", handleGlobalKeydown);
     skillsStore.init();
     await store.initFromSettings();
     loadModelInfo();
@@ -151,6 +159,7 @@
   }
 
   onDestroy(() => {
+    window.removeEventListener("keydown", handleGlobalKeydown);
     unlistenRestore?.();
     unlistenContextChanged?.();
     unlistenVoiceInput?.();

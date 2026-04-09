@@ -58,6 +58,7 @@ export interface TabState {
   thinking_started_at: number | null;
   active_tool_calls: ToolCall[];
   web_search_enabled: boolean;
+  abort_regenerate_node_id: string | null;
 }
 
 export type ContentSegment =

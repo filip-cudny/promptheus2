@@ -180,23 +180,25 @@
     if (gen !== resizeGeneration) return;
     if (!menuEl || !isVisible()) return;
 
-    const height = menuEl.scrollHeight + 2;
+    let height = menuEl.scrollHeight + 2;
     const win = getCurrentWebviewWindow();
     const wa = getWorkArea();
     let x = 0, y = 0;
-    if (wa) {
+
+    function positionFromHeight(h: number) {
+      if (!wa) return;
       const anchorOffset = getSkillsSectionOffset();
       x = wa.cursorX;
       y = wa.cursorY - anchorOffset;
-
       const rightEdge = wa.workX + wa.workWidth;
       const bottomEdge = wa.workY + wa.workHeight;
       if (x + MENU_WIDTH > rightEdge) x = rightEdge - MENU_WIDTH;
-      if (y + height > bottomEdge) y = bottomEdge - height;
+      if (y + h > bottomEdge) y = bottomEdge - h;
       if (x < wa.workX) x = wa.workX;
       if (y < wa.workY) y = wa.workY;
     }
 
+    positionFromHeight(height);
     hoverEnabled = false;
     suppressClose();
     await win.hide();
@@ -210,6 +212,20 @@
     }
     await win.show();
     if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
+
+    const correctedHeight = menuEl.scrollHeight + 2;
+    if (correctedHeight !== height) {
+      height = correctedHeight;
+      positionFromHeight(height);
+      await win.setSize(new LogicalSize(MENU_WIDTH, height));
+      if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
+      if (wa) {
+        currentWindowPos = { x, y };
+        await win.setPosition(new LogicalPosition(x, y));
+        if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
+      }
+    }
+
     await invoke("focus_context_menu");
     resumeClose();
     lastShownTrigger = getOpenTrigger();

@@ -19,10 +19,13 @@
   let panelEl: HTMLDivElement | undefined = $state();
   let style = $state("");
   let armed = $state(false);
+  let animating = $state(false);
+  let expandDirection: "up" | "down" = $state("down");
 
   $effect(() => {
     if (visible && anchorEl) {
       armed = false;
+      animating = true;
       tick().then(() => {
         computePosition();
         armed = true;
@@ -44,8 +47,10 @@
     let top: number;
     if (position === "below" || (position === "auto" && spaceBelow >= panelHeight + 4)) {
       top = anchorRect.bottom + 4;
+      expandDirection = "down";
     } else {
       top = anchorRect.top - panelHeight - 4;
+      expandDirection = "up";
     }
 
     top = Math.max(4, Math.min(top, viewportHeight - panelHeight - 4));
@@ -60,17 +65,45 @@
     }
   }
 
+  function handleAnimationEnd() {
+    animating = false;
+  }
 </script>
 
 <svelte:window onpointerdown={handlePointerDown} />
 
 {#if visible}
-  <div class="floating-panel" bind:this={panelEl} {style}>
+  <div
+    class="floating-panel"
+    class:expand-down={animating && expandDirection === "down"}
+    class:expand-up={animating && expandDirection === "up"}
+    bind:this={panelEl}
+    {style}
+    onanimationend={handleAnimationEnd}
+  >
     {@render children()}
   </div>
 {/if}
 
 <style>
+  @keyframes panel-expand-down {
+    from {
+      clip-path: inset(0 0 100% 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+
+  @keyframes panel-expand-up {
+    from {
+      clip-path: inset(100% 0 0 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+
   .floating-panel {
     position: fixed;
     left: 4px;
@@ -82,5 +115,13 @@
     padding: 8px 12px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     box-sizing: border-box;
+  }
+
+  .floating-panel.expand-down {
+    animation: panel-expand-down 150ms ease-out;
+  }
+
+  .floating-panel.expand-up {
+    animation: panel-expand-up 150ms ease-out;
   }
 </style>

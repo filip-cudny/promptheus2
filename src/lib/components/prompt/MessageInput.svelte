@@ -50,7 +50,10 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
-      if (store.isRegenerateMode) {
+      const abortNodeId = store.abortRegenerateNodeId;
+      if (abortNodeId) {
+        store.editAndRegenerate(abortNodeId, localText.trim());
+      } else if (store.isRegenerateMode) {
         const path = store.tree.current_path;
         if (path.length > 0) {
           store.regenerate(path[path.length - 1]);

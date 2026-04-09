@@ -1,3 +1,4 @@
+import { tick } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import { error as logError } from "@tauri-apps/plugin-log";
 import { generateId } from "$lib/utils/id";
@@ -154,6 +155,7 @@ function createTabState(
     thinking_started_at: null,
     active_tool_calls: [],
     web_search_enabled: false,
+    abort_regenerate_node_id: null,
   };
 }
 
@@ -388,6 +390,7 @@ export function createConversationStore(
     tab.is_executing = true;
     tab.is_streaming = true;
     tab.streamed_content = "";
+    tab.abort_regenerate_node_id = null;
 
     let success = false;
     let resultText = "";
@@ -726,6 +729,46 @@ export function createConversationStore(
     stopTabExecution(tab);
   }
 
+  async function abortExecution(): Promise<void> {
+    const tab = getTab(activeTabId);
+    if (!tab || !tab.is_executing) return;
+
+    const path = tab.tree.current_path;
+    if (path.length < 2) {
+      stopTabExecution(tab);
+      return;
+    }
+
+    const assistantNodeId = path[path.length - 1];
+    const userNodeId = path[path.length - 2];
+    const userNode = tab.tree.nodes.get(userNodeId);
+
+    stopTabExecution(tab);
+
+    if (userNode && userNode.role === "user") {
+      await tick();
+      tab.input_text = userNode.content;
+      tab.abort_regenerate_node_id = assistantNodeId;
+    }
+  }
+
+  async function editAndRegenerate(assistantNodeId: string, newText: string): Promise<void> {
+    const tab = getTab(activeTabId);
+    if (!tab || tab.is_executing) return;
+
+    const node = tab.tree.nodes.get(assistantNodeId);
+    if (!node || node.role !== "assistant" || !node.parent_id) return;
+
+    const parentUser = tab.tree.nodes.get(node.parent_id);
+    if (parentUser && parentUser.role === "user") {
+      parentUser.content = newText;
+      tab.tree.nodes.set(parentUser.node_id, parentUser);
+    }
+
+    tab.input_text = "";
+    await regenerate(assistantNodeId);
+  }
+
   async function regenerate(nodeId: string): Promise<void> {
     const tab = getTab(activeTabId);
     if (!tab || tab.is_executing) return;
@@ -896,7 +939,8 @@ export function createConversationStore(
 
   function updateInputText(text: string): void {
     const tab = getTab(activeTabId);
-    if (tab) tab.input_text = text;
+    if (!tab) return;
+    tab.input_text = text;
   }
 
   function updateInputImages(images: ConversationImage[]): void {
@@ -1235,6 +1279,9 @@ export function createConversationStore(
     get isRegenerateMode() {
       return isRegenerateMode;
     },
+    get abortRegenerateNodeId() {
+      return activeTab.abort_regenerate_node_id;
+    },
     get contextText() {
       return contextText;
     },
@@ -1284,6 +1331,8 @@ export function createConversationStore(
     },
     sendMessage,
     stopExecution,
+    abortExecution,
+    editAndRegenerate,
     regenerate,
     switchBranch,
     getBranchInfo,

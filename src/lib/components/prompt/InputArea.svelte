@@ -140,6 +140,11 @@
   });
 
   function sendOrRegenerate() {
+    const abortNodeId = store.abortRegenerateNodeId;
+    if (abortNodeId) {
+      store.editAndRegenerate(abortNodeId, localText.trim());
+      return;
+    }
     if (store.isRegenerateMode) {
       const path = store.tree.current_path;
       if (path.length > 0) {
@@ -275,11 +280,11 @@
           onclick={() => store.stopExecution()}
           title="Stop"
         />
-      {:else if store.isRegenerateMode}
+      {:else if store.abortRegenerateNodeId || store.isRegenerateMode}
         <ActionIconButton
           icon={RefreshCw}
           onclick={sendOrRegenerate}
-          title="Regenerate"
+          title="Regenerate (Enter)"
         />
       {:else}
         <ActionIconButton
