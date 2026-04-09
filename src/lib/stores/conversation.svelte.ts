@@ -288,49 +288,11 @@ export function createConversationStore(
 
   $effect(() => {
     const _streaming = activeTab.is_streaming;
-    const lastUsage = getLastApiUsage();
-    const apiTotal = lastUsage ? lastUsage.prompt + lastUsage.completion : null;
     const inputText = activeTab.input_text;
     const inputImages = activeTab.input_images;
     const inputAttachments = activeTab.input_text_attachments;
     const hasPendingInput = inputText.trim() || inputImages.length > 0 || inputAttachments.length > 0;
     const toolNames = activeTab.web_search_enabled ? ["web_search"] : [];
-
-    if (tokenDebounceTimer) clearTimeout(tokenDebounceTimer);
-
-    if (apiTotal != null) {
-      if (!hasPendingInput) {
-        totalTokens = apiTotal;
-        return;
-      }
-
-      const pendingNode: ConversationNodeForExecution = {
-        node_id: "pending-input",
-        role: "user",
-        content: inputText,
-        images: inputImages.map((img) => ({ data: img.data, media_type: img.media_type })),
-        text_attachments: [...inputAttachments],
-        updates: [],
-      };
-      const tabId = activeTab.tab_id;
-
-      if (tokenDebounceTimer) clearTimeout(tokenDebounceTimer);
-      tokenDebounceTimer = setTimeout(async () => {
-        try {
-          const inputTokens = await invoke<number>("count_conversation_tokens", {
-            nodes: [pendingNode],
-            contextText: null,
-            contextImages: [],
-            tabId,
-            toolNames: [],
-          });
-          totalTokens = apiTotal + inputTokens;
-        } catch {
-          totalTokens = apiTotal;
-        }
-      }, 300);
-      return;
-    }
 
     const nodes = serializePathNodes(activeTab);
     if (hasPendingInput) {
