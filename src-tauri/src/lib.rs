@@ -341,6 +341,7 @@ pub fn reload_shortcuts(app: &tauri::AppHandle, settings: &models::settings::Set
 
     let global_shortcut = app.global_shortcut();
 
+    log::debug!(target: "app_lib::hotkey_handler", "reload_shortcuts: unregistering all");
     if let Err(e) = global_shortcut.unregister_all() {
         log::error!("failed to unregister shortcuts: {}", e);
         return;
@@ -368,7 +369,7 @@ pub fn reload_shortcuts(app: &tauri::AppHandle, settings: &models::settings::Set
     let mut map = action_map_state.0.write().unwrap();
     *map = new_action_map;
 
-    log::info!("reloaded {} global shortcuts", bindings.len());
+    log::info!(target: "app_lib::hotkey_handler", "reloaded {} global shortcuts", bindings.len());
 }
 
 async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
@@ -420,7 +421,8 @@ pub fn run() {
                     ])
                     .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
                     .level(log::LevelFilter::Info)
-                    .level_for("app_lib", log::LevelFilter::Debug);
+                    .level_for("app_lib", log::LevelFilter::Debug)
+                    .level_for("app_lib::hotkey_handler", log::LevelFilter::Trace);
 
                 if let Ok(rust_log) = std::env::var("RUST_LOG") {
                     for directive in rust_log.split(',') {
@@ -494,20 +496,33 @@ pub fn run() {
                 app.handle().plugin(
                     builder
                         .with_handler(|app, shortcut, event| {
+                            let shortcut_str = shortcut.into_string();
+                            log::trace!(
+                                target: "app_lib::hotkey_handler",
+                                "hotkey event: {} state={:?}",
+                                shortcut_str, event.state,
+                            );
                             if event.state == ShortcutState::Pressed {
-                                let shortcut_str = shortcut.into_string();
                                 let action_map = app.state::<ShortcutActionMap>();
                                 let map = action_map.0.read().unwrap();
                                 if let Some(action) = map.get(&shortcut_str) {
                                     let action = action.clone();
                                     drop(map);
-                                    log::info!("hotkey action: {} -> {}", shortcut_str, action);
+                                    log::info!(
+                                        target: "app_lib::hotkey_handler",
+                                        "hotkey action: {} -> {}",
+                                        shortcut_str, action,
+                                    );
                                     let app = app.clone();
                                     tauri::async_runtime::spawn(async move {
                                         execute_hotkey_action(&app, &action).await;
                                     });
                                 } else {
-                                    log::warn!("hotkey pressed but no action found: {}", shortcut_str);
+                                    log::warn!(
+                                        target: "app_lib::hotkey_handler",
+                                        "hotkey pressed but no action found: {}",
+                                        shortcut_str,
+                                    );
                                 }
                             }
                         })

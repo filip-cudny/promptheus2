@@ -198,9 +198,15 @@
       document.execCommand("insertText", false, plainText);
     }
   }
+
+  function handleInputAreaClick(e: MouseEvent) {
+    const target = e.target as HTMLElement;
+    if (target.closest("button, .attach-menu, .model-selector, .autocomplete-dropdown, .context-section, .attachment-row")) return;
+    skillEditable?.focus();
+  }
 </script>
 
-<div class="input-area">
+<div class="input-area" onclick={handleInputAreaClick}>
   {#if contextVisible}
     <ContextSection {store} {contextDisabled} initialCollapsed={contextInitialCollapsed} onHasContent={onContextAutoShow} onClose={onCloseContext} />
   {/if}
