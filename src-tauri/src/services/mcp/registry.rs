@@ -38,7 +38,7 @@ impl McpRegistry {
 
             match client.list_tools().await {
                 Ok(server_tools) => {
-                    for tool in &server_tools {
+                    for tool in server_tools {
                         let tool_name = tool.name.to_string();
                         if tool_index.contains_key(&tool_name) {
                             log::warn!(
@@ -47,9 +47,9 @@ impl McpRegistry {
                             );
                         } else {
                             tool_index.insert(tool_name, name.clone());
+                            tools.push(tool);
                         }
                     }
-                    tools.extend(server_tools);
                 }
                 Err(e) => {
                     log::error!("Failed to list tools from MCP server '{}': {}", name, e);
