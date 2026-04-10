@@ -706,14 +706,7 @@ pub async fn execute_conversation_from_tree(
             Ok(())
         }
         Err(error) => {
-            let _ = state.notifications.notify(
-                "prompt_execution_error",
-                NotificationLevel::Error,
-                "Execution failed",
-                Some(error.as_str()),
-                &state.config.settings().notifications,
-            );
-
+            let _ = on_event.send(StreamEvent::Error { message: error.clone() });
             state.prompt_execution.clear_live();
             Err(error)
         }

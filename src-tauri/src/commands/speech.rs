@@ -53,7 +53,7 @@ pub async fn toggle_speech_recording(
             let _ = s.notifications.notify(
                 "speech_recording_start",
                 NotificationLevel::Warning,
-                "Transcription in Progress",
+                "Transcription in progress",
                 Some("Please wait for the current transcription to finish"),
                 &notification_settings,
             );
@@ -66,7 +66,7 @@ pub async fn toggle_speech_recording(
             let _ = s.notifications.notify(
                 "speech_recording_start",
                 NotificationLevel::Warning,
-                "Please Wait",
+                "Please wait",
                 Some("Cooldown active — try again in a moment"),
                 &notification_settings,
             );
@@ -102,7 +102,7 @@ pub async fn toggle_speech_recording(
             let _ = s.notifications.notify(
                 "speech_recording_start",
                 NotificationLevel::Info,
-                "Recording Started",
+                "Recording started",
                 Some("Click Speech to Text again to stop."),
                 &s.config.settings().notifications,
             );
@@ -158,7 +158,7 @@ pub async fn toggle_speech_recording(
         let _ = s.notifications.notify(
             "speech_recording_stop",
             NotificationLevel::Info,
-            "Processing Audio",
+            "Processing audio",
             Some("Transcribing your speech to text"),
             &s.config.settings().notifications,
         );
@@ -253,9 +253,9 @@ pub async fn toggle_speech_recording(
                 let had_pending = s.speech.take_pending_prompt().0.is_some();
 
                 let title = if had_pending {
-                    "Speech Execution Cancelled"
+                    "Speech execution cancelled"
                 } else {
-                    "No Speech Detected"
+                    "No speech detected"
                 };
                 let body = if had_pending {
                     "No speech detected — prompt execution cancelled"
@@ -291,7 +291,7 @@ pub async fn toggle_speech_recording(
                 let _ = s.notifications.notify(
                     "speech_transcription_success",
                     NotificationLevel::Error,
-                    "Transcription Error",
+                    "Transcription error",
                     Some(message),
                     &notification_settings,
                 );
