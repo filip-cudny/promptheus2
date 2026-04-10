@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod clipboard;
+pub mod mcp;
 pub mod config;
 pub mod conversation_context;
 pub mod context;

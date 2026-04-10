@@ -46,6 +46,7 @@ tiktoken-rs = "0.9"
 claude-tokenizer = "0.3"
 gemini-tokenizer = "0.2"
 rusqlite = { version = "0.39", features = ["bundled"] }
+rmcp = { version = "1.4", features = ["client", "transport-child-process", "transport-io"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = { version = "0.18", features = ["v3_24"] }

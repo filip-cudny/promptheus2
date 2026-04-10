@@ -365,10 +365,10 @@ impl AiProvider for OpenAiProvider {
                         if finish_reason == Some("tool_calls") {
                             for tc in &state.tool_calls {
                                 if !tc.id.is_empty() {
-                                    state.pending_tool_done_events.push(ToolCallEvent::Done {
+                                    state.pending_tool_done_events.push(ToolCallEvent::ArgumentsComplete {
                                         tool_call_id: tc.id.clone(),
-                                        result: Some(tc.arguments.clone()),
-                                        error: None,
+                                        tool_name: tc.name.clone(),
+                                        arguments: serde_json::from_str(&tc.arguments).unwrap_or(serde_json::Value::Null),
                                     });
                                 }
                             }

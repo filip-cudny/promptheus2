@@ -12,6 +12,7 @@ use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::services::image_storage::ImageStorage;
+use crate::services::mcp::McpRegistry;
 use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::notification::NotificationService;
 use crate::services::placeholder::PlaceholderService;
@@ -37,6 +38,7 @@ pub struct AppState {
     pub speech: SpeechService,
     pub ui_state: UiStateService,
     pub conversation_context: ConversationContextCache,
+    pub mcp: McpRegistry,
     pub tool_confirmation: ToolConfirmationService,
     pub recent_apps: VecDeque<String>,
 }

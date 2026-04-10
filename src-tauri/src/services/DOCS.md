@@ -19,6 +19,9 @@ services/
 ├── sqlite_history.rs    # SqliteHistoryService — persistent history storage via SQLite
 ├── hotkeys.rs           # Hotkey translation and OS-filtered binding resolution
 ├── image_storage.rs     # ImageStorage — temp image file save/load for conversation history
+├── mcp/                 # MCP client — rmcp-based tool server management
+│   ├── mod.rs           #   Re-exports McpClient, McpError
+│   └── client.rs        #   McpClient wrapper, McpError enum
 ├── menu_coordinator.rs  # MenuCoordinator — aggregates menu providers into ordered sections
 ├── notification.rs      # NotificationService — event-gated Tauri event emission
 ├── placeholder.rs       # PlaceholderService — template variable substitution and image injection

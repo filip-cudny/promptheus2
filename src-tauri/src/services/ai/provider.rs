@@ -31,6 +31,11 @@ pub enum ToolCallEvent {
         tool_call_id: String,
         tool_name: String,
     },
+    ArgumentsComplete {
+        tool_call_id: String,
+        tool_name: String,
+        arguments: serde_json::Value,
+    },
     Done {
         tool_call_id: String,
         result: Option<String>,

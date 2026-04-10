@@ -2,6 +2,15 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerConfig {
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub env: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     #[serde(default = "default_true")]
     pub show_tray_icon: bool,
@@ -50,6 +59,9 @@ pub struct Settings {
 
     #[serde(default = "default_recent_apps_count")]
     pub recent_apps_count: usize,
+
+    #[serde(default)]
+    pub mcp_servers: HashMap<String, McpServerConfig>,
 
     #[serde(default)]
     pub skills_order: Vec<String>,
@@ -336,6 +348,7 @@ impl Default for Settings {
             about_me: None,
             environment_section: None,
             recent_apps_count: default_recent_apps_count(),
+            mcp_servers: HashMap::new(),
             skills_order: Vec::new(),
             conversation_title_model: String::new(),
             conversation_title_prompt: default_conversation_title_prompt(),
@@ -462,6 +475,32 @@ mod tests {
         assert_eq!(settings.code_theme, "paraiso-dark");
         assert_eq!(settings.number_input_debounce_ms, 200);
         assert!(settings.models.is_empty());
+    }
+
+    #[test]
+    fn test_deserialize_with_mcp_servers() {
+        let json = r#"{
+            "mcp_servers": {
+                "my-tools": {
+                    "command": "npx",
+                    "args": ["-y", "my-mcp-server"],
+                    "env": { "API_KEY": "test-key" }
+                }
+            }
+        }"#;
+        let settings: Settings = serde_json::from_str(json).expect("should deserialize with mcp_servers");
+        assert_eq!(settings.mcp_servers.len(), 1);
+        let server = &settings.mcp_servers["my-tools"];
+        assert_eq!(server.command, "npx");
+        assert_eq!(server.args, vec!["-y", "my-mcp-server"]);
+        assert_eq!(server.env.get("API_KEY").unwrap(), "test-key");
+    }
+
+    #[test]
+    fn test_deserialize_without_mcp_servers() {
+        let json = r#"{ "debug_mode": true }"#;
+        let settings: Settings = serde_json::from_str(json).expect("should deserialize without mcp_servers");
+        assert!(settings.mcp_servers.is_empty());
     }
 
     #[test]

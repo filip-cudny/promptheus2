@@ -123,6 +123,7 @@ use services::context::{ContextManagerService, ContextMenuProvider};
 use services::database::Database;
 use services::sqlite_history::SqliteHistoryService;
 use services::image_storage::ImageStorage;
+use services::mcp::McpRegistry;
 use services::menu_coordinator::MenuCoordinator;
 use services::dock::DockManager;
 use services::notification::NotificationService;
@@ -580,6 +581,14 @@ pub fn run() {
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             log::info!("image storage initialized at {}", app_data_dir.display());
 
+            let mcp_registry = if config_service.settings().mcp_servers.is_empty() {
+                McpRegistry::empty()
+            } else {
+                tauri::async_runtime::block_on(
+                    McpRegistry::start_all(&config_service.settings().mcp_servers),
+                )
+            };
+
             app.manage(Mutex::new(AppState {
                 config: config_service,
                 clipboard: clipboard_service,
@@ -590,6 +599,7 @@ pub fn run() {
                 ai: ai_service,
                 history: history_service,
                 image_storage,
+                mcp: mcp_registry,
                 prompt_execution: PromptExecutionService::new(),
                 skill_service,
                 speech: SpeechService::new(),
