@@ -135,7 +135,7 @@ impl AiService {
             model: entry.model_name.clone(),
             messages,
             parameters: entry.parameters.clone(),
-            tools: vec![],
+            tool_payloads: vec![],
         };
         entry.provider.complete(request).await
     }
@@ -146,6 +146,7 @@ impl AiService {
         messages: Vec<ProcessedMessage>,
         parameter_overrides: Option<ModelParameters>,
         tools_override: Option<Vec<String>>,
+        mcp_tools: Vec<rmcp::model::Tool>,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk, AiError>> + Send>>, AiError> {
         let entry = self.get_provider(model_id)?;
         let parameters = match parameter_overrides {
@@ -153,19 +154,35 @@ impl AiService {
             None => entry.parameters.clone(),
         };
         validate_params(&parameters, entry.provider.as_ref(), &entry.model_name);
-        let tools = match tools_override {
-            Some(ref requested) => ToolRegistry::resolve_tools(
-                requested,
-                &entry.provider_type,
-                &entry.api_mode,
-            ),
+
+        let mut tool_payloads: Vec<serde_json::Value> = match tools_override {
+            Some(ref requested) => {
+                let built_in = ToolRegistry::resolve_tools(
+                    requested,
+                    &entry.provider_type,
+                    &entry.api_mode,
+                );
+                built_in
+                    .iter()
+                    .map(|t| ToolRegistry::to_request_payload(t, &entry.provider_type, &entry.api_mode))
+                    .collect()
+            }
             None => vec![],
         };
+
+        for mcp_tool in &mcp_tools {
+            tool_payloads.push(tools::mcp_tool_to_payload(
+                mcp_tool,
+                &entry.provider_type,
+                &entry.api_mode,
+            ));
+        }
+
         let request = CompletionRequest {
             model: entry.model_name.clone(),
             messages,
             parameters,
-            tools,
+            tool_payloads,
         };
         entry.provider.complete_stream(request).await
     }

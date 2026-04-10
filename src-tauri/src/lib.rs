@@ -693,6 +693,7 @@ pub fn run() {
             commands::tokenizer::count_conversation_tokens,
             commands::ui_state::get_ui_state,
             commands::ui_state::set_ui_state,
+            commands::mcp::list_mcp_tools,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Focused(false) = event {

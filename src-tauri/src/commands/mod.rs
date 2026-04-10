@@ -6,6 +6,7 @@ pub mod dock;
 pub mod history;
 pub mod history_dialog;
 pub mod image_preview;
+pub mod mcp;
 pub mod menu;
 pub mod notification;
 pub mod prompt_execution;

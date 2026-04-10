@@ -181,6 +181,8 @@ pub async fn count_conversation_tokens(
         let system_message = ProcessedMessage {
             role: "system".to_string(),
             content: MessageContent::Text(system_content),
+            tool_calls: None,
+            tool_call_id: None,
         };
 
         let tree_messages = skill_execution::build_messages_from_tree(&nodes, &context_images);

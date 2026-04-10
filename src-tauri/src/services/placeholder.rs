@@ -146,6 +146,8 @@ impl PlaceholderService {
             processed.push(ProcessedMessage {
                 role: role.to_string(),
                 content: message_content,
+                tool_calls: None,
+                tool_call_id: None,
             });
         }
 

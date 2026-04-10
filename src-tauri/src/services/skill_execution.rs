@@ -52,6 +52,8 @@ pub fn prepare_skill_messages(
     messages.push(ProcessedMessage {
         role: "system".to_string(),
         content: MessageContent::Text(system_content),
+        tool_calls: None,
+        tool_call_id: None,
     });
 
     let user_text = compose_skill_user_message(skill, input);
@@ -76,11 +78,15 @@ pub fn prepare_skill_messages(
         messages.push(ProcessedMessage {
             role: "user".to_string(),
             content: MessageContent::Parts(parts),
+            tool_calls: None,
+            tool_call_id: None,
         });
     } else {
         messages.push(ProcessedMessage {
             role: "user".to_string(),
             content: MessageContent::Text(user_text),
+            tool_calls: None,
+            tool_call_id: None,
         });
     }
 
@@ -303,17 +309,23 @@ pub fn build_messages_from_tree(
                 messages.push(ProcessedMessage {
                     role: "user".to_string(),
                     content: MessageContent::Parts(parts),
+                    tool_calls: None,
+                    tool_call_id: None,
                 });
             } else {
                 messages.push(ProcessedMessage {
                     role: "user".to_string(),
                     content: MessageContent::Text(text_content),
+                    tool_calls: None,
+                    tool_call_id: None,
                 });
             }
         } else {
             messages.push(ProcessedMessage {
                 role: "assistant".to_string(),
                 content: MessageContent::Text(node.content.clone()),
+                tool_calls: None,
+                tool_call_id: None,
             });
         }
     }

@@ -20,9 +20,27 @@ pub enum MessageContent {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ToolCallPayload {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub call_type: String,
+    pub function: ToolCallFunction,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ToolCallFunction {
+    pub name: String,
+    pub arguments: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProcessedMessage {
     pub role: String,
     pub content: MessageContent,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_calls: Option<Vec<ToolCallPayload>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -72,6 +90,8 @@ mod tests {
         let msg = ProcessedMessage {
             role: "user".into(),
             content: MessageContent::Text("hello".into()),
+            tool_calls: None,
+            tool_call_id: None,
         };
         let value = serde_json::to_value(&msg).unwrap();
         assert_eq!(value, json!({"role": "user", "content": "hello"}));
@@ -91,6 +111,8 @@ mod tests {
                     },
                 },
             ]),
+            tool_calls: None,
+            tool_call_id: None,
         };
         let value = serde_json::to_value(&msg).unwrap();
         assert_eq!(
@@ -103,6 +125,73 @@ mod tests {
                 ]
             })
         );
+    }
+
+    #[test]
+    fn assistant_tool_call_message_serialization() {
+        let msg = ProcessedMessage {
+            role: "assistant".into(),
+            content: MessageContent::Text("".into()),
+            tool_calls: Some(vec![ToolCallPayload {
+                id: "call_123".into(),
+                call_type: "function".into(),
+                function: ToolCallFunction {
+                    name: "get_weather".into(),
+                    arguments: r#"{"location":"NYC"}"#.into(),
+                },
+            }]),
+            tool_call_id: None,
+        };
+        let value = serde_json::to_value(&msg).unwrap();
+        assert_eq!(
+            value,
+            json!({
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call_123",
+                        "type": "function",
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": "{\"location\":\"NYC\"}"
+                        }
+                    }
+                ]
+            })
+        );
+    }
+
+    #[test]
+    fn tool_result_message_serialization() {
+        let msg = ProcessedMessage {
+            role: "tool".into(),
+            content: MessageContent::Text("72°F, partly cloudy".into()),
+            tool_calls: None,
+            tool_call_id: Some("call_123".into()),
+        };
+        let value = serde_json::to_value(&msg).unwrap();
+        assert_eq!(
+            value,
+            json!({
+                "role": "tool",
+                "content": "72°F, partly cloudy",
+                "tool_call_id": "call_123"
+            })
+        );
+    }
+
+    #[test]
+    fn regular_message_omits_tool_fields() {
+        let msg = ProcessedMessage {
+            role: "user".into(),
+            content: MessageContent::Text("hello".into()),
+            tool_calls: None,
+            tool_call_id: None,
+        };
+        let value = serde_json::to_value(&msg).unwrap();
+        assert!(value.get("tool_calls").is_none());
+        assert!(value.get("tool_call_id").is_none());
     }
 
     #[test]

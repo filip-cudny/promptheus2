@@ -7,7 +7,7 @@ use serde::Deserialize;
 use tokio_stream::StreamExt;
 
 use crate::models::message::{ContentPart, MessageContent, ProcessedMessage};
-use crate::models::settings::{ApiMode, ModelConfig, Provider};
+use crate::models::settings::ModelConfig;
 
 use super::provider::{AiProvider, CompletionRequest, StreamChunk, TokenUsage, ToolCallEvent};
 use super::sse::parse_sse_stream;
@@ -139,13 +139,8 @@ fn build_request_body(request: &CompletionRequest, stream: bool, store: bool) ->
         obj.insert("reasoning".into(), reasoning);
     }
 
-    if !request.tools.is_empty() {
-        let tools_json: Vec<serde_json::Value> = request
-            .tools
-            .iter()
-            .map(|t| ToolRegistry::to_request_payload(t, &Provider::Openai, &ApiMode::Responses))
-            .collect();
-        obj.insert("tools".into(), serde_json::json!(tools_json));
+    if !request.tool_payloads.is_empty() {
+        obj.insert("tools".into(), serde_json::json!(request.tool_payloads));
     }
 
     for (key, value) in &request.parameters.extra {

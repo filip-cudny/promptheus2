@@ -8,11 +8,8 @@ use tokio_stream::StreamExt;
 
 use crate::models::settings::ModelConfig;
 
-use crate::models::settings::{ApiMode, Provider};
-
 use super::provider::{AiProvider, CompletionRequest, StreamChunk, ToolCallEvent, TokenUsage};
 use super::sse::parse_sse_stream;
-use super::tools::ToolRegistry;
 use super::AiError;
 
 pub struct OpenAiProvider {
@@ -100,13 +97,8 @@ fn build_request_body(
         obj.insert(key.clone(), value.clone());
     }
 
-    if !request.tools.is_empty() {
-        let tools_json: Vec<serde_json::Value> = request
-            .tools
-            .iter()
-            .map(|t| ToolRegistry::to_request_payload(t, &Provider::Openai, &ApiMode::Completions))
-            .collect();
-        obj.insert("tools".into(), serde_json::json!(tools_json));
+    if !request.tool_payloads.is_empty() {
+        obj.insert("tools".into(), serde_json::json!(request.tool_payloads));
     }
 
     body

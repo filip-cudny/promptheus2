@@ -6,14 +6,13 @@ use futures::Stream;
 use crate::models::message::ProcessedMessage;
 use crate::models::settings::ModelParameters;
 
-use super::tools::BuiltInTool;
 use super::AiError;
 
 pub struct CompletionRequest {
     pub model: String,
     pub messages: Vec<ProcessedMessage>,
     pub parameters: ModelParameters,
-    pub tools: Vec<BuiltInTool>,
+    pub tool_payloads: Vec<serde_json::Value>,
 }
 
 pub struct StreamChunk {

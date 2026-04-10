@@ -19,7 +19,7 @@ use crate::services::ai::provider::{StreamChunk, ToolCallEvent};
 use crate::models::history::SerializedConversationNode;
 use crate::models::message::{
     ConversationNodeForExecution, ImageData, MessageContent,
-    NodeUpdate, ProcessedMessage,
+    NodeUpdate, ProcessedMessage, ToolCallFunction, ToolCallPayload,
 };
 use crate::services::notification::NotificationLevel;
 use crate::services::prompt_execution::{ExecutionSnapshot, LiveExecution, PromptExecutionService};
@@ -39,11 +39,20 @@ fn tool_type_from_name(tool_name: &str) -> ToolCallType {
     }
 }
 
+const MAX_TOOL_LOOP_ITERATIONS: usize = 10;
+
+struct PendingToolCall {
+    tool_call_id: String,
+    tool_name: String,
+    arguments: serde_json::Value,
+}
+
 struct StreamResult {
     full_text: String,
     full_thinking: Option<String>,
     prompt_tokens: Option<usize>,
     completion_tokens: Option<usize>,
+    pending_tool_calls: Vec<PendingToolCall>,
 }
 
 async fn run_stream_loop(
@@ -55,6 +64,7 @@ async fn run_stream_loop(
     let mut full_thinking = String::new();
     let mut prompt_tokens: Option<usize> = None;
     let mut completion_tokens: Option<usize> = None;
+    let mut pending_tool_calls: Vec<PendingToolCall> = Vec::new();
     let mut cancel_rx = cancel_rx;
 
     loop {
@@ -116,6 +126,16 @@ async fn run_stream_loop(
                                     live.channel = None;
                                 }
                             }
+                        }
+                        ToolCallEvent::ArgumentsComplete { tool_call_id, tool_name, arguments } => {
+                            if let Some(tc) = live.snapshot.tool_calls.iter_mut().find(|t| t.tool_call_id == tool_call_id) {
+                                tc.arguments = arguments.clone();
+                            }
+                            pending_tool_calls.push(PendingToolCall {
+                                tool_call_id,
+                                tool_name,
+                                arguments,
+                            });
                         }
                         ToolCallEvent::Done { tool_call_id, result, error } => {
                             if let Some(tc) = live.snapshot.tool_calls.iter_mut().find(|t| t.tool_call_id == tool_call_id) {
@@ -187,7 +207,135 @@ async fn run_stream_loop(
         }
     }
 
-    Ok(StreamResult { full_text, full_thinking: thinking, prompt_tokens, completion_tokens })
+    Ok(StreamResult { full_text, full_thinking: thinking, prompt_tokens, completion_tokens, pending_tool_calls })
+}
+
+fn extract_mcp_result_text(result: &rmcp::model::CallToolResult) -> String {
+    result
+        .content
+        .iter()
+        .filter_map(|c| match &c.raw {
+            rmcp::model::RawContent::Text(text) => Some(text.text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+struct ToolExecutionResult {
+    tool_call_id: String,
+    tool_name: String,
+    result_text: String,
+    is_error: bool,
+}
+
+async fn execute_tool_calls(
+    state: &State<'_, Mutex<AppState>>,
+    pending: &[PendingToolCall],
+    live: &Arc<TokioMutex<LiveExecution>>,
+) -> Vec<ToolExecutionResult> {
+    let futures: Vec<_> = pending
+        .iter()
+        .map(|tc| {
+            let tool_call_id = tc.tool_call_id.clone();
+            let tool_name = tc.tool_name.clone();
+            let arguments = tc.arguments.clone();
+            let state = state.inner().clone();
+            async move {
+                let call_future = async {
+                    let s = state.lock().await;
+                    s.mcp.call_tool(&tool_name, arguments).await
+                };
+
+                match tokio::time::timeout(std::time::Duration::from_secs(30), call_future).await {
+                    Ok(Ok(result)) => {
+                        let is_error = result.is_error.unwrap_or(false);
+                        let text = extract_mcp_result_text(&result);
+                        ToolExecutionResult {
+                            tool_call_id,
+                            tool_name,
+                            result_text: text,
+                            is_error,
+                        }
+                    }
+                    Ok(Err(e)) => ToolExecutionResult {
+                        tool_call_id,
+                        result_text: format!("Error executing tool '{}': {}", tool_name, e),
+                        tool_name,
+                        is_error: true,
+                    },
+                    Err(_) => ToolExecutionResult {
+                        tool_call_id,
+                        result_text: format!("Error executing tool '{}': timed out after 30s", tool_name),
+                        tool_name,
+                        is_error: true,
+                    },
+                }
+            }
+        })
+        .collect();
+
+    let results = futures::future::join_all(futures).await;
+
+    for r in &results {
+        let mut live = live.lock().await;
+        if let Some(tc) = live.snapshot.tool_calls.iter_mut().find(|t| t.tool_call_id == r.tool_call_id) {
+            tc.status = if r.is_error { ToolCallStatus::Failed } else { ToolCallStatus::Completed };
+            if r.is_error {
+                tc.error = Some(r.result_text.clone());
+            } else {
+                tc.result = Some(r.result_text.clone());
+            }
+            tc.completed_at = Some(chrono::Utc::now().to_rfc3339());
+        }
+        if let Some(ref ch) = live.channel {
+            let _ = ch.send(StreamEvent::ToolCallDone {
+                tool_call_id: r.tool_call_id.clone(),
+                result: if r.is_error { None } else { Some(r.result_text.clone()) },
+                error: if r.is_error { Some(r.result_text.clone()) } else { None },
+            });
+        }
+    }
+
+    results
+}
+
+fn build_tool_loop_messages(
+    pending: &[PendingToolCall],
+    accumulated_text: &str,
+    results: &[ToolExecutionResult],
+) -> Vec<ProcessedMessage> {
+    let mut messages = Vec::with_capacity(1 + results.len());
+
+    let tool_calls: Vec<ToolCallPayload> = pending
+        .iter()
+        .map(|tc| ToolCallPayload {
+            id: tc.tool_call_id.clone(),
+            call_type: "function".to_string(),
+            function: ToolCallFunction {
+                name: tc.tool_name.clone(),
+                arguments: serde_json::to_string(&tc.arguments).unwrap_or_default(),
+            },
+        })
+        .collect();
+
+    messages.push(ProcessedMessage {
+        role: "assistant".to_string(),
+        content: MessageContent::Text(accumulated_text.to_string()),
+        tool_calls: Some(tool_calls),
+        tool_call_id: None,
+    });
+
+    for r in results {
+        messages.push(ProcessedMessage {
+            role: "tool".to_string(),
+            content: MessageContent::Text(r.result_text.clone()),
+            tool_calls: None,
+            tool_call_id: Some(r.tool_call_id.clone()),
+        });
+    }
+
+    messages
 }
 
 #[derive(Clone, Serialize)]
@@ -283,7 +431,7 @@ pub async fn execute_skill(
 
     let stream_result = {
         let stream = ai
-            .complete_stream(&model_id, messages, skill_param_overrides, None)
+            .complete_stream(&model_id, messages, skill_param_overrides, None, vec![])
             .await
             .map_err(|e| e.to_string());
 
@@ -441,10 +589,14 @@ pub async fn generate_conversation_title(
         ProcessedMessage {
             role: "system".to_string(),
             content: MessageContent::Text(prompt),
+            tool_calls: None,
+            tool_call_id: None,
         },
         ProcessedMessage {
             role: "user".to_string(),
             content: MessageContent::Text(user_message),
+            tool_calls: None,
+            tool_call_id: None,
         },
     ];
 
@@ -572,7 +724,7 @@ pub async fn execute_conversation_from_tree(
     tools_override: Option<Vec<String>>,
     on_event: Channel<StreamEvent>,
 ) -> Result<(), String> {
-    let (execution_id, resolved_model_id, _model_display_name, all_messages, ai, updates_for_event, param_overrides) = {
+    let (execution_id, resolved_model_id, _model_display_name, mut all_messages, ai, updates_for_event, param_overrides) = {
         let mut state = state.lock().await;
 
         let execution_id = uuid::Uuid::new_v4().to_string();
@@ -651,6 +803,8 @@ pub async fn execute_conversation_from_tree(
         let system_message = ProcessedMessage {
             role: "system".to_string(),
             content: MessageContent::Text(system_content),
+            tool_calls: None,
+            tool_call_id: None,
         };
 
         let tree_messages =
@@ -686,29 +840,68 @@ pub async fn execute_conversation_from_tree(
         let _ = on_event.send(StreamEvent::NodeUpdates { node_id, updates });
     }
 
-    let stream_result = {
+    let mcp_tools = {
+        let s = state.lock().await;
+        s.mcp.all_tools().to_vec()
+    };
+
+    let mut iteration = 0;
+    loop {
         let stream = ai
-            .complete_stream(&resolved_model_id, all_messages, param_overrides, tools_override)
+            .complete_stream(
+                &resolved_model_id,
+                all_messages.clone(),
+                param_overrides.clone(),
+                tools_override.clone(),
+                mcp_tools.clone(),
+            )
             .await
             .map_err(|e| e.to_string());
 
-        match stream {
-            Ok(stream) => run_stream_loop(stream, live_execution, Some(cancel_rx)).await,
+        let stream_result = match stream {
+            Ok(stream) => run_stream_loop(stream, Arc::clone(&live_execution), Some(cancel_rx.clone())).await,
             Err(e) => Err(e),
-        }
-    };
+        };
 
-    let mut state = state.lock().await;
+        match stream_result {
+            Ok(result) => {
+                if result.pending_tool_calls.is_empty() || iteration >= MAX_TOOL_LOOP_ITERATIONS {
+                    if iteration >= MAX_TOOL_LOOP_ITERATIONS {
+                        log::warn!("Tool loop reached max iterations ({})", MAX_TOOL_LOOP_ITERATIONS);
+                    }
+                    let mut s = state.lock().await;
+                    s.prompt_execution.clear_live();
+                    return Ok(());
+                }
 
-    match stream_result {
-        Ok(_result) => {
-            state.prompt_execution.clear_live();
-            Ok(())
-        }
-        Err(error) => {
-            let _ = on_event.send(StreamEvent::Error { message: error.clone() });
-            state.prompt_execution.clear_live();
-            Err(error)
+                iteration += 1;
+                log::info!("Tool loop iteration {}", iteration);
+
+                {
+                    let mut live = live_execution.lock().await;
+                    live.snapshot.finished = false;
+                }
+
+                let tool_results = execute_tool_calls(&state, &result.pending_tool_calls, &live_execution).await;
+
+                let new_messages = build_tool_loop_messages(
+                    &result.pending_tool_calls,
+                    &result.full_text,
+                    &tool_results,
+                );
+
+                for tc in &result.pending_tool_calls {
+                    log::debug!("Executed tool '{}' (id: {})", tc.tool_name, tc.tool_call_id);
+                }
+
+                all_messages.extend(new_messages);
+            }
+            Err(error) => {
+                let _ = on_event.send(StreamEvent::Error { message: error.clone() });
+                let mut s = state.lock().await;
+                s.prompt_execution.clear_live();
+                return Err(error);
+            }
         }
     }
 }

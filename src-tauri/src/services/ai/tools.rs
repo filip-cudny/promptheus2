@@ -91,6 +91,43 @@ impl ToolRegistry {
     }
 }
 
+pub fn mcp_tool_to_payload(
+    tool: &rmcp::model::Tool,
+    provider: &Provider,
+    api_mode: &ApiMode,
+) -> serde_json::Value {
+    let schema = serde_json::Value::Object((*tool.input_schema).clone());
+    let description = tool.description.as_deref().unwrap_or("");
+    match (provider, api_mode) {
+        (Provider::Openai, ApiMode::Completions) => {
+            json!({
+                "type": "function",
+                "function": {
+                    "name": tool.name,
+                    "description": description,
+                    "parameters": schema,
+                }
+            })
+        }
+        (Provider::Openai, ApiMode::Responses) => {
+            json!({
+                "type": "function",
+                "name": tool.name,
+                "description": description,
+                "parameters": schema,
+            })
+        }
+        (Provider::Anthropic, _) => {
+            json!({
+                "name": tool.name,
+                "description": description,
+                "input_schema": schema,
+            })
+        }
+        _ => json!(null),
+    }
+}
+
 #[derive(Deserialize)]
 struct WebSearchAction {
     #[serde(default)]
@@ -168,5 +205,50 @@ mod tests {
         );
         assert_eq!(payload["type"], "function");
         assert_eq!(payload["function"]["name"], "web_search");
+    }
+
+    fn make_test_mcp_tool() -> rmcp::model::Tool {
+        let mut schema = serde_json::Map::new();
+        schema.insert("type".into(), json!("object"));
+        schema.insert(
+            "properties".into(),
+            json!({"location": {"type": "string"}}),
+        );
+        schema.insert("required".into(), json!(["location"]));
+        let mut tool = rmcp::model::Tool::default();
+        tool.name = "get_weather".into();
+        tool.description = Some("Get weather for a location".into());
+        tool.input_schema = std::sync::Arc::new(schema);
+        tool
+    }
+
+    #[test]
+    fn mcp_tool_openai_completions_format() {
+        let tool = make_test_mcp_tool();
+        let payload = mcp_tool_to_payload(&tool, &Provider::Openai, &ApiMode::Completions);
+        assert_eq!(payload["type"], "function");
+        assert_eq!(payload["function"]["name"], "get_weather");
+        assert_eq!(payload["function"]["description"], "Get weather for a location");
+        assert_eq!(payload["function"]["parameters"]["type"], "object");
+        assert_eq!(payload["function"]["parameters"]["required"], json!(["location"]));
+    }
+
+    #[test]
+    fn mcp_tool_openai_responses_format() {
+        let tool = make_test_mcp_tool();
+        let payload = mcp_tool_to_payload(&tool, &Provider::Openai, &ApiMode::Responses);
+        assert_eq!(payload["type"], "function");
+        assert_eq!(payload["name"], "get_weather");
+        assert_eq!(payload["description"], "Get weather for a location");
+        assert_eq!(payload["parameters"]["type"], "object");
+    }
+
+    #[test]
+    fn mcp_tool_anthropic_format() {
+        let tool = make_test_mcp_tool();
+        let payload = mcp_tool_to_payload(&tool, &Provider::Anthropic, &ApiMode::Completions);
+        assert_eq!(payload["name"], "get_weather");
+        assert_eq!(payload["description"], "Get weather for a location");
+        assert_eq!(payload["input_schema"]["type"], "object");
     }
 }
