@@ -60,6 +60,8 @@
       .toast-message {
         font-size: 13px;
         color: #4a4a4a;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
       }
     </style>
   </head>
@@ -84,7 +86,6 @@
         info: 2000,
         warning: 3000
       };
-      var ITEM_HEIGHT = 64;
       var ITEM_GAP = 8;
       var ENTRANCE_STAGGER = 80;
       var REMOVAL_STAGGER = 300;
@@ -198,8 +199,21 @@
         }, 50);
       }
 
+      function measureStackHeight() {
+        var total = 0;
+        var children = stack.children;
+        for (var i = 0; i < children.length; i++) {
+          var id = children[i].dataset.notifId;
+          if (id && registry[id] && (registry[id].state === "entering" || registry[id].state === "visible")) {
+            if (total > 0) total += ITEM_GAP;
+            total += children[i].offsetHeight;
+          }
+        }
+        return total;
+      }
+
       function updateWindow(n) {
-        var height = n > 0 ? n * ITEM_HEIGHT + (n - 1) * ITEM_GAP + 20 : 0;
+        var height = n > 0 ? measureStackHeight() + 20 : 0;
         if (window.__TAURI__) {
           return window.__TAURI__.core.invoke("update_notification_window", {
             count: n,

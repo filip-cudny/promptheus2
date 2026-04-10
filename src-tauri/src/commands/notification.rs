@@ -70,7 +70,7 @@ fn show_notification_window(handle: &tauri::AppHandle) -> Result<(), String> {
     });
 
     let win_width = (380.0 * scale) as i32;
-    let win_height = (100.0 * scale) as i32;
+    let win_height = (140.0 * scale) as i32;
 
     let x = work_right - win_width;
     let y = work_bottom - win_height;
