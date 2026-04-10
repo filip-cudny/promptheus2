@@ -152,3 +152,7 @@ export async function reconnectToExecution(
   onEvent.onmessage = routeStreamEvent(callbacks);
   return invoke("reconnect_to_execution", { onEvent });
 }
+
+export async function cancelLiveExecution(): Promise<boolean> {
+  return invoke("cancel_live_execution");
+}

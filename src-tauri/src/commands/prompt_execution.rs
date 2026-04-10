@@ -269,7 +269,8 @@ pub async fn execute_skill(
     let user_display_text = format!("/{skill_name} {input_content}");
     let live_execution = {
         let mut state = state.lock().await;
-        state.prompt_execution.start_live(&execution_id, user_display_text.clone(), on_event)
+        let (live, _) = state.prompt_execution.start_live(&execution_id, user_display_text.clone(), on_event);
+        live
     };
 
     let _ = app.emit(
@@ -676,7 +677,7 @@ pub async fn execute_conversation_from_tree(
         .map(|n| n.content.clone())
         .unwrap_or_default();
 
-    let live_execution = {
+    let (live_execution, cancel_rx) = {
         let mut state = state.lock().await;
         state.prompt_execution.start_live(&execution_id, user_message, on_event.clone())
     };
@@ -692,7 +693,7 @@ pub async fn execute_conversation_from_tree(
             .map_err(|e| e.to_string());
 
         match stream {
-            Ok(stream) => run_stream_loop(stream, live_execution, None).await,
+            Ok(stream) => run_stream_loop(stream, live_execution, Some(cancel_rx)).await,
             Err(e) => Err(e),
         }
     };
@@ -750,6 +751,14 @@ pub async fn cancel_skill_execution(
 ) -> Result<bool, String> {
     let mut state = state.lock().await;
     Ok(state.prompt_execution.cancel_execution())
+}
+
+#[tauri::command]
+pub async fn cancel_live_execution(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<bool, String> {
+    let mut state = state.lock().await;
+    Ok(state.prompt_execution.cancel_live())
 }
 
 #[tauri::command]

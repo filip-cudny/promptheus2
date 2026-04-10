@@ -3,6 +3,7 @@ import { SvelteMap } from "svelte/reactivity";
 import { error as logError } from "@tauri-apps/plugin-log";
 import { generateId } from "$lib/utils/id";
 import {
+  cancelLiveExecution,
   executeConversationFromTree,
   generateConversationTitle,
   reconnectToExecution,
@@ -386,6 +387,11 @@ export function createConversationStore(
           }
           assistantNode.prompt_tokens = usage?.prompt_tokens ?? null;
           assistantNode.completion_tokens = usage?.completion_tokens ?? null;
+          assistantNode.tool_calls = assistantNode.tool_calls.map((tc) =>
+            tc.status === "in_progress"
+              ? { ...tc, status: "completed", completed_at: new Date().toISOString() }
+              : tc,
+          );
           tab.tree.nodes.set(assistantNode.node_id, assistantNode);
           tab.is_executing = false;
           tab.is_streaming = false;
@@ -403,6 +409,11 @@ export function createConversationStore(
             assistantNode.thinking_duration = Math.floor((Date.now() - tab.thinking_started_at) / 1000);
           }
           assistantNode.error = message;
+          assistantNode.tool_calls = assistantNode.tool_calls.map((tc) =>
+            tc.status === "in_progress"
+              ? { ...tc, status: "failed", error: message, completed_at: new Date().toISOString() }
+              : tc,
+          );
           tab.tree.nodes.set(assistantNode.node_id, assistantNode);
           tab.is_executing = false;
           tab.is_streaming = false;
@@ -474,7 +485,13 @@ export function createConversationStore(
       });
     } catch (e) {
       logError("Failed to execute: " + e);
-      assistantNode.error = e instanceof Error ? e.message : String(e);
+      const errorMsg = e instanceof Error ? e.message : String(e);
+      assistantNode.error = errorMsg;
+      assistantNode.tool_calls = assistantNode.tool_calls.map((tc) =>
+        tc.status === "in_progress"
+          ? { ...tc, status: "failed", error: errorMsg, completed_at: new Date().toISOString() }
+          : tc,
+      );
       tab.tree.nodes.set(assistantNode.node_id, assistantNode);
       tab.is_executing = false;
       tab.is_streaming = false;
@@ -522,6 +539,11 @@ export function createConversationStore(
         }
         assistantNode.prompt_tokens = usage?.prompt_tokens ?? null;
         assistantNode.completion_tokens = usage?.completion_tokens ?? null;
+        assistantNode.tool_calls = assistantNode.tool_calls.map((tc) =>
+          tc.status === "in_progress"
+            ? { ...tc, status: "completed", completed_at: new Date().toISOString() }
+            : tc,
+        );
         tab.tree.nodes.set(assistantNode.node_id, assistantNode);
         tab.is_executing = false;
         tab.is_streaming = false;
@@ -539,6 +561,11 @@ export function createConversationStore(
           assistantNode.thinking_duration = Math.floor((Date.now() - tab.thinking_started_at) / 1000);
         }
         assistantNode.error = message;
+        assistantNode.tool_calls = assistantNode.tool_calls.map((tc) =>
+          tc.status === "in_progress"
+            ? { ...tc, status: "failed", error: message, completed_at: new Date().toISOString() }
+            : tc,
+        );
         tab.tree.nodes.set(assistantNode.node_id, assistantNode);
         tab.is_executing = false;
         tab.is_streaming = false;
@@ -837,11 +864,18 @@ export function createConversationStore(
   function stopTabExecution(tab: TabState): void {
     if (!tab.is_executing) return;
 
+    cancelLiveExecution().catch(() => {});
+
     const path = tab.tree.current_path;
     if (path.length > 0) {
       const lastNode = tab.tree.nodes.get(path[path.length - 1]);
       if (lastNode && lastNode.role === "assistant") {
         lastNode.cancelled = true;
+        lastNode.tool_calls = lastNode.tool_calls.map((tc) =>
+          tc.status === "in_progress"
+            ? { ...tc, status: "cancelled", completed_at: new Date().toISOString() }
+            : tc,
+        );
         tab.tree.nodes.set(lastNode.node_id, lastNode);
       }
     }

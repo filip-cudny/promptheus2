@@ -42,6 +42,7 @@ pub struct PromptExecutionService {
     skill_execution_id: Option<String>,
     executing_skill_id: Option<String>,
     cancel_sender: Option<watch::Sender<bool>>,
+    live_cancel_sender: Option<watch::Sender<bool>>,
     pub live: Option<Arc<TokioMutex<LiveExecution>>>,
 }
 
@@ -52,6 +53,7 @@ impl PromptExecutionService {
             skill_execution_id: None,
             executing_skill_id: None,
             cancel_sender: None,
+            live_cancel_sender: None,
             live: None,
         }
     }
@@ -96,8 +98,17 @@ impl PromptExecutionService {
         false
     }
 
+    pub fn cancel_live(&mut self) -> bool {
+        if let Some(sender) = &self.live_cancel_sender {
+            let _ = sender.send(true);
+            return true;
+        }
+        false
+    }
+
     pub fn clear_live(&mut self) {
         self.live = None;
+        self.live_cancel_sender = None;
     }
 
     pub fn start_live(
@@ -105,7 +116,8 @@ impl PromptExecutionService {
         execution_id: &str,
         user_message: String,
         channel: Channel<StreamEvent>,
-    ) -> Arc<TokioMutex<LiveExecution>> {
+    ) -> (Arc<TokioMutex<LiveExecution>>, watch::Receiver<bool>) {
+        let (tx, rx) = watch::channel(false);
         let live = Arc::new(TokioMutex::new(LiveExecution {
             snapshot: ExecutionSnapshot {
                 execution_id: execution_id.to_string(),
@@ -122,7 +134,8 @@ impl PromptExecutionService {
             channel: Some(channel),
         }));
         self.live = Some(Arc::clone(&live));
-        live
+        self.live_cancel_sender = Some(tx);
+        (live, rx)
     }
 
     pub fn resolve_model(
