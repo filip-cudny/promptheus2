@@ -421,8 +421,7 @@ pub fn run() {
                     ])
                     .timezone_strategy(tauri_plugin_log::TimezoneStrategy::UseLocal)
                     .level(log::LevelFilter::Info)
-                    .level_for("app_lib", log::LevelFilter::Debug)
-                    .level_for("app_lib::hotkey_handler", log::LevelFilter::Trace);
+                    .level_for("app_lib", log::LevelFilter::Debug);
 
                 if let Ok(rust_log) = std::env::var("RUST_LOG") {
                     for directive in rust_log.split(',') {
@@ -496,13 +495,8 @@ pub fn run() {
                 app.handle().plugin(
                     builder
                         .with_handler(|app, shortcut, event| {
-                            let shortcut_str = shortcut.into_string();
-                            log::trace!(
-                                target: "app_lib::hotkey_handler",
-                                "hotkey event: {} state={:?}",
-                                shortcut_str, event.state,
-                            );
                             if event.state == ShortcutState::Pressed {
+                                let shortcut_str = shortcut.into_string();
                                 let action_map = app.state::<ShortcutActionMap>();
                                 let map = action_map.0.read().unwrap();
                                 if let Some(action) = map.get(&shortcut_str) {
