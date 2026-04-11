@@ -413,14 +413,6 @@ pub fn migrate_legacy_env_fields(settings: &mut Settings) {
         }
     }
 
-    for (_name, server) in &mut settings.mcp_servers {
-        if !server.env_inherit.is_empty() {
-            log::info!("migrating MCP server env_inherit to ${{}} syntax");
-            for (child_name, source_name) in std::mem::take(&mut server.env_inherit) {
-                server.env.entry(child_name).or_insert_with(|| format!("${{{}}}", source_name));
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -557,25 +549,6 @@ mod tests {
         fs::write(dir.path().join("settings.json"), json).unwrap();
         let service = ConfigService::load(dir.path(), None).expect("load");
         assert_eq!(service.settings().models[0].api_key.as_deref(), Some("${MY_KEY}"));
-    }
-
-    #[test]
-    fn test_legacy_mcp_env_inherit_migrated() {
-        let dir = TempDir::new().unwrap();
-        let json = r#"{
-            "models": [{"id": "1", "model": "t", "display_name": "T", "api_key": "${K}"}],
-            "mcp_servers": {
-                "srv": {
-                    "command": "npx",
-                    "env_inherit": {"CHILD_KEY": "PARENT_KEY"}
-                }
-            }
-        }"#;
-        fs::write(dir.path().join("settings.json"), json).unwrap();
-        let service = ConfigService::load(dir.path(), None).expect("load");
-        let srv = &service.settings().mcp_servers["srv"];
-        assert_eq!(srv.env.get("CHILD_KEY").unwrap(), "${PARENT_KEY}");
-        assert!(srv.env_inherit.is_empty());
     }
 
     #[test]

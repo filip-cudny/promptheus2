@@ -15,7 +15,7 @@ pub enum ToolCallStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolCallType {
-    BuiltinWebSearch,
+    WebSearch,
     CodeExecution,
     FileRead,
     FileWrite,

@@ -1,7 +1,9 @@
 <script lang="ts">
   import { parseToolResult } from "$lib/utils/toolResultParser";
+  import { isXmlLike } from "$lib/utils/xmlParser";
   import type { HintStatus } from "$lib/types/toolResult";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
+  import SearchResultsRenderer from "./SearchResultsRenderer.svelte";
   import JsonNode from "./JsonNode.svelte";
 
   let {
@@ -83,7 +85,11 @@
       </div>
 
       {#if envelope.formattedContext}
-        <pre class="formatted-context">{envelope.formattedContext}</pre>
+        {#if isXmlLike(envelope.formattedContext)}
+          <SearchResultsRenderer xml={envelope.formattedContext} />
+        {:else}
+          <pre class="formatted-context">{envelope.formattedContext}</pre>
+        {/if}
       {/if}
 
       {#if envelope.metadata}

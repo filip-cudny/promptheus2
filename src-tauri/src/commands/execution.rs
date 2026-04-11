@@ -27,14 +27,14 @@ use crate::services::skill_message;
 
 fn tool_display_name(tool_name: &str) -> &str {
     match tool_name {
-        "builtin_web_search" => "Web Search",
+        "web_search" => "Web Search",
         other => other,
     }
 }
 
 fn tool_type_from_name(tool_name: &str) -> ToolCallType {
     match tool_name {
-        "builtin_web_search" => ToolCallType::BuiltinWebSearch,
+        "web_search" => ToolCallType::WebSearch,
         _ => ToolCallType::Custom,
     }
 }
@@ -726,7 +726,6 @@ pub async fn execute_conversation_from_tree(
     model_id: Option<String>,
     reasoning_effort: Option<String>,
     tools_override: Option<Vec<String>>,
-    mcp_tools_enabled: bool,
     on_event: Channel<StreamEvent>,
 ) -> Result<(), String> {
     let (execution_id, resolved_model_id, _model_display_name, mut all_messages, ai, updates_for_event, param_overrides) = {
@@ -845,11 +844,25 @@ pub async fn execute_conversation_from_tree(
         let _ = on_event.send(StreamEvent::NodeUpdates { node_id, updates });
     }
 
-    let mcp_tools = if mcp_tools_enabled {
+    let (builtin_tools, mcp_tools) = {
         let s = state.lock().await;
-        s.mcp.all_tools().to_vec()
-    } else {
-        vec![]
+        match &tools_override {
+            Some(requested) => {
+                let builtin: Vec<String> = requested
+                    .iter()
+                    .filter(|t| !t.contains('.'))
+                    .cloned()
+                    .collect();
+                let mcp_names: Vec<String> = requested
+                    .iter()
+                    .filter(|t| t.contains('.'))
+                    .cloned()
+                    .collect();
+                let mcp = s.mcp.get_tools_by_qualified_names(&mcp_names);
+                (Some(builtin), mcp)
+            }
+            None => (None, vec![]),
+        }
     };
 
     let mut iteration = 0;
@@ -860,7 +873,7 @@ pub async fn execute_conversation_from_tree(
                 &resolved_model_id,
                 all_messages.clone(),
                 param_overrides.clone(),
-                tools_override.clone(),
+                builtin_tools.clone(),
                 mcp_tools.clone(),
             )
             .await

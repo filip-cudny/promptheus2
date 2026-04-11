@@ -9,7 +9,12 @@
   import TextChipBar from "$lib/components/ui/TextChipBar.svelte";
   import SkillEditable from "$lib/components/ui/SkillEditable.svelte";
   import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
+  import ToolChip from "./ToolChip.svelte";
   import { SendHorizonal, RefreshCw, Square, CopyCheck, Globe } from "lucide-svelte";
+  import type { ComponentType, SvelteComponent } from "svelte";
+  import type { IconProps } from "lucide-svelte";
+
+  type LucideIcon = ComponentType<SvelteComponent<IconProps>>;
   import { getImageFromPasteEvent, extractTextAttachment } from "$lib/utils/paste";
   import { formatTokenCount } from "$lib/utils/contextWindow";
   import { ICON_SIZE, TEXT_ATTACHMENT_CHAR_THRESHOLD } from "$lib/constants/ui";
@@ -44,22 +49,42 @@
     defaultModelId?: string | null;
   } = $props();
 
-  const builtinWebSearchAvailable = $derived.by(() => {
+  let mcpWebSearchQualifiedId = $state<string | null>(null);
+
+  const activeModel = $derived.by(() => {
     const activeModelId = store.modelId ?? defaultModelId;
-    if (!activeModelId) return false;
-    const model = models.find((m) => m.id === activeModelId);
-    return model?.enabled_tools?.includes("builtin_web_search") ?? false;
+    if (!activeModelId) return null;
+    return models.find((m) => m.id === activeModelId) ?? null;
   });
 
-  let mcpWebSearchAvailable = $state(false);
+  const builtinWebSearchAvailable = $derived(
+    activeModel?.enabled_tools?.includes("web_search") ?? false,
+  );
+
+  const mcpWebSearchAvailable = $derived.by(() => {
+    if (!mcpWebSearchQualifiedId || !activeModel) return false;
+    const tools = activeModel.enabled_tools ?? [];
+    return tools.includes(mcpWebSearchQualifiedId);
+  });
 
   const webSearchAvailable = $derived(builtinWebSearchAvailable || mcpWebSearchAvailable);
   const bothWebSearchAvailable = $derived(builtinWebSearchAvailable && mcpWebSearchAvailable);
 
+  const availableTools = $derived.by(() => {
+    const tools: { id: string; label: string; icon: LucideIcon; active: boolean }[] = [];
+    if (webSearchAvailable) {
+      const toolId = store.webSearchProvider === "mcp" && mcpWebSearchQualifiedId
+        ? mcpWebSearchQualifiedId
+        : "web_search";
+      tools.push({ id: toolId, label: "Web Search", icon: Globe, active: store.selectedTools.includes(toolId) });
+    }
+    return tools;
+  });
+
   $effect(() => {
     if (!bothWebSearchAvailable) {
-      if (mcpWebSearchAvailable && !builtinWebSearchAvailable) {
-        store.setWebSearchProvider("mcp");
+      if (mcpWebSearchAvailable && !builtinWebSearchAvailable && mcpWebSearchQualifiedId) {
+        store.setWebSearchProvider("mcp", mcpWebSearchQualifiedId);
       } else if (builtinWebSearchAvailable && !mcpWebSearchAvailable) {
         store.setWebSearchProvider("builtin");
       }
@@ -134,9 +159,10 @@
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
 
-    invoke<{ name: string }[]>("list_mcp_tools")
+    invoke<{ name: string; server: string }[]>("list_mcp_tools")
       .then((tools) => {
-        mcpWebSearchAvailable = tools.some((t) => t.name === "web_search");
+        const ws = tools.find((t) => t.name === "web_search");
+        mcpWebSearchQualifiedId = ws ? `${ws.server}.${ws.name}` : null;
       })
       .catch(() => {});
 
@@ -259,20 +285,15 @@
       <AttachMenu
         onSelectContext={onToggleContext}
         {contextDisabled}
-        showWebSearchSwitch={bothWebSearchAvailable}
+        {availableTools}
+        onToggleTool={(id, enabled) => store.toggleTool(id, enabled)}
+        showWebSearchSwitch={bothWebSearchAvailable && store.webSearchEnabled}
         webSearchProvider={store.webSearchProvider}
-        onWebSearchProviderChange={(p) => store.setWebSearchProvider(p)}
+        onWebSearchProviderChange={(p) => store.setWebSearchProvider(p, mcpWebSearchQualifiedId ?? undefined)}
       />
-      {#if webSearchAvailable}
-        <button
-          class="web-search-btn"
-          class:active={store.webSearchEnabled}
-          onclick={() => store.toggleWebSearch(!store.webSearchEnabled)}
-          title="Toggle web search ({store.webSearchProvider === 'mcp' ? 'MCP' : 'Built-in'})"
-        >
-          <Globe size={ICON_SIZE.md} />
-        </button>
-      {/if}
+      {#each availableTools.filter(t => t.active) as tool (tool.id)}
+        <ToolChip label={tool.label} icon={tool.icon} ondismiss={() => store.toggleTool(tool.id, false)} />
+      {/each}
     </div>
 
     <div class="bar-right">
@@ -398,27 +419,4 @@
     gap: 6px;
   }
 
-  .web-search-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    border: none;
-    background: transparent;
-    color: #aaa;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    flex-shrink: 0;
-  }
-
-  .web-search-btn:hover {
-    color: #e0e0e0;
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .web-search-btn.active {
-    color: #5b8dd9;
-  }
 </style>

@@ -1,16 +1,24 @@
 <script lang="ts">
-  import { Plus, FileText } from "lucide-svelte";
+  import { Plus, FileText, Check } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import type { ComponentType, SvelteComponent } from "svelte";
+  import type { IconProps } from "lucide-svelte";
+
+  type LucideIcon = ComponentType<SvelteComponent<IconProps>>;
 
   let {
     onSelectContext,
     contextDisabled = false,
+    availableTools = [],
+    onToggleTool,
     showWebSearchSwitch = false,
     webSearchProvider = "builtin" as "builtin" | "mcp",
     onWebSearchProviderChange,
   }: {
     onSelectContext: () => void;
     contextDisabled?: boolean;
+    availableTools?: { id: string; label: string; icon?: LucideIcon; active: boolean }[];
+    onToggleTool?: (toolId: string, enabled: boolean) => void;
     showWebSearchSwitch?: boolean;
     webSearchProvider?: "builtin" | "mcp";
     onWebSearchProviderChange?: (provider: "builtin" | "mcp") => void;
@@ -53,6 +61,24 @@
         <FileText size={ICON_SIZE.md} />
         <span>Context</span>
       </button>
+      {#if availableTools.length > 0}
+        <div class="menu-separator"></div>
+        {#each availableTools as tool (tool.id)}
+          <button
+            class="menu-item"
+            onclick={() => { onToggleTool?.(tool.id, !tool.active); menuOpen = false; }}
+          >
+            <span class="tool-check" class:tool-check-active={tool.active}>
+              {#if tool.active}<Check size={12} />{/if}
+            </span>
+            {#if tool.icon}
+              {@const Icon = tool.icon}
+              <Icon size={ICON_SIZE.md} />
+            {/if}
+            <span>{tool.label}</span>
+          </button>
+        {/each}
+      {/if}
       {#if showWebSearchSwitch}
         <div class="menu-separator"></div>
         <div class="menu-label">Web Search</div>
@@ -178,6 +204,19 @@
   .provider-option.selected {
     background: rgba(255, 255, 255, 0.12);
     color: #e0e0e0;
+  }
+
+  .tool-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    flex-shrink: 0;
+    color: transparent;
+  }
+
+  .tool-check-active {
+    color: #5b8dd9;
   }
 
 </style>

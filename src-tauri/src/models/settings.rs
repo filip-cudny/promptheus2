@@ -10,9 +10,6 @@ pub struct McpServerConfig {
     pub args: Vec<String>,
     #[serde(default)]
     pub env: HashMap<String, String>,
-
-    #[serde(default, skip_serializing)]
-    pub env_inherit: HashMap<String, String>,
 }
 
 impl McpServerConfig {
@@ -538,7 +535,6 @@ mod tests {
                 ("EXPLICIT".to_string(), "direct".to_string()),
                 ("FROM_ENV".to_string(), "${TEST_MCP_ENV_REF}".to_string()),
             ]),
-            env_inherit: HashMap::new(),
         };
         let resolved = config.resolved_env();
         assert_eq!(resolved.get("EXPLICIT").unwrap(), "direct");
@@ -553,26 +549,10 @@ mod tests {
             command: "${TEST_MCP_PATH}/bin/server".to_string(),
             args: vec!["--config".to_string(), "${TEST_MCP_PATH}/config.json".to_string()],
             env: HashMap::new(),
-            env_inherit: HashMap::new(),
         };
         assert_eq!(config.resolved_command(), "/opt/tools/bin/server");
         assert_eq!(config.resolved_args(), vec!["--config", "/opt/tools/config.json"]);
         std::env::remove_var("TEST_MCP_PATH");
-    }
-
-    #[test]
-    fn test_mcp_legacy_env_inherit_deserialization() {
-        let json = r#"{
-            "mcp_servers": {
-                "my-tools": {
-                    "command": "npx",
-                    "env_inherit": { "TAVILY_API_KEY": "TAVILY_API_KEY" }
-                }
-            }
-        }"#;
-        let settings: Settings = serde_json::from_str(json).expect("should deserialize legacy env_inherit");
-        let server = &settings.mcp_servers["my-tools"];
-        assert_eq!(server.env_inherit.get("TAVILY_API_KEY").unwrap(), "TAVILY_API_KEY");
     }
 
     #[test]

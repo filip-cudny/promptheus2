@@ -38,7 +38,7 @@
   let intervalId: ReturnType<typeof setInterval> | null = null;
 
   const TOOL_ICONS: Record<ToolCallType, typeof Search> = {
-    builtin_web_search: Search,
+    web_search: Search,
     code_execution: Play,
     file_read: FileText,
     file_write: FilePen,
@@ -182,7 +182,7 @@
       {/if}
       {#if toolCall.result}
         <div class="details-section">
-          <span class="details-label">{toolCall.tool_type === "builtin_web_search" ? "Queries" : "Output"}</span>
+          <span class="details-label">{toolCall.tool_type === "web_search" ? "Queries" : "Output"}</span>
           <div class="details-content result-scroll">
             <ToolResultRenderer result={toolCall.result} />
           </div>

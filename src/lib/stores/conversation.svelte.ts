@@ -264,8 +264,9 @@ export function createConversationStore(
   const isThinking = $derived(activeTab.is_thinking);
   const hasActiveToolCalls = $derived(activeTab.active_tool_calls.length > 0);
   const selectedTools = $derived(activeTab.selected_tools);
-  const webSearchEnabled = $derived(activeTab.selected_tools.includes("builtin_web_search") || activeTab.selected_tools.includes("mcp_web_search"));
-  const webSearchProvider = $derived<"builtin" | "mcp">(activeTab.selected_tools.includes("mcp_web_search") ? "mcp" : "builtin");
+  const hasMcpWebSearch = $derived(activeTab.selected_tools.some((t: string) => t.endsWith(".web_search")));
+  const webSearchEnabled = $derived(activeTab.selected_tools.includes("web_search") || hasMcpWebSearch);
+  const webSearchProvider = $derived<"builtin" | "mcp">(hasMcpWebSearch ? "mcp" : "builtin");
 
   const canSend = $derived.by(() => {
     if (activeTab.is_executing) return false;
@@ -305,7 +306,7 @@ export function createConversationStore(
     const inputImages = activeTab.input_images;
     const inputAttachments = activeTab.input_text_attachments;
     const hasPendingInput = inputText.trim() || inputImages.length > 0 || inputAttachments.length > 0;
-    const toolNames = activeTab.selected_tools.filter(t => t !== "mcp_web_search");
+    const toolNames = activeTab.selected_tools;
 
     const nodes = serializePathNodes(activeTab);
     if (hasPendingInput) {
@@ -490,9 +491,6 @@ export function createConversationStore(
         },
       };
 
-      const toolsOverride = tab.selected_tools.filter(t => t !== "mcp_web_search");
-      const mcpToolsEnabled = tab.selected_tools.includes("mcp_web_search");
-
       await executeConversationFromTree(nodes, callbacks, {
         contextText: tab.context_text || undefined,
         contextImages,
@@ -501,8 +499,7 @@ export function createConversationStore(
         skillName,
         modelId: tab.model_id || undefined,
         reasoningEffort: tab.reasoning_effort || undefined,
-        toolsOverride,
-        mcpToolsEnabled,
+        toolsOverride: tab.selected_tools,
       });
     } catch (e) {
       logError("Failed to execute: " + e);
@@ -1006,21 +1003,24 @@ export function createConversationStore(
     updateSetting("selected_tools", tab.selected_tools);
   }
 
-  function toggleWebSearch(enabled: boolean): void {
-    const currentProvider = webSearchProvider;
-    const toolId = currentProvider === "mcp" ? "mcp_web_search" : "builtin_web_search";
+  function toggleWebSearch(enabled: boolean, mcpToolId?: string): void {
+    const mcpId = mcpToolId ?? selectedTools.find((t: string) => t.endsWith(".web_search"));
+    const toolId = webSearchProvider === "mcp" && mcpId ? mcpId : "web_search";
     toggleTool(toolId, enabled);
   }
 
-  function setWebSearchProvider(provider: "builtin" | "mcp"): void {
+  function setWebSearchProvider(provider: "builtin" | "mcp", mcpToolId?: string): void {
     const tab = getTab(activeTabId);
     if (!tab) return;
-    const addId = provider === "mcp" ? "mcp_web_search" : "builtin_web_search";
-    const removeId = provider === "mcp" ? "builtin_web_search" : "mcp_web_search";
-    if (tab.selected_tools.includes(addId) && !tab.selected_tools.includes(removeId)) return;
-    const wasEnabled = tab.selected_tools.includes("builtin_web_search") || tab.selected_tools.includes("mcp_web_search");
+    const mcpId = mcpToolId ?? tab.selected_tools.find((t: string) => t.endsWith(".web_search"));
+    if (provider === "mcp" && !mcpId) return;
+    const addId = provider === "mcp" ? mcpId! : "web_search";
+    const removeId = provider === "mcp" ? "web_search" : mcpId;
+    if (tab.selected_tools.includes(addId) && (!removeId || !tab.selected_tools.includes(removeId))) return;
+    const wasEnabled = tab.selected_tools.includes("web_search") || tab.selected_tools.some((t: string) => t.endsWith(".web_search"));
     if (!wasEnabled) return;
-    tab.selected_tools = [...tab.selected_tools.filter(t => t !== removeId && t !== addId), addId];
+    const filtered = tab.selected_tools.filter((t: string) => t !== addId && t !== removeId);
+    tab.selected_tools = [...filtered, addId];
     windowDefaultSelectedTools = [...tab.selected_tools];
     updateSetting("selected_tools", tab.selected_tools);
   }

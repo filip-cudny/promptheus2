@@ -425,7 +425,7 @@ impl AiProvider for OpenAiResponsesProvider {
                                                     usage: None,
                                                     tool_call_event: Some(ToolCallEvent::Started {
                                                         tool_call_id,
-                                                        tool_name: "builtin_web_search".to_string(),
+                                                        tool_name: "web_search".to_string(),
                                                     }),
                                                 }),
                                                 (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
