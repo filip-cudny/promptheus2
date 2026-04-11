@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ChevronRight, ChevronDown } from "lucide-svelte";
+  import JsonNode from "./JsonNode.svelte";
 
   let {
     value,
@@ -15,7 +16,6 @@
 
   let isObject = $derived(typeof value === "object" && value !== null && !Array.isArray(value));
   let isArray = $derived(Array.isArray(value));
-  let isCollapsible = $derived((isObject || isArray) && itemCount > 0);
   let itemCount = $derived(
     isArray
       ? (value as unknown[]).length
@@ -23,6 +23,7 @@
         ? Object.keys(value as Record<string, unknown>).length
         : 0,
   );
+  let isCollapsible = $derived((isObject || isArray) && itemCount > 0);
   let entries = $derived(
     isArray
       ? (value as unknown[]).map((v, i) => [String(i), v] as [string, unknown])
@@ -31,7 +32,9 @@
         : [],
   );
 
-  let expanded = $state(depth < 2 && itemCount > 0);
+  let defaultExpanded = $derived(depth < 2 && itemCount > 0);
+  let expanded = $state<boolean | undefined>(undefined);
+  let isExpanded = $derived(expanded ?? defaultExpanded);
 
   let bracketOpen = $derived(isArray ? "[" : "{");
   let bracketClose = $derived(isArray ? "]" : "}");
@@ -64,24 +67,24 @@
   </span>
 {:else if isCollapsible}
   <div class="json-node">
-    <button class="json-toggle" onclick={() => (expanded = !expanded)}>
-      {#if expanded}
+    <button class="json-toggle" onclick={() => (expanded = !isExpanded)}>
+      {#if isExpanded}
         <ChevronDown size={10} />
       {:else}
         <ChevronRight size={10} />
       {/if}
       {#if keyLabel}<span class="json-key">{keyLabel}: </span>{/if}
       <span class="json-bracket">{bracketOpen}</span>
-      {#if !expanded}
+      {#if !isExpanded}
         <span class="json-collapsed-hint">{itemCount} items</span>
         <span class="json-bracket">{bracketClose}</span>
       {/if}
     </button>
-    {#if expanded}
+    {#if isExpanded}
       <div class="json-children">
         {#each entries as [key, val]}
           <div class="json-indent">
-            <svelte:self value={val} keyLabel={isArray ? undefined : key} depth={depth + 1} />
+            <JsonNode value={val} keyLabel={isArray ? undefined : key} depth={depth + 1} />
           </div>
         {/each}
       </div>

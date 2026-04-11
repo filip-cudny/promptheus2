@@ -131,7 +131,7 @@
     </div>
   {:else if parsed.kind === "text"}
     {#if isMarkdownLike(parsed.text)}
-      <MarkdownRenderer content={parsed.text} />
+      <MarkdownRenderer content={parsed.text} isStreaming={false} />
     {:else}
       <pre class="plain-text">{parsed.text}</pre>
     {/if}
