@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import morphdom from "morphdom";
+  import { invoke } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
+  import { save } from "@tauri-apps/plugin-dialog";
   import { renderMarkdown, extractCodeBlocks } from "$lib/utils/markdown";
   import { icon, icons } from "$lib/utils/icons";
 
@@ -175,6 +177,15 @@
     }
   }
 
+  async function saveSvgToFile(content: string) {
+    const path = await save({
+      defaultPath: "mermaid-diagram.svg",
+      filters: [{ name: "SVG", extensions: ["svg"] }],
+    });
+    if (!path) return;
+    await invoke("write_text_file", { path, content });
+  }
+
   function handleClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
 
@@ -217,13 +228,7 @@
       const idx = saveSvgBtn.dataset.mermaidSaveSvg!;
       const svg = getMermaidSvg(idx);
       if (svg) {
-        const blob = new Blob([svg], { type: "image/svg+xml" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `mermaid-diagram.svg`;
-        a.click();
-        URL.revokeObjectURL(url);
+        saveSvgToFile(svg);
       }
       closeAllMermaidMenus();
       return;

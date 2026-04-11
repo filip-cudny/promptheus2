@@ -10,6 +10,7 @@ pub mod mcp;
 pub mod menu;
 pub mod notification;
 pub mod execution;
+pub mod fs;
 pub mod conversation_dialog;
 pub mod settings;
 pub mod skills;
