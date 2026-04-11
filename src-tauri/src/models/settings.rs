@@ -85,6 +85,9 @@ pub struct Settings {
 
     #[serde(default = "default_conversation_title_prompt")]
     pub conversation_title_prompt: String,
+
+    #[serde(default)]
+    pub selected_tools: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -366,6 +369,7 @@ impl Default for Settings {
             skills_order: Vec::new(),
             conversation_title_model: String::new(),
             conversation_title_prompt: default_conversation_title_prompt(),
+            selected_tools: Vec::new(),
         }
     }
 }

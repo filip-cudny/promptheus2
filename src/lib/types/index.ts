@@ -24,6 +24,7 @@ export interface Settings {
   skills_order: string[];
   conversation_title_model: string;
   conversation_title_prompt: string;
+  selected_tools: string[];
 }
 
 export interface ModelConfig {

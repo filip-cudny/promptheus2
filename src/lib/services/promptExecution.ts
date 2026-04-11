@@ -114,6 +114,7 @@ export async function executeConversationFromTree(
     modelId?: string;
     reasoningEffort?: string;
     toolsOverride?: string[];
+    mcpToolsEnabled?: boolean;
   },
 ): Promise<void> {
   const onEvent = new Channel<StreamEvent>();
@@ -128,6 +129,7 @@ export async function executeConversationFromTree(
     modelId: options.modelId ?? null,
     reasoningEffort: options.reasoningEffort ?? null,
     toolsOverride: options.toolsOverride ?? null,
+    mcpToolsEnabled: options.mcpToolsEnabled ?? false,
     onEvent,
   });
 }

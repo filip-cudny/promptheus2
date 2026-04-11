@@ -57,8 +57,7 @@ export interface TabState {
   is_thinking: boolean;
   thinking_started_at: number | null;
   active_tool_calls: ToolCall[];
-  web_search_enabled: boolean;
-  web_search_provider: "builtin" | "mcp";
+  selected_tools: string[];
   abort_regenerate_node_id: string | null;
 }
 

@@ -56,7 +56,7 @@
     !!toolCall.result ||
     !!toolCall.error
   );
-  let isClickable = $derived((isCompleted || isFailed || isCancelled) && hasExpandableContent);
+  let isClickable = $derived(isCompleted || isFailed || isCancelled);
 
   $effect(() => {
     if (isInProgress && toolCall.started_at) {

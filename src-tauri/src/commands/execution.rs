@@ -59,6 +59,7 @@ async fn run_stream_loop(
     mut stream: Pin<Box<dyn Stream<Item = Result<StreamChunk, AiError>> + Send>>,
     live: Arc<TokioMutex<LiveExecution>>,
     cancel_rx: Option<watch::Receiver<bool>>,
+    text_prefix: &str,
 ) -> Result<StreamResult, String> {
     let mut full_text = String::new();
     let mut full_thinking = String::new();
@@ -99,9 +100,10 @@ async fn run_stream_loop(
                 }
 
                 if let Some(tool_event) = chunk.tool_call_event {
-                    full_text.clone_from(&chunk.accumulated);
+                    let prefixed_accumulated = format!("{text_prefix}{}", chunk.accumulated);
+                    full_text.clone_from(&prefixed_accumulated);
                     let mut live = live.lock().await;
-                    live.snapshot.accumulated_text.clone_from(&chunk.accumulated);
+                    live.snapshot.accumulated_text.clone_from(&prefixed_accumulated);
 
                     match tool_event {
                         ToolCallEvent::Started { tool_call_id, tool_name } => {
@@ -156,20 +158,21 @@ async fn run_stream_loop(
 
                 let has_content = !chunk.delta.is_empty() || chunk.thinking_delta.is_some();
                 if has_content {
-                    full_text.clone_from(&chunk.accumulated);
+                    let prefixed_accumulated = format!("{text_prefix}{}", chunk.accumulated);
+                    full_text.clone_from(&prefixed_accumulated);
                     if let Some(ref acc) = chunk.accumulated_thinking {
                         full_thinking.clone_from(acc);
                     }
 
                     let mut live = live.lock().await;
-                    live.snapshot.accumulated_text.clone_from(&chunk.accumulated);
+                    live.snapshot.accumulated_text.clone_from(&prefixed_accumulated);
                     live.snapshot.accumulated_thinking = chunk.accumulated_thinking.clone();
                     live.snapshot.is_thinking = chunk.accumulated_thinking.is_some() && chunk.accumulated.is_empty();
 
                     if let Some(ref ch) = live.channel {
                         if ch.send(StreamEvent::Chunk {
                             delta: chunk.delta,
-                            accumulated: chunk.accumulated,
+                            accumulated: prefixed_accumulated,
                             thinking_delta: chunk.thinking_delta,
                             accumulated_thinking: chunk.accumulated_thinking,
                         }).is_err() {
@@ -192,7 +195,8 @@ async fn run_stream_loop(
     }
 
     let thinking = if full_thinking.is_empty() { None } else { Some(full_thinking) };
-    {
+
+    if pending_tool_calls.is_empty() {
         let mut live = live.lock().await;
         live.snapshot.finished = true;
         live.snapshot.prompt_tokens = prompt_tokens;
@@ -436,7 +440,7 @@ pub async fn execute_skill(
             .map_err(|e| e.to_string());
 
         match stream {
-            Ok(stream) => run_stream_loop(stream, live_execution, Some(cancel_rx)).await,
+            Ok(stream) => run_stream_loop(stream, live_execution, Some(cancel_rx), "").await,
             Err(e) => Err(e),
         }
     };
@@ -722,6 +726,7 @@ pub async fn execute_conversation_from_tree(
     model_id: Option<String>,
     reasoning_effort: Option<String>,
     tools_override: Option<Vec<String>>,
+    mcp_tools_enabled: bool,
     on_event: Channel<StreamEvent>,
 ) -> Result<(), String> {
     let (execution_id, resolved_model_id, _model_display_name, mut all_messages, ai, updates_for_event, param_overrides) = {
@@ -840,12 +845,15 @@ pub async fn execute_conversation_from_tree(
         let _ = on_event.send(StreamEvent::NodeUpdates { node_id, updates });
     }
 
-    let mcp_tools = {
+    let mcp_tools = if mcp_tools_enabled {
         let s = state.lock().await;
         s.mcp.all_tools().to_vec()
+    } else {
+        vec![]
     };
 
     let mut iteration = 0;
+    let mut accumulated_prefix = String::new();
     loop {
         let stream = ai
             .complete_stream(
@@ -859,7 +867,7 @@ pub async fn execute_conversation_from_tree(
             .map_err(|e| e.to_string());
 
         let stream_result = match stream {
-            Ok(stream) => run_stream_loop(stream, Arc::clone(&live_execution), Some(cancel_rx.clone())).await,
+            Ok(stream) => run_stream_loop(stream, Arc::clone(&live_execution), Some(cancel_rx.clone()), &accumulated_prefix).await,
             Err(e) => Err(e),
         };
 
@@ -868,12 +876,23 @@ pub async fn execute_conversation_from_tree(
                 if result.pending_tool_calls.is_empty() || iteration >= MAX_TOOL_LOOP_ITERATIONS {
                     if iteration >= MAX_TOOL_LOOP_ITERATIONS {
                         log::warn!("Tool loop reached max iterations ({})", MAX_TOOL_LOOP_ITERATIONS);
+                        let mut live = live_execution.lock().await;
+                        live.snapshot.finished = true;
+                        if let Some(ref ch) = live.channel {
+                            let _ = ch.send(StreamEvent::Done {
+                                full_text: result.full_text,
+                                full_thinking: result.full_thinking,
+                                prompt_tokens: result.prompt_tokens,
+                                completion_tokens: result.completion_tokens,
+                            });
+                        }
                     }
                     let mut s = state.lock().await;
                     s.prompt_execution.clear_live();
                     return Ok(());
                 }
 
+                accumulated_prefix = result.full_text.clone();
                 iteration += 1;
                 log::info!("Tool loop iteration {}", iteration);
 

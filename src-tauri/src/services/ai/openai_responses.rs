@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::pin::Pin;
 
 use async_trait::async_trait;
@@ -62,7 +63,38 @@ impl OpenAiResponsesProvider {
     }
 }
 
-fn to_responses_message(msg: &ProcessedMessage) -> serde_json::Value {
+fn to_responses_messages(msg: &ProcessedMessage) -> Vec<serde_json::Value> {
+    if msg.role == "tool" {
+        if let Some(ref call_id) = msg.tool_call_id {
+            let output = match &msg.content {
+                MessageContent::Text(text) => text.clone(),
+                MessageContent::Parts(_) => String::new(),
+            };
+            return vec![serde_json::json!({
+                "type": "function_call_output",
+                "call_id": call_id,
+                "output": output,
+            })];
+        }
+    }
+
+    let mut results = Vec::new();
+
+    if let Some(ref tool_calls) = msg.tool_calls {
+        for tc in tool_calls {
+            results.push(serde_json::json!({
+                "type": "function_call",
+                "call_id": tc.id,
+                "name": tc.function.name,
+                "arguments": tc.function.arguments,
+            }));
+        }
+    }
+
+    if !results.is_empty() {
+        return results;
+    }
+
     let content = match &msg.content {
         MessageContent::Text(text) => serde_json::json!(text),
         MessageContent::Parts(parts) => {
@@ -82,10 +114,10 @@ fn to_responses_message(msg: &ProcessedMessage) -> serde_json::Value {
             serde_json::json!(mapped)
         }
     };
-    serde_json::json!({
+    vec![serde_json::json!({
         "role": msg.role,
         "content": content,
-    })
+    })]
 }
 
 fn build_request_body(request: &CompletionRequest, stream: bool, store: bool) -> serde_json::Value {
@@ -106,7 +138,7 @@ fn build_request_body(request: &CompletionRequest, stream: bool, store: bool) ->
                 true
             }
         })
-        .map(|m| to_responses_message(m))
+        .flat_map(|m| to_responses_messages(m))
         .collect();
 
     let mut body = serde_json::json!({
@@ -200,6 +232,12 @@ struct ResponseEvent {
     item: Option<OutputItemEvent>,
     #[serde(default)]
     item_id: Option<String>,
+    #[serde(default)]
+    call_id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    arguments: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -212,6 +250,12 @@ struct OutputItemEvent {
     status: Option<String>,
     #[serde(default)]
     action: Option<serde_json::Value>,
+    #[serde(default)]
+    call_id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    arguments: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -307,8 +351,8 @@ impl AiProvider for OpenAiResponsesProvider {
         let sse_stream = parse_sse_stream(response);
 
         let stream = futures::stream::unfold(
-            (sse_stream, String::new(), String::new(), Vec::<String>::new()),
-            |(mut sse_stream, mut accumulated, mut accumulated_thinking, mut active_tool_call_ids)| async move {
+            (sse_stream, String::new(), String::new(), Vec::<String>::new(), HashMap::<String, (String, String)>::new(), HashMap::<String, String>::new()),
+            |(mut sse_stream, mut accumulated, mut accumulated_thinking, mut active_tool_call_ids, mut fn_call_args, mut item_id_to_call_id)| async move {
                 loop {
                     match sse_stream.next().await {
                         Some(Ok(data)) => {
@@ -321,7 +365,7 @@ impl AiProvider for OpenAiResponsesProvider {
                                 }
                             };
 
-                            log::trace!("responses: event_type={}, has_delta={}", event.event_type, event.delta.is_some());
+                            log::debug!("responses: event_type={}", event.event_type);
 
                             match event.event_type.as_str() {
                                 "response.reasoning_summary_text.delta" => {
@@ -340,7 +384,7 @@ impl AiProvider for OpenAiResponsesProvider {
                                             usage: None,
                                             tool_call_event: None,
                                         }),
-                                        (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids),
+                                        (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
                                     ));
                                 }
                                 "response.output_text.delta" => {
@@ -363,7 +407,7 @@ impl AiProvider for OpenAiResponsesProvider {
                                             usage: None,
                                             tool_call_event: None,
                                         }),
-                                        (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids),
+                                        (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
                                     ));
                                 }
                                 "response.output_item.added" => {
@@ -386,9 +430,85 @@ impl AiProvider for OpenAiResponsesProvider {
                                                         tool_name: "builtin_web_search".to_string(),
                                                     }),
                                                 }),
-                                                (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids),
+                                                (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
                                             ));
                                         }
+                                        if item.item_type.as_deref() == Some("function_call") {
+                                            let tool_call_id = item.call_id.clone().unwrap_or_default();
+                                            let tool_name = item.name.clone().unwrap_or_default();
+                                            log::debug!("responses: function_call started call_id={tool_call_id} item_id={:?} name={tool_name}", item.id);
+                                            active_tool_call_ids.push(tool_call_id.clone());
+                                            fn_call_args.insert(tool_call_id.clone(), (tool_name.clone(), String::new()));
+                                            if let Some(ref item_id) = item.id {
+                                                item_id_to_call_id.insert(item_id.clone(), tool_call_id.clone());
+                                            }
+                                            let marker = format!("{{{{tool_call:{tool_call_id}}}}}");
+                                            accumulated.push_str(&marker);
+                                            return Some((
+                                                Ok(StreamChunk {
+                                                    delta: String::new(),
+                                                    accumulated: accumulated.clone(),
+                                                    thinking_delta: None,
+                                                    accumulated_thinking: None,
+                                                    usage: None,
+                                                    tool_call_event: Some(ToolCallEvent::Started {
+                                                        tool_call_id,
+                                                        tool_name,
+                                                    }),
+                                                }),
+                                                (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
+                                            ));
+                                        }
+                                    }
+                                    continue;
+                                }
+                                "response.function_call_arguments.delta" => {
+                                    let raw_id = event.call_id.or(event.item_id.clone());
+                                    if let Some(raw_id) = raw_id {
+                                        let call_id = item_id_to_call_id.get(&raw_id).cloned().unwrap_or(raw_id);
+                                        if let Some(delta) = event.delta {
+                                            if let Some((_, ref mut acc_args)) = fn_call_args.get_mut(&call_id) {
+                                                acc_args.push_str(&delta);
+                                            }
+                                        }
+                                    }
+                                    continue;
+                                }
+                                "response.function_call_arguments.done" => {
+                                    let raw_id = event.call_id.or(event.item_id.clone());
+                                    log::debug!("responses: fn_call_args.done raw_id={:?} name={:?} has_arguments={}", raw_id, event.name, event.arguments.is_some());
+                                    if let Some(raw_id) = raw_id {
+                                        let call_id = item_id_to_call_id.get(&raw_id).cloned().unwrap_or(raw_id);
+                                        let tool_name = event.name.unwrap_or_else(|| {
+                                            fn_call_args.get(&call_id)
+                                                .map(|(name, _)| name.clone())
+                                                .unwrap_or_default()
+                                        });
+                                        let arguments_str = event.arguments.unwrap_or_else(|| {
+                                            fn_call_args.get(&call_id)
+                                                .map(|(_, args)| args.clone())
+                                                .unwrap_or_default()
+                                        });
+                                        let arguments: serde_json::Value = serde_json::from_str(&arguments_str)
+                                            .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+                                        log::debug!("responses: function_call args complete id={call_id} name={tool_name}");
+                                        fn_call_args.remove(&call_id);
+                                        active_tool_call_ids.retain(|id| id != &call_id);
+                                        return Some((
+                                            Ok(StreamChunk {
+                                                delta: String::new(),
+                                                accumulated: accumulated.clone(),
+                                                thinking_delta: None,
+                                                accumulated_thinking: None,
+                                                usage: None,
+                                                tool_call_event: Some(ToolCallEvent::ArgumentsComplete {
+                                                    tool_call_id: call_id,
+                                                    tool_name,
+                                                    arguments,
+                                                }),
+                                            }),
+                                            (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
+                                        ));
                                     }
                                     continue;
                                 }
@@ -415,7 +535,44 @@ impl AiProvider for OpenAiResponsesProvider {
                                                         error: None,
                                                     }),
                                                 }),
-                                                (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids),
+                                                (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
+                                            ));
+                                        }
+                                        if item.item_type.as_deref() == Some("function_call") {
+                                            let tool_call_id = item.call_id.clone().unwrap_or_default();
+                                            if !active_tool_call_ids.contains(&tool_call_id) {
+                                                log::debug!("responses: function_call output_item.done skipped (already handled) id={tool_call_id}");
+                                                continue;
+                                            }
+                                            let tool_name = item.name.clone().unwrap_or_else(|| {
+                                                fn_call_args.get(&tool_call_id)
+                                                    .map(|(n, _)| n.clone())
+                                                    .unwrap_or_default()
+                                            });
+                                            let arguments_str = item.arguments.clone().unwrap_or_else(|| {
+                                                fn_call_args.get(&tool_call_id)
+                                                    .map(|(_, a)| a.clone())
+                                                    .unwrap_or_default()
+                                            });
+                                            let arguments: serde_json::Value = serde_json::from_str(&arguments_str)
+                                                .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
+                                            log::debug!("responses: function_call done via output_item id={tool_call_id} name={tool_name}");
+                                            fn_call_args.remove(&tool_call_id);
+                                            active_tool_call_ids.retain(|id| id != &tool_call_id);
+                                            return Some((
+                                                Ok(StreamChunk {
+                                                    delta: String::new(),
+                                                    accumulated: accumulated.clone(),
+                                                    thinking_delta: None,
+                                                    accumulated_thinking: None,
+                                                    usage: None,
+                                                    tool_call_event: Some(ToolCallEvent::ArgumentsComplete {
+                                                        tool_call_id,
+                                                        tool_name,
+                                                        arguments,
+                                                    }),
+                                                }),
+                                                (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
                                             ));
                                         }
                                     }
@@ -444,7 +601,7 @@ impl AiProvider for OpenAiResponsesProvider {
                                                 usage,
                                                 tool_call_event: None,
                                             }),
-                                            (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids),
+                                            (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
                                         ));
                                     }
                                     continue;
@@ -455,7 +612,7 @@ impl AiProvider for OpenAiResponsesProvider {
                         Some(Err(e)) => {
                             return Some((
                                 Err(AiError::Stream(e.to_string())),
-                                (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids),
+                                (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
                             ));
                         }
                         None => return None,

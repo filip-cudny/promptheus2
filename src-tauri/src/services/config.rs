@@ -219,6 +219,11 @@ impl ConfigService {
                     self.settings.conversation_title_prompt = v.to_string();
                 }
             }
+            "selected_tools" => {
+                if let Ok(v) = serde_json::from_value::<Vec<String>>(value) {
+                    self.settings.selected_tools = v;
+                }
+            }
             _ => {}
         }
     }

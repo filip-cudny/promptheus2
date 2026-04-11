@@ -129,10 +129,15 @@ export function switchBranchInTree(
   }
 }
 
+interface TabDefaults {
+  modelId?: string | null;
+  reasoningEffort?: string | null;
+  selectedTools?: string[];
+}
+
 function createTabState(
   tabName: string | null = null,
-  modelId: string | null = null,
-  reasoningEffort: string | null = null,
+  defaults: TabDefaults = {},
 ): TabState {
   return {
     tab_id: generateId(),
@@ -149,14 +154,13 @@ function createTabState(
     execution_id: null,
     history_entry_id: null,
     pristine_input: null,
-    model_id: modelId,
-    reasoning_effort: reasoningEffort,
+    model_id: defaults.modelId ?? null,
+    reasoning_effort: defaults.reasoningEffort ?? null,
     streamed_thinking: "",
     is_thinking: false,
     thinking_started_at: null,
     active_tool_calls: [],
-    web_search_enabled: false,
-    web_search_provider: "builtin",
+    selected_tools: defaults.selectedTools ? [...defaults.selectedTools] : [],
     abort_regenerate_node_id: null,
   };
 }
@@ -232,6 +236,11 @@ export function createConversationStore(
 ) {
   let windowDefaultModelId = $state<string | null>(null);
   let windowDefaultReasoningEffort = $state<string | null>(null);
+  let windowDefaultSelectedTools = $state<string[]>([]);
+
+  function tabDefaults(): TabDefaults {
+    return { modelId: windowDefaultModelId, reasoningEffort: windowDefaultReasoningEffort, selectedTools: windowDefaultSelectedTools };
+  }
 
   let tabs = $state<TabState[]>([createTabState()]);
   let activeTabId = $state(tabs[0].tab_id);
@@ -254,8 +263,9 @@ export function createConversationStore(
   const streamedThinking = $derived(activeTab.streamed_thinking);
   const isThinking = $derived(activeTab.is_thinking);
   const hasActiveToolCalls = $derived(activeTab.active_tool_calls.length > 0);
-  const webSearchEnabled = $derived(activeTab.web_search_enabled);
-  const webSearchProvider = $derived(activeTab.web_search_provider);
+  const selectedTools = $derived(activeTab.selected_tools);
+  const webSearchEnabled = $derived(activeTab.selected_tools.includes("builtin_web_search") || activeTab.selected_tools.includes("mcp_web_search"));
+  const webSearchProvider = $derived<"builtin" | "mcp">(activeTab.selected_tools.includes("mcp_web_search") ? "mcp" : "builtin");
 
   const canSend = $derived.by(() => {
     if (activeTab.is_executing) return false;
@@ -295,7 +305,7 @@ export function createConversationStore(
     const inputImages = activeTab.input_images;
     const inputAttachments = activeTab.input_text_attachments;
     const hasPendingInput = inputText.trim() || inputImages.length > 0 || inputAttachments.length > 0;
-    const toolNames = activeTab.web_search_enabled && activeTab.web_search_provider === "builtin" ? ["builtin_web_search"] : [];
+    const toolNames = activeTab.selected_tools.filter(t => t !== "mcp_web_search");
 
     const nodes = serializePathNodes(activeTab);
     if (hasPendingInput) {
@@ -382,6 +392,11 @@ export function createConversationStore(
           }
         },
         onDone: (fullText, usage, fullThinking) => {
+          console.log("[DEBUG] onDone", {
+            hasMarkers: /\{\{tool_call:/.test(fullText),
+            toolCalls: assistantNode.tool_calls.map((tc) => ({ id: tc.tool_call_id, status: tc.status, hasResult: !!tc.result, hasError: !!tc.error, argKeys: Object.keys(tc.arguments) })),
+            contentLen: fullText.length,
+          });
           assistantNode.content = fullText;
           assistantNode.thinking = fullThinking ?? null;
           if (tab.thinking_started_at && !assistantNode.thinking_duration) {
@@ -433,6 +448,7 @@ export function createConversationStore(
           }
         },
         onToolCallStart: (toolCall) => {
+          console.log("[DEBUG] onToolCallStart", { id: toolCall.tool_call_id, name: toolCall.tool_name });
           tab.active_tool_calls = [...tab.active_tool_calls, toolCall];
           assistantNode.tool_calls = [...assistantNode.tool_calls, toolCall];
           const marker = `{{tool_call:${toolCall.tool_call_id}}}`;
@@ -446,6 +462,7 @@ export function createConversationStore(
           );
         },
         onToolCallDone: (toolCallId, result, error) => {
+          console.log("[DEBUG] onToolCallDone", { toolCallId, hasResult: !!result, resultLen: result?.length, hasError: !!error });
           const status = error ? "failed" : "completed";
           const now = new Date().toISOString();
           assistantNode.tool_calls = assistantNode.tool_calls.map((tc) =>
@@ -473,7 +490,8 @@ export function createConversationStore(
         },
       };
 
-      const toolsOverride = tab.web_search_enabled && tab.web_search_provider === "builtin" ? ["builtin_web_search"] : [];
+      const toolsOverride = tab.selected_tools.filter(t => t !== "mcp_web_search");
+      const mcpToolsEnabled = tab.selected_tools.includes("mcp_web_search");
 
       await executeConversationFromTree(nodes, callbacks, {
         contextText: tab.context_text || undefined,
@@ -484,6 +502,7 @@ export function createConversationStore(
         modelId: tab.model_id || undefined,
         reasoningEffort: tab.reasoning_effort || undefined,
         toolsOverride,
+        mcpToolsEnabled,
       });
     } catch (e) {
       logError("Failed to execute: " + e);
@@ -838,7 +857,7 @@ export function createConversationStore(
       tab.tab_name = skillName || null;
       return false;
     } else {
-      const newTab = createTabState(skillName || null, windowDefaultModelId, windowDefaultReasoningEffort);
+      const newTab = createTabState(skillName || null, tabDefaults());
       newTab.input_text = prefix;
       newTab.pristine_input = prefix || null;
       tabs.push(newTab);
@@ -858,7 +877,7 @@ export function createConversationStore(
       activeTabId = existing.tab_id;
       return;
     }
-    const newTab = createTabState(null, windowDefaultModelId, windowDefaultReasoningEffort);
+    const newTab = createTabState(null, tabDefaults());
     tabs.push(newTab);
     activeTabId = newTab.tab_id;
   }
@@ -899,7 +918,7 @@ export function createConversationStore(
     stopTabExecution(closingTab);
 
     if (tabs.length <= 1) {
-      tabs[0] = createTabState("New chat", windowDefaultModelId, windowDefaultReasoningEffort);
+      tabs[0] = createTabState("New chat", tabDefaults());
       activeTabId = tabs[0].tab_id;
       return;
     }
@@ -972,16 +991,38 @@ export function createConversationStore(
     }
   }
 
-  function toggleWebSearch(enabled: boolean): void {
+  function toggleTool(toolId: string, enabled: boolean): void {
     const tab = getTab(activeTabId);
     if (!tab) return;
-    tab.web_search_enabled = enabled;
+    const has = tab.selected_tools.includes(toolId);
+    if (enabled && has) return;
+    if (!enabled && !has) return;
+    if (enabled) {
+      tab.selected_tools = [...tab.selected_tools, toolId];
+    } else {
+      tab.selected_tools = tab.selected_tools.filter(t => t !== toolId);
+    }
+    windowDefaultSelectedTools = [...tab.selected_tools];
+    updateSetting("selected_tools", tab.selected_tools);
+  }
+
+  function toggleWebSearch(enabled: boolean): void {
+    const currentProvider = webSearchProvider;
+    const toolId = currentProvider === "mcp" ? "mcp_web_search" : "builtin_web_search";
+    toggleTool(toolId, enabled);
   }
 
   function setWebSearchProvider(provider: "builtin" | "mcp"): void {
     const tab = getTab(activeTabId);
     if (!tab) return;
-    tab.web_search_provider = provider;
+    const addId = provider === "mcp" ? "mcp_web_search" : "builtin_web_search";
+    const removeId = provider === "mcp" ? "builtin_web_search" : "mcp_web_search";
+    if (tab.selected_tools.includes(addId) && !tab.selected_tools.includes(removeId)) return;
+    const wasEnabled = tab.selected_tools.includes("builtin_web_search") || tab.selected_tools.includes("mcp_web_search");
+    if (!wasEnabled) return;
+    tab.selected_tools = [...tab.selected_tools.filter(t => t !== removeId && t !== addId), addId];
+    windowDefaultSelectedTools = [...tab.selected_tools];
+    updateSetting("selected_tools", tab.selected_tools);
   }
 
   async function initFromSettings(): Promise<void> {
@@ -992,9 +1033,13 @@ export function createConversationStore(
       const defaultModel = defaultId ? settings.models.find(m => m.id === defaultId) : undefined;
       const defaultEffort = defaultModel?.parameters?.reasoning_effort ?? null;
       windowDefaultReasoningEffort = defaultEffort;
+      windowDefaultSelectedTools = settings.selected_tools ?? [];
       for (const tab of tabs) {
         if (tab.model_id === null) tab.model_id = defaultId;
         if (tab.reasoning_effort === null && defaultEffort) tab.reasoning_effort = defaultEffort;
+        if (tab.selected_tools.length === 0 && windowDefaultSelectedTools.length > 0) {
+          tab.selected_tools = [...windowDefaultSelectedTools];
+        }
       }
     } catch {}
   }
@@ -1319,6 +1364,9 @@ export function createConversationStore(
     get activeToolCalls() {
       return activeTab.active_tool_calls;
     },
+    get selectedTools() {
+      return selectedTools;
+    },
     get webSearchEnabled() {
       return webSearchEnabled;
     },
@@ -1356,6 +1404,7 @@ export function createConversationStore(
     updateInputTextAttachments,
     updateModelId,
     updateReasoningEffort,
+    toggleTool,
     toggleWebSearch,
     setWebSearchProvider,
     initFromSettings,

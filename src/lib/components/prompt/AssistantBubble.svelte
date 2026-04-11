@@ -48,8 +48,8 @@
     onToolCallRetry?: (toolCallId: string) => void;
   } = $props();
 
-  const TOOL_CALL_MARKER_PATTERN = /\{\{tool_call:([a-zA-Z0-9_-]+)\}\}/g;
-  const TOOL_CALL_MARKER_TEST = /\{\{tool_call:[a-zA-Z0-9_-]+\}\}/;
+  const TOOL_CALL_MARKER_PATTERN = /\{\{tool_call:([^}]+)\}\}/g;
+  const TOOL_CALL_MARKER_TEST = /\{\{tool_call:[^}]+\}\}/;
 
   function parseContentSegments(content: string): ContentSegment[] {
     const segments: ContentSegment[] = [];
