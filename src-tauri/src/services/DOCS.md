@@ -25,7 +25,7 @@ services/
 ├── menu_coordinator.rs  # MenuCoordinator — aggregates menu providers into ordered sections
 ├── notification.rs      # NotificationService — event-gated Tauri event emission
 ├── placeholder.rs       # PlaceholderService — template variable substitution and image injection
-├── prompt_execution.rs  # PromptExecutionService — prompt execution pipeline orchestration
+├── execution.rs         # PromptExecutionService — execution state machine (cancel, streaming, model resolution)
 └── DOCS.md
 ```
 
@@ -232,7 +232,7 @@ Multi-provider LLM service. Lives in `ai/` subdirectory with one file per provid
 
 ### PromptExecutionService specifics
 
-Orchestrates the full prompt execution pipeline: validate → resolve prompt → process placeholders → call AI → deliver result. Lives in `prompt_execution.rs`.
+Orchestrates the full prompt execution pipeline: validate → resolve prompt → process placeholders → call AI → deliver result. Lives in `execution.rs`.
 
 **Execution state tracking**: `is_executing: bool` and `current_execution_id: Option<String>`. Guards against concurrent execution — `start_execution()` returns `ExecutionError::AlreadyExecuting` if already busy.
 

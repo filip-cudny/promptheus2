@@ -128,7 +128,7 @@ use services::menu_coordinator::MenuCoordinator;
 use services::dock::DockManager;
 use services::notification::NotificationService;
 use services::placeholder::PlaceholderService;
-use services::prompt_execution::PromptExecutionService;
+use services::execution::PromptExecutionService;
 use services::skill::SkillService;
 use services::speech::SpeechService;
 use providers::{LastInteractionMenuProvider, SkillMenuProvider, SpeechMenuProvider};
@@ -441,6 +441,7 @@ pub fn run() {
             },
         )
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri::plugin::Builder::<tauri::Wry, ()>::new("platform")
@@ -656,19 +657,19 @@ pub fn run() {
             commands::history::clear_history,
             commands::history::copy_history_content,
             commands::history::update_history_entry_title,
-            commands::prompt_execution::execute_skill,
-            commands::prompt_execution::resolve_environment_section,
-            commands::prompt_execution::release_conversation_context,
-            commands::prompt_execution::seed_conversation_context,
-            commands::prompt_execution::generate_conversation_title,
-            commands::prompt_execution::resolve_skill_input,
-            commands::prompt_execution::execute_conversation_from_tree,
-            commands::prompt_execution::reconnect_to_execution,
-            commands::prompt_execution::cancel_skill_execution,
-            commands::prompt_execution::cancel_live_execution,
-            commands::prompt_execution::get_executing_skill_id,
-            commands::prompt_execution::respond_to_tool_call,
-            commands::prompt_execution::retry_tool_call,
+            commands::execution::execute_skill,
+            commands::execution::resolve_environment_section,
+            commands::execution::release_conversation_context,
+            commands::execution::seed_conversation_context,
+            commands::execution::generate_conversation_title,
+            commands::execution::resolve_skill_input,
+            commands::execution::execute_conversation_from_tree,
+            commands::execution::reconnect_to_execution,
+            commands::execution::cancel_skill_execution,
+            commands::execution::cancel_live_execution,
+            commands::execution::get_executing_skill_id,
+            commands::execution::respond_to_tool_call,
+            commands::execution::retry_tool_call,
             commands::conversation_dialog::open_conversation_dialog,
             commands::conversation_dialog::get_dialog_init_params,
             commands::skills::list_skills,

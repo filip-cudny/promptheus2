@@ -16,7 +16,7 @@ use crate::services::mcp::McpRegistry;
 use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::notification::NotificationService;
 use crate::services::placeholder::PlaceholderService;
-use crate::services::prompt_execution::PromptExecutionService;
+use crate::services::execution::PromptExecutionService;
 use crate::services::skill::SkillService;
 use crate::services::speech::SpeechService;
 use crate::services::conversation_context::ConversationContextCache;

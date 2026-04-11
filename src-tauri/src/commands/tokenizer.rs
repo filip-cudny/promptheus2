@@ -9,10 +9,10 @@ use crate::models::message::{
 };
 use crate::models::settings::Provider;
 use crate::services::ai::tools::ToolRegistry;
-use crate::services::skill_execution;
+use crate::services::skill_message;
 use crate::services::tokenizer;
 
-use super::prompt_execution::{build_system_prompt_base, resolve_environment_section_template};
+use super::execution::{build_system_prompt_base, resolve_environment_section_template};
 
 fn parse_provider(s: &str) -> Provider {
     match s {
@@ -120,14 +120,14 @@ pub async fn count_conversation_tokens(
             .map(|mut node| {
                 if node.role == "user" {
                     let result =
-                        skill_execution::resolve_skill_input(&state.skill_service, &node.content);
+                        skill_message::resolve_skill_input(&state.skill_service, &node.content);
                     node.content = result.resolved_text;
                 }
                 node
             })
             .collect();
 
-        let model_id = crate::services::prompt_execution::PromptExecutionService::resolve_model(
+        let model_id = crate::services::execution::PromptExecutionService::resolve_model(
             &state.config,
             None,
         )
@@ -185,7 +185,7 @@ pub async fn count_conversation_tokens(
             tool_call_id: None,
         };
 
-        let tree_messages = skill_execution::build_messages_from_tree(&nodes, &context_images);
+        let tree_messages = skill_message::build_messages_from_tree(&nodes, &context_images);
 
         let mut all_messages = vec![system_message];
         all_messages.extend(tree_messages);

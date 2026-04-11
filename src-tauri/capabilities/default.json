@@ -18,6 +18,7 @@
     "log:default",
     "opener:default",
     "clipboard-manager:default",
+    "dialog:default",
     "global-shortcut:default"
   ]
 }

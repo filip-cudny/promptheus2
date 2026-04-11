@@ -3,7 +3,7 @@
   import morphdom from "morphdom";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { renderMarkdown, extractCodeBlocks } from "$lib/utils/markdown";
-  import { ICON_SIZE } from "$lib/constants/ui";
+  import { icon, icons } from "$lib/utils/icons";
 
   let {
     content,
@@ -38,6 +38,40 @@
   let markdownContainer: HTMLDivElement | undefined = $state();
   const morphWrapper = document.createElement("div");
 
+  let mermaidModule: typeof import("mermaid") | null = null;
+
+  async function ensureMermaid() {
+    if (mermaidModule) return mermaidModule;
+    mermaidModule = await import("mermaid");
+    mermaidModule.default.initialize({
+      startOnLoad: false,
+      theme: "dark",
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    });
+    return mermaidModule;
+  }
+
+  async function renderMermaidBlocks() {
+    if (!markdownContainer) return;
+    const blocks = markdownContainer.querySelectorAll<HTMLElement>(".mermaid-block:not(.mermaid-rendered)");
+    if (blocks.length === 0) return;
+
+    const mod = await ensureMermaid();
+    for (const block of blocks) {
+      const encoded = block.dataset.mermaidSource;
+      if (!encoded) continue;
+      const source = decodeURIComponent(atob(encoded));
+      const id = `mermaid-${block.dataset.mermaidIndex}-${Date.now()}`;
+      try {
+        const { svg } = await mod.default.render(id, source);
+        block.innerHTML = svg;
+        block.classList.add("mermaid-rendered");
+      } catch {
+        block.classList.add("mermaid-error");
+      }
+    }
+  }
+
   $effect(() => {
     if (!markdownContainer) return;
     const html = renderedHtml;
@@ -45,6 +79,7 @@
     lastRenderedHtml = html;
     morphWrapper.innerHTML = html;
     morphdom(markdownContainer, morphWrapper, { childrenOnly: true });
+    renderMermaidBlocks();
   });
 
   function animate() {
@@ -88,6 +123,58 @@
     }
   });
 
+  function handleMermaidToggle(toggleBtn: HTMLElement) {
+    const idx = toggleBtn.dataset.mermaidToggle;
+    if (!idx || !markdownContainer) return;
+
+    const block = markdownContainer.querySelector<HTMLElement>(`.mermaid-block[data-mermaid-index="${idx}"]`);
+    if (!block) return;
+
+    const codeIcon = icon(icons.Code);
+    const eyeIcon = icon(icons.Eye);
+
+    const isRaw = block.classList.contains("mermaid-raw");
+
+    if (isRaw) {
+      const savedSvg = block.dataset.mermaidSvg;
+      if (savedSvg) {
+        block.innerHTML = decodeURIComponent(atob(savedSvg));
+        block.classList.remove("mermaid-raw");
+        toggleBtn.innerHTML = codeIcon;
+      }
+    } else if (block.classList.contains("mermaid-rendered")) {
+      block.dataset.mermaidSvg = btoa(encodeURIComponent(block.innerHTML));
+      const encoded = block.dataset.mermaidSource;
+      if (!encoded) return;
+      const source = decodeURIComponent(atob(encoded));
+      block.textContent = source;
+      block.classList.add("mermaid-raw");
+      toggleBtn.innerHTML = eyeIcon;
+    }
+  }
+
+  function getMermaidSvg(idx: string): string | null {
+    if (!markdownContainer) return null;
+    const block = markdownContainer.querySelector<HTMLElement>(`.mermaid-block[data-mermaid-index="${idx}"]`);
+    if (!block) return null;
+
+    if (block.classList.contains("mermaid-raw")) {
+      const saved = block.dataset.mermaidSvg;
+      return saved ? decodeURIComponent(atob(saved)) : null;
+    }
+    if (block.classList.contains("mermaid-rendered")) {
+      return block.innerHTML;
+    }
+    return null;
+  }
+
+  function closeAllMermaidMenus() {
+    if (!markdownContainer) return;
+    for (const panel of markdownContainer.querySelectorAll<HTMLElement>(".mermaid-menu.open")) {
+      panel.classList.remove("open");
+    }
+  }
+
   function handleClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
 
@@ -98,14 +185,59 @@
       return;
     }
 
+    const toggleBtn = target.closest("[data-mermaid-toggle]") as HTMLElement | null;
+    if (toggleBtn) {
+      closeAllMermaidMenus();
+      handleMermaidToggle(toggleBtn);
+      return;
+    }
+
+    const menuBtn = target.closest("[data-mermaid-menu]") as HTMLElement | null;
+    if (menuBtn && markdownContainer) {
+      const idx = menuBtn.dataset.mermaidMenu;
+      const panel = markdownContainer.querySelector<HTMLElement>(`.mermaid-menu[data-mermaid-menu-panel="${idx}"]`);
+      if (panel) {
+        const wasOpen = panel.classList.contains("open");
+        closeAllMermaidMenus();
+        if (!wasOpen) panel.classList.add("open");
+      }
+      return;
+    }
+
+    const copySvgBtn = target.closest("[data-mermaid-copy-svg]") as HTMLElement | null;
+    if (copySvgBtn) {
+      const svg = getMermaidSvg(copySvgBtn.dataset.mermaidCopySvg!);
+      if (svg) navigator.clipboard.writeText(svg);
+      closeAllMermaidMenus();
+      return;
+    }
+
+    const saveSvgBtn = target.closest("[data-mermaid-save-svg]") as HTMLElement | null;
+    if (saveSvgBtn) {
+      const idx = saveSvgBtn.dataset.mermaidSaveSvg!;
+      const svg = getMermaidSvg(idx);
+      if (svg) {
+        const blob = new Blob([svg], { type: "image/svg+xml" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `mermaid-diagram.svg`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+      closeAllMermaidMenus();
+      return;
+    }
+
+    closeAllMermaidMenus();
+
     const copyBtn = target.closest("[data-copy-index]") as HTMLElement | null;
     if (!copyBtn) return;
 
     const index = parseInt(copyBtn.dataset.copyIndex ?? "", 10);
     if (Number.isNaN(index) || index >= codeBlocks.length) return;
 
-    const s = ICON_SIZE.md;
-    const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
+    const checkIcon = icon(icons.Check);
     const originalHtml = copyBtn.innerHTML;
     navigator.clipboard.writeText(codeBlocks[index]);
     copyBtn.innerHTML = checkIcon;
@@ -230,5 +362,83 @@
     padding: 0;
     border-radius: 0;
     font-size: 13px;
+  }
+
+  .markdown-renderer :global(.mermaid-wrapper) {
+    margin: 8px 0;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .markdown-renderer :global(.mermaid-actions) {
+    display: flex;
+    gap: 2px;
+  }
+
+  .markdown-renderer :global(.mermaid-block) {
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.3);
+    overflow-x: auto;
+    display: flex;
+    justify-content: center;
+  }
+
+  .markdown-renderer :global(.mermaid-block:not(.mermaid-rendered)),
+  .markdown-renderer :global(.mermaid-block.mermaid-raw) {
+    white-space: pre;
+    font-family: "Fira Code", "Cascadia Code", monospace;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.5);
+    justify-content: flex-start;
+  }
+
+  .markdown-renderer :global(.mermaid-block.mermaid-error) {
+    color: #e06c75;
+  }
+
+  .markdown-renderer :global(.mermaid-block svg) {
+    max-width: 100%;
+    height: auto;
+  }
+
+  .markdown-renderer :global(.mermaid-menu-anchor) {
+    position: relative;
+  }
+
+  .markdown-renderer :global(.mermaid-menu) {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 4px;
+    min-width: 140px;
+    background: #2a2a2a;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    padding: 4px 0;
+    z-index: 10;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  }
+
+  .markdown-renderer :global(.mermaid-menu.open) {
+    display: block;
+  }
+
+  .markdown-renderer :global(.mermaid-menu-item) {
+    display: block;
+    width: 100%;
+    padding: 6px 12px;
+    border: none;
+    background: none;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .markdown-renderer :global(.mermaid-menu-item:hover) {
+    background: rgba(255, 255, 255, 0.08);
   }
 </style>

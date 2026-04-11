@@ -22,8 +22,8 @@ use crate::models::message::{
     NodeUpdate, ProcessedMessage, ToolCallFunction, ToolCallPayload,
 };
 use crate::services::notification::NotificationLevel;
-use crate::services::prompt_execution::{ExecutionSnapshot, LiveExecution, PromptExecutionService};
-use crate::services::skill_execution;
+use crate::services::execution::{ExecutionSnapshot, LiveExecution, PromptExecutionService};
+use crate::services::skill_message;
 
 fn tool_display_name(tool_name: &str) -> &str {
     match tool_name {
@@ -370,7 +370,7 @@ pub async fn execute_skill(
             .start_skill_execution(skill_name.clone())
             .map_err(|e| e.to_string())?;
 
-        let skill = skill_execution::resolve_skill_or_err(&state.skill_service, &skill_name)
+        let skill = skill_message::resolve_skill_or_err(&state.skill_service, &skill_name)
             .map_err(|e| {
                 state.prompt_execution.finish_skill_execution();
                 e.to_string()
@@ -401,7 +401,7 @@ pub async fn execute_skill(
         };
 
         let system_prompt = build_system_prompt_base(&state.config, None, state.active_app(), &state.recent_apps_display());
-        let messages = skill_execution::prepare_skill_messages(
+        let messages = skill_message::prepare_skill_messages(
             &system_prompt,
             &skill,
             &input_content,
@@ -683,7 +683,7 @@ pub async fn resolve_skill_input(
     text: String,
 ) -> Result<ResolveSkillInputResult, String> {
     let state = state.lock().await;
-    let result = skill_execution::resolve_skill_input(&state.skill_service, &text);
+    let result = skill_message::resolve_skill_input(&state.skill_service, &text);
     Ok(ResolveSkillInputResult {
         resolved_text: result.resolved_text,
         had_skills: result.had_skills,
@@ -808,7 +808,7 @@ pub async fn execute_conversation_from_tree(
         };
 
         let tree_messages =
-            skill_execution::build_messages_from_tree(&nodes, &context_images);
+            skill_message::build_messages_from_tree(&nodes, &context_images);
 
         let mut all_messages = vec![system_message];
         all_messages.extend(tree_messages);

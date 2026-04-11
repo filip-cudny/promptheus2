@@ -1,6 +1,6 @@
 import { Marked, type RendererObject } from "marked";
 import hljs from "highlight.js";
-import { ICON_SIZE } from "$lib/constants/ui";
+import { icon, icons } from "$lib/utils/icons";
 
 let blockIndex = 0;
 
@@ -46,6 +46,18 @@ function createRenderer(): RendererObject {
   return {
     code({ text, lang }) {
       const idx = blockIndex++;
+
+      if (lang?.toLowerCase() === "mermaid") {
+        const escaped = text
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+        const codeIcon = icon(icons.Code);
+        const copyIcon = icon(icons.Copy);
+        const dotsIcon = icon(icons.EllipsisVertical);
+        return `<div class="mermaid-wrapper"><div class="code-block-header"><span class="code-lang">Mermaid</span><div class="mermaid-actions"><button class="copy-btn" data-mermaid-toggle="${idx}">${codeIcon}</button><button class="copy-btn" data-copy-index="${idx}">${copyIcon}</button><div class="mermaid-menu-anchor"><button class="copy-btn" data-mermaid-menu="${idx}">${dotsIcon}</button><div class="mermaid-menu" data-mermaid-menu-panel="${idx}"><button class="mermaid-menu-item" data-mermaid-copy-svg="${idx}">Copy as SVG</button><button class="mermaid-menu-item" data-mermaid-save-svg="${idx}">Save as SVG</button></div></div></div></div><div class="mermaid-block" data-mermaid-index="${idx}" data-mermaid-source="${btoa(encodeURIComponent(text))}">${escaped}</div></div>`;
+      }
+
       let codeHtml: string;
 
       if (lang && hljs.getLanguage(lang)) {
@@ -54,8 +66,7 @@ function createRenderer(): RendererObject {
         codeHtml = hljs.highlightAuto(text).value;
       }
 
-      const s = ICON_SIZE.md;
-      const copyIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>`;
+      const copyIcon = icon(icons.Copy);
       return `<div class="code-block"><div class="code-block-header"><span class="code-lang">${langDisplayName(lang)}</span><button class="copy-btn" data-copy-index="${idx}">${copyIcon}</button></div><pre><code class="hljs">${codeHtml}</code></pre></div>`;
     },
   };

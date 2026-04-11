@@ -9,7 +9,7 @@ pub mod image_preview;
 pub mod mcp;
 pub mod menu;
 pub mod notification;
-pub mod prompt_execution;
+pub mod execution;
 pub mod conversation_dialog;
 pub mod settings;
 pub mod skills;

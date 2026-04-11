@@ -15,8 +15,10 @@
     "@tauri-apps/plugin-log": "^2.8.0",
     "@tauri-apps/plugin-opener": "^2.5.3",
     "highlight.js": "^11.11.1",
+    "lucide-static": "^1.8.0",
     "lucide-svelte": "^1.0.1",
     "marked": "^17.0.5",
+    "mermaid": "^11.14.0",
     "morphdom": "^2.7.8"
   },
   "pnpm": {
