@@ -30,7 +30,7 @@ impl ToolRegistry {
             .iter()
             .filter_map(|name| {
                 let tool = match name.as_str() {
-                    "web_search" => Some(BuiltInTool::WebSearch),
+                    "builtin_web_search" => Some(BuiltInTool::WebSearch),
                     _ => {
                         log::warn!("unknown tool requested: '{name}', ignoring");
                         None
@@ -159,7 +159,7 @@ mod tests {
     #[test]
     fn resolve_filters_unsupported() {
         let resolved = ToolRegistry::resolve_tools(
-            &["web_search".to_string()],
+            &["builtin_web_search".to_string()],
             &Provider::Anthropic,
             &ApiMode::Completions,
         );
@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn resolve_passes_valid() {
         let resolved = ToolRegistry::resolve_tools(
-            &["web_search".to_string()],
+            &["builtin_web_search".to_string()],
             &Provider::Openai,
             &ApiMode::Responses,
         );

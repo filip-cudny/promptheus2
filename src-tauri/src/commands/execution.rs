@@ -27,14 +27,14 @@ use crate::services::skill_message;
 
 fn tool_display_name(tool_name: &str) -> &str {
     match tool_name {
-        "web_search" => "Web Search",
+        "builtin_web_search" => "Web Search",
         other => other,
     }
 }
 
 fn tool_type_from_name(tool_name: &str) -> ToolCallType {
     match tool_name {
-        "web_search" => ToolCallType::WebSearch,
+        "builtin_web_search" => ToolCallType::BuiltinWebSearch,
         _ => ToolCallType::Custom,
     }
 }

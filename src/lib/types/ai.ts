@@ -1,6 +1,6 @@
 export type ToolCallStatus = "pending" | "in_progress" | "completed" | "failed" | "cancelled";
 
-export type ToolCallType = "web_search" | "code_execution" | "file_read" | "file_write" | "api_call" | "custom";
+export type ToolCallType = "builtin_web_search" | "code_execution" | "file_read" | "file_write" | "api_call" | "custom";
 
 export interface ToolCall {
   tool_call_id: string;

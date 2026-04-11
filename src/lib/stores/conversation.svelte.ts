@@ -156,6 +156,7 @@ function createTabState(
     thinking_started_at: null,
     active_tool_calls: [],
     web_search_enabled: false,
+    web_search_provider: "builtin",
     abort_regenerate_node_id: null,
   };
 }
@@ -254,6 +255,7 @@ export function createConversationStore(
   const isThinking = $derived(activeTab.is_thinking);
   const hasActiveToolCalls = $derived(activeTab.active_tool_calls.length > 0);
   const webSearchEnabled = $derived(activeTab.web_search_enabled);
+  const webSearchProvider = $derived(activeTab.web_search_provider);
 
   const canSend = $derived.by(() => {
     if (activeTab.is_executing) return false;
@@ -293,7 +295,7 @@ export function createConversationStore(
     const inputImages = activeTab.input_images;
     const inputAttachments = activeTab.input_text_attachments;
     const hasPendingInput = inputText.trim() || inputImages.length > 0 || inputAttachments.length > 0;
-    const toolNames = activeTab.web_search_enabled ? ["web_search"] : [];
+    const toolNames = activeTab.web_search_enabled && activeTab.web_search_provider === "builtin" ? ["builtin_web_search"] : [];
 
     const nodes = serializePathNodes(activeTab);
     if (hasPendingInput) {
@@ -471,7 +473,7 @@ export function createConversationStore(
         },
       };
 
-      const toolsOverride = tab.web_search_enabled ? ["web_search"] : [];
+      const toolsOverride = tab.web_search_enabled && tab.web_search_provider === "builtin" ? ["builtin_web_search"] : [];
 
       await executeConversationFromTree(nodes, callbacks, {
         contextText: tab.context_text || undefined,
@@ -976,6 +978,12 @@ export function createConversationStore(
     tab.web_search_enabled = enabled;
   }
 
+  function setWebSearchProvider(provider: "builtin" | "mcp"): void {
+    const tab = getTab(activeTabId);
+    if (!tab) return;
+    tab.web_search_provider = provider;
+  }
+
   async function initFromSettings(): Promise<void> {
     try {
       const settings = await getSettings();
@@ -1314,6 +1322,9 @@ export function createConversationStore(
     get webSearchEnabled() {
       return webSearchEnabled;
     },
+    get webSearchProvider() {
+      return webSearchProvider;
+    },
     get totalTokens() {
       return totalTokens;
     },
@@ -1346,6 +1357,7 @@ export function createConversationStore(
     updateModelId,
     updateReasoningEffort,
     toggleWebSearch,
+    setWebSearchProvider,
     initFromSettings,
     tryReconnect,
     approveToolCall,

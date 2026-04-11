@@ -44,11 +44,26 @@
     defaultModelId?: string | null;
   } = $props();
 
-  const webSearchAvailable = $derived.by(() => {
+  const builtinWebSearchAvailable = $derived.by(() => {
     const activeModelId = store.modelId ?? defaultModelId;
     if (!activeModelId) return false;
     const model = models.find((m) => m.id === activeModelId);
-    return model?.enabled_tools?.includes("web_search") ?? false;
+    return model?.enabled_tools?.includes("builtin_web_search") ?? false;
+  });
+
+  let mcpWebSearchAvailable = $state(false);
+
+  const webSearchAvailable = $derived(builtinWebSearchAvailable || mcpWebSearchAvailable);
+  const bothWebSearchAvailable = $derived(builtinWebSearchAvailable && mcpWebSearchAvailable);
+
+  $effect(() => {
+    if (!bothWebSearchAvailable) {
+      if (mcpWebSearchAvailable && !builtinWebSearchAvailable) {
+        store.setWebSearchProvider("mcp");
+      } else if (builtinWebSearchAvailable && !mcpWebSearchAvailable) {
+        store.setWebSearchProvider("builtin");
+      }
+    }
   });
 
   let localText = $state("");
@@ -118,6 +133,12 @@
     skillEditable?.focus();
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+
+    invoke<{ name: string }[]>("list_mcp_tools")
+      .then((tools) => {
+        mcpWebSearchAvailable = tools.some((t) => t.name === "web_search");
+      })
+      .catch(() => {});
 
     const win = getCurrentWebviewWindow();
     unlistenTextUpdate = await win.listen<{ text: string; index: number }>(
@@ -238,13 +259,16 @@
       <AttachMenu
         onSelectContext={onToggleContext}
         {contextDisabled}
+        showWebSearchSwitch={bothWebSearchAvailable}
+        webSearchProvider={store.webSearchProvider}
+        onWebSearchProviderChange={(p) => store.setWebSearchProvider(p)}
       />
       {#if webSearchAvailable}
         <button
           class="web-search-btn"
           class:active={store.webSearchEnabled}
           onclick={() => store.toggleWebSearch(!store.webSearchEnabled)}
-          title="Toggle web search"
+          title="Toggle web search ({store.webSearchProvider === 'mcp' ? 'MCP' : 'Built-in'})"
         >
           <Globe size={ICON_SIZE.md} />
         </button>

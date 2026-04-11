@@ -28,7 +28,8 @@ impl McpRegistry {
         let mut tools = Vec::new();
 
         for (name, server_config) in config {
-            let client = match McpClient::start(name, &server_config.command, &server_config.args, &server_config.env).await {
+            let resolved_env = server_config.resolved_env();
+            let client = match McpClient::start(name, &server_config.command, &server_config.args, &resolved_env).await {
                 Ok(c) => c,
                 Err(e) => {
                     log::error!("Failed to start MCP server '{}': {}", name, e);

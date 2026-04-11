@@ -8,6 +8,20 @@ pub struct McpServerConfig {
     pub args: Vec<String>,
     #[serde(default)]
     pub env: HashMap<String, String>,
+    #[serde(default)]
+    pub env_inherit: HashMap<String, String>,
+}
+
+impl McpServerConfig {
+    pub fn resolved_env(&self) -> HashMap<String, String> {
+        let mut merged = self.env.clone();
+        for (child_name, source_name) in &self.env_inherit {
+            if let Ok(value) = std::env::var(source_name) {
+                merged.entry(child_name.clone()).or_insert(value);
+            }
+        }
+        merged
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -484,7 +498,8 @@ mod tests {
                 "my-tools": {
                     "command": "npx",
                     "args": ["-y", "my-mcp-server"],
-                    "env": { "API_KEY": "test-key" }
+                    "env": { "API_KEY": "test-key" },
+                    "env_inherit": { "TAVILY_API_KEY": "TAVILY_API_KEY" }
                 }
             }
         }"#;
@@ -494,6 +509,40 @@ mod tests {
         assert_eq!(server.command, "npx");
         assert_eq!(server.args, vec!["-y", "my-mcp-server"]);
         assert_eq!(server.env.get("API_KEY").unwrap(), "test-key");
+        assert_eq!(server.env_inherit.get("TAVILY_API_KEY").unwrap(), "TAVILY_API_KEY");
+    }
+
+    #[test]
+    fn test_mcp_resolved_env_merges_inherit_with_explicit() {
+        std::env::set_var("TEST_MCP_INHERITED_VAR", "from-env");
+        let config = McpServerConfig {
+            command: "test".to_string(),
+            args: vec![],
+            env: HashMap::from([("EXPLICIT".to_string(), "direct".to_string())]),
+            env_inherit: HashMap::from([
+                ("TEST_MCP_INHERITED_VAR".to_string(), "TEST_MCP_INHERITED_VAR".to_string()),
+                ("MISSING_VAR".to_string(), "MISSING_VAR".to_string()),
+            ]),
+        };
+        let resolved = config.resolved_env();
+        assert_eq!(resolved.get("EXPLICIT").unwrap(), "direct");
+        assert_eq!(resolved.get("TEST_MCP_INHERITED_VAR").unwrap(), "from-env");
+        assert!(!resolved.contains_key("MISSING_VAR"));
+        std::env::remove_var("TEST_MCP_INHERITED_VAR");
+    }
+
+    #[test]
+    fn test_mcp_resolved_env_explicit_takes_precedence() {
+        std::env::set_var("TEST_MCP_OVERRIDE", "from-env");
+        let config = McpServerConfig {
+            command: "test".to_string(),
+            args: vec![],
+            env: HashMap::from([("TEST_MCP_OVERRIDE".to_string(), "explicit-value".to_string())]),
+            env_inherit: HashMap::from([("TEST_MCP_OVERRIDE".to_string(), "TEST_MCP_OVERRIDE".to_string())]),
+        };
+        let resolved = config.resolved_env();
+        assert_eq!(resolved.get("TEST_MCP_OVERRIDE").unwrap(), "explicit-value");
+        std::env::remove_var("TEST_MCP_OVERRIDE");
     }
 
     #[test]
