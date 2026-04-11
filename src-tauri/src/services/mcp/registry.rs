@@ -29,7 +29,9 @@ impl McpRegistry {
 
         for (name, server_config) in config {
             let resolved_env = server_config.resolved_env();
-            let client = match McpClient::start(name, &server_config.command, &server_config.args, &resolved_env).await {
+            let resolved_command = server_config.resolved_command();
+            let resolved_args = server_config.resolved_args();
+            let client = match McpClient::start(name, &resolved_command, &resolved_args, &resolved_env).await {
                 Ok(c) => c,
                 Err(e) => {
                     log::error!("Failed to start MCP server '{}': {}", name, e);

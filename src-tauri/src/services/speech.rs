@@ -181,9 +181,7 @@ pub async fn transcribe(
     config: &SpeechToTextModel,
 ) -> Result<String, SpeechError> {
     let api_key = config
-        .api_key
-        .as_deref()
-        .filter(|k| !k.is_empty())
+        .resolved_api_key()
         .ok_or(SpeechError::ApiKeyMissing)?;
 
     let base_url = config
@@ -402,9 +400,9 @@ mod tests {
         let config = SpeechToTextModel {
             model: "whisper-1".into(),
             display_name: "Whisper".into(),
-            api_key_env: "NONEXISTENT_VAR".into(),
-            base_url: None,
             api_key: None,
+            base_url: None,
+            api_key_env: None,
         };
         let result = transcribe(vec![0; 44], &config).await;
         assert!(matches!(result, Err(SpeechError::ApiKeyMissing)));
@@ -415,9 +413,9 @@ mod tests {
         let config = SpeechToTextModel {
             model: "whisper-1".into(),
             display_name: "Whisper".into(),
-            api_key_env: "TEST".into(),
-            base_url: None,
             api_key: Some("".into()),
+            base_url: None,
+            api_key_env: None,
         };
         let result = transcribe(vec![0; 44], &config).await;
         assert!(matches!(result, Err(SpeechError::ApiKeyMissing)));

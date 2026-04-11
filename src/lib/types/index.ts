@@ -31,17 +31,13 @@ export interface ModelConfig {
   id: string;
   model: string;
   display_name: string;
-  api_key_source: ApiKeySource;
   provider: Provider;
-  api_key_env: string | null;
   api_key: string | null;
   base_url: string | null;
   parameters: ModelParameters | null;
   context_window_size: number | null;
   enabled_tools: string[];
 }
-
-export type ApiKeySource = "env" | "direct";
 
 export type Provider = "openai" | "anthropic" | "gemini";
 
@@ -57,9 +53,8 @@ export interface ModelParameters {
 export interface SpeechToTextModel {
   model: string;
   display_name: string;
-  api_key_env: string;
-  base_url: string | null;
   api_key: string | null;
+  base_url: string | null;
 }
 
 export interface KeymapGroup {

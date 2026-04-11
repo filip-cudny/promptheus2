@@ -196,9 +196,7 @@ mod tests {
                 id: "model-1".to_string(),
                 model: "gpt-4".to_string(),
                 display_name: "GPT-4".to_string(),
-                api_key_source: crate::models::settings::ApiKeySource::Direct,
                 provider: Default::default(),
-                api_key_env: None,
                 api_key: Some("test-key".to_string()),
                 base_url: None,
                 parameters: None,
@@ -206,6 +204,8 @@ mod tests {
                 api_mode: None,
                 store: true,
                 enabled_tools: vec![],
+                api_key_source: None,
+                api_key_env: None,
             }],
             ..Default::default()
         };

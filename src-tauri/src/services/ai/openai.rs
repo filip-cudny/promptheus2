@@ -20,9 +20,7 @@ pub struct OpenAiProvider {
 impl OpenAiProvider {
     pub fn new(model: &ModelConfig) -> Result<Self, AiError> {
         let api_key = model
-            .api_key
-            .as_deref()
-            .filter(|k| !k.is_empty())
+            .resolved_api_key()
             .ok_or_else(|| {
                 AiError::Authentication(format!(
                     "no API key configured for model '{}'",

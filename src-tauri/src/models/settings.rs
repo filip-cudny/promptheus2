@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::services::env_resolve::resolve_env_refs;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServerConfig {
     pub command: String,
@@ -8,19 +10,25 @@ pub struct McpServerConfig {
     pub args: Vec<String>,
     #[serde(default)]
     pub env: HashMap<String, String>,
-    #[serde(default)]
+
+    #[serde(default, skip_serializing)]
     pub env_inherit: HashMap<String, String>,
 }
 
 impl McpServerConfig {
+    pub fn resolved_command(&self) -> String {
+        resolve_env_refs(&self.command)
+    }
+
+    pub fn resolved_args(&self) -> Vec<String> {
+        self.args.iter().map(|a| resolve_env_refs(a)).collect()
+    }
+
     pub fn resolved_env(&self) -> HashMap<String, String> {
-        let mut merged = self.env.clone();
-        for (child_name, source_name) in &self.env_inherit {
-            if let Ok(value) = std::env::var(source_name) {
-                merged.entry(child_name.clone()).or_insert(value);
-            }
-        }
-        merged
+        self.env
+            .iter()
+            .map(|(k, v)| (k.clone(), resolve_env_refs(v)))
+            .collect()
     }
 }
 
@@ -97,13 +105,7 @@ pub struct ModelConfig {
     pub display_name: String,
 
     #[serde(default)]
-    pub api_key_source: ApiKeySource,
-
-    #[serde(default)]
     pub provider: Provider,
-
-    #[serde(default)]
-    pub api_key_env: Option<String>,
 
     #[serde(default)]
     pub api_key: Option<String>,
@@ -125,14 +127,18 @@ pub struct ModelConfig {
 
     #[serde(default)]
     pub enabled_tools: Vec<String>,
+
+    #[serde(default, skip_serializing)]
+    pub api_key_source: Option<String>,
+
+    #[serde(default, skip_serializing)]
+    pub api_key_env: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum ApiKeySource {
-    #[default]
-    Env,
-    Direct,
+impl ModelConfig {
+    pub fn resolved_api_key(&self) -> Option<String> {
+        self.api_key.as_ref().map(|k| resolve_env_refs(k)).filter(|k| !k.is_empty())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -225,13 +231,21 @@ impl ModelParameters {
 pub struct SpeechToTextModel {
     pub model: String,
     pub display_name: String,
-    pub api_key_env: String,
+
+    #[serde(default)]
+    pub api_key: Option<String>,
 
     #[serde(default)]
     pub base_url: Option<String>,
 
-    #[serde(default)]
-    pub api_key: Option<String>,
+    #[serde(default, skip_serializing)]
+    pub api_key_env: Option<String>,
+}
+
+impl SpeechToTextModel {
+    pub fn resolved_api_key(&self) -> Option<String> {
+        self.api_key.as_ref().map(|k| resolve_env_refs(k)).filter(|k| !k.is_empty())
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -450,7 +464,7 @@ mod tests {
         assert_eq!(settings.code_theme, "paraiso-dark");
         assert_eq!(settings.models.len(), 1);
         assert_eq!(settings.models[0].model, "gpt-5.4");
-        assert_eq!(settings.models[0].api_key_source, ApiKeySource::Env);
+        assert_eq!(settings.models[0].api_key_env.as_deref(), Some("OPENAI_API_KEY"));
         assert_eq!(settings.keymaps.len(), 3);
         assert_eq!(settings.number_input_debounce_ms, 200);
         assert_eq!(settings.default_model, Some("13b85c38-19cc-4387-a52d-6577478be057".to_string()));
@@ -461,7 +475,7 @@ mod tests {
 
         let speech = settings.speech_to_text_model.expect("speech model should be present");
         assert_eq!(speech.model, "gpt-4o-transcribe");
-        assert_eq!(speech.api_key_env, "OPENAI_API_KEY");
+        assert_eq!(speech.api_key_env.as_deref(), Some("OPENAI_API_KEY"));
 
         assert_eq!(settings.description_generator.model, "");
         assert!(settings.description_generator.prompt.is_some());
@@ -502,8 +516,7 @@ mod tests {
                 "my-tools": {
                     "command": "npx",
                     "args": ["-y", "my-mcp-server"],
-                    "env": { "API_KEY": "test-key" },
-                    "env_inherit": { "TAVILY_API_KEY": "TAVILY_API_KEY" }
+                    "env": { "API_KEY": "test-key" }
                 }
             }
         }"#;
@@ -513,40 +526,53 @@ mod tests {
         assert_eq!(server.command, "npx");
         assert_eq!(server.args, vec!["-y", "my-mcp-server"]);
         assert_eq!(server.env.get("API_KEY").unwrap(), "test-key");
-        assert_eq!(server.env_inherit.get("TAVILY_API_KEY").unwrap(), "TAVILY_API_KEY");
     }
 
     #[test]
-    fn test_mcp_resolved_env_merges_inherit_with_explicit() {
-        std::env::set_var("TEST_MCP_INHERITED_VAR", "from-env");
+    fn test_mcp_resolved_env_with_env_refs() {
+        std::env::set_var("TEST_MCP_ENV_REF", "from-env");
         let config = McpServerConfig {
             command: "test".to_string(),
             args: vec![],
-            env: HashMap::from([("EXPLICIT".to_string(), "direct".to_string())]),
-            env_inherit: HashMap::from([
-                ("TEST_MCP_INHERITED_VAR".to_string(), "TEST_MCP_INHERITED_VAR".to_string()),
-                ("MISSING_VAR".to_string(), "MISSING_VAR".to_string()),
+            env: HashMap::from([
+                ("EXPLICIT".to_string(), "direct".to_string()),
+                ("FROM_ENV".to_string(), "${TEST_MCP_ENV_REF}".to_string()),
             ]),
+            env_inherit: HashMap::new(),
         };
         let resolved = config.resolved_env();
         assert_eq!(resolved.get("EXPLICIT").unwrap(), "direct");
-        assert_eq!(resolved.get("TEST_MCP_INHERITED_VAR").unwrap(), "from-env");
-        assert!(!resolved.contains_key("MISSING_VAR"));
-        std::env::remove_var("TEST_MCP_INHERITED_VAR");
+        assert_eq!(resolved.get("FROM_ENV").unwrap(), "from-env");
+        std::env::remove_var("TEST_MCP_ENV_REF");
     }
 
     #[test]
-    fn test_mcp_resolved_env_explicit_takes_precedence() {
-        std::env::set_var("TEST_MCP_OVERRIDE", "from-env");
+    fn test_mcp_resolved_command_and_args() {
+        std::env::set_var("TEST_MCP_PATH", "/opt/tools");
         let config = McpServerConfig {
-            command: "test".to_string(),
-            args: vec![],
-            env: HashMap::from([("TEST_MCP_OVERRIDE".to_string(), "explicit-value".to_string())]),
-            env_inherit: HashMap::from([("TEST_MCP_OVERRIDE".to_string(), "TEST_MCP_OVERRIDE".to_string())]),
+            command: "${TEST_MCP_PATH}/bin/server".to_string(),
+            args: vec!["--config".to_string(), "${TEST_MCP_PATH}/config.json".to_string()],
+            env: HashMap::new(),
+            env_inherit: HashMap::new(),
         };
-        let resolved = config.resolved_env();
-        assert_eq!(resolved.get("TEST_MCP_OVERRIDE").unwrap(), "explicit-value");
-        std::env::remove_var("TEST_MCP_OVERRIDE");
+        assert_eq!(config.resolved_command(), "/opt/tools/bin/server");
+        assert_eq!(config.resolved_args(), vec!["--config", "/opt/tools/config.json"]);
+        std::env::remove_var("TEST_MCP_PATH");
+    }
+
+    #[test]
+    fn test_mcp_legacy_env_inherit_deserialization() {
+        let json = r#"{
+            "mcp_servers": {
+                "my-tools": {
+                    "command": "npx",
+                    "env_inherit": { "TAVILY_API_KEY": "TAVILY_API_KEY" }
+                }
+            }
+        }"#;
+        let settings: Settings = serde_json::from_str(json).expect("should deserialize legacy env_inherit");
+        let server = &settings.mcp_servers["my-tools"];
+        assert_eq!(server.env_inherit.get("TAVILY_API_KEY").unwrap(), "TAVILY_API_KEY");
     }
 
     #[test]
@@ -557,9 +583,29 @@ mod tests {
     }
 
     #[test]
-    fn test_api_key_source_default() {
-        let json = r#"{"id":"1","model":"test","display_name":"Test"}"#;
-        let config: ModelConfig = serde_json::from_str(json).expect("deserialize model config");
-        assert_eq!(config.api_key_source, ApiKeySource::Env);
+    fn test_model_resolved_api_key_direct() {
+        let config: ModelConfig = serde_json::from_str(r#"{"id":"1","model":"test","display_name":"Test","api_key":"sk-direct"}"#).unwrap();
+        assert_eq!(config.resolved_api_key().as_deref(), Some("sk-direct"));
+    }
+
+    #[test]
+    fn test_model_resolved_api_key_env_ref() {
+        std::env::set_var("TEST_MODEL_KEY", "sk-from-env");
+        let config: ModelConfig = serde_json::from_str(r#"{"id":"1","model":"test","display_name":"Test","api_key":"${TEST_MODEL_KEY}"}"#).unwrap();
+        assert_eq!(config.resolved_api_key().as_deref(), Some("sk-from-env"));
+        std::env::remove_var("TEST_MODEL_KEY");
+    }
+
+    #[test]
+    fn test_model_resolved_api_key_missing_env() {
+        let config: ModelConfig = serde_json::from_str(r#"{"id":"1","model":"test","display_name":"Test","api_key":"${DEFINITELY_MISSING_KEY_XYZ}"}"#).unwrap();
+        assert_eq!(config.resolved_api_key(), None);
+    }
+
+    #[test]
+    fn test_legacy_api_key_env_deserialized() {
+        let config: ModelConfig = serde_json::from_str(r#"{"id":"1","model":"test","display_name":"Test","api_key_env":"OPENAI_API_KEY","api_key_source":"env"}"#).unwrap();
+        assert_eq!(config.api_key_env.as_deref(), Some("OPENAI_API_KEY"));
+        assert_eq!(config.api_key_source.as_deref(), Some("env"));
     }
 }

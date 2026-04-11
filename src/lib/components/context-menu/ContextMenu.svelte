@@ -429,8 +429,6 @@
                   model: m.model,
                   display_name: m.display_name,
                   provider: m.provider,
-                  api_key_source: "env" as const,
-                  api_key_env: null,
                   api_key: null,
                   base_url: null,
                   parameters: m.reasoning_effort ? { temperature: null, max_tokens: null, top_p: null, frequency_penalty: null, presence_penalty: null, reasoning_effort: m.reasoning_effort } : null,
