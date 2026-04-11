@@ -582,13 +582,7 @@ pub fn run() {
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             log::info!("image storage initialized at {}", app_data_dir.display());
 
-            let mcp_registry = if config_service.settings().mcp_servers.is_empty() {
-                McpRegistry::empty()
-            } else {
-                tauri::async_runtime::block_on(
-                    McpRegistry::start_all(&config_service.settings().mcp_servers),
-                )
-            };
+            let mcp_servers_config = config_service.settings().mcp_servers.clone();
 
             app.manage(Mutex::new(AppState {
                 config: config_service,
@@ -600,7 +594,7 @@ pub fn run() {
                 ai: ai_service,
                 history: history_service,
                 image_storage,
-                mcp: mcp_registry,
+                mcp: McpRegistry::empty(),
                 prompt_execution: PromptExecutionService::new(),
                 skill_service,
                 speech: SpeechService::new(),
@@ -609,6 +603,16 @@ pub fn run() {
                 tool_confirmation: crate::services::tool_confirmation::ToolConfirmationService::new(),
                 recent_apps: std::collections::VecDeque::new(),
             }));
+
+            if !mcp_servers_config.is_empty() {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let registry = McpRegistry::start_all(&mcp_servers_config).await;
+                    let state = app_handle.state::<Mutex<AppState>>();
+                    state.lock().await.mcp = registry;
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

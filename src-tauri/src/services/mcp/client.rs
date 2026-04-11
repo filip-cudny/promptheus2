@@ -180,4 +180,53 @@ mod tests {
         assert!(!result.is_error.unwrap_or(false));
         assert_eq!(result.content.len(), 1);
     }
+
+    #[tokio::test]
+    async fn e2e_promptheus_mcp_echo_tool() {
+        let mcp_server_path = std::env::var("PROMPTHEUS_MCP_PATH")
+            .unwrap_or_else(|_| {
+                let manifest_dir = env!("CARGO_MANIFEST_DIR");
+                format!("{}/../../promptheus-mcp/src/index.ts", manifest_dir)
+            });
+
+        if !std::path::Path::new(&mcp_server_path).exists() {
+            eprintln!("Skipping e2e test: {} not found", mcp_server_path);
+            return;
+        }
+
+        let client = tokio::time::timeout(
+            Duration::from_secs(15),
+            McpClient::start(
+                "promptheus-mcp",
+                "bun",
+                &["run".to_string(), mcp_server_path],
+                &HashMap::new(),
+            ),
+        )
+        .await
+        .expect("MCP start should not timeout")
+        .expect("should start promptheus-mcp");
+
+        let tools = client.list_tools().await.expect("should list tools");
+        assert!(!tools.is_empty(), "should have at least one tool");
+
+        let echo_tool = tools.iter().find(|t| &*t.name == "echo");
+        assert!(echo_tool.is_some(), "should have echo tool");
+
+        let result = client
+            .call_tool("echo", serde_json::json!({"message": "hello from promptheus"}))
+            .await
+            .expect("echo tool should succeed");
+
+        assert!(!result.is_error.unwrap_or(false));
+        assert_eq!(result.content.len(), 1);
+
+        let text = match &result.content[0].raw {
+            rmcp::model::RawContent::Text(t) => t.text.clone(),
+            other => panic!("expected text content, got {:?}", other),
+        };
+        assert_eq!(text, "hello from promptheus");
+
+        client.shutdown().await;
+    }
 }
