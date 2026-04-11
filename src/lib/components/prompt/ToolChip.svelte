@@ -16,38 +16,66 @@
   } = $props();
 </script>
 
-<button class="tool-chip" onclick={ondismiss} title="Remove {label}">
+<button class="tool-chip" title={label}>
   {#if icon}
     {@const Icon = icon}
-    <Icon size={12} />
+    <Icon size={14} />
+  {:else}
+    <span class="tool-chip-label">{label}</span>
   {/if}
-  <span class="tool-chip-label">{label}</span>
-  <X size={10} />
+  <span class="tool-chip-dismiss" onclick={ondismiss}>
+    <X size={10} />
+  </span>
 </button>
 
 <style>
   .tool-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    height: 22px;
-    padding: 0 6px 0 8px;
-    background: #5b8dd9;
-    color: white;
-    border: none;
-    border-radius: 10px;
+    justify-content: center;
+    gap: 0;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background: rgba(91, 141, 217, 0.15);
+    border: 1px solid rgba(91, 141, 217, 0.35);
+    color: #5b8dd9;
+    border-radius: 6px;
     font: inherit;
     font-size: 11px;
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
+    overflow: hidden;
+    transition: background 0.15s ease, width 0.15s ease;
   }
 
   .tool-chip:hover {
-    background: #4a7cc8;
+    background: rgba(91, 141, 217, 0.25);
   }
 
   .tool-chip-label {
     line-height: 1;
+  }
+
+  .tool-chip-dismiss {
+    display: inline-flex;
+    align-items: center;
+    width: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: width 0.15s ease, opacity 0.15s ease, margin 0.15s ease;
+    margin-left: 0;
+    color: #5b8dd9;
+  }
+
+  .tool-chip:hover .tool-chip-dismiss {
+    width: 10px;
+    opacity: 1;
+    margin-left: 2px;
+  }
+
+  .tool-chip:hover {
+    width: 36px;
   }
 </style>

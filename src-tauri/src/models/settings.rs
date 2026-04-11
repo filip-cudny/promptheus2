@@ -3,6 +3,10 @@ use std::collections::HashMap;
 
 use crate::services::env_resolve::resolve_env_refs;
 
+const fn default_timeout_secs() -> u64 {
+    180
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServerConfig {
     pub command: String,
@@ -10,6 +14,10 @@ pub struct McpServerConfig {
     pub args: Vec<String>,
     #[serde(default)]
     pub env: HashMap<String, String>,
+    #[serde(default = "default_timeout_secs")]
+    pub timeout_secs: u64,
+    #[serde(default)]
+    pub tool_timeouts: HashMap<String, u64>,
 }
 
 impl McpServerConfig {
@@ -535,6 +543,8 @@ mod tests {
                 ("EXPLICIT".to_string(), "direct".to_string()),
                 ("FROM_ENV".to_string(), "${TEST_MCP_ENV_REF}".to_string()),
             ]),
+            timeout_secs: 180,
+            tool_timeouts: HashMap::new(),
         };
         let resolved = config.resolved_env();
         assert_eq!(resolved.get("EXPLICIT").unwrap(), "direct");
@@ -549,6 +559,8 @@ mod tests {
             command: "${TEST_MCP_PATH}/bin/server".to_string(),
             args: vec!["--config".to_string(), "${TEST_MCP_PATH}/config.json".to_string()],
             env: HashMap::new(),
+            timeout_secs: 180,
+            tool_timeouts: HashMap::new(),
         };
         assert_eq!(config.resolved_command(), "/opt/tools/bin/server");
         assert_eq!(config.resolved_args(), vec!["--config", "/opt/tools/config.json"]);

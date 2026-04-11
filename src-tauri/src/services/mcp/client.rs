@@ -7,16 +7,14 @@ use rmcp::transport::child_process::TokioChildProcess;
 use rmcp::ServiceExt;
 use serde_json::Value;
 
-const TOOL_CALL_TIMEOUT: Duration = Duration::from_secs(30);
-
 #[derive(Debug, thiserror::Error)]
 pub enum McpError {
     #[error("failed to start MCP server '{server}': {reason}")]
     StartFailed { server: String, reason: String },
     #[error("MCP protocol error: {0}")]
     Protocol(String),
-    #[error("MCP server '{server}' timed out")]
-    Timeout { server: String },
+    #[error("MCP server '{server}' timed out after {timeout_secs}s")]
+    Timeout { server: String, timeout_secs: u64 },
     #[error("MCP service error: {0}")]
     Service(String),
 }
@@ -24,6 +22,8 @@ pub enum McpError {
 pub struct McpClient {
     service: RunningService<rmcp::RoleClient, ()>,
     server_name: String,
+    default_timeout: Duration,
+    tool_timeouts: HashMap<String, Duration>,
 }
 
 impl McpClient {
@@ -32,6 +32,8 @@ impl McpClient {
         command: &str,
         args: &[String],
         env: &HashMap<String, String>,
+        timeout_secs: u64,
+        tool_timeouts: &HashMap<String, u64>,
     ) -> Result<Self, McpError> {
         let mut cmd = tokio::process::Command::new(command);
         cmd.args(args);
@@ -48,11 +50,16 @@ impl McpClient {
             reason: e.to_string(),
         })?;
 
-        log::info!("MCP server '{}' started", server_name);
+        log::info!("MCP server '{}' started (timeout: {}s)", server_name, timeout_secs);
 
         Ok(Self {
             service,
             server_name: server_name.to_string(),
+            default_timeout: Duration::from_secs(timeout_secs),
+            tool_timeouts: tool_timeouts
+                .iter()
+                .map(|(k, v)| (k.clone(), Duration::from_secs(*v)))
+                .collect(),
         })
     }
 
@@ -83,12 +90,14 @@ impl McpClient {
             }
         };
 
+        let timeout = self.tool_timeouts.get(name).copied().unwrap_or(self.default_timeout);
         let params = CallToolRequestParams::new(name.to_string()).with_arguments(args_map);
 
-        let result = tokio::time::timeout(TOOL_CALL_TIMEOUT, self.service.peer().call_tool(params))
+        let result = tokio::time::timeout(timeout, self.service.peer().call_tool(params))
             .await
             .map_err(|_| McpError::Timeout {
                 server: self.server_name.clone(),
+                timeout_secs: timeout.as_secs(),
             })?
             .map_err(|e| McpError::Service(e.to_string()))?;
 
@@ -134,8 +143,9 @@ mod tests {
     fn mcp_error_display_timeout() {
         let err = McpError::Timeout {
             server: "slow-server".to_string(),
+            timeout_secs: 180,
         };
-        assert_eq!(err.to_string(), "MCP server 'slow-server' timed out");
+        assert_eq!(err.to_string(), "MCP server 'slow-server' timed out after 180s");
     }
 
     #[test]
@@ -200,6 +210,8 @@ mod tests {
                 "promptheus-mcp",
                 "bun",
                 &["run".to_string(), mcp_server_path],
+                &HashMap::new(),
+                30,
                 &HashMap::new(),
             ),
         )

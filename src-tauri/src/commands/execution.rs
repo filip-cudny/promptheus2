@@ -246,13 +246,13 @@ async fn execute_tool_calls(
             let arguments = tc.arguments.clone();
             let state = state.inner().clone();
             async move {
-                let call_future = async {
+                let result = {
                     let s = state.lock().await;
                     s.mcp.call_tool(&tool_name, arguments).await
                 };
 
-                match tokio::time::timeout(std::time::Duration::from_secs(30), call_future).await {
-                    Ok(Ok(result)) => {
+                match result {
+                    Ok(result) => {
                         let is_error = result.is_error.unwrap_or(false);
                         let text = extract_mcp_result_text(&result);
                         ToolExecutionResult {
@@ -262,15 +262,9 @@ async fn execute_tool_calls(
                             is_error,
                         }
                     }
-                    Ok(Err(e)) => ToolExecutionResult {
+                    Err(e) => ToolExecutionResult {
                         tool_call_id,
                         result_text: format!("Error executing tool '{}': {}", tool_name, e),
-                        tool_name,
-                        is_error: true,
-                    },
-                    Err(_) => ToolExecutionResult {
-                        tool_call_id,
-                        result_text: format!("Error executing tool '{}': timed out after 30s", tool_name),
                         tool_name,
                         is_error: true,
                     },

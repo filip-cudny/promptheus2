@@ -20,7 +20,7 @@ Wraps `rmcp::RunningService<RoleClient, ()>`. Each instance manages one MCP serv
 **Methods**:
 - `start(server_name, command, args, env)` — spawn server process, return connected client
 - `list_tools()` — paginated tool listing via `peer().list_all_tools()`
-- `call_tool(name, arguments)` — execute tool with 30s timeout
+- `call_tool(name, arguments)` — execute tool with configurable timeout (per-tool override → server default → 180s)
 - `shutdown(self)` — consume client, drop service
 
 ## McpError
