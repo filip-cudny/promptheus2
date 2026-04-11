@@ -19,6 +19,7 @@
     RefreshCw,
   } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import ToolResultRenderer from "./ToolResultRenderer.svelte";
 
   let {
     toolCall,
@@ -162,7 +163,7 @@
 
   {#if isInProgress && toolCall.result}
     <div class="in-progress-detail">
-      <span class="partial-result">{toolCall.result}</span>
+      <ToolResultRenderer result={toolCall.result} isPartial={true} />
     </div>
   {/if}
 
@@ -182,7 +183,9 @@
       {#if toolCall.result}
         <div class="details-section">
           <span class="details-label">{toolCall.tool_type === "builtin_web_search" ? "Queries" : "Output"}</span>
-          <div class="details-content result-scroll">{toolCall.result}</div>
+          <div class="details-content result-scroll">
+            <ToolResultRenderer result={toolCall.result} />
+          </div>
         </div>
       {/if}
       {#if toolCall.error}
@@ -367,11 +370,6 @@
 
   .in-progress-detail {
     padding: 0 10px 6px;
-  }
-
-  .partial-result {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.4);
   }
 
   .tool-call-details {
