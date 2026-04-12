@@ -363,7 +363,7 @@ impl AiProvider for OpenAiResponsesProvider {
                                 }
                             };
 
-                            log::debug!("responses: event_type={}", event.event_type);
+                            log::trace!("responses: event_type={}", event.event_type);
 
                             match event.event_type.as_str() {
                                 "response.reasoning_summary_text.delta" => {

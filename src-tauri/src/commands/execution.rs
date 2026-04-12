@@ -238,20 +238,23 @@ async fn execute_tool_calls(
     pending: &[PendingToolCall],
     live: &Arc<TokioMutex<LiveExecution>>,
 ) -> Vec<ToolExecutionResult> {
+    let mcp = {
+        let s = state.lock().await;
+        Arc::clone(&s.mcp)
+    };
+
     let futures: Vec<_> = pending
         .iter()
         .map(|tc| {
             let tool_call_id = tc.tool_call_id.clone();
             let tool_name = tc.tool_name.clone();
             let arguments = tc.arguments.clone();
-            let state = state.inner().clone();
+            let mcp = Arc::clone(&mcp);
+            let live = Arc::clone(live);
             async move {
-                let result = {
-                    let s = state.lock().await;
-                    s.mcp.call_tool(&tool_name, arguments).await
-                };
+                let result = mcp.call_tool(&tool_name, arguments).await;
 
-                match result {
+                let execution_result = match result {
                     Ok(result) => {
                         let is_error = result.is_error.unwrap_or(false);
                         let text = extract_mcp_result_text(&result);
@@ -268,34 +271,32 @@ async fn execute_tool_calls(
                         tool_name,
                         is_error: true,
                     },
+                };
+
+                let mut live = live.lock().await;
+                if let Some(tc) = live.snapshot.tool_calls.iter_mut().find(|t| t.tool_call_id == execution_result.tool_call_id) {
+                    tc.status = if execution_result.is_error { ToolCallStatus::Failed } else { ToolCallStatus::Completed };
+                    if execution_result.is_error {
+                        tc.error = Some(execution_result.result_text.clone());
+                    } else {
+                        tc.result = Some(execution_result.result_text.clone());
+                    }
+                    tc.completed_at = Some(chrono::Utc::now().to_rfc3339());
                 }
+                if let Some(ref ch) = live.channel {
+                    let _ = ch.send(StreamEvent::ToolCallDone {
+                        tool_call_id: execution_result.tool_call_id.clone(),
+                        result: if execution_result.is_error { None } else { Some(execution_result.result_text.clone()) },
+                        error: if execution_result.is_error { Some(execution_result.result_text.clone()) } else { None },
+                    });
+                }
+
+                execution_result
             }
         })
         .collect();
 
-    let results = futures::future::join_all(futures).await;
-
-    for r in &results {
-        let mut live = live.lock().await;
-        if let Some(tc) = live.snapshot.tool_calls.iter_mut().find(|t| t.tool_call_id == r.tool_call_id) {
-            tc.status = if r.is_error { ToolCallStatus::Failed } else { ToolCallStatus::Completed };
-            if r.is_error {
-                tc.error = Some(r.result_text.clone());
-            } else {
-                tc.result = Some(r.result_text.clone());
-            }
-            tc.completed_at = Some(chrono::Utc::now().to_rfc3339());
-        }
-        if let Some(ref ch) = live.channel {
-            let _ = ch.send(StreamEvent::ToolCallDone {
-                tool_call_id: r.tool_call_id.clone(),
-                result: if r.is_error { None } else { Some(r.result_text.clone()) },
-                error: if r.is_error { Some(r.result_text.clone()) } else { None },
-            });
-        }
-    }
-
-    results
+    futures::future::join_all(futures).await
 }
 
 fn build_tool_loop_messages(

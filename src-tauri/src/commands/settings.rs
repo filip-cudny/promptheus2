@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
@@ -38,7 +39,7 @@ pub struct AppState {
     pub speech: SpeechService,
     pub ui_state: UiStateService,
     pub conversation_context: ConversationContextCache,
-    pub mcp: McpRegistry,
+    pub mcp: Arc<McpRegistry>,
     pub tool_confirmation: ToolConfirmationService,
     pub recent_apps: VecDeque<String>,
 }

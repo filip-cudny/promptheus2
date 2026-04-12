@@ -594,7 +594,7 @@ pub fn run() {
                 ai: ai_service,
                 history: history_service,
                 image_storage,
-                mcp: McpRegistry::empty(),
+                mcp: std::sync::Arc::new(McpRegistry::empty()),
                 prompt_execution: PromptExecutionService::new(),
                 skill_service,
                 speech: SpeechService::new(),
@@ -609,7 +609,7 @@ pub fn run() {
                 tauri::async_runtime::spawn(async move {
                     let registry = McpRegistry::start_all(&mcp_servers_config).await;
                     let state = app_handle.state::<Mutex<AppState>>();
-                    state.lock().await.mcp = registry;
+                    state.lock().await.mcp = std::sync::Arc::new(registry);
                 });
             }
 

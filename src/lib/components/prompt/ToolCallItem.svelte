@@ -117,6 +117,9 @@
       <ToolIcon size={ICON_SIZE.md} />
     </span>
     <span class="tool-name">{toolCall.tool_display_name}</span>
+    {#if toolCall.started_at}
+      <span class="tool-elapsed">{formatElapsed(elapsed)}</span>
+    {/if}
     <span class="tool-status">
       {#if isPending}
         <Clock size={ICON_SIZE.sm} />
@@ -130,9 +133,6 @@
         <Ban size={ICON_SIZE.sm} />
       {/if}
     </span>
-    {#if toolCall.started_at}
-      <span class="tool-elapsed">{formatElapsed(elapsed)}</span>
-    {/if}
     {#if isClickable}
       <span class="tool-chevron">
         {#if expanded}
