@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Plus, FileText, Check } from "lucide-svelte";
+  import { Plus, FileText } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import type { ComponentType, SvelteComponent } from "svelte";
   import type { IconProps } from "lucide-svelte";
@@ -60,11 +60,9 @@
         {#each availableTools as tool (tool.id)}
           <button
             class="menu-item"
+            class:active={tool.active}
             onclick={() => { onToggleTool?.(tool.id, !tool.active); menuOpen = false; }}
           >
-            <span class="tool-check" class:tool-check-active={tool.active}>
-              {#if tool.active}<Check size={12} />{/if}
-            </span>
             {#if tool.icon}
               {@const Icon = tool.icon}
               <Icon size={ICON_SIZE.md} />
@@ -129,6 +127,7 @@
     font-size: 13px;
     cursor: pointer;
     text-align: left;
+    white-space: nowrap;
   }
 
   .menu-item:hover:not(.disabled) {
@@ -146,17 +145,7 @@
     margin: 4px 0;
   }
 
-
-  .tool-check {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 14px;
-    flex-shrink: 0;
-    color: transparent;
-  }
-
-  .tool-check-active {
+  .menu-item.active {
     color: #5b8dd9;
   }
 

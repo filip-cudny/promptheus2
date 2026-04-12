@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import { Check, ChevronDown, Brain } from "lucide-svelte";
+  import { ChevronDown, Brain } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import {
     supportsReasoning,
@@ -49,6 +49,19 @@
   let currentLevel = $derived(
     (reasoningEffort as ReasoningLevel | null) ?? "none",
   );
+
+  let groupedModels = $derived.by(() => {
+    const groups = new Map<string, ModelConfig[]>();
+    for (const model of models) {
+      const key = model.group ?? model.provider;
+      const list = groups.get(key);
+      if (list) list.push(model);
+      else groups.set(key, [model]);
+    }
+    return groups;
+  });
+
+  let showGroupHeaders = $derived(groupedModels.size > 1);
 
   function toggleModelDropdown(e: MouseEvent) {
     e.stopPropagation();
@@ -125,11 +138,6 @@
               class:active={level === currentLevel}
               onclick={() => selectReasoning(level)}
             >
-              <span class="check-icon">
-                {#if level === currentLevel}
-                  <Check size={ICON_SIZE.sm} />
-                {/if}
-              </span>
               <span class="dropdown-label">{REASONING_LEVEL_LABELS[level]}</span>
             </button>
           {/each}
@@ -140,19 +148,19 @@
 
   {#if modelDropdownOpen}
     <div class="dropdown model-dropdown">
-      {#each models as model}
-        <button
-          class="dropdown-item"
-          class:active={model.id === selectedModel?.id}
-          onclick={() => selectModel(model.id)}
-        >
-          <span class="check-icon">
-            {#if model.id === selectedModel?.id}
-              <Check size={ICON_SIZE.sm} />
-            {/if}
-          </span>
-          <span class="dropdown-label">{model.display_name}</span>
-        </button>
+      {#each [...groupedModels] as [groupName, groupModels]}
+        {#if showGroupHeaders}
+          <div class="dropdown-group-label">{groupName}</div>
+        {/if}
+        {#each groupModels as model}
+          <button
+            class="dropdown-item"
+            class:active={model.id === selectedModel?.id}
+            onclick={() => selectModel(model.id)}
+          >
+            <span class="dropdown-label">{model.display_name}</span>
+          </button>
+        {/each}
       {/each}
     </div>
   {/if}
@@ -244,20 +252,27 @@
   }
 
   .dropdown-item.active {
-    color: rgba(255, 255, 255, 0.95);
-  }
-
-  .check-icon {
-    width: 12px;
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    color: #5b8dd9;
   }
 
   .dropdown-label {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .dropdown-group-label {
+    padding: 6px 10px 2px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  .dropdown-group-label:not(:first-child) {
+    margin-top: 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding-top: 8px;
   }
 </style>

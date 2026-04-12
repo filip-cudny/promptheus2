@@ -32,6 +32,7 @@ export interface ModelConfig {
   model: string;
   display_name: string;
   provider: Provider;
+  group: string | null;
   api_key: string | null;
   base_url: string | null;
   parameters: ModelParameters | null;

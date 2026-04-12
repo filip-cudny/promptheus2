@@ -16,14 +16,14 @@
   } = $props();
 </script>
 
-<button class="tool-chip" title={label}>
+<button class="tool-chip" title={label} onclick={ondismiss}>
   {#if icon}
     {@const Icon = icon}
     <Icon size={14} />
   {:else}
     <span class="tool-chip-label">{label}</span>
   {/if}
-  <span class="tool-chip-dismiss" onclick={ondismiss}>
+  <span class="tool-chip-dismiss">
     <X size={10} />
   </span>
 </button>
@@ -52,6 +52,7 @@
 
   .tool-chip:hover {
     background: rgba(91, 141, 217, 0.25);
+    width: 36px;
   }
 
   .tool-chip-label {
@@ -67,15 +68,12 @@
     transition: width 0.15s ease, opacity 0.15s ease, margin 0.15s ease;
     margin-left: 0;
     color: #5b8dd9;
+    pointer-events: none;
   }
 
   .tool-chip:hover .tool-chip-dismiss {
     width: 10px;
     opacity: 1;
     margin-left: 2px;
-  }
-
-  .tool-chip:hover {
-    width: 36px;
   }
 </style>

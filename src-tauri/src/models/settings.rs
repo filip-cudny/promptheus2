@@ -113,6 +113,9 @@ pub struct ModelConfig {
     pub provider: Provider,
 
     #[serde(default)]
+    pub group: Option<String>,
+
+    #[serde(default)]
     pub api_key: Option<String>,
 
     #[serde(default)]
