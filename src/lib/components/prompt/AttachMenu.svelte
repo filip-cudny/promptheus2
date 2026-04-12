@@ -11,17 +11,11 @@
     contextDisabled = false,
     availableTools = [],
     onToggleTool,
-    showWebSearchSwitch = false,
-    webSearchProvider = "builtin" as "builtin" | "mcp",
-    onWebSearchProviderChange,
   }: {
     onSelectContext: () => void;
     contextDisabled?: boolean;
     availableTools?: { id: string; label: string; icon?: LucideIcon; active: boolean }[];
     onToggleTool?: (toolId: string, enabled: boolean) => void;
-    showWebSearchSwitch?: boolean;
-    webSearchProvider?: "builtin" | "mcp";
-    onWebSearchProviderChange?: (provider: "builtin" | "mcp") => void;
   } = $props();
 
   let menuOpen = $state(false);
@@ -78,22 +72,6 @@
             <span>{tool.label}</span>
           </button>
         {/each}
-      {/if}
-      {#if showWebSearchSwitch}
-        <div class="menu-separator"></div>
-        <div class="menu-label">Web Search</div>
-        <div class="provider-switch">
-          <button
-            class="provider-option"
-            class:selected={webSearchProvider === "builtin"}
-            onclick={() => onWebSearchProviderChange?.("builtin")}
-          >Built-in</button>
-          <button
-            class="provider-option"
-            class:selected={webSearchProvider === "mcp"}
-            onclick={() => onWebSearchProviderChange?.("mcp")}
-          >MCP</button>
-        </div>
       {/if}
     </div>
   {/if}
@@ -168,43 +146,6 @@
     margin: 4px 0;
   }
 
-  .menu-label {
-    padding: 4px 12px 2px;
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.4);
-    user-select: none;
-  }
-
-  .provider-switch {
-    display: flex;
-    gap: 2px;
-    margin: 2px 8px 4px;
-    background: rgba(255, 255, 255, 0.06);
-    border-radius: 4px;
-    padding: 2px;
-  }
-
-  .provider-option {
-    flex: 1;
-    padding: 4px 8px;
-    border: none;
-    border-radius: 3px;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.5);
-    font: inherit;
-    font-size: 12px;
-    cursor: pointer;
-    text-align: center;
-  }
-
-  .provider-option:hover:not(.selected) {
-    color: rgba(255, 255, 255, 0.7);
-  }
-
-  .provider-option.selected {
-    background: rgba(255, 255, 255, 0.12);
-    color: #e0e0e0;
-  }
 
   .tool-check {
     display: inline-flex;

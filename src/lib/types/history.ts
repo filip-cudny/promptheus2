@@ -16,6 +16,7 @@ export interface SerializedConversationNode {
   completion_tokens?: number | null;
   thinking?: string | null;
   thinking_duration?: number | null;
+  query_duration?: number | null;
   error?: string | null;
   cancelled?: boolean;
   tool_calls?: ToolCall[];

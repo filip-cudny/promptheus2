@@ -33,6 +33,8 @@ pub struct SerializedConversationNode {
     #[serde(default)]
     pub thinking_duration: Option<f64>,
     #[serde(default)]
+    pub query_duration: Option<f64>,
+    #[serde(default)]
     pub error: Option<String>,
     #[serde(default)]
     pub cancelled: bool,
@@ -161,6 +163,7 @@ mod tests {
                         completion_tokens: None,
                         thinking: None,
                         thinking_duration: None,
+                        query_duration: None,
                         error: None,
                         cancelled: false,
                         tool_calls: vec![],
@@ -178,6 +181,7 @@ mod tests {
                         completion_tokens: None,
                         thinking: None,
                         thinking_duration: None,
+                        query_duration: None,
                         error: None,
                         cancelled: false,
                         tool_calls: vec![],

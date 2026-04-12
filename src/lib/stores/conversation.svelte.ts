@@ -62,6 +62,7 @@ export function createNode(
     completion_tokens: null,
     thinking: null,
     thinking_duration: null,
+    query_duration: null,
     error: null,
     cancelled: false,
     tool_calls: [],
@@ -159,6 +160,7 @@ function createTabState(
     streamed_thinking: "",
     is_thinking: false,
     thinking_started_at: null,
+    execution_started_at: null,
     active_tool_calls: [],
     selected_tools: defaults.selectedTools ? [...defaults.selectedTools] : [],
     abort_regenerate_node_id: null,
@@ -181,6 +183,7 @@ function serializeNodes(
     completion_tokens: node.completion_tokens,
     thinking: node.thinking,
     thinking_duration: node.thinking_duration,
+    query_duration: node.query_duration,
     error: node.error,
     cancelled: node.cancelled,
     tool_calls: node.tool_calls,
@@ -264,9 +267,6 @@ export function createConversationStore(
   const isThinking = $derived(activeTab.is_thinking);
   const hasActiveToolCalls = $derived(activeTab.active_tool_calls.length > 0);
   const selectedTools = $derived(activeTab.selected_tools);
-  const hasMcpWebSearch = $derived(activeTab.selected_tools.some((t: string) => t.endsWith(".web_search")));
-  const webSearchEnabled = $derived(activeTab.selected_tools.includes("web_search") || hasMcpWebSearch);
-  const webSearchProvider = $derived<"builtin" | "mcp">(hasMcpWebSearch ? "mcp" : "builtin");
 
   const canSend = $derived.by(() => {
     if (activeTab.is_executing) return false;
@@ -367,6 +367,7 @@ export function createConversationStore(
     tab.is_streaming = true;
     tab.streamed_content = "";
     tab.abort_regenerate_node_id = null;
+    tab.execution_started_at = Date.now();
 
     let success = false;
     let resultText = "";
@@ -405,6 +406,9 @@ export function createConversationStore(
           }
           assistantNode.prompt_tokens = usage?.prompt_tokens ?? null;
           assistantNode.completion_tokens = usage?.completion_tokens ?? null;
+          if (tab.execution_started_at) {
+            assistantNode.query_duration = (Date.now() - tab.execution_started_at) / 1000;
+          }
           assistantNode.tool_calls = assistantNode.tool_calls.map((tc) =>
             tc.status === "in_progress"
               ? { ...tc, status: "completed", completed_at: new Date().toISOString() }
@@ -417,6 +421,7 @@ export function createConversationStore(
           tab.streamed_thinking = "";
           tab.is_thinking = false;
           tab.thinking_started_at = null;
+          tab.execution_started_at = null;
           tab.active_tool_calls = [];
           success = true;
           resultText = fullText;
@@ -425,6 +430,9 @@ export function createConversationStore(
           logError("Execution error: " + message);
           if (tab.thinking_started_at && !assistantNode.thinking_duration) {
             assistantNode.thinking_duration = Math.floor((Date.now() - tab.thinking_started_at) / 1000);
+          }
+          if (tab.execution_started_at) {
+            assistantNode.query_duration = (Date.now() - tab.execution_started_at) / 1000;
           }
           assistantNode.error = message;
           assistantNode.tool_calls = assistantNode.tool_calls.map((tc) =>
@@ -439,6 +447,7 @@ export function createConversationStore(
           tab.streamed_thinking = "";
           tab.is_thinking = false;
           tab.thinking_started_at = null;
+          tab.execution_started_at = null;
           tab.active_tool_calls = [];
         },
         onNodeUpdates: (nodeId, updates) => {
@@ -510,6 +519,9 @@ export function createConversationStore(
           ? { ...tc, status: "failed", error: errorMsg, completed_at: new Date().toISOString() }
           : tc,
       );
+      if (tab.execution_started_at) {
+        assistantNode.query_duration = (Date.now() - tab.execution_started_at) / 1000;
+      }
       tab.tree.nodes.set(assistantNode.node_id, { ...assistantNode });
       tab.is_executing = false;
       tab.is_streaming = false;
@@ -517,6 +529,7 @@ export function createConversationStore(
       tab.streamed_thinking = "";
       tab.is_thinking = false;
       tab.thinking_started_at = null;
+      tab.execution_started_at = null;
       tab.active_tool_calls = [];
     }
 
@@ -533,6 +546,7 @@ export function createConversationStore(
 
     let assistantNode: ConversationNode | null = null;
 
+    tab.execution_started_at = Date.now();
     const snapshot = await reconnectToExecution({
       onChunk: (_delta, accumulated, _thinkingDelta, accumulatedThinking) => {
         if (!assistantNode) return;
@@ -557,6 +571,9 @@ export function createConversationStore(
         }
         assistantNode.prompt_tokens = usage?.prompt_tokens ?? null;
         assistantNode.completion_tokens = usage?.completion_tokens ?? null;
+        if (tab.execution_started_at) {
+          assistantNode.query_duration = (Date.now() - tab.execution_started_at) / 1000;
+        }
         assistantNode.tool_calls = assistantNode.tool_calls.map((tc) =>
           tc.status === "in_progress"
             ? { ...tc, status: "completed", completed_at: new Date().toISOString() }
@@ -569,6 +586,7 @@ export function createConversationStore(
         tab.streamed_thinking = "";
         tab.is_thinking = false;
         tab.thinking_started_at = null;
+        tab.execution_started_at = null;
         tab.active_tool_calls = [];
         saveToHistory();
       },
@@ -577,6 +595,9 @@ export function createConversationStore(
         logError("Reconnected execution error: " + message);
         if (tab.thinking_started_at && !assistantNode.thinking_duration) {
           assistantNode.thinking_duration = Math.floor((Date.now() - tab.thinking_started_at) / 1000);
+        }
+        if (tab.execution_started_at) {
+          assistantNode.query_duration = (Date.now() - tab.execution_started_at) / 1000;
         }
         assistantNode.error = message;
         assistantNode.tool_calls = assistantNode.tool_calls.map((tc) =>
@@ -591,6 +612,7 @@ export function createConversationStore(
         tab.streamed_thinking = "";
         tab.is_thinking = false;
         tab.thinking_started_at = null;
+        tab.execution_started_at = null;
         tab.active_tool_calls = [];
       },
       onToolCallStart: (toolCall) => {
@@ -904,6 +926,7 @@ export function createConversationStore(
     tab.streamed_thinking = "";
     tab.is_thinking = false;
     tab.thinking_started_at = null;
+    tab.execution_started_at = null;
     tab.active_tool_calls = [];
   }
 
@@ -1003,27 +1026,6 @@ export function createConversationStore(
     updateSetting("selected_tools", tab.selected_tools);
   }
 
-  function toggleWebSearch(enabled: boolean, mcpToolId?: string): void {
-    const mcpId = mcpToolId ?? selectedTools.find((t: string) => t.endsWith(".web_search"));
-    const toolId = webSearchProvider === "mcp" && mcpId ? mcpId : "web_search";
-    toggleTool(toolId, enabled);
-  }
-
-  function setWebSearchProvider(provider: "builtin" | "mcp", mcpToolId?: string): void {
-    const tab = getTab(activeTabId);
-    if (!tab) return;
-    const mcpId = mcpToolId ?? tab.selected_tools.find((t: string) => t.endsWith(".web_search"));
-    if (provider === "mcp" && !mcpId) return;
-    const addId = provider === "mcp" ? mcpId! : "web_search";
-    const removeId = provider === "mcp" ? "web_search" : mcpId;
-    if (tab.selected_tools.includes(addId) && (!removeId || !tab.selected_tools.includes(removeId))) return;
-    const wasEnabled = tab.selected_tools.includes("web_search") || tab.selected_tools.some((t: string) => t.endsWith(".web_search"));
-    if (!wasEnabled) return;
-    const filtered = tab.selected_tools.filter((t: string) => t !== addId && t !== removeId);
-    tab.selected_tools = [...filtered, addId];
-    windowDefaultSelectedTools = [...tab.selected_tools];
-    updateSetting("selected_tools", tab.selected_tools);
-  }
 
   async function initFromSettings(): Promise<void> {
     try {
@@ -1139,6 +1141,7 @@ export function createConversationStore(
             completion_tokens: serialized.completion_tokens ?? null,
             thinking: serialized.thinking ?? null,
             thinking_duration: serialized.thinking_duration ?? null,
+            query_duration: serialized.query_duration ?? null,
             error: serialized.error ?? null,
             cancelled: serialized.cancelled ?? false,
             tool_calls: serialized.tool_calls ?? [],
@@ -1166,6 +1169,7 @@ export function createConversationStore(
           completion_tokens: null,
           thinking: null,
           thinking_duration: null,
+          query_duration: null,
           error: null,
           cancelled: false,
           tool_calls: [],
@@ -1187,6 +1191,7 @@ export function createConversationStore(
             completion_tokens: null,
             thinking: null,
             thinking_duration: null,
+            query_duration: null,
             error: null,
             cancelled: false,
             tool_calls: [],
@@ -1367,12 +1372,6 @@ export function createConversationStore(
     get selectedTools() {
       return selectedTools;
     },
-    get webSearchEnabled() {
-      return webSearchEnabled;
-    },
-    get webSearchProvider() {
-      return webSearchProvider;
-    },
     get totalTokens() {
       return totalTokens;
     },
@@ -1405,8 +1404,6 @@ export function createConversationStore(
     updateModelId,
     updateReasoningEffort,
     toggleTool,
-    toggleWebSearch,
-    setWebSearchProvider,
     initFromSettings,
     tryReconnect,
     approveToolCall,

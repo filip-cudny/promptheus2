@@ -37,6 +37,27 @@
 
   let inputPreview = $derived(truncate(entry.input_content, 120));
 
+  let totalDuration = $derived.by(() => {
+    const nodes = entry.conversation_data?.nodes;
+    if (!nodes) return null;
+    let sum = 0;
+    let hasAny = false;
+    for (const node of nodes) {
+      if (node.query_duration != null) {
+        sum += node.query_duration;
+        hasAny = true;
+      }
+    }
+    return hasAny ? sum : null;
+  });
+
+  function formatDuration(seconds: number): string {
+    if (seconds < 60) return `${seconds.toFixed(1)}s`;
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  }
+
   function truncate(text: string, max: number): string {
     if (!text || text.length <= max) return text ?? "";
     return text.slice(0, max) + "…";
@@ -83,6 +104,9 @@
       <span class="prompt-name">{displayName}</span>
       {#if turnCount}
         <span class="turn-count">({turnCount} turns)</span>
+      {/if}
+      {#if totalDuration != null}
+        <span class="duration">{formatDuration(totalDuration)}</span>
       {/if}
       <span class="timestamp">{formatTimestamp(entry)}</span>
       {#if isTranscription}
@@ -181,6 +205,12 @@
 
   .turn-count {
     color: rgba(255, 255, 255, 0.4);
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .duration {
+    color: rgba(255, 255, 255, 0.35);
     font-size: 11px;
     flex-shrink: 0;
   }

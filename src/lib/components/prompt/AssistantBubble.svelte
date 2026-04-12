@@ -148,6 +148,13 @@
   async function copyContent() {
     await navigator.clipboard.writeText(displayContent);
   }
+
+  function formatDuration(seconds: number): string {
+    if (seconds < 60) return `${seconds.toFixed(1)}s`;
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  }
 </script>
 
 <div class="assistant-bubble">
@@ -155,6 +162,9 @@
     {#snippet headerLeft()}
       <span class="role-badge assistant-badge">Assistant</span>
       <span class="turn-number"># {outputNumber}</span>
+      {#if node.query_duration != null}
+        <span class="query-duration">{formatDuration(node.query_duration)}</span>
+      {/if}
     {/snippet}
     {#snippet actions()}
       {#if branchInfo.total > 1}
@@ -277,6 +287,18 @@
     font-size: 12px;
     color: rgba(255, 255, 255, 0.4);
     font-weight: 500;
+  }
+
+  .assistant-bubble :global(.query-duration) {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.35);
+    font-weight: 400;
+    opacity: 0;
+    transition: opacity 120ms ease;
+  }
+
+  .assistant-bubble :global(.collapsible-header:hover .query-duration) {
+    opacity: 1;
   }
 
   .branch-nav {

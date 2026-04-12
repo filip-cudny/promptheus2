@@ -72,24 +72,25 @@
 
   const availableTools = $derived.by(() => {
     const tools: { id: string; label: string; icon: LucideIcon; active: boolean }[] = [];
-    if (webSearchAvailable) {
-      const toolId = store.webSearchProvider === "mcp" && mcpWebSearchQualifiedId
-        ? mcpWebSearchQualifiedId
-        : "web_search";
+    if (bothWebSearchAvailable) {
+      tools.push({ id: "web_search", label: "Web Search (Built-in)", icon: Globe, active: store.selectedTools.includes("web_search") });
+      tools.push({ id: mcpWebSearchQualifiedId!, label: "Web Search (MCP)", icon: Globe, active: store.selectedTools.includes(mcpWebSearchQualifiedId!) });
+    } else if (webSearchAvailable) {
+      const toolId = mcpWebSearchAvailable && mcpWebSearchQualifiedId ? mcpWebSearchQualifiedId : "web_search";
       tools.push({ id: toolId, label: "Web Search", icon: Globe, active: store.selectedTools.includes(toolId) });
     }
     return tools;
   });
 
-  $effect(() => {
-    if (!bothWebSearchAvailable) {
-      if (mcpWebSearchAvailable && !builtinWebSearchAvailable && mcpWebSearchQualifiedId) {
-        store.setWebSearchProvider("mcp", mcpWebSearchQualifiedId);
-      } else if (builtinWebSearchAvailable && !mcpWebSearchAvailable) {
-        store.setWebSearchProvider("builtin");
+  function handleToggleTool(id: string, enabled: boolean) {
+    if (enabled && bothWebSearchAvailable) {
+      const otherId = id === "web_search" ? mcpWebSearchQualifiedId : "web_search";
+      if (otherId && store.selectedTools.includes(otherId)) {
+        store.toggleTool(otherId, false);
       }
     }
-  });
+    store.toggleTool(id, enabled);
+  }
 
   let localText = $state("");
   let localImages = $state<ConversationImage[]>([]);
@@ -286,10 +287,7 @@
         onSelectContext={onToggleContext}
         {contextDisabled}
         {availableTools}
-        onToggleTool={(id, enabled) => store.toggleTool(id, enabled)}
-        showWebSearchSwitch={bothWebSearchAvailable && store.webSearchEnabled}
-        webSearchProvider={store.webSearchProvider}
-        onWebSearchProviderChange={(p) => store.setWebSearchProvider(p, mcpWebSearchQualifiedId ?? undefined)}
+        onToggleTool={handleToggleTool}
       />
       {#each availableTools.filter(t => t.active) as tool (tool.id)}
         <ToolChip label={tool.label} icon={tool.icon} ondismiss={() => store.toggleTool(tool.id, false)} />
