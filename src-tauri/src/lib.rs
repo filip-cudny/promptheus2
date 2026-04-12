@@ -658,6 +658,7 @@ pub fn run() {
             commands::history::add_conversation_entry,
             commands::history::update_conversation_entry,
             commands::history::get_last_interaction,
+            commands::history::delete_history_entry,
             commands::history::clear_history,
             commands::history::copy_history_content,
             commands::history::update_history_entry_title,

@@ -78,6 +78,12 @@ export async function updateHistoryEntryTitle(
   return invoke("update_history_entry_title", { entryId, title });
 }
 
+export async function deleteHistoryEntry(
+  entryId: string,
+): Promise<void> {
+  return invoke("delete_history_entry", { entryId });
+}
+
 export async function clearHistory(): Promise<void> {
   return invoke("clear_history");
 }

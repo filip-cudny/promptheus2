@@ -397,11 +397,29 @@ impl SqliteHistoryService {
         entry_id: &str,
         title: String,
     ) -> Result<(), HistoryError> {
+        let now = Self::now_timestamp();
         let updated = self.db.conn().execute(
-            "UPDATE conversations SET title = ?1 WHERE id = ?2",
-            rusqlite::params![title, entry_id],
+            "UPDATE conversations SET title = ?1, updated_at = ?2 WHERE id = ?3",
+            rusqlite::params![title, now, entry_id],
         )?;
         if updated == 0 {
+            return Err(HistoryError::EntryNotFound(entry_id.to_string()));
+        }
+        Ok(())
+    }
+
+    pub fn delete_entry(&self, entry_id: &str) -> Result<(), HistoryError> {
+        self.db
+            .conn()
+            .execute(
+                "DELETE FROM conversation_images WHERE conversation_id = ?1",
+                rusqlite::params![entry_id],
+            )?;
+        let deleted = self.db.conn().execute(
+            "DELETE FROM conversations WHERE id = ?1",
+            rusqlite::params![entry_id],
+        )?;
+        if deleted == 0 {
             return Err(HistoryError::EntryNotFound(entry_id.to_string()));
         }
         Ok(())

@@ -22,6 +22,7 @@ pub struct NotificationPayload {
     pub level: NotificationLevel,
     pub title: String,
     pub message: Option<String>,
+    pub monochromatic: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -60,6 +61,7 @@ impl NotificationService {
             level,
             title: title.into(),
             message: message.map(|m| m.into()),
+            monochromatic: settings.monochromatic_notification_icons,
         };
 
         log::debug!(
@@ -179,23 +181,27 @@ mod tests {
             level: NotificationLevel::Success,
             title: "Done".to_string(),
             message: Some("Task completed".to_string()),
+            monochromatic: true,
         };
         let json: serde_json::Value = serde_json::to_value(&payload).unwrap();
         assert_eq!(json["id"], "n-1");
         assert_eq!(json["level"], "success");
         assert_eq!(json["title"], "Done");
         assert_eq!(json["message"], "Task completed");
+        assert_eq!(json["monochromatic"], true);
 
         let payload_no_msg = NotificationPayload {
             id: "n-2".to_string(),
             level: NotificationLevel::Error,
             title: "Failed".to_string(),
             message: None,
+            monochromatic: false,
         };
         let json: serde_json::Value = serde_json::to_value(&payload_no_msg).unwrap();
         assert_eq!(json["id"], "n-2");
         assert_eq!(json["level"], "error");
         assert_eq!(json["title"], "Failed");
         assert!(json["message"].is_null());
+        assert_eq!(json["monochromatic"], false);
     }
 }

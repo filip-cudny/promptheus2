@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { X, MessageSquare, MessagesSquare, Mic, Circle } from "lucide-svelte";
+  import { X, MessageSquare, MessagesSquare, Mic, Circle, EllipsisVertical, Pencil, Trash2 } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import { getConversations } from "$lib/services/history";
+  import { getConversations, updateHistoryEntryTitle, deleteHistoryEntry } from "$lib/services/history";
   import type { HistoryEntry } from "$lib/types";
   import type { TabState } from "$lib/types/conversation";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
@@ -105,6 +105,7 @@
   }
 
   function handleItemClick(item: SidebarItem) {
+    if (editingItemId) return;
     if (item.kind === "history") {
       store.restoreFromHistory(item.entry.id, false);
     } else {
@@ -113,10 +114,103 @@
     onClose();
   }
 
-  function handleClose(e: MouseEvent, item: SidebarItem) {
+  let menuOpenForId = $state<string | null>(null);
+  let menuContainerEls = $state<Record<string, HTMLDivElement>>({});
+
+  function toggleMenu(e: MouseEvent, item: SidebarItem) {
     e.stopPropagation();
-    if (item.kind !== "history") {
+    const id = itemId(item);
+    menuOpenForId = menuOpenForId === id ? null : id;
+  }
+
+  function closeMenu() {
+    menuOpenForId = null;
+  }
+
+  function handleWindowPointerDown(e: PointerEvent) {
+    if (menuOpenForId) {
+      const container = menuContainerEls[menuOpenForId];
+      if (container && container.contains(e.target as Node)) return;
+      closeMenu();
+    }
+  }
+
+  let editingItemId = $state<string | null>(null);
+  let editValue = $state("");
+  let cancelled = $state(false);
+
+  function startRename(item: SidebarItem) {
+    closeMenu();
+    editingItemId = itemId(item);
+    editValue = itemTitle(item);
+    cancelled = false;
+  }
+
+  function commitRename(item: SidebarItem) {
+    if (cancelled) return;
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== itemTitle(item)) {
+      if (item.kind === "history") {
+        updateHistoryEntryTitle(item.entry.id, trimmed).catch(() => {});
+      } else {
+        store.renameTab(item.tab.tab_id, trimmed);
+      }
+    }
+    editingItemId = null;
+  }
+
+  function cancelRename() {
+    cancelled = true;
+    editingItemId = null;
+  }
+
+  function handleRenameKeydown(e: KeyboardEvent, item: SidebarItem) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      (e.target as HTMLInputElement).blur();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelRename();
+    }
+  }
+
+  let confirmDeleteItem = $state<SidebarItem | null>(null);
+
+  function startDelete(item: SidebarItem) {
+    closeMenu();
+    confirmDeleteItem = item;
+  }
+
+  async function confirmDelete() {
+    if (!confirmDeleteItem) return;
+    const item = confirmDeleteItem;
+    confirmDeleteItem = null;
+
+    if (item.kind === "open") {
       store.closeTab(item.tab.tab_id);
+      await deleteHistoryEntry(item.entry.id).catch(() => {});
+    } else if (item.kind === "history") {
+      await deleteHistoryEntry(item.entry.id).catch(() => {});
+    } else if (item.kind === "draft" && item.tab.history_entry_id) {
+      const entryId = item.tab.history_entry_id;
+      store.closeTab(item.tab.tab_id);
+      await deleteHistoryEntry(entryId).catch(() => {});
+    } else {
+      store.closeTab(item.tab.tab_id);
+    }
+  }
+
+  function cancelDelete() {
+    confirmDeleteItem = null;
+  }
+
+  function handleConfirmKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      confirmDelete();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      cancelDelete();
     }
   }
 
@@ -174,6 +268,8 @@
   }
 </script>
 
+<svelte:window onpointerdown={handleWindowPointerDown} />
+
 {#if open}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div class="backdrop" onclick={onClose}></div>
@@ -190,6 +286,7 @@
   <div class="tab-list" bind:this={tabListEl} onscroll={handleScroll}>
     {#each items as item (itemId(item))}
       {@const ts = itemTimestamp(item)}
+      {@const id = itemId(item)}
       <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions a11y_no_noninteractive_element_interactions -->
       <div
         class="tab-item"
@@ -206,20 +303,66 @@
           <MessageSquare size={ICON_SIZE.sm} />
         {/if}
         <div class="tab-body">
-          <span class="tab-name" title={itemTitle(item)}>{itemTitle(item)}</span>
+          {#if editingItemId === id}
+            <!-- svelte-ignore a11y_autofocus -->
+            <input
+              class="tab-name-input"
+              type="text"
+              bind:value={editValue}
+              autofocus
+              onclick={(e: MouseEvent) => e.stopPropagation()}
+              onblur={() => commitRename(item)}
+              onkeydown={(e: KeyboardEvent) => handleRenameKeydown(e, item)}
+            />
+          {:else}
+            <span class="tab-name" title={itemTitle(item)}>{itemTitle(item)}</span>
+          {/if}
           {#if ts}
             <span class="tab-meta">{ts}</span>
           {/if}
         </div>
-        {#if item.kind !== "history" && store.tabs.length > 1}
-          <button class="tab-close-btn" onclick={(e) => handleClose(e, item)}>
-            <X size={12} />
+        <div class="more-menu" bind:this={menuContainerEls[id]}>
+          <button
+            class="more-btn"
+            onclick={(e: MouseEvent) => toggleMenu(e, item)}
+          >
+            <EllipsisVertical size={14} />
           </button>
-        {/if}
+          {#if menuOpenForId === id}
+            <div class="menu-dropdown">
+              <button class="menu-item" onclick={(e: MouseEvent) => { e.stopPropagation(); startRename(item); }}>
+                <Pencil size={14} />
+                <span>Rename</span>
+              </button>
+              <button class="menu-item destructive" onclick={(e: MouseEvent) => { e.stopPropagation(); startDelete(item); }}>
+                <Trash2 size={14} />
+                <span>Delete</span>
+              </button>
+            </div>
+          {/if}
+        </div>
       </div>
     {/each}
   </div>
 </aside>
+
+{#if confirmDeleteItem}
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="confirm-overlay" onclick={cancelDelete}>
+    <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+    <div class="confirm-dialog" onclick={(e: MouseEvent) => e.stopPropagation()} onkeydown={handleConfirmKeydown}>
+      <p class="confirm-text">Delete this conversation?</p>
+      <div class="confirm-actions">
+        <button class="confirm-btn cancel" onclick={cancelDelete}>Cancel</button>
+        <!-- svelte-ignore a11y_autofocus -->
+        <button class="confirm-btn delete" onclick={confirmDelete} autofocus>
+          <Trash2 size={14} />
+          <span>Delete</span>
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .backdrop {
@@ -339,13 +482,35 @@
     white-space: nowrap;
   }
 
+  .tab-name-input {
+    width: 100%;
+    font-size: 13px;
+    font-family: inherit;
+    color: #e0e0e0;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    padding: 0 4px;
+    outline: none;
+    line-height: inherit;
+  }
+
+  .tab-name-input:focus {
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+
   .tab-meta {
     font-size: 11px;
     font-weight: 400;
     color: rgba(255, 255, 255, 0.3);
   }
 
-  .tab-close-btn {
+  .more-menu {
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .more-btn {
     width: 20px;
     height: 20px;
     border-radius: 4px;
@@ -358,16 +523,120 @@
     justify-content: center;
     padding: 0;
     opacity: 0;
-    flex-shrink: 0;
   }
 
-  .tab-item:hover .tab-close-btn {
+  .tab-item:hover .more-btn,
+  .more-btn:focus {
     opacity: 1;
   }
 
-  .tab-close-btn:hover {
+  .more-btn:hover {
     color: #e0e0e0;
     background: rgba(255, 255, 255, 0.1);
+  }
+
+  .menu-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 2px;
+    min-width: 120px;
+    background: rgba(30, 30, 32, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    padding: 4px;
+    z-index: 300;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border: none;
+    background: transparent;
+    color: #ccc;
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .menu-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #e0e0e0;
+  }
+
+  .menu-item.destructive:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #e0e0e0;
+  }
+
+  .confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 400;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .confirm-dialog {
+    background: #1e1e20;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 16px 20px;
+    min-width: 240px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .confirm-text {
+    margin: 0;
+    font-size: 13px;
+    color: #e0e0e0;
+  }
+
+  .confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .confirm-btn {
+    padding: 5px 14px;
+    border-radius: 5px;
+    border: none;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .confirm-btn.cancel {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ccc;
+  }
+
+  .confirm-btn.cancel:hover {
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  .confirm-btn.delete {
+    background: rgba(255, 255, 255, 0.12);
+    color: #e0e0e0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+  }
+
+  .confirm-btn.delete:hover {
+    background: rgba(255, 255, 255, 0.14);
+    color: #e0e0e0;
   }
 
   :global(.draft-dot) {

@@ -262,6 +262,8 @@
     color: #e0e0e0;
     word-wrap: break-word;
     overflow-wrap: break-word;
+    user-select: text;
+    -webkit-user-select: text;
   }
 
   .markdown-renderer :global(h1),

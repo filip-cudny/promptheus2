@@ -143,6 +143,8 @@
   .user-bubble {
     border-left: 3.5px solid #4a9ebb;
     border-radius: 6px;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .user-bubble.editing :global(.collapsible-section) {
@@ -203,6 +205,8 @@
     color: #e0e0e0;
     white-space: pre-wrap;
     word-wrap: break-word;
+    user-select: text;
+    -webkit-user-select: text;
   }
 
   .bubble-text :global(.skill-badge) {

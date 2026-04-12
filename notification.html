@@ -107,11 +107,14 @@
         return n;
       }
 
-      function createToastElement(level, title, message) {
+      var MONOCHROME_COLOR = "#1a1a1a";
+
+      function createToastElement(level, title, message, monochromatic) {
         var el = document.createElement("div");
         el.className = "toast";
+        var iconColor = monochromatic ? MONOCHROME_COLOR : ICON_COLORS[level];
         el.innerHTML =
-          '<svg class="toast-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="' + ICON_COLORS[level] + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICON_PATHS[level] + '</svg>' +
+          '<svg class="toast-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="' + iconColor + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICON_PATHS[level] + '</svg>' +
           '<div class="toast-content">' +
             '<span class="toast-title">' + escapeHtml(title) + '</span>' +
             (message ? '<span class="toast-message">' + escapeHtml(message) + '</span>' : '') +
@@ -237,7 +240,7 @@
           var entries = [];
           for (var i = 0; i < pending.length; i++) {
             var n = pending[i];
-            var el = createToastElement(n.level, n.title, n.message);
+            var el = createToastElement(n.level, n.title, n.message, n.monochromatic);
             el.dataset.notifId = n.id;
             stack.appendChild(el);
             registry[n.id] = { el: el, timerId: null, state: "entering" };

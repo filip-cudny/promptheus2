@@ -956,6 +956,15 @@ export function createConversationStore(
     }
   }
 
+  function renameTab(tabId: string, title: string): void {
+    const tab = tabs.find((t) => t.tab_id === tabId);
+    if (!tab) return;
+    tab.tab_name = title;
+    if (tab.history_entry_id) {
+      updateHistoryEntryTitle(tab.history_entry_id, title).catch(() => {});
+    }
+  }
+
   function updateNodeContent(nodeId: string, content: string): void {
     const tab = getTab(activeTabId);
     if (!tab) return;
@@ -1395,6 +1404,7 @@ export function createConversationStore(
     addTab,
     closeTab,
     switchTab,
+    renameTab,
     updateNodeContent,
     updateContextText,
     updateContextImages,

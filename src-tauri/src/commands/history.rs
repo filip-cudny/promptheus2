@@ -171,6 +171,20 @@ pub async fn update_history_entry_title(
 }
 
 #[tauri::command]
+pub async fn delete_history_entry(
+    app: AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    entry_id: String,
+) -> Result<(), String> {
+    let state = state.lock().await;
+    state
+        .history
+        .delete_entry(&entry_id)
+        .map_err(|e| e.to_string())?;
+    emit_history_changed(&app)
+}
+
+#[tauri::command]
 pub async fn clear_history(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,

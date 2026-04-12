@@ -267,6 +267,8 @@
   .assistant-bubble {
     border-left: 3.5px solid #9b6dcc;
     border-radius: 6px;
+    user-select: none;
+    -webkit-user-select: none;
   }
 
   .role-badge {
