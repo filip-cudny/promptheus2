@@ -98,6 +98,7 @@
   let shiftHeld = $state(false);
   let skillEditable: ReturnType<typeof SkillEditable> | undefined = $state();
   let syncedTabId = $state("");
+  let unlistenMcpReady: (() => void) | undefined;
   let lastDomText = $state("");
 
   $effect(() => {
@@ -160,14 +161,21 @@
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
 
-    invoke<{ name: string; server: string }[]>("list_mcp_tools")
-      .then((tools) => {
-        const ws = tools.find((t) => t.name === "web_search");
-        mcpWebSearchQualifiedId = ws ? `${ws.server}.${ws.name}` : null;
-      })
-      .catch(() => {});
+    function fetchMcpTools() {
+      invoke<{ name: string; server: string }[]>("list_mcp_tools")
+        .then((tools) => {
+          const ws = tools.find((t) => t.name === "web_search");
+          mcpWebSearchQualifiedId = ws ? `${ws.server}.${ws.name}` : null;
+        })
+        .catch(() => {});
+    }
+
+    fetchMcpTools();
 
     const win = getCurrentWebviewWindow();
+    win.listen("mcp-ready", () => fetchMcpTools()).then((unlisten) => {
+      unlistenMcpReady = unlisten;
+    });
     unlistenTextUpdate = await win.listen<{ text: string; index: number }>(
       "text-attachment-updated",
       (event) => {
@@ -183,6 +191,7 @@
 
   onDestroy(() => {
     unlistenTextUpdate?.();
+    unlistenMcpReady?.();
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", onKeyUp);
   });

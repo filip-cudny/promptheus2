@@ -610,6 +610,7 @@ pub fn run() {
                     let registry = McpRegistry::start_all(&mcp_servers_config).await;
                     let state = app_handle.state::<Mutex<AppState>>();
                     state.lock().await.mcp = std::sync::Arc::new(registry);
+                    let _ = app_handle.emit("mcp-ready", ());
                 });
             }
 

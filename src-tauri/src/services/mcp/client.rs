@@ -35,8 +35,15 @@ impl McpClient {
         timeout_secs: u64,
         tool_timeouts: &HashMap<String, u64>,
     ) -> Result<Self, McpError> {
-        let mut cmd = tokio::process::Command::new(command);
+        let shell_env = crate::services::shell_env::get_shell_env();
+        let resolved_command = crate::services::shell_env::resolve_command(command, shell_env);
+        log::debug!(
+            "MCP server '{}': resolved command '{}' -> '{}'",
+            server_name, command, resolved_command
+        );
+        let mut cmd = tokio::process::Command::new(&resolved_command);
         cmd.args(args);
+        cmd.envs(shell_env.iter());
         cmd.envs(env);
 
         let transport =

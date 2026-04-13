@@ -1,6 +1,7 @@
 pub mod ai;
 pub mod clipboard;
 pub mod env_resolve;
+pub mod shell_env;
 pub mod mcp;
 pub mod config;
 pub mod conversation_context;
