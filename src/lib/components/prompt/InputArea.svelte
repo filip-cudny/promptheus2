@@ -242,13 +242,14 @@
     const plainText = e.clipboardData?.getData("text/plain") ?? "";
     e.preventDefault();
 
+    if (plainText) {
+      document.execCommand("insertText", false, plainText);
+      return;
+    }
+
     const image = await getImageFromPasteEvent(e);
     if (image) {
       localImages = [...localImages, image];
-      return;
-    }
-    if (plainText) {
-      document.execCommand("insertText", false, plainText);
     }
   }
 

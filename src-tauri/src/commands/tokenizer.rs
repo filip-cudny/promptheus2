@@ -154,7 +154,12 @@ pub async fn count_conversation_tokens(
             .unwrap_or_default();
 
         let tools_text = if !tool_names.is_empty() {
-            let resolved = ToolRegistry::resolve_tools(&tool_names, &provider, &api_mode);
+            let builtin_names: Vec<String> = tool_names
+                .iter()
+                .filter(|t| !t.contains('.'))
+                .cloned()
+                .collect();
+            let resolved = ToolRegistry::resolve_tools(&builtin_names, &provider, &api_mode);
             let payloads: Vec<serde_json::Value> = resolved
                 .iter()
                 .map(|t| ToolRegistry::to_request_payload(t, &provider, &api_mode))

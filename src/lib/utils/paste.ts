@@ -36,6 +36,8 @@ async function getImageViaArboard(): Promise<ConversationImage | null> {
 export async function getImageFromPasteEvent(
   e: ClipboardEvent,
 ): Promise<ConversationImage | null> {
+  if (hasTextInClipboardData(e)) return null;
+
   const item = getImageFromClipboardData(e);
   if (item) {
     const file = item.getAsFile();
@@ -44,8 +46,6 @@ export async function getImageFromPasteEvent(
       return { data, media_type: item.type };
     }
   }
-
-  if (hasTextInClipboardData(e)) return null;
 
   return getImageViaArboard();
 }

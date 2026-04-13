@@ -53,8 +53,8 @@
   }
 
   .small .chip-badge {
-    font-size: 8px;
-    padding: 0 3px;
+    font-size: 9px;
+    padding: 1px 4px;
     bottom: 4px;
     left: 4px;
   }
