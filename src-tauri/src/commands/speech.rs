@@ -153,7 +153,7 @@ pub async fn toggle_speech_recording(
         }
     };
 
-    let speech_config = {
+    let (speech_config, stt_prompt) = {
         let mut s = state.lock().await;
         let _ = s.notifications.notify(
             "speech_recording_stop",
@@ -163,8 +163,10 @@ pub async fn toggle_speech_recording(
             &s.config.settings().notifications,
         );
 
+        let stt_prompt = s.config.stt_prompt();
+
         match s.config.settings().speech_to_text_model.clone() {
-            Some(config) => config,
+            Some(config) => (config, stt_prompt),
             None => {
                 s.speech.set_transcribing(false);
                 s.speech.mark_transcription_finished();
@@ -182,7 +184,7 @@ pub async fn toggle_speech_recording(
     tokio::spawn(async move {
         let state_inner = app_clone.state::<Mutex<AppState>>();
         let start = std::time::Instant::now();
-        match speech::transcribe(wav_bytes, &speech_config).await {
+        match speech::transcribe(wav_bytes, &speech_config, stt_prompt).await {
             Ok(text) => {
                 let duration_secs = start.elapsed().as_secs_f64();
                 let _ = app_clone.emit(

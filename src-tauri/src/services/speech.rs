@@ -179,6 +179,7 @@ impl SpeechService {
 pub async fn transcribe(
     wav_bytes: Vec<u8>,
     config: &SpeechToTextModel,
+    prompt: Option<String>,
 ) -> Result<String, SpeechError> {
     let api_key = config
         .resolved_api_key()
@@ -197,9 +198,17 @@ pub async fn transcribe(
         .mime_str("audio/wav")
         .map_err(|e| SpeechError::TranscriptionFailed(e.to_string()))?;
 
-    let form = reqwest::multipart::Form::new()
+    let mut form = reqwest::multipart::Form::new()
         .part("file", file_part)
         .text("model", config.model.clone());
+
+    if let Some(ref lang) = config.language {
+        form = form.text("language", lang.clone());
+    }
+
+    if let Some(prompt) = prompt {
+        form = form.text("prompt", prompt);
+    }
 
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))
@@ -402,9 +411,10 @@ mod tests {
             display_name: "Whisper".into(),
             api_key: None,
             base_url: None,
+            language: None,
             api_key_env: None,
         };
-        let result = transcribe(vec![0; 44], &config).await;
+        let result = transcribe(vec![0; 44], &config, None).await;
         assert!(matches!(result, Err(SpeechError::ApiKeyMissing)));
     }
 
@@ -415,9 +425,10 @@ mod tests {
             display_name: "Whisper".into(),
             api_key: Some("".into()),
             base_url: None,
+            language: None,
             api_key_env: None,
         };
-        let result = transcribe(vec![0; 44], &config).await;
+        let result = transcribe(vec![0; 44], &config, None).await;
         assert!(matches!(result, Err(SpeechError::ApiKeyMissing)));
     }
 

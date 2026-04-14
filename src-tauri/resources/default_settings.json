@@ -40,7 +40,8 @@
     "model": "gpt-4o-transcribe",
     "display_name": "gpt-4o-transcribe",
     "api_key": "${OPENAI_API_KEY}",
-    "base_url": "https://api.openai.com/v1"
+    "base_url": "https://api.openai.com/v1",
+    "language": "pl"
   },
   "default_model": "550e8400-e29b-41d4-a716-446655440000",
   "number_input_debounce_ms": 200,
@@ -104,6 +105,7 @@
   "system_prompt": "You are a helpful assistant.",
   "about_me": "about_me.md",
   "environment_section": "environment_section.md",
+  "stt_prompt": "${STT_PROMPT_FILE}",
   "skills_order": [
     "prompt-refine",
     "prompt-execute",

@@ -30,6 +30,7 @@ import type {
   SerializedConversationNode,
   ImagePayload,
 } from "$lib/types";
+import { hasUserContent } from "$lib/types";
 import type { ConversationNodeForExecution } from "$lib/types/ai";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -271,15 +272,16 @@ export function createConversationStore(
   const canSend = $derived.by(() => {
     if (activeTab.is_executing) return false;
     if (
-      !activeTab.input_text.trim() &&
-      activeTab.input_images.length === 0 &&
-      activeTab.input_text_attachments.length === 0
+      !hasUserContent({
+        content: activeTab.input_text,
+        images: activeTab.input_images,
+        text_attachments: activeTab.input_text_attachments,
+      })
     )
       return false;
     const pairs = getMessagePairs(activeTab.tree);
     for (const pair of pairs) {
-      if (!pair.user.content.trim() && pair.user.images.length === 0)
-        return false;
+      if (!hasUserContent(pair.user)) return false;
       if (pair.assistant !== null && !pair.assistant.content.trim())
         return false;
     }
@@ -702,7 +704,7 @@ export function createConversationStore(
     const text = tab.input_text.trim();
     const images = [...tab.input_images];
     const textAttachments = [...tab.input_text_attachments];
-    if (!text && images.length === 0 && textAttachments.length === 0)
+    if (!hasUserContent({ content: tab.input_text, images, text_attachments: textAttachments }))
       return { success: false, result: "" };
 
     const { resolved_text: storedContent } = await resolveSkillInput(text);

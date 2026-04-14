@@ -63,6 +63,18 @@ export interface TabState {
   abort_regenerate_node_id: string | null;
 }
 
+export function hasUserContent(msg: {
+  content: string;
+  images: ConversationImage[];
+  text_attachments: string[];
+}): boolean {
+  return (
+    !!msg.content.trim() ||
+    msg.images.length > 0 ||
+    msg.text_attachments.length > 0
+  );
+}
+
 export type ContentSegment =
   | { type: "text"; text: string }
   | { type: "tool_call"; tool_call_id: string };

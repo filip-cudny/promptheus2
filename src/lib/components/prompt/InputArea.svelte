@@ -213,17 +213,6 @@
   }
 
   async function handleKeydown(e: KeyboardEvent) {
-    if (e.key.toLowerCase() === "v" && e.shiftKey && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      try {
-        const text = await invoke<string>("get_clipboard_text");
-        if (text) {
-          document.execCommand("insertText", false, text);
-        }
-      } catch {}
-      return;
-    }
-
     if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       sendOrRegenerate();
@@ -249,13 +238,13 @@
     }
 
     const plainText = e.clipboardData?.getData("text/plain") ?? "";
-    e.preventDefault();
-
     if (plainText) {
+      e.preventDefault();
       document.execCommand("insertText", false, plainText);
       return;
     }
 
+    e.preventDefault();
     const image = await getImageFromPasteEvent(e);
     if (image) {
       localImages = [...localImages, image];

@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use crate::models::settings::{
     KeymapGroup, ModelConfig, NotificationSettings, Settings, SpeechToTextModel,
 };
+use crate::services::env_resolve::resolve_env_refs;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
@@ -278,6 +279,15 @@ impl ConfigService {
             .unwrap_or("environment_section.md");
         let path = self.config_dir.join(filename);
         std::fs::read_to_string(&path).unwrap_or_default()
+    }
+
+    pub fn stt_prompt(&self) -> Option<String> {
+        let raw = self.settings.stt_prompt.as_deref().unwrap_or("stt_prompt.md");
+        let filename = resolve_env_refs(raw);
+        let path = self.config_dir.join(filename);
+        let content = std::fs::read_to_string(&path).ok()?;
+        let trimmed = content.trim();
+        if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
     }
 
     pub fn config_dir(&self) -> &Path {

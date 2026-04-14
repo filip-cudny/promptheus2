@@ -84,6 +84,9 @@ pub struct Settings {
     #[serde(default)]
     pub environment_section: Option<String>,
 
+    #[serde(default)]
+    pub stt_prompt: Option<String>,
+
     #[serde(default = "default_recent_apps_count")]
     pub recent_apps_count: usize,
 
@@ -246,6 +249,9 @@ pub struct SpeechToTextModel {
     #[serde(default)]
     pub base_url: Option<String>,
 
+    #[serde(default)]
+    pub language: Option<String>,
+
     #[serde(default, skip_serializing)]
     pub api_key_env: Option<String>,
 }
@@ -386,6 +392,7 @@ impl Default for Settings {
             system_prompt: default_system_prompt(),
             about_me: None,
             environment_section: None,
+            stt_prompt: None,
             recent_apps_count: default_recent_apps_count(),
             mcp_servers: HashMap::new(),
             skills_order: Vec::new(),
