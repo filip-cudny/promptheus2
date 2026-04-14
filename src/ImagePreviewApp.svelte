@@ -5,12 +5,12 @@
   import { LogicalSize, LogicalPosition } from "@tauri-apps/api/dpi";
 
   interface WorkArea {
-    cursorX: number;
-    cursorY: number;
-    workX: number;
-    workY: number;
-    workWidth: number;
-    workHeight: number;
+    cursor_x: number;
+    cursor_y: number;
+    work_x: number;
+    work_y: number;
+    work_width: number;
+    work_height: number;
   }
 
   const MAX_SIZE = 800;
@@ -46,15 +46,15 @@
 
     try {
       const wa = await invoke<WorkArea>("get_image_preview_work_area");
-      const rightEdge = wa.workX + wa.workWidth;
-      const bottomEdge = wa.workY + wa.workHeight;
+      const rightEdge = wa.work_x + wa.work_width;
+      const bottomEdge = wa.work_y + wa.work_height;
 
-      let x = wa.cursorX;
-      let y = wa.cursorY;
+      let x = wa.cursor_x;
+      let y = wa.cursor_y;
       if (x + width > rightEdge) x = rightEdge - width;
       if (y + height > bottomEdge) y = bottomEdge - height;
-      if (x < wa.workX) x = wa.workX;
-      if (y < wa.workY) y = wa.workY;
+      if (x < wa.work_x) x = wa.work_x;
+      if (y < wa.work_y) y = wa.work_y;
 
       await win.setPosition(new LogicalPosition(x, y));
     } catch {

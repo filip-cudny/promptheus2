@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ConversationImage } from "$lib/types/conversation";
+import { TEXT_ATTACHMENT_CHAR_THRESHOLD } from "$lib/constants/ui";
 
 async function readFileAsBase64(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
@@ -68,4 +69,34 @@ export function extractTextAttachment(
   if (!text || text.length < threshold) return null;
   e.preventDefault();
   return text;
+}
+
+export async function handleEditablePaste(
+  e: ClipboardEvent,
+  opts: {
+    skipTextAttachment?: boolean;
+    onTextAttachment: (text: string) => void;
+    onImage: (image: ConversationImage) => void;
+  },
+): Promise<void> {
+  const textAttachment = opts.skipTextAttachment
+    ? null
+    : extractTextAttachment(e, TEXT_ATTACHMENT_CHAR_THRESHOLD);
+  if (textAttachment) {
+    requestAnimationFrame(() => opts.onTextAttachment(textAttachment));
+    return;
+  }
+
+  const plainText = e.clipboardData?.getData("text/plain") ?? "";
+  if (plainText) {
+    e.preventDefault();
+    document.execCommand("insertText", false, plainText);
+    return;
+  }
+
+  e.preventDefault();
+  const image = await getImageFromPasteEvent(e);
+  if (image) {
+    opts.onImage(image);
+  }
 }

@@ -975,6 +975,50 @@ export function createConversationStore(
     if (node) node.content = content;
   }
 
+  function addNodeTextAttachment(nodeId: string, text: string): void {
+    const tab = getTab(activeTabId);
+    if (!tab) return;
+    const node = tab.tree.nodes.get(nodeId);
+    if (!node) return;
+    tab.tree.nodes.set(nodeId, {
+      ...node,
+      text_attachments: [...node.text_attachments, text],
+    });
+  }
+
+  function addNodeImage(nodeId: string, data: string, mediaType: string): void {
+    const tab = getTab(activeTabId);
+    if (!tab) return;
+    const node = tab.tree.nodes.get(nodeId);
+    if (!node) return;
+    tab.tree.nodes.set(nodeId, {
+      ...node,
+      images: [...node.images, { data, media_type: mediaType }],
+    });
+  }
+
+  function removeNodeTextAttachment(nodeId: string, index: number): void {
+    const tab = getTab(activeTabId);
+    if (!tab) return;
+    const node = tab.tree.nodes.get(nodeId);
+    if (!node) return;
+    tab.tree.nodes.set(nodeId, {
+      ...node,
+      text_attachments: node.text_attachments.filter((_, i) => i !== index),
+    });
+  }
+
+  function removeNodeImage(nodeId: string, index: number): void {
+    const tab = getTab(activeTabId);
+    if (!tab) return;
+    const node = tab.tree.nodes.get(nodeId);
+    if (!node) return;
+    tab.tree.nodes.set(nodeId, {
+      ...node,
+      images: node.images.filter((_, i) => i !== index),
+    });
+  }
+
   function updateContextText(text: string): void {
     const tab = getTab(activeTabId);
     if (tab) tab.context_text = text;
@@ -1408,6 +1452,10 @@ export function createConversationStore(
     switchTab,
     renameTab,
     updateNodeContent,
+    addNodeTextAttachment,
+    addNodeImage,
+    removeNodeTextAttachment,
+    removeNodeImage,
     updateContextText,
     updateContextImages,
     updateInputText,

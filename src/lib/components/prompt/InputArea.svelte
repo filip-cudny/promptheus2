@@ -15,9 +15,9 @@
   import type { IconProps } from "lucide-svelte";
 
   type LucideIcon = ComponentType<SvelteComponent<IconProps>>;
-  import { getImageFromPasteEvent, extractTextAttachment } from "$lib/utils/paste";
+  import { handleEditablePaste } from "$lib/utils/paste";
   import { formatTokenCount } from "$lib/utils/contextWindow";
-  import { ICON_SIZE, TEXT_ATTACHMENT_CHAR_THRESHOLD } from "$lib/constants/ui";
+  import { ICON_SIZE } from "$lib/constants/ui";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
@@ -229,26 +229,11 @@
   }
 
   async function handlePaste(e: ClipboardEvent) {
-    const textAttachment = !shiftHeld ? extractTextAttachment(e, TEXT_ATTACHMENT_CHAR_THRESHOLD) : null;
-    if (textAttachment) {
-      requestAnimationFrame(() => {
-        localTextAttachments = [...localTextAttachments, textAttachment];
-      });
-      return;
-    }
-
-    const plainText = e.clipboardData?.getData("text/plain") ?? "";
-    if (plainText) {
-      e.preventDefault();
-      document.execCommand("insertText", false, plainText);
-      return;
-    }
-
-    e.preventDefault();
-    const image = await getImageFromPasteEvent(e);
-    if (image) {
-      localImages = [...localImages, image];
-    }
+    await handleEditablePaste(e, {
+      skipTextAttachment: shiftHeld,
+      onTextAttachment: (text) => { localTextAttachments = [...localTextAttachments, text]; },
+      onImage: (image) => { localImages = [...localImages, image]; },
+    });
   }
 
   function handleInputAreaClick(e: MouseEvent) {

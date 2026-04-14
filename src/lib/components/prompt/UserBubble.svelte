@@ -7,6 +7,7 @@
   import SkillEditable from "$lib/components/ui/SkillEditable.svelte";
   import { Trash2, Pencil, Copy, Check } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import { handleEditablePaste } from "$lib/utils/paste";
   import { highlightSkills } from "$lib/utils/skillHighlight";
   import { isSkillXml, extractSkillDisplayText } from "$lib/utils/skillDisplay";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
@@ -18,6 +19,10 @@
     onContentChange,
     onDelete,
     onRegenerate,
+    onRemoveTextAttachment,
+    onRemoveImage,
+    onAddTextAttachment,
+    onAddImage,
   }: {
     node: ConversationNode;
     messageNumber: number;
@@ -25,6 +30,10 @@
     onContentChange: (content: string) => void;
     onDelete: (nodeId: string) => void;
     onRegenerate: () => void;
+    onRemoveTextAttachment: (index: number) => void;
+    onRemoveImage: (index: number) => void;
+    onAddTextAttachment: (text: string) => void;
+    onAddImage: (data: string, mediaType: string) => void;
   } = $props();
 
   const skillsStore = getSkillsStore();
@@ -73,6 +82,13 @@
     }
   }
 
+  async function handlePaste(e: ClipboardEvent) {
+    await handleEditablePaste(e, {
+      onTextAttachment: onAddTextAttachment,
+      onImage: (img) => onAddImage(img.data, img.media_type),
+    });
+  }
+
   async function copyContent() {
     const displayText = isSkillXml(node.content)
       ? extractSkillDisplayText(node.content)
@@ -108,8 +124,8 @@
       <div class="bubble-edit-field">
         {#if node.text_attachments.length > 0 || node.images.length > 0}
           <div class="attachment-row">
-            <TextChipBar textAttachments={node.text_attachments} readonly={true} />
-            <ImageChipBar images={node.images} readonly={true} />
+            <TextChipBar textAttachments={node.text_attachments} onremove={onRemoveTextAttachment} />
+            <ImageChipBar images={node.images} onremove={onRemoveImage} />
           </div>
         {/if}
         <SkillEditable
@@ -118,6 +134,7 @@
           editableClass="bubble-editable"
           oninput={handleEditInput}
           onkeydown={handleKeydown}
+          onpaste={handlePaste}
         />
       </div>
     {:else}
