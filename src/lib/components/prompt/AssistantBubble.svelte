@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { ConversationNode, ContentSegment } from "$lib/types/conversation";
   import type { ToolCall } from "$lib/types/ai";
-  import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
   import ThinkingBlock from "$lib/components/ui/ThinkingBlock.svelte";
@@ -13,7 +12,6 @@
   let {
     node,
     displayContent,
-    outputNumber,
     showDelete = false,
     isStreaming = false,
     thinkingContent = "",
@@ -31,7 +29,6 @@
   }: {
     node: ConversationNode;
     displayContent: string;
-    outputNumber: number;
     showDelete: boolean;
     isStreaming: boolean;
     thinkingContent: string;
@@ -121,7 +118,6 @@
     return blocks;
   });
 
-  let collapsed = $state(false);
   let editMode = $state(false);
   let textarea: HTMLTextAreaElement | undefined = $state();
 
@@ -157,16 +153,72 @@
   }
 </script>
 
-<div class="assistant-bubble">
-  <CollapsibleSection title="" bind:collapsed hoverActions actionsVisible={editMode}>
-    {#snippet headerLeft()}
-      <span class="role-badge assistant-badge">Assistant</span>
-      <span class="turn-number"># {outputNumber}</span>
-      {#if node.query_duration != null}
-        <span class="query-duration">{formatDuration(node.query_duration)}</span>
+<div class="assistant-message-wrapper">
+  <div class="assistant-bubble" class:editing={editMode}>
+    <div class="bubble-body">
+      {#if thinkingContent || isThinkingActive}
+        <ThinkingBlock {thinkingContent} {isThinkingActive} {isStreaming} thinkingDuration={node.thinking_duration} />
       {/if}
-    {/snippet}
-    {#snippet actions()}
+
+      {#if editMode}
+        <div class="bubble-edit-field">
+          <textarea
+            bind:this={textarea}
+            value={displayContent}
+            oninput={handleInput}
+            class="bubble-textarea"
+            rows="1"
+          ></textarea>
+        </div>
+      {:else if hasMarkers}
+        {#each renderBlocks as block}
+          {#if block.kind === "text"}
+            <MarkdownRenderer content={block.text} {isStreaming} />
+          {:else if block.kind === "tool_group"}
+            {@const groupToolCalls = block.toolCallIds
+              .map((id) => allToolCalls.get(id))
+              .filter((tc): tc is ToolCall => tc != null)}
+            {#if groupToolCalls.length > 0}
+              <ToolCallGroup
+                toolCalls={groupToolCalls}
+                {isStreaming}
+                onApprove={onToolCallApprove}
+                onReject={onToolCallReject}
+                onRetry={onToolCallRetry}
+              />
+            {/if}
+          {/if}
+        {/each}
+      {:else if displayContent}
+        <MarkdownRenderer content={displayContent} {isStreaming} />
+      {/if}
+
+      {#if showGenerating}
+        <div class="processing-indicator" role="status" aria-live="polite">
+          <span class="processing-label">Generating</span>
+        </div>
+      {/if}
+
+      {#if node.error}
+        <div class="error-banner">
+          <AlertCircle size={ICON_SIZE.sm} />
+          <span class="error-text">{node.error}</span>
+          <button class="retry-btn" onclick={() => onRegenerate(node.node_id)}>
+            <RefreshCw size={ICON_SIZE.sm} />
+            Retry
+          </button>
+        </div>
+      {:else if node.cancelled}
+        <span class="cancelled-hint">Response interrupted</span>
+      {/if}
+    </div>
+  </div>
+
+  <div class="bubble-footer" class:actions-visible={editMode}>
+    {#if node.query_duration != null}
+      <span class="query-time" title="Query time">{formatDuration(node.query_duration)}</span>
+    {/if}
+    <div class="bubble-actions">
       {#if branchInfo.total > 1}
         <span class="branch-nav">
           <button
@@ -203,104 +255,48 @@
           <Trash2 size={ICON_SIZE.md} />
         </button>
       {/if}
-    {/snippet}
-
-    {#if thinkingContent || isThinkingActive}
-      <ThinkingBlock {thinkingContent} {isThinkingActive} {isStreaming} thinkingDuration={node.thinking_duration} />
-    {/if}
-
-    {#if editMode}
-      <div class="bubble-edit-field">
-        <textarea
-          bind:this={textarea}
-          value={displayContent}
-          oninput={handleInput}
-          class="bubble-textarea"
-          rows="1"
-        ></textarea>
-      </div>
-    {:else if hasMarkers}
-      {#each renderBlocks as block}
-        {#if block.kind === "text"}
-          <MarkdownRenderer content={block.text} {isStreaming} />
-        {:else if block.kind === "tool_group"}
-          {@const groupToolCalls = block.toolCallIds
-            .map((id) => allToolCalls.get(id))
-            .filter((tc): tc is ToolCall => tc != null)}
-          {#if groupToolCalls.length > 0}
-            <ToolCallGroup
-              toolCalls={groupToolCalls}
-              {isStreaming}
-              onApprove={onToolCallApprove}
-              onReject={onToolCallReject}
-              onRetry={onToolCallRetry}
-            />
-          {/if}
-        {/if}
-      {/each}
-    {:else if displayContent}
-      <MarkdownRenderer content={displayContent} {isStreaming} />
-    {/if}
-
-    {#if showGenerating}
-      <div class="processing-indicator" role="status" aria-live="polite">
-        <span class="processing-label">Generating</span>
-      </div>
-    {/if}
-
-    {#if node.error}
-      <div class="error-banner">
-        <AlertCircle size={ICON_SIZE.sm} />
-        <span class="error-text">{node.error}</span>
-        <button class="retry-btn" onclick={() => onRegenerate(node.node_id)}>
-          <RefreshCw size={ICON_SIZE.sm} />
-          Retry
-        </button>
-      </div>
-    {:else if node.cancelled}
-      <span class="cancelled-hint">Response interrupted</span>
-    {/if}
-  </CollapsibleSection>
+    </div>
+  </div>
 </div>
 
 <style>
   .assistant-bubble {
-    border-left: 3.5px solid #9b6dcc;
+    padding: 14px 20px;
     border-radius: 6px;
     user-select: none;
     -webkit-user-select: none;
+    transition: background 120ms ease;
   }
 
-  .role-badge {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+  .assistant-message-wrapper:hover .assistant-bubble {
+    background: rgba(255, 255, 255, 0.03);
   }
 
-  .assistant-badge {
-    background: rgba(155, 109, 204, 0.25);
-    color: #c9a5f0;
-  }
-
-  .turn-number {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.4);
-    font-weight: 500;
-  }
-
-  .assistant-bubble :global(.query-duration) {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.35);
-    font-weight: 400;
+  .bubble-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
     opacity: 0;
     transition: opacity 120ms ease;
   }
 
-  .assistant-bubble :global(.collapsible-header:hover .query-duration) {
+  .assistant-message-wrapper:hover .bubble-footer,
+  .bubble-footer.actions-visible {
     opacity: 1;
+  }
+
+  .query-time {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.35);
+    font-weight: 400;
+  }
+
+  .bubble-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
   }
 
   .branch-nav {

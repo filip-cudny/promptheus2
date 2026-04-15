@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { ConversationNode } from "$lib/types/conversation";
-  import CollapsibleSection from "$lib/components/ui/CollapsibleSection.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import TextChipBar from "$lib/components/ui/TextChipBar.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
@@ -14,7 +13,6 @@
 
   let {
     node,
-    messageNumber,
     showDelete = false,
     onContentChange,
     onDelete,
@@ -25,7 +23,6 @@
     onAddImage,
   }: {
     node: ConversationNode;
-    messageNumber: number;
     showDelete: boolean;
     onContentChange: (content: string) => void;
     onDelete: (nodeId: string) => void;
@@ -49,7 +46,6 @@
     return highlightSkills(displayContent, classifySkillToken, "\n");
   }
 
-  let collapsed = $state(false);
   let editMode = $state(false);
   let editText = $state("");
   let skillEditable: ReturnType<typeof SkillEditable> | undefined = $state();
@@ -97,59 +93,85 @@
   }
 </script>
 
-<div class="user-bubble" class:editing={editMode}>
-  <CollapsibleSection title="" bind:collapsed hoverActions actionsVisible={editMode}>
-    {#snippet headerLeft()}
-      <span class="role-badge user-badge">Me</span>
-      <span class="turn-number"># {messageNumber}</span>
-    {/snippet}
-    {#snippet actions()}
-      <ActionIconButton
-        icon={Copy}
-        confirmIcon={Check}
-        onclick={copyContent}
-        title="Copy text"
-      />
-      <button class="icon-btn" class:active={editMode} onclick={toggleEditMode} title={editMode ? "View" : "Edit"}>
-        <Pencil size={ICON_SIZE.md} />
-      </button>
-      {#if showDelete}
-        <button class="icon-btn delete-btn" onclick={() => onDelete(node.node_id)} title="Delete">
-          <Trash2 size={ICON_SIZE.md} />
-        </button>
-      {/if}
-    {/snippet}
-
-    {#if editMode}
-      <div class="bubble-edit-field">
+<div class="user-message-wrapper" class:editing={editMode}>
+  <div class="user-bubble" class:editing={editMode}>
+    <div class="bubble-body">
+      {#if editMode}
+        <div class="bubble-edit-field">
+          {#if node.text_attachments.length > 0 || node.images.length > 0}
+            <div class="attachment-row">
+              <TextChipBar textAttachments={node.text_attachments} onremove={onRemoveTextAttachment} />
+              <ImageChipBar images={node.images} onremove={onRemoveImage} />
+            </div>
+          {/if}
+          <SkillEditable
+            bind:this={skillEditable}
+            bind:text={editText}
+            editableClass="bubble-editable"
+            oninput={handleEditInput}
+            onkeydown={handleKeydown}
+            onpaste={handlePaste}
+          />
+        </div>
+      {:else}
         {#if node.text_attachments.length > 0 || node.images.length > 0}
           <div class="attachment-row">
-            <TextChipBar textAttachments={node.text_attachments} onremove={onRemoveTextAttachment} />
-            <ImageChipBar images={node.images} onremove={onRemoveImage} />
+            <TextChipBar textAttachments={node.text_attachments} readonly={true} />
+            <ImageChipBar images={node.images} readonly={true} />
           </div>
         {/if}
-        <SkillEditable
-          bind:this={skillEditable}
-          bind:text={editText}
-          editableClass="bubble-editable"
-          oninput={handleEditInput}
-          onkeydown={handleKeydown}
-          onpaste={handlePaste}
-        />
-      </div>
-    {:else}
-      {#if node.text_attachments.length > 0 || node.images.length > 0}
-        <div class="attachment-row">
-          <TextChipBar textAttachments={node.text_attachments} readonly={true} />
-          <ImageChipBar images={node.images} readonly={true} />
-        </div>
+        <div class="bubble-text">{@html formatUserContent(node.content)}</div>
       {/if}
-      <div class="bubble-text">{@html formatUserContent(node.content)}</div>
+    </div>
+  </div>
+  <div class="bubble-actions" class:actions-visible={editMode}>
+    <ActionIconButton
+      icon={Copy}
+      confirmIcon={Check}
+      onclick={copyContent}
+      title="Copy text"
+    />
+    <button class="icon-btn" class:active={editMode} onclick={toggleEditMode} title={editMode ? "View" : "Edit"}>
+      <Pencil size={ICON_SIZE.md} />
+    </button>
+    {#if showDelete}
+      <button class="icon-btn delete-btn" onclick={() => onDelete(node.node_id)} title="Delete">
+        <Trash2 size={ICON_SIZE.md} />
+      </button>
     {/if}
-  </CollapsibleSection>
+  </div>
 </div>
 
 <style>
+  .user-message-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    max-width: 80%;
+    margin-left: auto;
+  }
+
+  .user-message-wrapper.editing {
+    max-width: 100%;
+    width: 100%;
+    margin-left: 0;
+    align-items: stretch;
+  }
+
+  .user-bubble {
+    padding: 14px 20px;
+    background: rgba(74, 158, 187, 0.06);
+    border-radius: 12px;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background 120ms ease;
+  }
+
+  .user-message-wrapper:hover .user-bubble {
+    background: rgba(74, 158, 187, 0.1);
+  }
+
   .attachment-row {
     display: flex;
     flex-wrap: wrap;
@@ -157,35 +179,33 @@
     padding: 2px 0;
   }
 
-  .user-bubble {
-    border-left: 3.5px solid #4a9ebb;
-    border-radius: 6px;
-    user-select: none;
-    -webkit-user-select: none;
+  .bubble-text {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #e0e0e0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    user-select: text;
+    -webkit-user-select: text;
   }
 
-  .user-bubble.editing :global(.collapsible-section) {
-    overflow: visible;
+  .bubble-text :global(.skill-badge) {
+    display: inline;
+    color: rgba(100, 160, 255, 0.9);
   }
 
-  .role-badge {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+  .bubble-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+    padding: 4px 0;
+    opacity: 0;
+    transition: opacity 120ms ease;
   }
 
-  .user-badge {
-    background: rgba(74, 158, 187, 0.25);
-    color: #7dd3f0;
-  }
-
-  .turn-number {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.4);
-    font-weight: 500;
+  .user-message-wrapper:hover .bubble-actions,
+  .bubble-actions.actions-visible {
+    opacity: 1;
   }
 
   .icon-btn {
@@ -216,21 +236,6 @@
     color: #ff8a8a;
   }
 
-  .bubble-text {
-    font-size: 14px;
-    line-height: 1.5;
-    color: #e0e0e0;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    user-select: text;
-    -webkit-user-select: text;
-  }
-
-  .bubble-text :global(.skill-badge) {
-    display: inline;
-    color: rgba(100, 160, 255, 0.9);
-  }
-
   .bubble-edit-field {
     display: flex;
     flex-direction: column;
@@ -245,14 +250,14 @@
     border-color: rgba(74, 158, 187, 0.4);
   }
 
-  .bubble-edit-field :global(.bubble-editable) {
+  .user-bubble.editing :global(.bubble-editable) {
     font-size: 14px;
     line-height: 1.5;
     max-height: 40vh;
     padding: 4px 0 8px;
   }
 
-  .bubble-edit-field :global(.autocomplete-dropdown) {
+  .user-bubble.editing :global(.autocomplete-dropdown) {
     bottom: auto;
     top: 100%;
     margin-bottom: 0;

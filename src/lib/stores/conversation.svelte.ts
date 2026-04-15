@@ -416,7 +416,7 @@ export function createConversationStore(
               ? { ...tc, status: "completed", completed_at: new Date().toISOString() }
               : tc,
           );
-          tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+          tab.tree.nodes.set(assistantNode.node_id, { ...assistantNode });
           tab.is_executing = false;
           tab.is_streaming = false;
           tab.streamed_content = "";
@@ -581,7 +581,7 @@ export function createConversationStore(
             ? { ...tc, status: "completed", completed_at: new Date().toISOString() }
             : tc,
         );
-        tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+        tab.tree.nodes.set(assistantNode.node_id, { ...assistantNode });
         tab.is_executing = false;
         tab.is_streaming = false;
         tab.streamed_content = "";
@@ -607,7 +607,7 @@ export function createConversationStore(
             ? { ...tc, status: "failed", error: message, completed_at: new Date().toISOString() }
             : tc,
         );
-        tab.tree.nodes.set(assistantNode.node_id, assistantNode);
+        tab.tree.nodes.set(assistantNode.node_id, { ...assistantNode });
         tab.is_executing = false;
         tab.is_streaming = false;
         tab.streamed_content = "";

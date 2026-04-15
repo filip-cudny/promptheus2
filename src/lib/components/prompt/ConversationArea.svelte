@@ -87,7 +87,6 @@
     {#each visiblePairs as pair (pair.user.node_id)}
       <UserBubble
         node={pair.user}
-        messageNumber={pair.message_number}
         showDelete={false}
         onContentChange={(content) => store.updateNodeContent(pair.user.node_id, content)}
         onDelete={() => {}}
@@ -103,7 +102,6 @@
         <AssistantBubble
           node={assistant}
           displayContent={streaming ? store.streamedContent : assistant.content}
-          outputNumber={pair.message_number}
           showDelete={false}
           isStreaming={streaming}
           thinkingContent={streaming ? store.streamedThinking : (assistant.thinking ?? "")}
@@ -131,7 +129,7 @@
     padding: 40px 16px 16px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 2px;
   }
 
   .empty-state {
