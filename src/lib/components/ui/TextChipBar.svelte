@@ -27,9 +27,13 @@
     }
   }
 
-  function openPreview(text: string, index: number) {
+  async function openPreview(text: string, index: number) {
     const sourceWindow = getCurrentWebviewWindow().label;
-    invoke("open_text_preview", { text, index, sourceWindow });
+    try {
+      await invoke("open_text_preview", { text, index, sourceWindow });
+    } catch (e) {
+      console.error("open_text_preview failed:", e);
+    }
   }
 
   function truncate(text: string): string {

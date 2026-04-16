@@ -83,7 +83,7 @@ pub async fn open_text_preview(
     app.show().map_err(|e| e.to_string())?;
 
     win.show().map_err(|e| e.to_string())?;
-    win.set_focus().map_err(|e| e.to_string())?;
+    dialog::focus_window(&win)?;
 
     app.emit_to(label, "load-text", ())
         .map_err(|e| e.to_string())?;

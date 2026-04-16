@@ -197,6 +197,7 @@ mod tests {
                 model: "gpt-4".to_string(),
                 display_name: "GPT-4".to_string(),
                 provider: Default::default(),
+                group: None,
                 api_key: Some("test-key".to_string()),
                 base_url: None,
                 parameters: None,

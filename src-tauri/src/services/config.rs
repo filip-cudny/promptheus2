@@ -438,6 +438,7 @@ mod tests {
             model: "test".to_string(),
             display_name: "Test".to_string(),
             provider: Provider::default(),
+            group: None,
             api_key: Some(api_key.to_string()),
             base_url: None,
             parameters: None,

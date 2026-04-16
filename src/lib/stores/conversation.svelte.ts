@@ -779,6 +779,8 @@ export function createConversationStore(
     if (userNode && userNode.role === "user") {
       await tick();
       tab.input_text = userNode.content;
+      tab.input_images = userNode.images.map((img) => ({ ...img }));
+      tab.input_text_attachments = [...userNode.text_attachments];
       tab.abort_regenerate_node_id = assistantNodeId;
     }
   }
@@ -793,10 +795,14 @@ export function createConversationStore(
     const parentUser = tab.tree.nodes.get(node.parent_id);
     if (parentUser && parentUser.role === "user") {
       parentUser.content = newText;
+      parentUser.images = tab.input_images.map((img) => ({ ...img }));
+      parentUser.text_attachments = [...tab.input_text_attachments];
       tab.tree.nodes.set(parentUser.node_id, parentUser);
     }
 
     tab.input_text = "";
+    tab.input_images = [];
+    tab.input_text_attachments = [];
     await regenerate(assistantNodeId);
   }
 

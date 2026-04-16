@@ -111,12 +111,16 @@ struct SkillSegment {
 static SKILL_TOKEN_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"(?m)(?:^|\s)(/[a-z0-9-]+)").unwrap());
 
-fn parse_input_for_skills(text: &str) -> Vec<SkillSegment> {
+fn parse_input_for_skills(
+    text: &str,
+    is_registered: impl Fn(&str) -> bool,
+) -> Vec<SkillSegment> {
     let skill_positions: Vec<(usize, usize, String)> = SKILL_TOKEN_RE
         .captures_iter(text)
-        .map(|caps| {
+        .filter_map(|caps| {
             let m = caps.get(1).unwrap();
-            (m.start(), m.end(), m.as_str()[1..].to_string())
+            let name = m.as_str()[1..].to_string();
+            is_registered(&name).then_some((m.start(), m.end(), name))
         })
         .collect();
 
@@ -177,7 +181,7 @@ pub fn resolve_skill_input(
         };
     }
 
-    let segments = parse_input_for_skills(text);
+    let segments = parse_input_for_skills(text, |name| skill_service.get_skill(name).is_some());
     let has_any_skill = segments.iter().any(|s| s.skill_name.is_some());
     if !has_any_skill {
         return ResolveSkillResult {
@@ -457,7 +461,7 @@ mod tests {
 
     #[test]
     fn parse_single_skill() {
-        let segments = parse_input_for_skills("/translate hello world");
+        let segments = parse_input_for_skills("/translate hello world", |_| true);
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].skill_name.as_deref(), Some("translate"));
         assert_eq!(segments[0].input, "hello world");
@@ -465,7 +469,7 @@ mod tests {
 
     #[test]
     fn parse_multiple_skills() {
-        let segments = parse_input_for_skills("/translate hello\n/formal world");
+        let segments = parse_input_for_skills("/translate hello\n/formal world", |_| true);
         assert_eq!(segments.len(), 2);
         assert_eq!(segments[0].skill_name.as_deref(), Some("translate"));
         assert_eq!(segments[0].input, "hello");
@@ -475,7 +479,7 @@ mod tests {
 
     #[test]
     fn parse_no_skills() {
-        let segments = parse_input_for_skills("just plain text");
+        let segments = parse_input_for_skills("just plain text", |_| true);
         assert_eq!(segments.len(), 1);
         assert!(segments[0].skill_name.is_none());
         assert_eq!(segments[0].input, "just plain text");
@@ -483,10 +487,30 @@ mod tests {
 
     #[test]
     fn parse_skill_multiline_input() {
-        let segments = parse_input_for_skills("/translate hello\nmore text\neven more");
+        let segments =
+            parse_input_for_skills("/translate hello\nmore text\neven more", |_| true);
         assert_eq!(segments.len(), 1);
         assert_eq!(segments[0].skill_name.as_deref(), Some("translate"));
         assert_eq!(segments[0].input, "hello\nmore text\neven more");
+    }
+
+    #[test]
+    fn parse_keeps_unregistered_skill_as_text() {
+        let segments = parse_input_for_skills(
+            "/todo dodaj /plan-task coś tam",
+            |name| name == "todo",
+        );
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].skill_name.as_deref(), Some("todo"));
+        assert_eq!(segments[0].input, "dodaj /plan-task coś tam");
+    }
+
+    #[test]
+    fn parse_all_unregistered_returns_plain_text() {
+        let segments = parse_input_for_skills("/plan-task coś tam", |_| false);
+        assert_eq!(segments.len(), 1);
+        assert!(segments[0].skill_name.is_none());
+        assert_eq!(segments[0].input, "/plan-task coś tam");
     }
 
     #[test]

@@ -95,6 +95,28 @@ pub fn save_geometry(app: &tauri::AppHandle, window_label: &str, geometry_key: &
     });
 }
 
+pub fn focus_window(win: &tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::glib::object::Cast;
+        use gtk::prelude::GtkWindowExt;
+        use gtk::prelude::WidgetExt;
+
+        if let Ok(gtk_win) = win.gtk_window() {
+            if let Some(gdk_win) = gtk_win.window() {
+                if let Ok(x11_win) = gdk_win.downcast::<gdkx11::X11Window>() {
+                    let timestamp = gdkx11::functions::x11_get_server_time(&x11_win);
+                    log::debug!("focus_window({}): present_with_time({})", win.label(), timestamp);
+                    gtk_win.present_with_time(timestamp);
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    win.set_focus().map_err(|e| e.to_string())
+}
+
 pub async fn restore_size(app: &tauri::AppHandle, window_label: &str, geometry_key: &str) {
     let Some(win) = app.get_webview_window(window_label) else {
         return;
