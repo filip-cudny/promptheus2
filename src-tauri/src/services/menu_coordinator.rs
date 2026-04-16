@@ -150,6 +150,7 @@ impl MenuCoordinator {
         let models: Vec<serde_json::Value> = settings
             .models
             .iter()
+            .filter(|m| m.is_text())
             .map(|m| {
                 serde_json::json!({
                     "id": m.id,
@@ -279,8 +280,8 @@ mod tests {
 
     fn make_config_service() -> ConfigService {
         let dir = tempfile::TempDir::new().unwrap();
-        let example = include_str!("../../../../promptheus/settings_example/settings.json");
-        std::fs::write(dir.path().join("settings.json"), example).unwrap();
+        let default_json = include_str!("../../resources/default_settings.json");
+        std::fs::write(dir.path().join("settings.json"), default_json).unwrap();
         let svc = ConfigService::load(dir.path(), None).unwrap();
         std::mem::forget(dir);
         svc

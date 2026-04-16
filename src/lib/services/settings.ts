@@ -3,7 +3,6 @@ import type {
   Settings,
   ModelConfig,
   NotificationSettings,
-  SpeechToTextModel,
   KeymapGroup,
 } from "$lib/types";
 
@@ -46,10 +45,13 @@ export async function updateNotifications(
   return invoke("update_notifications", { config });
 }
 
-export async function updateSpeechModel(
-  config: SpeechToTextModel,
+export async function setSpeechToTextModel(
+  modelId: string | null,
 ): Promise<void> {
-  return invoke("update_speech_model", { config });
+  return invoke("update_setting", {
+    key: "speech_to_text_model",
+    value: modelId,
+  });
 }
 
 export async function updateKeymaps(keymaps: KeymapGroup[]): Promise<void> {

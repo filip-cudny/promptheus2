@@ -165,7 +165,7 @@ pub async fn toggle_speech_recording(
 
         let stt_prompt = s.config.stt_prompt();
 
-        match s.config.settings().speech_to_text_model.clone() {
+        match s.config.resolve_stt_model().cloned() {
             Some(config) => (config, stt_prompt),
             None => {
                 s.speech.set_transcribing(false);

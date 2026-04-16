@@ -7,7 +7,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Device;
 use serde::Deserialize;
 
-use crate::models::settings::SpeechToTextModel;
+use crate::models::settings::ModelConfig;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SpeechError {
@@ -178,7 +178,7 @@ impl SpeechService {
 
 pub async fn transcribe(
     wav_bytes: Vec<u8>,
-    config: &SpeechToTextModel,
+    config: &ModelConfig,
     prompt: Option<String>,
 ) -> Result<String, SpeechError> {
     let api_key = config
@@ -404,30 +404,37 @@ mod tests {
         assert_eq!(reader.spec().sample_rate, 44100);
     }
 
-    #[tokio::test]
-    async fn transcribe_missing_api_key_returns_error() {
-        let config = SpeechToTextModel {
+    fn stt_test_config(api_key: Option<&str>) -> ModelConfig {
+        ModelConfig {
+            id: "stt-test".into(),
             model: "whisper-1".into(),
             display_name: "Whisper".into(),
-            api_key: None,
+            model_type: crate::models::settings::ModelType::Stt,
+            provider: None,
+            group: None,
+            api_key: api_key.map(|k| k.to_string()),
             base_url: None,
+            parameters: None,
+            context_window_size: None,
+            api_mode: None,
+            store: true,
+            enabled_tools: vec![],
             language: None,
+            api_key_source: None,
             api_key_env: None,
-        };
+        }
+    }
+
+    #[tokio::test]
+    async fn transcribe_missing_api_key_returns_error() {
+        let config = stt_test_config(None);
         let result = transcribe(vec![0; 44], &config, None).await;
         assert!(matches!(result, Err(SpeechError::ApiKeyMissing)));
     }
 
     #[tokio::test]
     async fn transcribe_empty_api_key_returns_error() {
-        let config = SpeechToTextModel {
-            model: "whisper-1".into(),
-            display_name: "Whisper".into(),
-            api_key: Some("".into()),
-            base_url: None,
-            language: None,
-            api_key_env: None,
-        };
+        let config = stt_test_config(Some(""));
         let result = transcribe(vec![0; 44], &config, None).await;
         assert!(matches!(result, Err(SpeechError::ApiKeyMissing)));
     }

@@ -60,12 +60,18 @@ const REASONING_MODELS_BY_PROVIDER: Record<Provider, readonly string[]> = {
   gemini: GEMINI_REASONING_MODELS,
 };
 
-export function supportsReasoning(provider: Provider, modelName: string): boolean {
+export function supportsReasoning(
+  provider: Provider | null,
+  modelName: string,
+): boolean {
+  if (!provider) return false;
   const models = REASONING_MODELS_BY_PROVIDER[provider];
   return models?.includes(modelName) ?? false;
 }
 
-export function getAvailableReasoningLevels(provider: Provider): ReasoningLevel[] {
+export function getAvailableReasoningLevels(
+  provider: Provider | null,
+): ReasoningLevel[] {
   switch (provider) {
     case "openai":
       return ["none", "low", "medium", "high"];

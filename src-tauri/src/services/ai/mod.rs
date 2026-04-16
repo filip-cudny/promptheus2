@@ -70,7 +70,11 @@ impl AiService {
         let mut unavailable_models = HashMap::new();
 
         for model in models {
-            match model.provider {
+            if !model.is_text() {
+                continue;
+            }
+            let provider_type = model.provider.clone().unwrap_or_default();
+            match provider_type {
                 Provider::Openai => {
                     let api_mode = model.api_mode.clone().unwrap_or_default();
                     log::info!(
@@ -90,7 +94,7 @@ impl AiService {
                                     model_name: model.model.clone(),
                                     parameters: model.parameters.clone().unwrap_or_default(),
                                     enabled_tools: model.enabled_tools.clone(),
-                                    provider_type: model.provider.clone(),
+                                    provider_type,
                                     api_mode: api_mode.clone(),
                                 },
                             );

@@ -5,7 +5,7 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 use crate::models::settings::{
-    KeymapGroup, ModelConfig, ModelParameters, NotificationSettings, Settings, SpeechToTextModel,
+    KeymapGroup, ModelConfig, ModelParameters, NotificationSettings, Settings,
 };
 use crate::services::ai::AiService;
 use crate::services::clipboard::ClipboardService;
@@ -158,17 +158,6 @@ pub async fn update_notifications(
 ) -> Result<(), String> {
     let mut state = state.lock().await;
     state.config.update_notifications(config);
-    save_and_emit(&state.config, &app)
-}
-
-#[tauri::command]
-pub async fn update_speech_model(
-    app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
-    config: SpeechToTextModel,
-) -> Result<(), String> {
-    let mut state = state.lock().await;
-    state.config.update_speech_model(config);
     save_and_emit(&state.config, &app)
 }
 

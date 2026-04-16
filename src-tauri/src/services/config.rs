@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::models::settings::{
-    KeymapGroup, ModelConfig, NotificationSettings, Settings, SpeechToTextModel,
+    KeymapGroup, ModelConfig, ModelType, NotificationSettings, Settings,
 };
 use crate::services::env_resolve::resolve_env_refs;
 
@@ -192,6 +192,9 @@ impl ConfigService {
             "quick_action_default_model" => {
                 self.settings.quick_action_default_model = value.as_str().map(|s| s.to_string());
             }
+            "speech_to_text_model" => {
+                self.settings.speech_to_text_model = value.as_str().map(|s| s.to_string());
+            }
             "number_input_debounce_ms" => {
                 if let Some(v) = value.as_u64() {
                     self.settings.number_input_debounce_ms = v as u32;
@@ -230,14 +233,27 @@ impl ConfigService {
 
     pub fn delete_model(&mut self, model_id: &str) {
         self.settings.models.retain(|m| m.id != model_id);
+        if self.settings.default_model.as_deref() == Some(model_id) {
+            self.settings.default_model = None;
+        }
+        if self.settings.quick_action_default_model.as_deref() == Some(model_id) {
+            self.settings.quick_action_default_model = None;
+        }
+        if self.settings.speech_to_text_model.as_deref() == Some(model_id) {
+            self.settings.speech_to_text_model = None;
+        }
     }
 
     pub fn update_notifications(&mut self, config: NotificationSettings) {
         self.settings.notifications = config;
     }
 
-    pub fn update_speech_model(&mut self, config: SpeechToTextModel) {
-        self.settings.speech_to_text_model = Some(config);
+    pub fn resolve_stt_model(&self) -> Option<&ModelConfig> {
+        let id = self.settings.speech_to_text_model.as_deref()?;
+        self.settings
+            .models
+            .iter()
+            .find(|m| m.id == id && m.is_stt())
     }
 
     pub fn update_keymaps(&mut self, keymaps: Vec<KeymapGroup>) {
@@ -364,28 +380,21 @@ pub fn validate(settings: &Settings) -> Result<(), ConfigError> {
         ));
     }
 
-    if let Some(ref speech) = settings.speech_to_text_model {
-        if speech.model.is_empty() {
-            return Err(ConfigError::InvalidSettings(
-                "speech_to_text_model field 'model' cannot be empty".to_string(),
-            ));
-        }
-        if speech.display_name.is_empty() {
-            return Err(ConfigError::InvalidSettings(
-                "speech_to_text_model field 'display_name' cannot be empty".to_string(),
-            ));
-        }
-        if speech.api_key.as_deref().unwrap_or("").is_empty() {
-            return Err(ConfigError::InvalidSettings(
-                "speech_to_text_model requires 'api_key' (use \"${ENV_VAR}\" for env-based keys)".to_string(),
-            ));
-        }
-        if let Some(ref url) = speech.base_url {
-            if !url.is_empty() && !url.starts_with("http://") && !url.starts_with("https://") {
-                return Err(ConfigError::InvalidSettings(
-                    "speech_to_text_model base_url must start with http:// or https://".to_string(),
-                ));
+    if let Some(ref stt_id) = settings.speech_to_text_model {
+        match settings.models.iter().find(|m| &m.id == stt_id) {
+            None => {
+                return Err(ConfigError::InvalidSettings(format!(
+                    "speech_to_text_model references unknown model id: '{}'",
+                    stt_id
+                )));
             }
+            Some(m) if !m.is_stt() => {
+                return Err(ConfigError::InvalidSettings(format!(
+                    "speech_to_text_model '{}' must have type='stt'",
+                    stt_id
+                )));
+            }
+            _ => {}
         }
     }
 
@@ -394,7 +403,7 @@ pub fn validate(settings: &Settings) -> Result<(), ConfigError> {
 
 pub fn migrate_model_params(settings: &mut Settings) {
     for model in &mut settings.models {
-        if model.parameters.is_none() {
+        if model.is_text() && model.parameters.is_none() {
             model.parameters = Some(Default::default());
         }
     }
@@ -411,18 +420,6 @@ pub fn migrate_legacy_env_fields(settings: &mut Settings) {
             }
         }
     }
-
-    if let Some(ref mut speech) = settings.speech_to_text_model {
-        if speech.api_key.is_none() || speech.api_key.as_deref() == Some("") {
-            if let Some(ref env_var) = speech.api_key_env {
-                if !env_var.is_empty() {
-                    log::info!("migrating speech model from api_key_env to ${{}} syntax");
-                    speech.api_key = Some(format!("${{{}}}", env_var));
-                }
-            }
-        }
-    }
-
 }
 
 #[cfg(test)]
@@ -437,7 +434,8 @@ mod tests {
             id: id.to_string(),
             model: "test".to_string(),
             display_name: "Test".to_string(),
-            provider: Provider::default(),
+            model_type: ModelType::Text,
+            provider: Some(Provider::default()),
             group: None,
             api_key: Some(api_key.to_string()),
             base_url: None,
@@ -446,6 +444,28 @@ mod tests {
             api_mode: None,
             store: true,
             enabled_tools: vec![],
+            language: None,
+            api_key_source: None,
+            api_key_env: None,
+        }
+    }
+
+    fn test_stt_model(id: &str, api_key: &str) -> ModelConfig {
+        ModelConfig {
+            id: id.to_string(),
+            model: "whisper-1".to_string(),
+            display_name: "STT".to_string(),
+            model_type: ModelType::Stt,
+            provider: None,
+            group: None,
+            api_key: Some(api_key.to_string()),
+            base_url: None,
+            parameters: None,
+            context_window_size: None,
+            api_mode: None,
+            store: true,
+            enabled_tools: vec![],
+            language: Some("en".to_string()),
             api_key_source: None,
             api_key_env: None,
         }
@@ -453,35 +473,27 @@ mod tests {
 
     fn setup_test_dir() -> TempDir {
         let dir = TempDir::new().unwrap();
-        let example = include_str!("../../../../promptheus/settings_example/settings.json");
-        fs::write(dir.path().join("settings.json"), example).unwrap();
+        let default_json = include_str!("../../resources/default_settings.json");
+        fs::write(dir.path().join("settings.json"), default_json).unwrap();
         dir
     }
 
     #[test]
-    fn test_load_example_settings() {
+    fn test_load_default_settings() {
         let dir = setup_test_dir();
-        let service = ConfigService::load(dir.path(), None).expect("should load example settings");
+        let service = ConfigService::load(dir.path(), None).expect("should load default settings");
         assert!(!service.settings().models.is_empty());
-        assert_eq!(service.settings().models[0].model, "gpt-5.4");
+        assert!(service.settings().models.iter().any(|m| m.is_text()));
+        assert!(service.settings().models.iter().any(|m| m.is_stt()));
     }
 
     #[test]
-    fn test_legacy_migration_converts_api_key_env() {
+    fn test_resolve_stt_model_returns_stt_entry() {
         let dir = setup_test_dir();
         let service = ConfigService::load(dir.path(), None).expect("load");
-        assert_eq!(
-            service.settings().models[0].api_key.as_deref(),
-            Some("${OPENAI_API_KEY}")
-        );
-    }
-
-    #[test]
-    fn test_legacy_migration_converts_speech_api_key_env() {
-        let dir = setup_test_dir();
-        let service = ConfigService::load(dir.path(), None).expect("load");
-        let speech = service.settings().speech_to_text_model.as_ref().unwrap();
-        assert_eq!(speech.api_key.as_deref(), Some("${OPENAI_API_KEY}"));
+        let stt = service.resolve_stt_model().expect("stt model should resolve");
+        assert!(stt.is_stt());
+        assert_eq!(stt.language.as_deref(), Some("pl"));
     }
 
     #[test]
@@ -528,10 +540,45 @@ mod tests {
         let content = fs::read_to_string(dir.path().join("settings.json")).unwrap();
         let saved: serde_json::Value = serde_json::from_str(&content).unwrap();
         let models = saved["models"].as_array().unwrap();
-        assert_eq!(models[0]["api_key"].as_str().unwrap(), "${OPENAI_API_KEY}");
+        let text_model = models.iter().find(|m| m["type"] == "text").unwrap();
+        assert_eq!(text_model["api_key"].as_str().unwrap(), "${OPENAI_API_KEY}");
+        let stt_model = models.iter().find(|m| m["type"] == "stt").unwrap();
+        assert_eq!(stt_model["api_key"].as_str().unwrap(), "${OPENAI_API_KEY}");
+    }
 
-        let speech = &saved["speech_to_text_model"];
-        assert_eq!(speech["api_key"].as_str().unwrap(), "${OPENAI_API_KEY}");
+    #[test]
+    fn test_validate_speech_to_text_model_unknown_id() {
+        let settings = Settings {
+            models: vec![test_model("1", "${KEY}")],
+            speech_to_text_model: Some("missing-stt".to_string()),
+            ..Default::default()
+        };
+        let result = validate(&settings);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("unknown model id"));
+    }
+
+    #[test]
+    fn test_validate_speech_to_text_model_wrong_type() {
+        let settings = Settings {
+            models: vec![test_model("text-1", "${KEY}")],
+            speech_to_text_model: Some("text-1".to_string()),
+            ..Default::default()
+        };
+        let result = validate(&settings);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("type='stt'"));
+    }
+
+    #[test]
+    fn test_delete_model_clears_references() {
+        let dir = setup_test_dir();
+        let mut service = ConfigService::load(dir.path(), None).expect("load");
+        service.add_model(test_stt_model("stt-to-delete", "${KEY}"));
+        service.settings_mut().speech_to_text_model = Some("stt-to-delete".to_string());
+
+        service.delete_model("stt-to-delete");
+        assert_eq!(service.settings().speech_to_text_model, None);
     }
 
     #[test]
@@ -660,12 +707,12 @@ mod tests {
         let resource_dir = TempDir::new().unwrap();
         let resource_settings_dir = resource_dir.path().join("resources");
         fs::create_dir_all(&resource_settings_dir).unwrap();
-        let example = include_str!("../../../../promptheus/settings_example/settings.json");
-        fs::write(resource_settings_dir.join("default_settings.json"), example).unwrap();
+        let default_json = include_str!("../../resources/default_settings.json");
+        fs::write(resource_settings_dir.join("default_settings.json"), default_json).unwrap();
 
         let service = ConfigService::load(dir.path(), Some(resource_dir.path())).expect("should load");
         assert!(dir.path().join("settings.json").exists());
-        assert_eq!(service.settings().models[0].model, "gpt-5.4");
+        assert!(!service.settings().models.is_empty());
     }
 
     #[test]

@@ -12,7 +12,7 @@ export interface Settings {
   menu_section_order: string[];
   description_generator: DescriptionGenerator;
   notifications: NotificationSettings;
-  speech_to_text_model: SpeechToTextModel | null;
+  speech_to_text_model: string | null;
   default_model: string | null;
   number_input_debounce_ms: number;
   models: ModelConfig[];
@@ -27,17 +27,21 @@ export interface Settings {
   selected_tools: string[];
 }
 
+export type ModelType = "text" | "stt";
+
 export interface ModelConfig {
   id: string;
   model: string;
   display_name: string;
-  provider: Provider;
+  type: ModelType;
+  provider: Provider | null;
   group: string | null;
   api_key: string | null;
   base_url: string | null;
   parameters: ModelParameters | null;
   context_window_size: number | null;
   enabled_tools: string[];
+  language: string | null;
 }
 
 export type Provider = "openai" | "anthropic" | "gemini";
@@ -49,13 +53,6 @@ export interface ModelParameters {
   frequency_penalty: number | null;
   presence_penalty: number | null;
   reasoning_effort: string | null;
-}
-
-export interface SpeechToTextModel {
-  model: string;
-  display_name: string;
-  api_key: string | null;
-  base_url: string | null;
 }
 
 export interface KeymapGroup {

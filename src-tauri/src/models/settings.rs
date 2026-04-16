@@ -58,7 +58,7 @@ pub struct Settings {
     pub notifications: NotificationSettings,
 
     #[serde(default)]
-    pub speech_to_text_model: Option<SpeechToTextModel>,
+    pub speech_to_text_model: Option<String>,
 
     #[serde(default)]
     pub default_model: Option<String>,
@@ -106,14 +106,25 @@ pub struct Settings {
     pub selected_tools: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum ModelType {
+    #[default]
+    Text,
+    Stt,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelConfig {
     pub id: String,
     pub model: String,
     pub display_name: String,
 
+    #[serde(default, rename = "type")]
+    pub model_type: ModelType,
+
     #[serde(default)]
-    pub provider: Provider,
+    pub provider: Option<Provider>,
 
     #[serde(default)]
     pub group: Option<String>,
@@ -139,6 +150,9 @@ pub struct ModelConfig {
     #[serde(default)]
     pub enabled_tools: Vec<String>,
 
+    #[serde(default)]
+    pub language: Option<String>,
+
     #[serde(default, skip_serializing)]
     pub api_key_source: Option<String>,
 
@@ -149,6 +163,14 @@ pub struct ModelConfig {
 impl ModelConfig {
     pub fn resolved_api_key(&self) -> Option<String> {
         self.api_key.as_ref().map(|k| resolve_env_refs(k)).filter(|k| !k.is_empty())
+    }
+
+    pub fn is_text(&self) -> bool {
+        matches!(self.model_type, ModelType::Text)
+    }
+
+    pub fn is_stt(&self) -> bool {
+        matches!(self.model_type, ModelType::Stt)
     }
 }
 
@@ -235,30 +257,6 @@ impl ModelParameters {
         }
         params.extra = extra;
         params
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SpeechToTextModel {
-    pub model: String,
-    pub display_name: String,
-
-    #[serde(default)]
-    pub api_key: Option<String>,
-
-    #[serde(default)]
-    pub base_url: Option<String>,
-
-    #[serde(default)]
-    pub language: Option<String>,
-
-    #[serde(default, skip_serializing)]
-    pub api_key_env: Option<String>,
-}
-
-impl SpeechToTextModel {
-    pub fn resolved_api_key(&self) -> Option<String> {
-        self.api_key.as_ref().map(|k| resolve_env_refs(k)).filter(|k| !k.is_empty())
     }
 }
 
@@ -470,35 +468,30 @@ mod tests {
     }
 
     #[test]
-    fn test_deserialize_example_settings() {
-        let json = include_str!("../../../../promptheus/settings_example/settings.json");
-        let settings: Settings = serde_json::from_str(json).expect("failed to deserialize example settings.json");
+    fn test_deserialize_default_settings() {
+        let json = include_str!("../../resources/default_settings.json");
+        let settings: Settings = serde_json::from_str(json).expect("failed to deserialize default_settings.json");
 
         assert!(settings.show_tray_icon);
         assert!(!settings.debug_mode);
         assert_eq!(settings.code_theme, "paraiso-dark");
-        assert_eq!(settings.models.len(), 1);
-        assert_eq!(settings.models[0].model, "gpt-5.4");
-        assert_eq!(settings.models[0].api_key_env.as_deref(), Some("OPENAI_API_KEY"));
         assert_eq!(settings.keymaps.len(), 3);
         assert_eq!(settings.number_input_debounce_ms, 200);
-        assert_eq!(settings.default_model, Some("13b85c38-19cc-4387-a52d-6577478be057".to_string()));
+
+        let stt_id = settings.speech_to_text_model.as_deref().expect("speech_to_text_model should reference an id");
+        let stt_model = settings.models.iter().find(|m| m.id == stt_id).expect("stt model should be present in models list");
+        assert!(stt_model.is_stt());
 
         assert!(settings.notifications.events.prompt_execution_success);
         assert!(settings.notifications.monochromatic_notification_icons);
         assert_eq!(settings.notifications.background_colors.success, "#FFFFFF");
 
-        let speech = settings.speech_to_text_model.expect("speech model should be present");
-        assert_eq!(speech.model, "gpt-4o-transcribe");
-        assert_eq!(speech.api_key_env.as_deref(), Some("OPENAI_API_KEY"));
-
-        assert_eq!(settings.description_generator.model, "");
         assert!(settings.description_generator.prompt.is_some());
     }
 
     #[test]
     fn test_round_trip() {
-        let json = include_str!("../../../../promptheus/settings_example/settings.json");
+        let json = include_str!("../../resources/default_settings.json");
         let settings: Settings = serde_json::from_str(json).expect("deserialize");
         let serialized = serde_json::to_string_pretty(&settings).expect("serialize");
         let settings2: Settings = serde_json::from_str(&serialized).expect("re-deserialize");

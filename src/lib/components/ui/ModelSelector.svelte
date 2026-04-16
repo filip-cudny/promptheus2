@@ -53,7 +53,7 @@
   let groupedModels = $derived.by(() => {
     const groups = new Map<string, ModelConfig[]>();
     for (const model of models) {
-      const key = model.group ?? model.provider;
+      const key = model.group ?? model.provider ?? "other";
       const list = groups.get(key);
       if (list) list.push(model);
       else groups.set(key, [model]);

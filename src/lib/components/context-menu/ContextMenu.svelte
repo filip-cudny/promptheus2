@@ -426,6 +426,7 @@
               <ModelSelector
                 models={modelsData.models.map((m) => ({
                   id: m.id,
+                  type: "text" as const,
                   model: m.model,
                   display_name: m.display_name,
                   provider: m.provider,
@@ -435,6 +436,7 @@
                   parameters: m.reasoning_effort ? { temperature: null, max_tokens: null, top_p: null, frequency_penalty: null, presence_penalty: null, reasoning_effort: m.reasoning_effort } : null,
                   context_window_size: null,
                   enabled_tools: [],
+                  language: null,
                 }))}
                 selectedModelId={modelsDefaultModelId}
                 reasoningEffort={modelsReasoningEffort}

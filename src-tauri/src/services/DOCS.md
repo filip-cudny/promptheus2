@@ -73,7 +73,7 @@ Uses the `arboard` crate for cross-platform clipboard access (text and images). 
 
 **API key sanitization**: `save()` deep-clones settings before writing. Env-sourced model keys and speech model keys are stripped. Direct API keys are preserved.
 
-**Mutation methods**: `add_model`, `update_model` (upsert), `delete_model`, `add_prompt`, `update_prompt`, `delete_prompt`, `reorder_prompts`, `update_notifications`, `update_speech_model`, `update_keymaps`, `update_menu_section_order`, `update_setting`.
+**Mutation methods**: `add_model`, `update_model` (upsert), `delete_model`, `add_prompt`, `update_prompt`, `delete_prompt`, `reorder_prompts`, `update_notifications`, `update_keymaps`, `update_menu_section_order`, `update_setting`. STT models live in the same `models` list (discriminated by `ModelConfig.model_type = Stt`) — use `add_model`/`update_model`/`delete_model`. `settings.speech_to_text_model: Option<String>` holds the id of the currently selected STT model; resolve via `ConfigService::resolve_stt_model()`.
 
 ### Testing pattern
 

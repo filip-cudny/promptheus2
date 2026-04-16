@@ -82,6 +82,11 @@ pub async fn open_text_preview(
     #[cfg(target_os = "macos")]
     app.show().map_err(|e| e.to_string())?;
 
+    #[cfg(target_os = "linux")]
+    if already_visible {
+        win.hide().map_err(|e| e.to_string())?;
+    }
+
     win.show().map_err(|e| e.to_string())?;
     dialog::focus_window(&win)?;
 

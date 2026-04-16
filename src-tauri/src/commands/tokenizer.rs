@@ -145,7 +145,7 @@ pub async fn count_conversation_tokens(
 
         let provider = model_config
             .as_ref()
-            .map(|m| m.provider.clone())
+            .and_then(|m| m.provider.clone())
             .unwrap_or_default();
 
         let api_mode = model_config
