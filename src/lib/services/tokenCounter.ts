@@ -42,6 +42,7 @@ const IMAGE_TOKENS: Record<Provider, number> = {
   openai: 765,
   anthropic: 1334,
   gemini: 258,
+  elevenlabs: 765,
 };
 
 export function estimateImageTokens(provider: Provider): number {

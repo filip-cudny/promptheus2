@@ -55,7 +55,7 @@ fn count_images_in_messages(messages: &[ProcessedMessage]) -> usize {
 
 fn image_tokens_for_provider(provider: &Provider) -> usize {
     match provider {
-        Provider::Openai => 765,
+        Provider::Openai | Provider::ElevenLabs => 765,
         Provider::Anthropic => 1334,
         Provider::Gemini => 258,
     }

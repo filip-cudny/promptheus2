@@ -306,6 +306,26 @@ impl ConfigService {
         if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
     }
 
+    pub fn stt_keyterms(&self, model: &ModelConfig) -> Vec<String> {
+        let Some(raw) = model.keyterms_file.as_deref() else {
+            return Vec::new();
+        };
+        let filename = resolve_env_refs(raw);
+        if filename.is_empty() {
+            return Vec::new();
+        }
+        let path = self.config_dir.join(filename);
+        let Ok(content) = std::fs::read_to_string(&path) else {
+            return Vec::new();
+        };
+        content
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .map(str::to_string)
+            .collect()
+    }
+
     pub fn config_dir(&self) -> &Path {
         &self.config_dir
     }
@@ -445,6 +465,8 @@ mod tests {
             store: true,
             enabled_tools: vec![],
             language: None,
+            keyterms_file: None,
+            no_verbatim: None,
             api_key_source: None,
             api_key_env: None,
         }
@@ -466,6 +488,8 @@ mod tests {
             store: true,
             enabled_tools: vec![],
             language: Some("en".to_string()),
+            keyterms_file: None,
+            no_verbatim: None,
             api_key_source: None,
             api_key_env: None,
         }

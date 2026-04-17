@@ -23,7 +23,9 @@ pub fn count_tokens(text: &str, provider: &Provider) -> usize {
     }
 
     match provider {
-        Provider::Openai => openai_bpe().encode_with_special_tokens(text).len(),
+        Provider::Openai | Provider::ElevenLabs => {
+            openai_bpe().encode_with_special_tokens(text).len()
+        }
         Provider::Anthropic => claude_tokenizer::count_tokens(text).unwrap_or(0),
         Provider::Gemini => gemini_tok().count_tokens(text, None).total_tokens,
     }

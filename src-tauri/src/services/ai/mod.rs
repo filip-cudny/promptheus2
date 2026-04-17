@@ -117,6 +117,12 @@ impl AiService {
                     unavailable_models
                         .insert(model.id.clone(), "Gemini provider not yet supported".into());
                 }
+                Provider::ElevenLabs => {
+                    unavailable_models.insert(
+                        model.id.clone(),
+                        "ElevenLabs provider is speech-to-text only".into(),
+                    );
+                }
             }
         }
 

@@ -44,7 +44,7 @@ export interface ModelConfig {
   language: string | null;
 }
 
-export type Provider = "openai" | "anthropic" | "gemini";
+export type Provider = "openai" | "anthropic" | "gemini" | "elevenlabs";
 
 export interface ModelParameters {
   temperature: number | null;

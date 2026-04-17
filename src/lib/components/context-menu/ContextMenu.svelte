@@ -14,7 +14,7 @@
   import { openConversationDialog } from "$lib/services/conversationDialog";
   import { isExecuting, getExecutingSkillId } from "$lib/stores/execution.svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import { updateSetting, updateModelReasoningEffort } from "$lib/services/settings";
+  import { updateSetting, updateModelReasoningEffort, setSpeechToTextModel } from "$lib/services/settings";
   import type { ModelConfig, Provider } from "$lib/types";
   import {
     getItems,
@@ -100,6 +100,8 @@
     models: { id: string; display_name: string; model: string; provider: Provider; reasoning_effort: string | null }[];
     default_model_id: string | null;
     default_reasoning_effort: string | null;
+    stt_models: { id: string; display_name: string; model: string; provider: Provider }[];
+    speech_to_text_model_id: string | null;
   }
 
   function extractModelsData(item: MenuItem): ModelsMenuData | null {
@@ -109,6 +111,7 @@
 
   let modelsDefaultModelId = $state<string | null>(null);
   let modelsReasoningEffort = $state<string | null>(null);
+  let sttModelId = $state<string | null>(null);
 
   let menuEl: HTMLDivElement | undefined = $state();
   let settingsOpen = $state(false);
@@ -296,6 +299,7 @@
       if (data) {
         modelsDefaultModelId = data.default_model_id;
         modelsReasoningEffort = data.default_reasoning_effort;
+        sttModelId = data.speech_to_text_model_id;
       }
     }
   });
@@ -421,7 +425,7 @@
         </div>
         <FloatingPanel visible={settingsOpen} anchorEl={settingsAnchorEl} onclose={closeSettingsPanel}>
           {#if modelsData && modelsData.models.length > 0}
-            <div class="panel-label">Quick Action Model</div>
+            <div class="panel-label">Quick action model</div>
             <div class="models-row" onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}>
               <ModelSelector
                 models={modelsData.models.map((m) => ({
@@ -452,6 +456,35 @@
                     await updateModelReasoningEffort(modelsDefaultModelId, effort);
                   }
                 }}
+                preventDismiss={{ suppress: suppressClose, resume: resumeClose }}
+              />
+            </div>
+          {/if}
+          {#if modelsData && modelsData.stt_models.length > 0}
+            <div class="panel-label">Speech-to-text model</div>
+            <div class="models-row" onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}>
+              <ModelSelector
+                models={modelsData.stt_models.map((m) => ({
+                  id: m.id,
+                  type: "stt" as const,
+                  model: m.model,
+                  display_name: m.display_name,
+                  provider: m.provider,
+                  group: null,
+                  api_key: null,
+                  base_url: null,
+                  parameters: null,
+                  context_window_size: null,
+                  enabled_tools: [],
+                  language: null,
+                }))}
+                selectedModelId={sttModelId}
+                reasoningEffort={null}
+                onModelSelect={async (modelId) => {
+                  sttModelId = modelId;
+                  await setSpeechToTextModel(modelId);
+                }}
+                onReasoningSelect={() => {}}
                 preventDismiss={{ suppress: suppressClose, resume: resumeClose }}
               />
             </div>

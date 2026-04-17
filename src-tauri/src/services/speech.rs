@@ -7,7 +7,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::Device;
 use serde::Deserialize;
 
-use crate::models::settings::ModelConfig;
+use crate::models::settings::{ModelConfig, Provider};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SpeechError {
@@ -180,6 +180,45 @@ pub async fn transcribe(
     wav_bytes: Vec<u8>,
     config: &ModelConfig,
     prompt: Option<String>,
+    keyterms: Vec<String>,
+) -> Result<String, SpeechError> {
+    match config.provider {
+        Some(Provider::ElevenLabs) => transcribe_elevenlabs(wav_bytes, config, keyterms).await,
+        _ => transcribe_openai(wav_bytes, config, prompt).await,
+    }
+}
+
+fn build_http_client() -> Result<reqwest::Client, SpeechError> {
+    reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(60))
+        .build()
+        .map_err(|e| SpeechError::TranscriptionFailed(e.to_string()))
+}
+
+fn map_send_error(e: reqwest::Error) -> SpeechError {
+    if e.is_connect() {
+        SpeechError::TranscriptionFailed("Connection failed — check your internet".into())
+    } else {
+        SpeechError::TranscriptionFailed(e.to_string())
+    }
+}
+
+async fn map_http_error(status: reqwest::StatusCode, response: reqwest::Response) -> SpeechError {
+    let body = response.text().await.unwrap_or_default();
+    match status.as_u16() {
+        401 => SpeechError::TranscriptionFailed("API key is invalid or expired".into()),
+        429 => SpeechError::TranscriptionFailed(
+            "Rate limit exceeded — please wait and try again".into(),
+        ),
+        _ => SpeechError::TranscriptionFailed(format!("API error (status {status}): {body}")),
+    }
+}
+
+async fn transcribe_openai(
+    wav_bytes: Vec<u8>,
+    config: &ModelConfig,
+    prompt: Option<String>,
 ) -> Result<String, SpeechError> {
     let api_key = config
         .resolved_api_key()
@@ -192,6 +231,13 @@ pub async fn transcribe(
         .trim_end_matches('/');
 
     let url = format!("{base_url}/audio/transcriptions");
+
+    log::debug!(
+        "STT transcribe provider=openai model={} bytes={} has_prompt={}",
+        config.model,
+        wav_bytes.len(),
+        prompt.is_some()
+    );
 
     let file_part = reqwest::multipart::Part::bytes(wav_bytes)
         .file_name("recording.wav")
@@ -210,42 +256,88 @@ pub async fn transcribe(
         form = form.text("prompt", prompt);
     }
 
-    let client = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(10))
-        .timeout(std::time::Duration::from_secs(60))
-        .build()
-        .map_err(|e| SpeechError::TranscriptionFailed(e.to_string()))?;
-
-    let response = client
+    let response = build_http_client()?
         .post(&url)
         .header("Authorization", format!("Bearer {api_key}"))
         .multipart(form)
         .send()
         .await
-        .map_err(|e| {
-            if e.is_connect() {
-                SpeechError::TranscriptionFailed(
-                    "Connection failed — check your internet".into(),
-                )
-            } else {
-                SpeechError::TranscriptionFailed(e.to_string())
-            }
-        })?;
+        .map_err(map_send_error)?;
 
     let status = response.status();
     if !status.is_success() {
-        let body = response.text().await.unwrap_or_default();
-        return Err(match status.as_u16() {
-            401 => SpeechError::TranscriptionFailed(
-                "API key is invalid or expired".into(),
-            ),
-            429 => SpeechError::TranscriptionFailed(
-                "Rate limit exceeded — please wait and try again".into(),
-            ),
-            _ => SpeechError::TranscriptionFailed(format!(
-                "API error (status {status}): {body}"
-            )),
-        });
+        return Err(map_http_error(status, response).await);
+    }
+
+    let parsed: TranscriptionResponse = response
+        .json()
+        .await
+        .map_err(|e| SpeechError::TranscriptionFailed(format!("Failed to parse response: {e}")))?;
+
+    let text = parsed.text.trim().to_string();
+    if text.is_empty() {
+        return Err(SpeechError::NoSpeechDetected);
+    }
+
+    Ok(text)
+}
+
+async fn transcribe_elevenlabs(
+    wav_bytes: Vec<u8>,
+    config: &ModelConfig,
+    keyterms: Vec<String>,
+) -> Result<String, SpeechError> {
+    let api_key = config
+        .resolved_api_key()
+        .ok_or(SpeechError::ApiKeyMissing)?;
+
+    let base_url = config
+        .base_url
+        .as_deref()
+        .unwrap_or("https://api.elevenlabs.io/v1")
+        .trim_end_matches('/');
+
+    let url = format!("{base_url}/speech-to-text");
+
+    log::debug!(
+        "STT transcribe provider=elevenlabs model={} bytes={} keyterms={}",
+        config.model,
+        wav_bytes.len(),
+        keyterms.len()
+    );
+
+    let file_part = reqwest::multipart::Part::bytes(wav_bytes)
+        .file_name("recording.wav")
+        .mime_str("audio/wav")
+        .map_err(|e| SpeechError::TranscriptionFailed(e.to_string()))?;
+
+    let mut form = reqwest::multipart::Form::new()
+        .part("file", file_part)
+        .text("model_id", config.model.clone());
+
+    if let Some(ref lang) = config.language {
+        form = form.text("language_code", lang.clone());
+    }
+
+    if let Some(flag) = config.no_verbatim {
+        form = form.text("no_verbatim", flag.to_string());
+    }
+
+    for term in keyterms {
+        form = form.text("keyterms", term);
+    }
+
+    let response = build_http_client()?
+        .post(&url)
+        .header("xi-api-key", api_key)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(map_send_error)?;
+
+    let status = response.status();
+    if !status.is_success() {
+        return Err(map_http_error(status, response).await);
     }
 
     let parsed: TranscriptionResponse = response
@@ -420,6 +512,8 @@ mod tests {
             store: true,
             enabled_tools: vec![],
             language: None,
+            keyterms_file: None,
+            no_verbatim: None,
             api_key_source: None,
             api_key_env: None,
         }
@@ -428,14 +522,14 @@ mod tests {
     #[tokio::test]
     async fn transcribe_missing_api_key_returns_error() {
         let config = stt_test_config(None);
-        let result = transcribe(vec![0; 44], &config, None).await;
+        let result = transcribe(vec![0; 44], &config, None, vec![]).await;
         assert!(matches!(result, Err(SpeechError::ApiKeyMissing)));
     }
 
     #[tokio::test]
     async fn transcribe_empty_api_key_returns_error() {
         let config = stt_test_config(Some(""));
-        let result = transcribe(vec![0; 44], &config, None).await;
+        let result = transcribe(vec![0; 44], &config, None, vec![]).await;
         assert!(matches!(result, Err(SpeechError::ApiKeyMissing)));
     }
 

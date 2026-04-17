@@ -162,6 +162,20 @@ impl MenuCoordinator {
             })
             .collect();
 
+        let stt_models: Vec<serde_json::Value> = settings
+            .models
+            .iter()
+            .filter(|m| m.is_stt())
+            .map(|m| {
+                serde_json::json!({
+                    "id": m.id,
+                    "display_name": m.display_name,
+                    "model": m.model,
+                    "provider": m.provider,
+                })
+            })
+            .collect();
+
         vec![MenuItem {
             id: "__models__".to_string(),
             label: "Models".to_string(),
@@ -170,6 +184,8 @@ impl MenuCoordinator {
                 "models": models,
                 "default_model_id": default_model_id,
                 "default_reasoning_effort": default_reasoning_effort,
+                "stt_models": stt_models,
+                "speech_to_text_model_id": settings.speech_to_text_model,
             })),
             enabled: true,
             separator_after: false,

@@ -153,6 +153,12 @@ pub struct ModelConfig {
     #[serde(default)]
     pub language: Option<String>,
 
+    #[serde(default)]
+    pub keyterms_file: Option<String>,
+
+    #[serde(default)]
+    pub no_verbatim: Option<bool>,
+
     #[serde(default, skip_serializing)]
     pub api_key_source: Option<String>,
 
@@ -181,6 +187,7 @@ pub enum Provider {
     Openai,
     Anthropic,
     Gemini,
+    ElevenLabs,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]

@@ -58,6 +58,7 @@ const REASONING_MODELS_BY_PROVIDER: Record<Provider, readonly string[]> = {
   openai: OPENAI_REASONING_MODELS,
   anthropic: ANTHROPIC_REASONING_MODELS,
   gemini: GEMINI_REASONING_MODELS,
+  elevenlabs: [],
 };
 
 export function supportsReasoning(

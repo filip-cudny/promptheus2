@@ -25,29 +25,20 @@ pub fn show_notification(handle: &tauri::AppHandle, payload: NotificationPayload
 
     if SHOW_IN_FLIGHT
         .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
-        .is_err()
+        .is_ok()
     {
-        return;
-    }
-
-    let handle = handle.clone();
-    tauri::async_runtime::spawn(async move {
-        loop {
+        let handle = handle.clone();
+        tauri::async_runtime::spawn(async move {
             if let Err(e) = show_notification_window(&handle) {
                 log::error!("show_notification failed: {e}");
-            }
-
-            let pending_empty = PENDING
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .is_empty();
-
-            if pending_empty {
                 SHOW_IN_FLIGHT.store(false, Ordering::Release);
-                break;
             }
+        });
+    } else if let Some(win) = handle.get_webview_window("notification") {
+        if let Err(e) = win.eval("drainPending()") {
+            log::error!("notification drainPending eval failed: {e}");
         }
-    });
+    }
 }
 
 fn show_notification_window(handle: &tauri::AppHandle) -> Result<(), String> {
@@ -112,6 +103,7 @@ pub async fn update_notification_window(
     if count == 0 {
         win.hide().map_err(|e| e.to_string())?;
         *ANCHOR.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        SHOW_IN_FLIGHT.store(false, Ordering::Release);
         return Ok(());
     }
 
