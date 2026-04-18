@@ -213,6 +213,24 @@
   }
 
   async function handleKeydown(e: KeyboardEvent) {
+    if (e.key.toLowerCase() === "v" && e.shiftKey && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      try {
+        const text = await invoke<string>("get_clipboard_text");
+        if (text) {
+          document.execCommand("insertText", false, text);
+          return;
+        }
+      } catch {}
+      try {
+        const [data, mediaType] = await invoke<[string, string]>("get_clipboard_image");
+        if (data) {
+          localImages = [...localImages, { data, media_type: mediaType }];
+        }
+      } catch {}
+      return;
+    }
+
     if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       sendOrRegenerate();

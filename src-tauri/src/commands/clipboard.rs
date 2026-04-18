@@ -4,9 +4,14 @@ use tokio::sync::Mutex;
 use super::settings::AppState;
 
 #[tauri::command]
-pub fn get_clipboard_text(state: State<'_, Mutex<AppState>>) -> Result<String, String> {
-    let state = state.blocking_lock();
-    state.clipboard.get_text().map_err(|e| e.to_string())
+pub fn get_clipboard_text() -> Result<String, String> {
+    let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
+    let text = clipboard.get_text().map_err(|e| e.to_string())?;
+    let trimmed = text.trim().to_string();
+    if trimmed.is_empty() {
+        return Err("clipboard is empty".into());
+    }
+    Ok(trimmed)
 }
 
 #[tauri::command]
