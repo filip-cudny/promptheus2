@@ -470,6 +470,16 @@ pub fn run() {
                 log::info!("system tray initialized");
             }
 
+            #[cfg(desktop)]
+            {
+                use tauri_plugin_autostart::MacosLauncher;
+                app.handle().plugin(tauri_plugin_autostart::init(
+                    MacosLauncher::LaunchAgent,
+                    None,
+                ))?;
+                services::autostart::reconcile(app.handle(), config_service.settings());
+            }
+
             create_app_windows(app)?;
 
             let bindings = services::hotkeys::get_active_bindings(config_service.settings());

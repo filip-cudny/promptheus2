@@ -200,5 +200,6 @@ pub async fn reload_settings(
         s.config.settings().clone()
     };
     crate::reload_shortcuts(&app, &settings);
+    crate::services::autostart::reconcile(&app, &settings);
     Ok(())
 }

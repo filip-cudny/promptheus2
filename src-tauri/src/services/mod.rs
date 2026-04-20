@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod autostart;
 pub mod clipboard;
 pub mod env_resolve;
 pub mod shell_env;

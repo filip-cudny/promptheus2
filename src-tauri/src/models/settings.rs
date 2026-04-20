@@ -43,6 +43,9 @@ pub struct Settings {
     pub show_tray_icon: bool,
 
     #[serde(default)]
+    pub launch_at_startup: bool,
+
+    #[serde(default)]
     pub debug_mode: bool,
 
     #[serde(default = "default_code_theme")]
@@ -383,6 +386,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             show_tray_icon: true,
+            launch_at_startup: false,
             debug_mode: false,
             code_theme: default_code_theme(),
             menu_section_order: default_menu_section_order(),
@@ -518,6 +522,7 @@ mod tests {
     fn test_deserialize_empty_json() {
         let settings: Settings = serde_json::from_str("{}").expect("empty JSON should use defaults");
         assert!(settings.show_tray_icon);
+        assert!(!settings.launch_at_startup);
         assert!(!settings.debug_mode);
         assert_eq!(settings.code_theme, "paraiso-dark");
         assert_eq!(settings.number_input_debounce_ms, 200);

@@ -1,5 +1,6 @@
 {
   "show_tray_icon": true,
+  "launch_at_startup": false,
   "debug_mode": false,
   "code_theme": "paraiso-dark",
   "menu_section_order": [
