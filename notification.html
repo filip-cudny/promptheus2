@@ -88,7 +88,8 @@
       };
       var ITEM_GAP = 8;
       var ENTRANCE_STAGGER = 80;
-      var REMOVAL_STAGGER = 300;
+      var IS_LINUX = navigator.userAgent.indexOf("Linux") !== -1;
+      var REMOVAL_STAGGER = IS_LINUX ? 450 : 300;
       var stack = document.getElementById("stack");
 
       var registry = {};
@@ -168,13 +169,17 @@
           return;
         }
         var id = removalQueue.shift();
-        removeNotification(id);
-        removalTimer = setTimeout(processRemovalQueue, REMOVAL_STAGGER);
+        removeNotification(id, function() {
+          removalTimer = setTimeout(processRemovalQueue, REMOVAL_STAGGER);
+        });
       }
 
-      function removeNotification(id) {
+      function removeNotification(id, onDone) {
         var entry = registry[id];
-        if (!entry || entry.state === "exiting" || entry.state === "removed") return;
+        if (!entry || entry.state === "exiting" || entry.state === "removed") {
+          if (onDone) onDone();
+          return;
+        }
         entry.state = "exiting";
         if (entry.timerId) {
           clearTimeout(entry.timerId);
@@ -189,6 +194,7 @@
           if (entry.el.parentNode) entry.el.parentNode.removeChild(entry.el);
           delete registry[id];
           debouncedResize();
+          if (onDone) onDone();
         }
         entry.el.addEventListener("transitionend", cleanup, { once: true });
         setTimeout(cleanup, 500);
@@ -242,6 +248,7 @@
             var n = pending[i];
             var el = createToastElement(n.level, n.title, n.message, n.monochromatic);
             el.dataset.notifId = n.id;
+            if (IS_LINUX) el.classList.add("visible");
             stack.appendChild(el);
             registry[n.id] = { el: el, timerId: null, state: "entering" };
             entries.push({ id: n.id, level: n.level, el: el });
@@ -252,7 +259,7 @@
               (function(entry, delay) {
                 setTimeout(function() {
                   if (!registry[entry.id] || registry[entry.id].state !== "entering") return;
-                  fadeIn(entry.el);
+                  if (!IS_LINUX) fadeIn(entry.el);
                   registry[entry.id].state = "visible";
                   scheduleDismissal(entry.id, entry.level);
                 }, delay);
