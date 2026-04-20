@@ -86,7 +86,7 @@ pub async fn execute_prompt(
 
 ### Provider Pattern
 
-Mirrors the original app's architecture:
+Menu content is assembled from pluggable providers:
 
 - Each provider implements a trait that returns `Vec<MenuItem>`.
 - Providers are registered at startup and queried when the menu is shown.
