@@ -96,6 +96,7 @@
       var draining = false;
       var removalQueue = [];
       var removalTimer = null;
+      var removalInProgress = false;
       var resizeTimer = null;
 
       function activeCount() {
@@ -103,7 +104,7 @@
         var ids = Object.keys(registry);
         for (var i = 0; i < ids.length; i++) {
           var s = registry[ids[i]].state;
-          if (s === "entering" || s === "visible") n++;
+          if (s === "entering" || s === "visible" || s === "exiting") n++;
         }
         return n;
       }
@@ -160,16 +161,19 @@
       function queueRemoval(id) {
         if (!registry[id] || registry[id].state !== "visible") return;
         removalQueue.push(id);
-        if (!removalTimer) processRemovalQueue();
+        if (!removalInProgress && !removalTimer) processRemovalQueue();
       }
 
       function processRemovalQueue() {
+        removalTimer = null;
         if (removalQueue.length === 0) {
-          removalTimer = null;
+          removalInProgress = false;
           return;
         }
+        removalInProgress = true;
         var id = removalQueue.shift();
         removeNotification(id, function() {
+          removalInProgress = false;
           removalTimer = setTimeout(processRemovalQueue, REMOVAL_STAGGER);
         });
       }
@@ -213,7 +217,8 @@
         var children = stack.children;
         for (var i = 0; i < children.length; i++) {
           var id = children[i].dataset.notifId;
-          if (id && registry[id] && (registry[id].state === "entering" || registry[id].state === "visible")) {
+          var entry = registry[id];
+          if (id && entry && entry.state !== "removed") {
             if (total > 0) total += ITEM_GAP;
             total += children[i].offsetHeight;
           }

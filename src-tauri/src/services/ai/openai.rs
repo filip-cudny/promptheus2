@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::pin::Pin;
 
 use async_trait::async_trait;
@@ -171,6 +172,128 @@ struct ChunkUsage {
     completion_tokens: usize,
 }
 
+#[derive(Default)]
+struct StreamState {
+    accumulated: String,
+    accumulated_thinking: String,
+    tool_calls: Vec<AccumulatedToolCall>,
+    pending_chunks: VecDeque<StreamChunk>,
+}
+
+#[derive(Default)]
+struct AccumulatedToolCall {
+    id: String,
+    name: String,
+    arguments: String,
+}
+
+fn process_chunk(state: &mut StreamState, chunk: ChatCompletionChunk) {
+    let usage = chunk.usage.map(|u| TokenUsage {
+        prompt_tokens: u.prompt_tokens,
+        completion_tokens: u.completion_tokens,
+    });
+
+    let (delta, finish_reason) = match chunk.choices.into_iter().next() {
+        Some(c) => (Some(c.delta), c.finish_reason),
+        None => (None, None),
+    };
+
+    if let Some(tool_call_deltas) = delta.as_ref().and_then(|d| d.tool_calls.as_ref()) {
+        for tc_delta in tool_call_deltas {
+            while state.tool_calls.len() <= tc_delta.index {
+                state.tool_calls.push(AccumulatedToolCall::default());
+            }
+
+            let fn_delta = tc_delta.function.as_ref();
+            let slot = &mut state.tool_calls[tc_delta.index];
+            let is_start = slot.id.is_empty() && tc_delta.id.is_some();
+
+            if let Some(id) = tc_delta.id.as_ref() {
+                slot.id = id.clone();
+            }
+            if let Some(name) = fn_delta.and_then(|f| f.name.as_ref()) {
+                slot.name = name.clone();
+            }
+            if let Some(args) = fn_delta.and_then(|f| f.arguments.as_ref()) {
+                slot.arguments.push_str(args);
+            }
+
+            if is_start {
+                let marker = format!("{{{{tool_call:{}}}}}", slot.id);
+                state.accumulated.push_str(&marker);
+                state.pending_chunks.push_back(StreamChunk {
+                    delta: marker,
+                    accumulated: state.accumulated.clone(),
+                    thinking_delta: None,
+                    accumulated_thinking: None,
+                    usage: None,
+                    tool_call_event: Some(ToolCallEvent::Started {
+                        tool_call_id: slot.id.clone(),
+                        tool_name: slot.name.clone(),
+                    }),
+                });
+            }
+        }
+    }
+
+    let content = delta.as_ref().and_then(|d| d.content.as_deref()).unwrap_or("");
+    let thinking = delta
+        .as_ref()
+        .and_then(|d| d.reasoning_content.as_deref().or(d.reasoning.as_deref()))
+        .unwrap_or("");
+
+    if !content.is_empty() || !thinking.is_empty() {
+        state.accumulated.push_str(content);
+        state.accumulated_thinking.push_str(thinking);
+        let thinking_delta = (!thinking.is_empty()).then(|| thinking.to_string());
+        let acc_thinking = (!state.accumulated_thinking.is_empty())
+            .then(|| state.accumulated_thinking.clone());
+        state.pending_chunks.push_back(StreamChunk {
+            delta: content.to_string(),
+            accumulated: state.accumulated.clone(),
+            thinking_delta,
+            accumulated_thinking: acc_thinking,
+            usage: None,
+            tool_call_event: None,
+        });
+    }
+
+    if finish_reason.as_deref() == Some("tool_calls") {
+        for tc in std::mem::take(&mut state.tool_calls) {
+            if tc.id.is_empty() {
+                continue;
+            }
+            state.pending_chunks.push_back(StreamChunk {
+                delta: String::new(),
+                accumulated: state.accumulated.clone(),
+                thinking_delta: None,
+                accumulated_thinking: None,
+                usage: None,
+                tool_call_event: Some(ToolCallEvent::ArgumentsComplete {
+                    tool_call_id: tc.id,
+                    tool_name: tc.name,
+                    arguments: serde_json::from_str(&tc.arguments).unwrap_or(serde_json::Value::Null),
+                }),
+            });
+        }
+    }
+
+    if usage.is_some() {
+        if let Some(last) = state.pending_chunks.back_mut() {
+            last.usage = usage;
+        } else {
+            state.pending_chunks.push_back(StreamChunk {
+                delta: String::new(),
+                accumulated: state.accumulated.clone(),
+                thinking_delta: None,
+                accumulated_thinking: None,
+                usage,
+                tool_call_event: None,
+            });
+        }
+    }
+}
+
 #[async_trait]
 impl AiProvider for OpenAiProvider {
     fn supported_params(&self) -> &'static [&'static str] {
@@ -243,180 +366,160 @@ impl AiProvider for OpenAiProvider {
         }
 
         let sse_stream = parse_sse_stream(response);
+        let state = StreamState::default();
 
-        struct UnfoldState {
-            sse_stream: Pin<Box<dyn Stream<Item = Result<String, reqwest::Error>> + Send>>,
-            accumulated: String,
-            accumulated_thinking: String,
-            tool_calls: Vec<AccumulatedToolCall>,
-            pending_tool_done_events: Vec<ToolCallEvent>,
-        }
-
-        struct AccumulatedToolCall {
-            id: String,
-            name: String,
-            arguments: String,
-        }
-
-        let state = UnfoldState {
-            sse_stream,
-            accumulated: String::new(),
-            accumulated_thinking: String::new(),
-            tool_calls: Vec::new(),
-            pending_tool_done_events: Vec::new(),
-        };
-
-        let stream = futures::stream::unfold(state, |mut state| async move {
-            if let Some(event) = state.pending_tool_done_events.pop() {
-                return Some((
-                    Ok(StreamChunk {
-                        delta: String::new(),
-                        accumulated: state.accumulated.clone(),
-                        thinking_delta: None,
-                        accumulated_thinking: None,
-                        usage: None,
-                        tool_call_event: Some(event),
-                    }),
-                    state,
-                ));
-            }
-
-            loop {
-                match state.sse_stream.next().await {
-                    Some(Ok(data)) => {
-                        log::trace!("completions chunk: {data}");
-                        let chunk: ChatCompletionChunk = match serde_json::from_str(&data) {
-                            Ok(c) => c,
-                            Err(e) => {
-                                log::warn!("completions: failed to parse chunk: {e}");
-                                log::debug!("completions: raw data: {data}");
-                                continue;
-                            }
-                        };
-
-                        let usage = chunk.usage.map(|u| TokenUsage {
-                            prompt_tokens: u.prompt_tokens,
-                            completion_tokens: u.completion_tokens,
-                        });
-
-                        let choice = chunk.choices.first();
-                        let choice_delta = choice.map(|c| &c.delta);
-                        let finish_reason = choice.and_then(|c| c.finish_reason.as_deref());
-
-                        if let Some(tool_call_deltas) = choice_delta.and_then(|d| d.tool_calls.as_ref()) {
-                            for tc_delta in tool_call_deltas {
-                                if let Some(ref id) = tc_delta.id {
-                                    let name = tc_delta
-                                        .function
-                                        .as_ref()
-                                        .and_then(|f| f.name.clone())
-                                        .unwrap_or_default();
-
-                                    while state.tool_calls.len() <= tc_delta.index {
-                                        state.tool_calls.push(AccumulatedToolCall {
-                                            id: String::new(),
-                                            name: String::new(),
-                                            arguments: String::new(),
-                                        });
-                                    }
-                                    state.tool_calls[tc_delta.index] = AccumulatedToolCall {
-                                        id: id.clone(),
-                                        name: name.clone(),
-                                        arguments: String::new(),
-                                    };
-
-                                    let marker = format!("{{{{tool_call:{id}}}}}");
-                                    state.accumulated.push_str(&marker);
-
-                                    return Some((
-                                        Ok(StreamChunk {
-                                            delta: marker,
-                                            accumulated: state.accumulated.clone(),
-                                            thinking_delta: None,
-                                            accumulated_thinking: None,
-                                            usage: None,
-                                            tool_call_event: Some(ToolCallEvent::Started {
-                                                tool_call_id: id.clone(),
-                                                tool_name: name,
-                                            }),
-                                        }),
-                                        state,
-                                    ));
-                                }
-
-                                if let Some(ref args) = tc_delta.function.as_ref().and_then(|f| f.arguments.clone()) {
-                                    if tc_delta.index < state.tool_calls.len() {
-                                        state.tool_calls[tc_delta.index].arguments.push_str(args);
-                                    }
-                                }
-                            }
-                        }
-
-                        if finish_reason == Some("tool_calls") {
-                            for tc in &state.tool_calls {
-                                if !tc.id.is_empty() {
-                                    state.pending_tool_done_events.push(ToolCallEvent::ArgumentsComplete {
-                                        tool_call_id: tc.id.clone(),
-                                        tool_name: tc.name.clone(),
-                                        arguments: serde_json::from_str(&tc.arguments).unwrap_or(serde_json::Value::Null),
-                                    });
-                                }
-                            }
-                            state.tool_calls.clear();
-
-                            if let Some(event) = state.pending_tool_done_events.pop() {
-                                return Some((
-                                    Ok(StreamChunk {
-                                        delta: String::new(),
-                                        accumulated: state.accumulated.clone(),
-                                        thinking_delta: None,
-                                        accumulated_thinking: None,
-                                        usage,
-                                        tool_call_event: Some(event),
-                                    }),
-                                    state,
-                                ));
-                            }
-                        }
-
-                        let delta = choice_delta
-                            .and_then(|d| d.content.as_deref())
-                            .unwrap_or("");
-
-                        let thinking = choice_delta
-                            .and_then(|d| d.reasoning_content.as_deref().or(d.reasoning.as_deref()))
-                            .unwrap_or("");
-
-                        if delta.is_empty() && thinking.is_empty() && usage.is_none() {
-                            continue;
-                        }
-
-                        state.accumulated.push_str(delta);
-                        state.accumulated_thinking.push_str(thinking);
-
-                        let thinking_delta = if thinking.is_empty() { None } else { Some(thinking.to_string()) };
-                        let acc_thinking = if state.accumulated_thinking.is_empty() { None } else { Some(state.accumulated_thinking.clone()) };
-
-                        return Some((
-                            Ok(StreamChunk {
-                                delta: delta.to_string(),
-                                accumulated: state.accumulated.clone(),
-                                thinking_delta,
-                                accumulated_thinking: acc_thinking,
-                                usage,
-                                tool_call_event: None,
-                            }),
-                            state,
-                        ));
+        let stream = futures::stream::unfold(
+            (state, sse_stream),
+            |(mut state, mut sse_stream)| async move {
+                loop {
+                    if let Some(chunk) = state.pending_chunks.pop_front() {
+                        return Some((Ok(chunk), (state, sse_stream)));
                     }
-                    Some(Err(e)) => {
-                        return Some((Err(AiError::Stream(e.to_string())), state));
+                    match sse_stream.next().await {
+                        Some(Ok(data)) => {
+                            log::trace!("completions chunk: {data}");
+                            match serde_json::from_str::<ChatCompletionChunk>(&data) {
+                                Ok(chunk) => process_chunk(&mut state, chunk),
+                                Err(e) => {
+                                    log::warn!("completions: failed to parse chunk: {e}");
+                                    log::debug!("completions: raw data: {data}");
+                                }
+                            }
+                        }
+                        Some(Err(e)) => {
+                            return Some((Err(AiError::Stream(e.to_string())), (state, sse_stream)));
+                        }
+                        None => return None,
                     }
-                    None => return None,
                 }
-            }
-        });
+            },
+        );
 
         Ok(Box::pin(stream))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(data: &str) -> ChatCompletionChunk {
+        serde_json::from_str(data).expect("valid chunk json")
+    }
+
+    fn drain(state: &mut StreamState) -> Vec<StreamChunk> {
+        state.pending_chunks.drain(..).collect()
+    }
+
+    #[test]
+    fn atomic_tool_call_keeps_arguments() {
+        let mut state = StreamState::default();
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{"tool_calls":[{"id":"call_1","function":{"name":"web_search","arguments":"{\"query\":\"docker\"}"},"type":"function","index":0}]}}]}"#));
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}"#));
+
+        let events = drain(&mut state);
+        assert_eq!(events.len(), 2, "expected Started + ArgumentsComplete");
+
+        match &events[0].tool_call_event {
+            Some(ToolCallEvent::Started { tool_call_id, tool_name }) => {
+                assert_eq!(tool_call_id, "call_1");
+                assert_eq!(tool_name, "web_search");
+            }
+            other => panic!("expected Started, got {other:?}"),
+        }
+        match &events[1].tool_call_event {
+            Some(ToolCallEvent::ArgumentsComplete { arguments, .. }) => {
+                assert_eq!(arguments["query"], "docker");
+            }
+            other => panic!("expected ArgumentsComplete, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn fragmented_tool_call_accumulates_arguments() {
+        let mut state = StreamState::default();
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{"tool_calls":[{"id":"call_x","function":{"name":"web_search","arguments":""},"index":0}]}}]}"#));
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{"tool_calls":[{"function":{"arguments":"{\"q"},"index":0}]}}]}"#));
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{"tool_calls":[{"function":{"arguments":"uery\":\"k8s\"}"},"index":0}]}}]}"#));
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}"#));
+
+        let events = drain(&mut state);
+        let complete = events.iter().find_map(|c| match &c.tool_call_event {
+            Some(ToolCallEvent::ArgumentsComplete { arguments, .. }) => Some(arguments),
+            _ => None,
+        }).expect("ArgumentsComplete present");
+        assert_eq!(complete["query"], "k8s");
+    }
+
+    #[test]
+    fn repeated_id_does_not_emit_duplicate_started() {
+        let mut state = StreamState::default();
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{"tool_calls":[{"id":"call_a","function":{"name":"t","arguments":"{"},"index":0}]}}]}"#));
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{"tool_calls":[{"id":"call_a","function":{"arguments":"}"},"index":0}]}}]}"#));
+
+        let events = drain(&mut state);
+        let starts = events.iter().filter(|c| matches!(c.tool_call_event, Some(ToolCallEvent::Started { .. }))).count();
+        assert_eq!(starts, 1, "Started should fire once even if id repeats");
+    }
+
+    #[test]
+    fn multiple_tool_calls_in_single_chunk_each_emit_started() {
+        let mut state = StreamState::default();
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{"tool_calls":[
+            {"id":"call_1","function":{"name":"a","arguments":"{\"x\":1}"},"index":0},
+            {"id":"call_2","function":{"name":"b","arguments":"{\"y\":2}"},"index":1}
+        ]}}]}"#));
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}"#));
+
+        let events = drain(&mut state);
+        let starts: Vec<_> = events.iter().filter_map(|c| match &c.tool_call_event {
+            Some(ToolCallEvent::Started { tool_call_id, .. }) => Some(tool_call_id.clone()),
+            _ => None,
+        }).collect();
+        assert_eq!(starts, vec!["call_1", "call_2"]);
+
+        let completes: Vec<_> = events.iter().filter_map(|c| match &c.tool_call_event {
+            Some(ToolCallEvent::ArgumentsComplete { tool_call_id, arguments, .. }) => Some((tool_call_id.clone(), arguments.clone())),
+            _ => None,
+        }).collect();
+        assert_eq!(completes.len(), 2);
+        assert_eq!(completes[0].0, "call_1");
+        assert_eq!(completes[0].1["x"], 1);
+        assert_eq!(completes[1].0, "call_2");
+        assert_eq!(completes[1].1["y"], 2);
+    }
+
+    #[test]
+    fn content_and_tool_call_in_same_chunk_both_emit() {
+        let mut state = StreamState::default();
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{
+            "content":"hello ",
+            "tool_calls":[{"id":"call_q","function":{"name":"t","arguments":"{}"},"index":0}]
+        }}]}"#));
+
+        let events = drain(&mut state);
+        assert!(events.iter().any(|c| c.delta == "hello "), "content delta must be emitted");
+        assert!(events.iter().any(|c| matches!(c.tool_call_event, Some(ToolCallEvent::Started { .. }))), "Started must be emitted");
+    }
+
+    #[test]
+    fn usage_attaches_to_last_emitted_chunk() {
+        let mut state = StreamState::default();
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{"content":"hi"}}]}"#));
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":5,"completion_tokens":3}}"#));
+
+        let events = drain(&mut state);
+        let with_usage = events.iter().filter(|c| c.usage.is_some()).count();
+        assert_eq!(with_usage, 1);
+        let last = events.last().expect("at least one chunk");
+        assert_eq!(last.usage.as_ref().unwrap().prompt_tokens, 5);
+        assert_eq!(last.usage.as_ref().unwrap().completion_tokens, 3);
+    }
+
+    #[test]
+    fn empty_delta_chunk_does_not_emit() {
+        let mut state = StreamState::default();
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{"role":"assistant"}}]}"#));
+        assert!(state.pending_chunks.is_empty());
     }
 }

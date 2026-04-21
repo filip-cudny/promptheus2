@@ -69,8 +69,6 @@ fn show_notification_window(handle: &tauri::AppHandle) -> Result<(), String> {
     win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
         .map_err(|e| e.to_string())?;
 
-    win.eval("drainPending()").map_err(|e| e.to_string())?;
-
     win.show().map_err(|e| e.to_string())?;
 
     #[cfg(target_os = "linux")]
@@ -80,6 +78,8 @@ fn show_notification_window(handle: &tauri::AppHandle) -> Result<(), String> {
             gtk_win.set_opacity(0.8);
         }
     }
+
+    win.eval("drainPending()").map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -116,12 +116,6 @@ pub async fn update_notification_window(
     let (work_right, work_bottom, scale) = anchor.ok_or("no anchor position cached")?;
 
     let new_height = height.max(60);
-    win.set_size(tauri::Size::Logical(tauri::LogicalSize {
-        width: 380.0,
-        height: new_height as f64,
-    }))
-    .map_err(|e| e.to_string())?;
-
     let win_width = (380.0 * scale) as i32;
     let win_height = (new_height as f64 * scale) as i32;
 
@@ -130,6 +124,19 @@ pub async fn update_notification_window(
 
     win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
         .map_err(|e| e.to_string())?;
+    win.set_size(tauri::Size::Logical(tauri::LogicalSize {
+        width: 380.0,
+        height: new_height as f64,
+    }))
+    .map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::prelude::WidgetExt;
+        if let Ok(gtk_win) = win.gtk_window() {
+            gtk_win.queue_draw();
+        }
+    }
 
     Ok(())
 }
