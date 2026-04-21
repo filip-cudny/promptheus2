@@ -137,10 +137,13 @@
     --width: 360px;
     --gap: 14px;
     --border-radius: 8px;
-    --offset-right: 20px;
-    --offset-bottom: 20px;
-    --offset-top: 20px;
-    --offset-left: 20px;
+    --offset-right: 0px;
+    --offset-bottom: 0px;
+    --offset-top: 0px;
+    --offset-left: 0px;
+    inset: 0 !important;
+    width: auto !important;
+    height: auto !important;
     --normal-bg: #ffffff;
     --normal-border: rgba(200, 200, 200, 0.9);
     --normal-text: #1a1a1a;
@@ -163,6 +166,11 @@
     border: 1px solid rgba(200, 200, 200, 0.9) !important;
     box-shadow: none !important;
     padding: 12px 16px !important;
+  }
+
+  :global([data-sonner-toast][data-y-position="bottom"][data-x-position="right"]) {
+    bottom: 20px !important;
+    right: 20px !important;
   }
 
   :global([data-sonner-toast] [data-title]) {
