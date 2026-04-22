@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { slide } from "svelte/transition";
-  import { ChevronRight, ChevronDown } from "lucide-svelte";
+  import { ChevronRight, ChevronDown, Brain } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import MarkdownRenderer from "./MarkdownRenderer.svelte";
 
@@ -68,19 +68,22 @@
 </script>
 
 {#if isThinkingActive}
-  <div class="thinking-active" role="status" aria-live="polite">
-    <span class="thinking-label">Thinking</span>
-    {#if showTimer}
-      <span class="thinking-timer">{formatElapsed(elapsed)}</span>
+  <div class="thinking-block" role="status" aria-live="polite">
+    <div class="thinking-active">
+      <Brain size={ICON_SIZE.sm} />
+      <span class="thinking-label">Thinking</span>
+      {#if showTimer}
+        <span class="thinking-timer">{formatElapsed(elapsed)}</span>
+      {/if}
+    </div>
+    {#if hasContent}
+      <div class="thinking-content thinking-content--live" bind:this={liveThinkingEl}>
+        <MarkdownRenderer content={thinkingContent} isStreaming={true} />
+      </div>
     {/if}
   </div>
-  {#if hasContent}
-    <div class="thinking-content thinking-content--live" bind:this={liveThinkingEl}>
-      <MarkdownRenderer content={thinkingContent} isStreaming={true} />
-    </div>
-  {/if}
 {:else if hasContent}
-  <div class="thinking-completed">
+  <div class="thinking-block">
     <button
       class="thinking-toggle"
       onclick={() => (expanded = !expanded)}
@@ -91,6 +94,7 @@
       {:else}
         <ChevronRight size={ICON_SIZE.sm} />
       {/if}
+      <Brain size={ICON_SIZE.sm} />
       <span class="thinking-summary">
         Thought{#if finalElapsed != null}&nbsp;for {formatElapsed(finalElapsed)}{:else if thinkingDuration != null}&nbsp;for {formatElapsed(thinkingDuration)}{/if}
       </span>
@@ -104,11 +108,20 @@
 {/if}
 
 <style>
+  .thinking-block {
+    margin: 4px 0;
+    border-left: 3px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.03);
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
   .thinking-active {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 6px 0;
+    padding: 6px 10px;
   }
 
   .thinking-label {
@@ -145,25 +158,24 @@
     color: rgba(255, 255, 255, 0.35);
   }
 
-  .thinking-completed {
-    margin-bottom: 4px;
-  }
-
   .thinking-toggle {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 0;
-    background: none;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 10px;
     border: none;
-    color: rgba(255, 255, 255, 0.45);
+    background: none;
+    color: rgba(255, 255, 255, 0.7);
     font: inherit;
-    font-size: 12px;
+    font-size: 13px;
+    text-align: left;
     cursor: pointer;
   }
 
   .thinking-toggle:hover {
-    color: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.9);
   }
 
   .thinking-summary {
@@ -173,11 +185,7 @@
   .thinking-content {
     max-height: 400px;
     overflow-y: auto;
-    padding: 8px 12px;
-    margin-top: 2px;
-    background: rgba(155, 109, 204, 0.06);
-    border-left: 2px solid rgba(155, 109, 204, 0.2);
-    border-radius: 0 4px 4px 0;
+    padding: 4px 10px 10px 10px;
     font-size: 13px;
     color: rgba(255, 255, 255, 0.6);
   }

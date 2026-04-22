@@ -265,11 +265,6 @@
     border-radius: 6px;
     user-select: none;
     -webkit-user-select: none;
-    transition: background 120ms ease;
-  }
-
-  .assistant-message-wrapper:hover .assistant-bubble {
-    background: rgba(255, 255, 255, 0.03);
   }
 
   .bubble-footer {

@@ -91,18 +91,23 @@
 <style>
   .tool-group {
     margin: 4px 0;
+    border-left: 3px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.03);
+    overflow: hidden;
   }
 
   .tool-group-header-active {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 0;
-    color: rgba(255, 255, 255, 0.6);
+    gap: 8px;
+    width: 100%;
+    padding: 6px 10px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 13px;
   }
 
   .tool-group-label-active {
-    font-size: 13px;
     font-weight: 600;
     background: linear-gradient(
       90deg,
@@ -120,18 +125,21 @@
   .tool-group-toggle {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 0;
-    background: none;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 10px;
     border: none;
-    color: rgba(255, 255, 255, 0.45);
+    background: none;
+    color: rgba(255, 255, 255, 0.7);
     font: inherit;
-    font-size: 12px;
+    font-size: 13px;
+    text-align: left;
     cursor: pointer;
   }
 
   .tool-group-toggle:hover {
-    color: rgba(255, 255, 255, 0.7);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.9);
   }
 
   .tool-group-summary {
@@ -142,7 +150,7 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    margin-top: 4px;
+    padding: 4px 8px 10px 8px;
   }
 
   @keyframes shimmer {

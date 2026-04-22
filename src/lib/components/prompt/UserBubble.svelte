@@ -165,11 +165,6 @@
     box-sizing: border-box;
     user-select: none;
     -webkit-user-select: none;
-    transition: background 120ms ease;
-  }
-
-  .user-message-wrapper:hover .user-bubble {
-    background: rgba(74, 158, 187, 0.1);
   }
 
   .attachment-row {
