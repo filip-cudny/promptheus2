@@ -54,7 +54,7 @@ pub async fn toggle_speech_recording(
                 "speech_recording_start",
                 NotificationLevel::Warning,
                 "Transcription in progress",
-                Some("Please wait for the current transcription to finish"),
+                Some("Wait until it finishes"),
                 &notification_settings,
             );
             return Ok(());
@@ -67,7 +67,7 @@ pub async fn toggle_speech_recording(
                 "speech_recording_start",
                 NotificationLevel::Warning,
                 "Please wait",
-                Some("Cooldown active — try again in a moment"),
+                Some("Cooldown active — try again"),
                 &notification_settings,
             );
             return Ok(());

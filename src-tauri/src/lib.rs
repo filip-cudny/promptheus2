@@ -134,11 +134,9 @@ use services::speech::SpeechService;
 use providers::{LastInteractionMenuProvider, SkillMenuProvider, SpeechMenuProvider};
 
 fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    use tauri::webview::{Color, WebviewWindowBuilder};
+    use tauri::webview::WebviewWindowBuilder;
 
-    let transparent = cfg!(target_os = "macos");
-
-    let mut cm = WebviewWindowBuilder::new(
+    WebviewWindowBuilder::new(
         app,
         "context-menu",
         tauri::WebviewUrl::App("context-menu.html".into()),
@@ -147,16 +145,11 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     .inner_size(320.0, 400.0)
     .resizable(false)
     .decorations(false)
-    .transparent(transparent)
+    .transparent(true)
     .always_on_top(true)
     .skip_taskbar(true)
-    .visible(false);
-
-    if !transparent {
-        cm = cm.background_color(Color(0x1e, 0x1e, 0x1e, 0xff));
-    }
-
-    cm.build()?;
+    .visible(false)
+    .build()?;
 
     let notif = WebviewWindowBuilder::new(
         app,

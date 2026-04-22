@@ -22,6 +22,8 @@
     warning: 3000,
   };
 
+  const isLinux = navigator.userAgent.includes("Linux");
+
   let active = 0;
   let syncTimer: number | null = null;
 
@@ -58,6 +60,10 @@
       const pending = await invoke<Payload[]>("drain_pending_notifications");
       if (pending.length === 0) return;
       logDebug(`draining ${pending.length} pending notification(s)`);
+      const onToastGone = () => {
+        active = Math.max(0, active - 1);
+        scheduleSync();
+      };
       for (const n of pending) {
         active++;
         const klass = n.monochromatic ? "p-toast p-mono" : `p-toast p-color-${n.level}`;
@@ -65,14 +71,8 @@
           description: n.message ?? undefined,
           duration: DURATIONS[n.level],
           class: klass,
-          onAutoClose: () => {
-            active = Math.max(0, active - 1);
-            scheduleSync();
-          },
-          onDismiss: () => {
-            active = Math.max(0, active - 1);
-            scheduleSync();
-          },
+          onAutoClose: onToastGone,
+          onDismiss: onToastGone,
         });
       }
       scheduleSync();
@@ -84,6 +84,10 @@
   onMount(() => {
     attachConsole();
     (window as unknown as { drainPending: () => void }).drainPending = drainPending;
+
+    if (isLinux) {
+      document.documentElement.classList.add("linux");
+    }
 
     let ro: ResizeObserver | null = null;
     const attachObserver = () => {
@@ -106,7 +110,7 @@
   });
 </script>
 
-<Toaster position="bottom-right" closeButton={false} richColors={false} duration={2000}>
+<Toaster position="bottom-right" closeButton={false} richColors={false} duration={2000} expand={isLinux} gap={14}>
   {#snippet successIcon()}
     <CircleCheck size={20} strokeWidth={2} />
   {/snippet}
@@ -134,8 +138,6 @@
   }
 
   :global([data-sonner-toaster]) {
-    --width: 360px;
-    --gap: 14px;
     --border-radius: 8px;
     --offset-right: 0px;
     --offset-bottom: 0px;
@@ -144,24 +146,10 @@
     inset: 0 !important;
     width: auto !important;
     height: auto !important;
-    --normal-bg: #ffffff;
-    --normal-border: rgba(200, 200, 200, 0.9);
-    --normal-text: #1a1a1a;
-    --success-bg: #ffffff;
-    --success-border: rgba(200, 200, 200, 0.9);
-    --success-text: #1a1a1a;
-    --error-bg: #ffffff;
-    --error-border: rgba(200, 200, 200, 0.9);
-    --error-text: #1a1a1a;
-    --info-bg: #ffffff;
-    --info-border: rgba(200, 200, 200, 0.9);
-    --info-text: #1a1a1a;
-    --warning-bg: #ffffff;
-    --warning-border: rgba(200, 200, 200, 0.9);
-    --warning-text: #1a1a1a;
   }
 
   :global([data-sonner-toast]) {
+    width: 300px !important;
     background: #ffffff !important;
     border: 1px solid rgba(200, 200, 200, 0.9) !important;
     box-shadow: none !important;
@@ -171,17 +159,24 @@
   :global([data-sonner-toast][data-y-position="bottom"][data-x-position="right"]) {
     bottom: 20px !important;
     right: 20px !important;
+    left: auto !important;
+  }
+
+  :global(html.linux [data-sonner-toast]),
+  :global(html.linux [data-sonner-toast] *) {
+    transition: none !important;
+    animation: none !important;
   }
 
   :global([data-sonner-toast] [data-title]) {
-    color: #1a1a1a;
-    font-weight: 600;
-    font-size: 14px;
+    color: #1a1a1a !important;
+    font-weight: 600 !important;
+    font-size: 14px !important;
   }
 
   :global([data-sonner-toast] [data-description]) {
-    color: #4a4a4a;
-    font-size: 13px;
+    color: #4a4a4a !important;
+    font-size: 13px !important;
   }
 
   :global([data-sonner-toast] [data-icon]) {

@@ -323,6 +323,8 @@ async fn transcribe_elevenlabs(
         form = form.text("no_verbatim", flag.to_string());
     }
 
+    form = form.text("tag_audio_events", "false");
+
     for term in keyterms {
         form = form.text("keyterms", term);
     }
