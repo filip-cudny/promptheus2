@@ -117,18 +117,3 @@ pub fn focus_window(win: &tauri::WebviewWindow) -> Result<(), String> {
     win.set_focus().map_err(|e| e.to_string())
 }
 
-pub async fn restore_size(app: &tauri::AppHandle, window_label: &str, geometry_key: &str) {
-    let Some(win) = app.get_webview_window(window_label) else {
-        return;
-    };
-
-    let state = app.state::<Mutex<AppState>>();
-    let Some(geom) = state.lock().await.ui_state.get_geometry(geometry_key) else {
-        return;
-    };
-
-    let _ = win.set_size(tauri::Size::Logical(tauri::LogicalSize {
-        width: geom.width,
-        height: geom.height,
-    }));
-}

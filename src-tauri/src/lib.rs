@@ -185,21 +185,6 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     .visible(false)
     .build()?;
 
-    WebviewWindowBuilder::new(
-        app,
-        "text-preview",
-        tauri::WebviewUrl::App("text-preview.html".into()),
-    )
-    .title("Text Preview")
-    .inner_size(500.0, 400.0)
-    .resizable(true)
-    .decorations(true)
-    .transparent(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .visible(false)
-    .build()?;
-
     Ok(())
 }
 
