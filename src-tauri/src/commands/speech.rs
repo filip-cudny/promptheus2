@@ -153,7 +153,7 @@ pub async fn toggle_speech_recording(
         }
     };
 
-    let (speech_config, stt_prompt, stt_keyterms) = {
+    let (speech_config, stt_options) = {
         let mut s = state.lock().await;
         let _ = s.notifications.notify(
             "speech_recording_stop",
@@ -164,11 +164,18 @@ pub async fn toggle_speech_recording(
         );
 
         let stt_prompt = s.config.stt_prompt();
+        let keyterms = s.config.stt_keyterms();
+        let stt_surface = s.config.settings().surfaces.speech_to_text.clone();
 
         match s.config.resolve_stt_model().cloned() {
             Some(config) => {
-                let keyterms = s.config.stt_keyterms(&config);
-                (config, stt_prompt, keyterms)
+                let options = crate::services::speech::SttOptions {
+                    language: stt_surface.language,
+                    no_verbatim: stt_surface.no_verbatim,
+                    prompt: stt_prompt,
+                    keyterms,
+                };
+                (config, options)
             }
             None => {
                 s.speech.set_transcribing(false);
@@ -187,7 +194,7 @@ pub async fn toggle_speech_recording(
     tokio::spawn(async move {
         let state_inner = app_clone.state::<Mutex<AppState>>();
         let start = std::time::Instant::now();
-        match speech::transcribe(wav_bytes, &speech_config, stt_prompt, stt_keyterms).await {
+        match speech::transcribe(wav_bytes, &speech_config, &stt_options).await {
             Ok(text) => {
                 let duration_secs = start.elapsed().as_secs_f64();
                 let _ = app_clone.emit(

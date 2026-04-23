@@ -14,7 +14,7 @@
   import { openConversationDialog } from "$lib/services/conversationDialog";
   import { isExecuting, getExecutingSkillId } from "$lib/stores/execution.svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import { updateSetting, updateModelReasoningEffort, setSpeechToTextModel } from "$lib/services/settings";
+  import { updateSurfaceModel, updateSurfaceReasoningEffort, setSpeechToTextModel } from "$lib/services/settings";
   import type { ModelConfig, Provider } from "$lib/types";
   import {
     getItems,
@@ -97,7 +97,7 @@
   }
 
   interface ModelsMenuData {
-    models: { id: string; display_name: string; model: string; provider: Provider; reasoning_effort: string | null }[];
+    models: { id: string; display_name: string; model: string; provider: Provider }[];
     default_model_id: string | null;
     default_reasoning_effort: string | null;
     stt_models: { id: string; display_name: string; model: string; provider: Provider }[];
@@ -437,24 +437,20 @@
                   group: null,
                   api_key: null,
                   base_url: null,
-                  parameters: m.reasoning_effort ? { temperature: null, max_tokens: null, top_p: null, frequency_penalty: null, presence_penalty: null, reasoning_effort: m.reasoning_effort } : null,
+                  parameters: null,
                   context_window_size: null,
-                  enabled_tools: [],
-                  language: null,
+                  api_mode: null,
+                  store: true,
                 }))}
                 selectedModelId={modelsDefaultModelId}
                 reasoningEffort={modelsReasoningEffort}
                 onModelSelect={async (modelId) => {
                   modelsDefaultModelId = modelId;
-                  const model = modelsData.models.find((m) => m.id === modelId);
-                  modelsReasoningEffort = model?.reasoning_effort ?? null;
-                  await updateSetting("quick_action_default_model", modelId);
+                  await updateSurfaceModel("quick_actions", modelId);
                 }}
                 onReasoningSelect={async (effort) => {
                   modelsReasoningEffort = effort;
-                  if (modelsDefaultModelId) {
-                    await updateModelReasoningEffort(modelsDefaultModelId, effort);
-                  }
+                  await updateSurfaceReasoningEffort("quick_actions", effort);
                 }}
                 preventDismiss={{ suppress: suppressClose, resume: resumeClose }}
               />
@@ -475,8 +471,8 @@
                   base_url: null,
                   parameters: null,
                   context_window_size: null,
-                  enabled_tools: [],
-                  language: null,
+                  api_mode: null,
+                  store: true,
                 }))}
                 selectedModelId={sttModelId}
                 reasoningEffort={null}

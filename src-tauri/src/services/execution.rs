@@ -153,9 +153,12 @@ impl PromptExecutionService {
             }
             None => config
                 .settings()
-                .default_model
+                .surfaces
+                .chat
+                .generation
+                .model_id
                 .clone()
-                .ok_or_else(|| ExecutionError::ModelNotFound("no default model configured".to_string())),
+                .ok_or_else(|| ExecutionError::ModelNotFound("no chat model configured".to_string())),
         }
     }
 
@@ -174,13 +177,29 @@ impl PromptExecutionService {
             }
             None => config
                 .settings()
-                .quick_action_default_model
+                .surfaces
+                .quick_actions
+                .generation
+                .model_id
                 .clone()
-                .or_else(|| config.settings().default_model.clone())
-                .ok_or_else(|| ExecutionError::ModelNotFound("no default model configured".to_string())),
+                .or_else(|| config.settings().surfaces.chat.generation.model_id.clone())
+                .ok_or_else(|| ExecutionError::ModelNotFound("no quick action model configured".to_string())),
         }
     }
 
+    pub fn resolve_title_generation_model(
+        config: &ConfigService,
+    ) -> Result<String, ExecutionError> {
+        config
+            .settings()
+            .surfaces
+            .title_generation
+            .generation
+            .model_id
+            .clone()
+            .or_else(|| config.settings().surfaces.chat.generation.model_id.clone())
+            .ok_or_else(|| ExecutionError::ModelNotFound("no title generation model configured".to_string()))
+    }
 }
 
 #[cfg(test)]
@@ -190,8 +209,7 @@ mod tests {
 
     fn setup_config() -> (TempDir, ConfigService) {
         let dir = TempDir::new().unwrap();
-        let settings = crate::models::settings::Settings {
-            default_model: Some("model-1".to_string()),
+        let mut settings = crate::models::settings::Settings {
             models: vec![crate::models::settings::ModelConfig {
                 id: "model-1".to_string(),
                 model: "gpt-4".to_string(),
@@ -205,13 +223,10 @@ mod tests {
                 context_window_size: None,
                 api_mode: None,
                 store: true,
-                enabled_tools: vec![],
-                language: None,
-                keyterms_file: None,
-                no_verbatim: None,
             }],
             ..Default::default()
         };
+        settings.surfaces.chat.generation.model_id = Some("model-1".to_string());
         let settings_path = dir.path().join("settings.json");
         std::fs::write(&settings_path, serde_json::to_string(&settings).unwrap()).unwrap();
         let config = ConfigService::load(dir.path(), None).unwrap();

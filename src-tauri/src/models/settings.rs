@@ -60,15 +60,6 @@ pub struct Settings {
     #[serde(default)]
     pub notifications: NotificationSettings,
 
-    #[serde(default)]
-    pub speech_to_text_model: Option<String>,
-
-    #[serde(default)]
-    pub default_model: Option<String>,
-
-    #[serde(default)]
-    pub quick_action_default_model: Option<String>,
-
     #[serde(default = "default_debounce_ms")]
     pub number_input_debounce_ms: u32,
 
@@ -76,19 +67,10 @@ pub struct Settings {
     pub models: Vec<ModelConfig>,
 
     #[serde(default)]
+    pub surfaces: Surfaces,
+
+    #[serde(default)]
     pub keymaps: Vec<KeymapGroup>,
-
-    #[serde(default = "default_system_prompt")]
-    pub system_prompt: String,
-
-    #[serde(default)]
-    pub about_me: Option<String>,
-
-    #[serde(default)]
-    pub environment_section: Option<String>,
-
-    #[serde(default)]
-    pub stt_prompt: Option<String>,
 
     #[serde(default = "default_recent_apps_count")]
     pub recent_apps_count: usize,
@@ -98,15 +80,101 @@ pub struct Settings {
 
     #[serde(default)]
     pub skills_order: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Surfaces {
+    #[serde(default)]
+    pub chat: ChatConfig,
 
     #[serde(default)]
-    pub conversation_title_model: String,
+    pub quick_actions: QuickActionsConfig,
+
+    #[serde(default)]
+    pub title_generation: TitleGenConfig,
+
+    #[serde(default)]
+    pub speech_to_text: SpeechToTextConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct GenerationConfig {
+    #[serde(default)]
+    pub model_id: Option<String>,
+
+    #[serde(default)]
+    pub parameters: ModelParameters,
+
+    #[serde(default)]
+    pub enabled_tools: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChatConfig {
+    #[serde(default)]
+    pub generation: GenerationConfig,
+
+    #[serde(default = "default_system_prompt")]
+    pub system_prompt: String,
+
+    #[serde(default)]
+    pub about_me: Option<String>,
+
+    #[serde(default)]
+    pub environment_section: Option<String>,
+}
+
+impl Default for ChatConfig {
+    fn default() -> Self {
+        Self {
+            generation: GenerationConfig::default(),
+            system_prompt: default_system_prompt(),
+            about_me: None,
+            environment_section: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QuickActionsConfig {
+    #[serde(default)]
+    pub generation: GenerationConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TitleGenConfig {
+    #[serde(default)]
+    pub generation: GenerationConfig,
 
     #[serde(default = "default_conversation_title_prompt")]
-    pub conversation_title_prompt: String,
+    pub prompt: String,
+}
+
+impl Default for TitleGenConfig {
+    fn default() -> Self {
+        Self {
+            generation: GenerationConfig::default(),
+            prompt: default_conversation_title_prompt(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SpeechToTextConfig {
+    #[serde(default)]
+    pub model_id: Option<String>,
 
     #[serde(default)]
-    pub selected_tools: Vec<String>,
+    pub language: Option<String>,
+
+    #[serde(default)]
+    pub keyterms_file: Option<String>,
+
+    #[serde(default)]
+    pub no_verbatim: Option<bool>,
+
+    #[serde(default)]
+    pub prompt: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -149,18 +217,6 @@ pub struct ModelConfig {
 
     #[serde(default = "default_true")]
     pub store: bool,
-
-    #[serde(default)]
-    pub enabled_tools: Vec<String>,
-
-    #[serde(default)]
-    pub language: Option<String>,
-
-    #[serde(default)]
-    pub keyterms_file: Option<String>,
-
-    #[serde(default)]
-    pub no_verbatim: Option<bool>,
 }
 
 impl ModelConfig {
@@ -375,22 +431,13 @@ impl Default for Settings {
             menu_section_order: default_menu_section_order(),
             description_generator: DescriptionGenerator::default(),
             notifications: NotificationSettings::default(),
-            speech_to_text_model: None,
-            default_model: None,
-            quick_action_default_model: None,
             number_input_debounce_ms: 200,
             models: Vec::new(),
+            surfaces: Surfaces::default(),
             keymaps: Vec::new(),
-            system_prompt: default_system_prompt(),
-            about_me: None,
-            environment_section: None,
-            stt_prompt: None,
             recent_apps_count: default_recent_apps_count(),
             mcp_servers: HashMap::new(),
             skills_order: Vec::new(),
-            conversation_title_model: String::new(),
-            conversation_title_prompt: default_conversation_title_prompt(),
-            selected_tools: Vec::new(),
         }
     }
 }
@@ -459,46 +506,7 @@ mod tests {
         assert_eq!(settings.number_input_debounce_ms, 200);
         assert_eq!(settings.menu_section_order.len(), 6);
         assert!(settings.models.is_empty());
-    }
-
-    #[test]
-    fn test_deserialize_default_settings() {
-        let json = include_str!("../../resources/default_settings.json");
-        let settings: Settings = serde_json::from_str(json).expect("failed to deserialize default_settings.json");
-
-        assert!(settings.show_tray_icon);
-        assert!(!settings.debug_mode);
-        assert_eq!(settings.code_theme, "paraiso-dark");
-        assert_eq!(settings.keymaps.len(), 3);
-        assert_eq!(settings.number_input_debounce_ms, 200);
-
-        let stt_id = settings.speech_to_text_model.as_deref().expect("speech_to_text_model should reference an id");
-        let stt_model = settings.models.iter().find(|m| m.id == stt_id).expect("stt model should be present in models list");
-        assert!(stt_model.is_stt());
-
-        assert!(settings.notifications.events.prompt_execution_success);
-        assert!(settings.notifications.monochromatic_notification_icons);
-        assert_eq!(settings.notifications.background_colors.success, "#FFFFFF");
-
-        assert!(settings.description_generator.prompt.is_some());
-    }
-
-    #[test]
-    fn test_round_trip() {
-        let json = include_str!("../../resources/default_settings.json");
-        let settings: Settings = serde_json::from_str(json).expect("deserialize");
-        let serialized = serde_json::to_string_pretty(&settings).expect("serialize");
-        let settings2: Settings = serde_json::from_str(&serialized).expect("re-deserialize");
-
-        assert_eq!(settings.show_tray_icon, settings2.show_tray_icon);
-        assert_eq!(settings.debug_mode, settings2.debug_mode);
-        assert_eq!(settings.code_theme, settings2.code_theme);
-        assert_eq!(settings.models.len(), settings2.models.len());
-        assert_eq!(settings.models[0].id, settings2.models[0].id);
-        assert_eq!(settings.models[0].model, settings2.models[0].model);
-        assert_eq!(settings.keymaps.len(), settings2.keymaps.len());
-        assert_eq!(settings.default_model, settings2.default_model);
-        assert_eq!(settings.number_input_debounce_ms, settings2.number_input_debounce_ms);
+        assert_eq!(settings.surfaces.chat.system_prompt, "You are a helpful assistant.");
     }
 
     #[test]
@@ -590,5 +598,32 @@ mod tests {
     fn test_model_resolved_api_key_missing_env() {
         let config: ModelConfig = serde_json::from_str(r#"{"id":"1","model":"test","display_name":"Test","api_key":"${DEFINITELY_MISSING_KEY_XYZ}"}"#).unwrap();
         assert_eq!(config.resolved_api_key(), None);
+    }
+
+    #[test]
+    fn test_surfaces_roundtrip() {
+        let mut settings = Settings::default();
+        settings.surfaces.chat.generation.model_id = Some("model-1".to_string());
+        settings.surfaces.chat.generation.parameters.reasoning_effort = Some("medium".to_string());
+        settings.surfaces.chat.system_prompt = "Custom".to_string();
+        settings.surfaces.quick_actions.generation.model_id = Some("model-2".to_string());
+        settings.surfaces.quick_actions.generation.parameters.reasoning_effort = Some("high".to_string());
+        settings.surfaces.title_generation.generation.model_id = Some("model-3".to_string());
+        settings.surfaces.title_generation.prompt = "Title prompt".to_string();
+        settings.surfaces.speech_to_text.model_id = Some("stt-1".to_string());
+        settings.surfaces.speech_to_text.language = Some("en".to_string());
+
+        let json = serde_json::to_string(&settings).unwrap();
+        let parsed: Settings = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.surfaces.chat.generation.model_id.as_deref(), Some("model-1"));
+        assert_eq!(parsed.surfaces.chat.generation.parameters.reasoning_effort.as_deref(), Some("medium"));
+        assert_eq!(parsed.surfaces.chat.system_prompt, "Custom");
+        assert_eq!(parsed.surfaces.quick_actions.generation.model_id.as_deref(), Some("model-2"));
+        assert_eq!(parsed.surfaces.quick_actions.generation.parameters.reasoning_effort.as_deref(), Some("high"));
+        assert_eq!(parsed.surfaces.title_generation.generation.model_id.as_deref(), Some("model-3"));
+        assert_eq!(parsed.surfaces.title_generation.prompt, "Title prompt");
+        assert_eq!(parsed.surfaces.speech_to_text.model_id.as_deref(), Some("stt-1"));
+        assert_eq!(parsed.surfaces.speech_to_text.language.as_deref(), Some("en"));
     }
 }

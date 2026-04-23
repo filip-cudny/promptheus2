@@ -58,14 +58,12 @@
   });
 
   const builtinWebSearchAvailable = $derived(
-    activeModel?.enabled_tools?.includes("web_search") ?? false,
+    activeModel?.provider === "openai",
   );
 
-  const mcpWebSearchAvailable = $derived.by(() => {
-    if (!mcpWebSearchQualifiedId || !activeModel) return false;
-    const tools = activeModel.enabled_tools ?? [];
-    return tools.includes(mcpWebSearchQualifiedId);
-  });
+  const mcpWebSearchAvailable = $derived(
+    !!mcpWebSearchQualifiedId && !!activeModel,
+  );
 
   const webSearchAvailable = $derived(builtinWebSearchAvailable || mcpWebSearchAvailable);
   const bothWebSearchAvailable = $derived(builtinWebSearchAvailable && mcpWebSearchAvailable);

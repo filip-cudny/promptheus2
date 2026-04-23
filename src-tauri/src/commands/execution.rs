@@ -32,6 +32,38 @@ fn tool_display_name(tool_name: &str) -> &str {
     }
 }
 
+fn merge_optional_parameters(
+    base: Option<ModelParameters>,
+    overrides: Option<ModelParameters>,
+) -> Option<ModelParameters> {
+    match (base, overrides) {
+        (None, None) => None,
+        (Some(b), None) => Some(b),
+        (None, Some(o)) => Some(o),
+        (Some(b), Some(o)) => {
+            let mut extra = b.extra.clone();
+            extra.extend(o.extra.clone());
+            Some(ModelParameters {
+                temperature: o.temperature.or(b.temperature),
+                max_tokens: o.max_tokens.or(b.max_tokens),
+                top_p: o.top_p.or(b.top_p),
+                frequency_penalty: o.frequency_penalty.or(b.frequency_penalty),
+                presence_penalty: o.presence_penalty.or(b.presence_penalty),
+                reasoning_effort: o.reasoning_effort.or(b.reasoning_effort),
+                extra,
+            })
+        }
+    }
+}
+
+fn surface_effort_override(base: Option<String>, override_effort: Option<String>) -> Option<ModelParameters> {
+    let effort = override_effort.or(base);
+    effort.map(|e| ModelParameters {
+        reasoning_effort: Some(e),
+        ..Default::default()
+    })
+}
+
 fn tool_type_from_name(tool_name: &str) -> ToolCallType {
     match tool_name {
         "web_search" => ToolCallType::WebSearch,
@@ -361,7 +393,7 @@ pub async fn execute_skill(
 ) -> Result<(), String> {
     let start_time = Instant::now();
 
-    let (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, input_content, messages, ai, skill_param_overrides) = {
+    let (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, input_content, messages, ai, param_overrides) = {
         let mut state = state.lock().await;
 
         let (execution_id, cancel_rx) = state
@@ -408,9 +440,18 @@ pub async fn execute_skill(
         );
 
         let ai = state.ai.clone();
-        let skill_param_overrides = skill.parameters.as_ref().map(ModelParameters::from_map);
+        let surface_params = state
+            .config
+            .settings()
+            .surfaces
+            .quick_actions
+            .generation
+            .parameters
+            .clone();
+        let skill_params = skill.parameters.as_ref().map(ModelParameters::from_map);
+        let param_overrides = merge_optional_parameters(Some(surface_params), skill_params);
 
-        (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, input_content, messages, ai, skill_param_overrides)
+        (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, input_content, messages, ai, param_overrides)
     };
 
     let user_display_text = format!("/{skill_name} {input_content}");
@@ -430,7 +471,7 @@ pub async fn execute_skill(
 
     let stream_result = {
         let stream = ai
-            .complete_stream(&model_id, messages, skill_param_overrides, None, vec![])
+            .complete_stream(&model_id, messages, param_overrides, None, vec![])
             .await
             .map_err(|e| e.to_string());
 
@@ -575,15 +616,14 @@ pub async fn generate_conversation_title(
         let state = state.lock().await;
         let settings = state.config.settings();
 
-        let model_id = if !settings.conversation_title_model.is_empty() {
-            settings.conversation_title_model.clone()
-        } else if let Some(ref default) = settings.default_model {
-            default.clone()
-        } else {
-            return Err("No model configured for title generation".to_string());
-        };
+        let model_id = PromptExecutionService::resolve_title_generation_model(&state.config)
+            .map_err(|e| e.to_string())?;
 
-        (model_id, settings.conversation_title_prompt.clone(), state.ai.clone())
+        (
+            model_id,
+            settings.surfaces.title_generation.prompt.clone(),
+            state.ai.clone(),
+        )
     };
 
     let messages = vec![
@@ -626,7 +666,7 @@ pub fn resolve_environment_section_template(config: &ConfigService, active_app: 
 }
 
 pub fn build_system_prompt_base(config: &ConfigService, resolved_environment_section: Option<&str>, active_app: &str, recent_apps: &str) -> String {
-    let system_prompt = &config.settings().system_prompt;
+    let system_prompt = &config.settings().surfaces.chat.system_prompt;
     let input_format_guide = config.input_format_guide();
     let about_me = config.about_me();
 
@@ -735,12 +775,16 @@ pub async fn execute_conversation_from_tree(
                 e.to_string()
             })?;
 
-        let param_overrides = reasoning_effort.map(|effort| {
-            ModelParameters {
-                reasoning_effort: Some(effort),
-                ..Default::default()
-            }
-        });
+        let chat_surface_params = state
+            .config
+            .settings()
+            .surfaces
+            .chat
+            .generation
+            .parameters
+            .clone();
+        let tab_override = surface_effort_override(None, reasoning_effort);
+        let param_overrides = merge_optional_parameters(Some(chat_surface_params), tab_override);
 
         let model_display_name = state
             .config

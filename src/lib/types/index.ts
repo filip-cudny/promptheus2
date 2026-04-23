@@ -5,6 +5,8 @@ export * from "./context";
 export * from "./history";
 export * from "./conversation";
 
+export type SurfaceKind = "chat" | "quick_actions" | "title_generation" | "speech_to_text";
+
 export interface Settings {
   show_tray_icon: boolean;
   debug_mode: boolean;
@@ -12,22 +14,53 @@ export interface Settings {
   menu_section_order: string[];
   description_generator: DescriptionGenerator;
   notifications: NotificationSettings;
-  speech_to_text_model: string | null;
-  default_model: string | null;
   number_input_debounce_ms: number;
   models: ModelConfig[];
+  surfaces: Surfaces;
   keymaps: KeymapGroup[];
+  recent_apps_count: number;
+  skills_order: string[];
+}
+
+export interface Surfaces {
+  chat: ChatConfig;
+  quick_actions: QuickActionsConfig;
+  title_generation: TitleGenConfig;
+  speech_to_text: SpeechToTextConfig;
+}
+
+export interface GenerationConfig {
+  model_id: string | null;
+  parameters: ModelParameters;
+  enabled_tools: string[];
+}
+
+export interface ChatConfig {
+  generation: GenerationConfig;
   system_prompt: string;
   about_me: string | null;
   environment_section: string | null;
-  recent_apps_count: number;
-  skills_order: string[];
-  conversation_title_model: string;
-  conversation_title_prompt: string;
-  selected_tools: string[];
+}
+
+export interface QuickActionsConfig {
+  generation: GenerationConfig;
+}
+
+export interface TitleGenConfig {
+  generation: GenerationConfig;
+  prompt: string;
+}
+
+export interface SpeechToTextConfig {
+  model_id: string | null;
+  language: string | null;
+  keyterms_file: string | null;
+  no_verbatim: boolean | null;
+  prompt: string | null;
 }
 
 export type ModelType = "text" | "stt";
+export type ApiMode = "responses" | "completions";
 
 export interface ModelConfig {
   id: string;
@@ -40,8 +73,8 @@ export interface ModelConfig {
   base_url: string | null;
   parameters: ModelParameters | null;
   context_window_size: number | null;
-  enabled_tools: string[];
-  language: string | null;
+  api_mode: ApiMode | null;
+  store: boolean;
 }
 
 export type Provider = "openai" | "anthropic" | "gemini" | "elevenlabs";
@@ -104,4 +137,3 @@ export interface DescriptionGenerator {
   system_prompt: string | null;
   prompt: string | null;
 }
-

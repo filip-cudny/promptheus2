@@ -4,6 +4,8 @@ import type {
   ModelConfig,
   NotificationSettings,
   KeymapGroup,
+  SurfaceKind,
+  SpeechToTextConfig,
 } from "$lib/types";
 
 export async function getSettings(): Promise<Settings> {
@@ -15,6 +17,47 @@ export async function updateSetting(
   value: unknown,
 ): Promise<void> {
   return invoke("update_setting", { key, value });
+}
+
+export async function updateSurfaceModel(
+  surface: SurfaceKind,
+  modelId: string | null,
+): Promise<void> {
+  return invoke("update_surface_model", { surface, modelId });
+}
+
+export async function updateSurfaceParameter(
+  surface: SurfaceKind,
+  key: string,
+  value: unknown,
+): Promise<void> {
+  return invoke("update_surface_parameter", { surface, key, value });
+}
+
+export async function updateSurfaceReasoningEffort(
+  surface: SurfaceKind,
+  effort: string | null,
+): Promise<void> {
+  return updateSurfaceParameter(surface, "reasoning_effort", effort);
+}
+
+export async function updateSurfaceEnabledTools(
+  surface: SurfaceKind,
+  tools: string[],
+): Promise<void> {
+  return invoke("update_surface_enabled_tools", { surface, tools });
+}
+
+export async function updateSpeechToTextConfig(
+  config: SpeechToTextConfig,
+): Promise<void> {
+  return invoke("update_speech_to_text_config", { config });
+}
+
+export async function setSpeechToTextModel(
+  modelId: string | null,
+): Promise<void> {
+  return updateSurfaceModel("speech_to_text", modelId);
 }
 
 export async function addModel(config: ModelConfig): Promise<void> {
@@ -32,26 +75,10 @@ export async function deleteModel(modelId: string): Promise<void> {
   return invoke("delete_model", { modelId });
 }
 
-export async function updateModelReasoningEffort(
-  modelId: string,
-  reasoningEffort: string | null,
-): Promise<void> {
-  return invoke("update_model_reasoning_effort", { modelId, reasoningEffort });
-}
-
 export async function updateNotifications(
   config: NotificationSettings,
 ): Promise<void> {
   return invoke("update_notifications", { config });
-}
-
-export async function setSpeechToTextModel(
-  modelId: string | null,
-): Promise<void> {
-  return invoke("update_setting", {
-    key: "speech_to_text_model",
-    value: modelId,
-  });
 }
 
 export async function updateKeymaps(keymaps: KeymapGroup[]): Promise<void> {

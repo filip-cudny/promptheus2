@@ -176,15 +176,22 @@ impl SpeechService {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct SttOptions {
+    pub language: Option<String>,
+    pub no_verbatim: Option<bool>,
+    pub prompt: Option<String>,
+    pub keyterms: Vec<String>,
+}
+
 pub async fn transcribe(
     wav_bytes: Vec<u8>,
     config: &ModelConfig,
-    prompt: Option<String>,
-    keyterms: Vec<String>,
+    options: &SttOptions,
 ) -> Result<String, SpeechError> {
     match config.provider {
-        Some(Provider::ElevenLabs) => transcribe_elevenlabs(wav_bytes, config, keyterms).await,
-        _ => transcribe_openai(wav_bytes, config, prompt).await,
+        Some(Provider::ElevenLabs) => transcribe_elevenlabs(wav_bytes, config, options).await,
+        _ => transcribe_openai(wav_bytes, config, options).await,
     }
 }
 
@@ -218,7 +225,7 @@ async fn map_http_error(status: reqwest::StatusCode, response: reqwest::Response
 async fn transcribe_openai(
     wav_bytes: Vec<u8>,
     config: &ModelConfig,
-    prompt: Option<String>,
+    options: &SttOptions,
 ) -> Result<String, SpeechError> {
     let api_key = config
         .resolved_api_key()
@@ -236,7 +243,7 @@ async fn transcribe_openai(
         "STT transcribe provider=openai model={} bytes={} has_prompt={}",
         config.model,
         wav_bytes.len(),
-        prompt.is_some()
+        options.prompt.is_some()
     );
 
     let file_part = reqwest::multipart::Part::bytes(wav_bytes)
@@ -248,12 +255,12 @@ async fn transcribe_openai(
         .part("file", file_part)
         .text("model", config.model.clone());
 
-    if let Some(ref lang) = config.language {
+    if let Some(ref lang) = options.language {
         form = form.text("language", lang.clone());
     }
 
-    if let Some(prompt) = prompt {
-        form = form.text("prompt", prompt);
+    if let Some(ref prompt) = options.prompt {
+        form = form.text("prompt", prompt.clone());
     }
 
     let response = build_http_client()?
@@ -285,7 +292,7 @@ async fn transcribe_openai(
 async fn transcribe_elevenlabs(
     wav_bytes: Vec<u8>,
     config: &ModelConfig,
-    keyterms: Vec<String>,
+    options: &SttOptions,
 ) -> Result<String, SpeechError> {
     let api_key = config
         .resolved_api_key()
@@ -303,7 +310,7 @@ async fn transcribe_elevenlabs(
         "STT transcribe provider=elevenlabs model={} bytes={} keyterms={}",
         config.model,
         wav_bytes.len(),
-        keyterms.len()
+        options.keyterms.len()
     );
 
     let file_part = reqwest::multipart::Part::bytes(wav_bytes)
@@ -315,18 +322,18 @@ async fn transcribe_elevenlabs(
         .part("file", file_part)
         .text("model_id", config.model.clone());
 
-    if let Some(ref lang) = config.language {
+    if let Some(ref lang) = options.language {
         form = form.text("language_code", lang.clone());
     }
 
-    if let Some(flag) = config.no_verbatim {
+    if let Some(flag) = options.no_verbatim {
         form = form.text("no_verbatim", flag.to_string());
     }
 
     form = form.text("tag_audio_events", "false");
 
-    for term in keyterms {
-        form = form.text("keyterms", term);
+    for term in options.keyterms.iter() {
+        form = form.text("keyterms", term.clone());
     }
 
     let response = build_http_client()?
@@ -512,24 +519,20 @@ mod tests {
             context_window_size: None,
             api_mode: None,
             store: true,
-            enabled_tools: vec![],
-            language: None,
-            keyterms_file: None,
-            no_verbatim: None,
         }
     }
 
     #[tokio::test]
     async fn transcribe_missing_api_key_returns_error() {
         let config = stt_test_config(None);
-        let result = transcribe(vec![0; 44], &config, None, vec![]).await;
+        let result = transcribe(vec![0; 44], &config, &SttOptions::default()).await;
         assert!(matches!(result, Err(SpeechError::ApiKeyMissing)));
     }
 
     #[tokio::test]
     async fn transcribe_empty_api_key_returns_error() {
         let config = stt_test_config(Some(""));
-        let result = transcribe(vec![0; 44], &config, None, vec![]).await;
+        let result = transcribe(vec![0; 44], &config, &SttOptions::default()).await;
         assert!(matches!(result, Err(SpeechError::ApiKeyMissing)));
     }
 

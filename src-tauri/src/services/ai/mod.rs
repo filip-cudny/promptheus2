@@ -51,7 +51,6 @@ struct ProviderEntry {
     provider: Box<dyn AiProvider>,
     model_name: String,
     parameters: ModelParameters,
-    enabled_tools: Vec<String>,
     provider_type: Provider,
     api_mode: ApiMode,
 }
@@ -95,7 +94,6 @@ impl AiService {
                                     provider,
                                     model_name: model.model.clone(),
                                     parameters: model.parameters.clone().unwrap_or_default(),
-                                    enabled_tools: model.enabled_tools.clone(),
                                     provider_type,
                                     api_mode: api_mode.clone(),
                                 },

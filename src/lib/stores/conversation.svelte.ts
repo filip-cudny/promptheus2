@@ -19,7 +19,12 @@ import {
   updateHistoryEntryTitle,
   getHistoryEntry,
 } from "$lib/services/history";
-import { getSettings, updateSetting, updateModelReasoningEffort } from "$lib/services/settings";
+import {
+  getSettings,
+  updateSurfaceModel,
+  updateSurfaceReasoningEffort,
+  updateSurfaceEnabledTools,
+} from "$lib/services/settings";
 import { hasSkillReferences } from "$lib/utils/skillDisplay";
 import type {
   ConversationNode,
@@ -1056,9 +1061,7 @@ export function createConversationStore(
     if (!tab) return;
     tab.model_id = id;
     windowDefaultModelId = id;
-    if (id) {
-      updateSetting("default_model", id);
-    }
+    updateSurfaceModel("chat", id);
   }
 
   function updateReasoningEffort(effort: string | null): void {
@@ -1066,10 +1069,7 @@ export function createConversationStore(
     if (!tab) return;
     tab.reasoning_effort = effort;
     windowDefaultReasoningEffort = effort;
-    const modelId = tab.model_id ?? windowDefaultModelId;
-    if (modelId) {
-      updateModelReasoningEffort(modelId, effort);
-    }
+    updateSurfaceReasoningEffort("chat", effort);
   }
 
   function toggleTool(toolId: string, enabled: boolean): void {
@@ -1084,19 +1084,19 @@ export function createConversationStore(
       tab.selected_tools = tab.selected_tools.filter(t => t !== toolId);
     }
     windowDefaultSelectedTools = [...tab.selected_tools];
-    updateSetting("selected_tools", tab.selected_tools);
+    updateSurfaceEnabledTools("chat", tab.selected_tools);
   }
 
 
   async function initFromSettings(): Promise<void> {
     try {
       const settings = await getSettings();
-      const defaultId = settings.default_model ?? null;
+      const chatSurface = settings.surfaces.chat.generation;
+      const defaultId = chatSurface.model_id ?? null;
       windowDefaultModelId = defaultId;
-      const defaultModel = defaultId ? settings.models.find(m => m.id === defaultId) : undefined;
-      const defaultEffort = defaultModel?.parameters?.reasoning_effort ?? null;
+      const defaultEffort = chatSurface.parameters.reasoning_effort ?? null;
       windowDefaultReasoningEffort = defaultEffort;
-      windowDefaultSelectedTools = settings.selected_tools ?? [];
+      windowDefaultSelectedTools = chatSurface.enabled_tools ?? [];
       for (const tab of tabs) {
         if (tab.model_id === null) tab.model_id = defaultId;
         if (tab.reasoning_effort === null && defaultEffort) tab.reasoning_effort = defaultEffort;

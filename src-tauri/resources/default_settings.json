@@ -37,11 +37,39 @@
     },
     "monochromatic_notification_icons": true
   },
-  "speech_to_text_model": "c3d4e5f6-a7b8-4c9d-8e0f-1a2b3c4d5e6f",
-  "default_model": "550e8400-e29b-41d4-a716-446655440000",
   "number_input_debounce_ms": 200,
-  "conversation_title_model": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
-  "conversation_title_prompt": "Generate a short conversation title based on the user's first message. Return only the title, 2-6 words, no emoji, no quotes, no trailing punctuation. Match the user's language when possible.",
+  "surfaces": {
+    "chat": {
+      "generation": {
+        "model_id": "550e8400-e29b-41d4-a716-446655440000",
+        "parameters": {},
+        "enabled_tools": []
+      },
+      "system_prompt": "You are a helpful assistant.",
+      "about_me": "about_me.md",
+      "environment_section": "environment_section.md"
+    },
+    "quick_actions": {
+      "generation": {
+        "model_id": "550e8400-e29b-41d4-a716-446655440000",
+        "parameters": {},
+        "enabled_tools": []
+      }
+    },
+    "title_generation": {
+      "generation": {
+        "model_id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+        "parameters": {},
+        "enabled_tools": []
+      },
+      "prompt": "Generate a short conversation title based on the user's first message. Return only the title, 2-6 words, no emoji, no quotes, no trailing punctuation. Match the user's language when possible."
+    },
+    "speech_to_text": {
+      "model_id": "c3d4e5f6-a7b8-4c9d-8e0f-1a2b3c4d5e6f",
+      "language": "pl",
+      "prompt": "${STT_PROMPT_FILE}"
+    }
+  },
   "models": [
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -70,8 +98,7 @@
       "model": "gpt-4o-transcribe",
       "display_name": "gpt-4o-transcribe",
       "api_key": "${OPENAI_API_KEY}",
-      "base_url": "https://api.openai.com/v1",
-      "language": "pl"
+      "base_url": "https://api.openai.com/v1"
     }
   ],
   "keymaps": [
@@ -109,11 +136,6 @@
       }
     }
   ],
-  "prompts": [],
-  "system_prompt": "You are a helpful assistant.",
-  "about_me": "about_me.md",
-  "environment_section": "environment_section.md",
-  "stt_prompt": "${STT_PROMPT_FILE}",
   "skills_order": [
     "prompt-refine",
     "prompt-execute",

@@ -89,7 +89,7 @@
     try {
       const settings = await getSettings();
       models = settings.models;
-      defaultModelId = settings.default_model ?? null;
+      defaultModelId = settings.surfaces.chat.generation.model_id ?? null;
     } catch {}
   }
 

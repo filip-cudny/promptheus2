@@ -5,11 +5,11 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 use crate::models::settings::{
-    KeymapGroup, ModelConfig, ModelParameters, NotificationSettings, Settings,
+    KeymapGroup, ModelConfig, NotificationSettings, Settings, SpeechToTextConfig,
 };
 use crate::services::ai::AiService;
 use crate::services::clipboard::ClipboardService;
-use crate::services::config::ConfigService;
+use crate::services::config::{ConfigService, SurfaceKind};
 use crate::services::context::ContextManagerService;
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::services::image_storage::ImageStorage;
@@ -98,6 +98,54 @@ pub async fn update_setting(
 }
 
 #[tauri::command]
+pub async fn update_surface_model(
+    app: AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    surface: SurfaceKind,
+    model_id: Option<String>,
+) -> Result<(), String> {
+    let mut state = state.lock().await;
+    state.config.update_surface_model(surface, model_id);
+    save_and_emit(&state.config, &app)
+}
+
+#[tauri::command]
+pub async fn update_surface_parameter(
+    app: AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    surface: SurfaceKind,
+    key: String,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    let mut state = state.lock().await;
+    state.config.update_surface_parameter(surface, &key, value);
+    save_and_emit(&state.config, &app)
+}
+
+#[tauri::command]
+pub async fn update_surface_enabled_tools(
+    app: AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    surface: SurfaceKind,
+    tools: Vec<String>,
+) -> Result<(), String> {
+    let mut state = state.lock().await;
+    state.config.update_surface_enabled_tools(surface, tools);
+    save_and_emit(&state.config, &app)
+}
+
+#[tauri::command]
+pub async fn update_speech_to_text_config(
+    app: AppHandle,
+    state: State<'_, Mutex<AppState>>,
+    config: SpeechToTextConfig,
+) -> Result<(), String> {
+    let mut state = state.lock().await;
+    state.config.update_speech_to_text(config);
+    save_and_emit(&state.config, &app)
+}
+
+#[tauri::command]
 pub async fn add_model(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
@@ -131,22 +179,6 @@ pub async fn delete_model(
     let mut state = state.lock().await;
     state.config.delete_model(&model_id);
     rebuild_ai(&mut state);
-    save_and_emit(&state.config, &app)
-}
-
-#[tauri::command]
-pub async fn update_model_reasoning_effort(
-    app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
-    model_id: String,
-    reasoning_effort: Option<String>,
-) -> Result<(), String> {
-    let mut state = state.lock().await;
-    let settings = state.config.settings_mut();
-    if let Some(model) = settings.models.iter_mut().find(|m| m.id == model_id) {
-        let params = model.parameters.get_or_insert_with(ModelParameters::default);
-        params.reasoning_effort = reasoning_effort;
-    }
     save_and_emit(&state.config, &app)
 }
 

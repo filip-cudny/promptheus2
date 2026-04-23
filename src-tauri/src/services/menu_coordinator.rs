@@ -138,14 +138,21 @@ impl MenuCoordinator {
             return Vec::new();
         }
 
-        let default_model_id = settings.quick_action_default_model.clone()
-            .or_else(|| settings.default_model.clone());
+        let default_model_id = settings
+            .surfaces
+            .quick_actions
+            .generation
+            .model_id
+            .clone()
+            .or_else(|| settings.surfaces.chat.generation.model_id.clone());
 
-        let default_reasoning_effort = default_model_id
-            .as_ref()
-            .and_then(|id| settings.models.iter().find(|m| &m.id == id))
-            .and_then(|m| m.parameters.as_ref())
-            .and_then(|p| p.reasoning_effort.clone());
+        let default_reasoning_effort = settings
+            .surfaces
+            .quick_actions
+            .generation
+            .parameters
+            .reasoning_effort
+            .clone();
 
         let models: Vec<serde_json::Value> = settings
             .models
@@ -157,7 +164,6 @@ impl MenuCoordinator {
                     "display_name": m.display_name,
                     "model": m.model,
                     "provider": m.provider,
-                    "reasoning_effort": m.parameters.as_ref().and_then(|p| p.reasoning_effort.clone()),
                 })
             })
             .collect();
@@ -185,7 +191,7 @@ impl MenuCoordinator {
                 "default_model_id": default_model_id,
                 "default_reasoning_effort": default_reasoning_effort,
                 "stt_models": stt_models,
-                "speech_to_text_model_id": settings.speech_to_text_model,
+                "speech_to_text_model_id": settings.surfaces.speech_to_text.model_id,
             })),
             enabled: true,
             separator_after: false,
@@ -199,9 +205,9 @@ impl MenuCoordinator {
 
     fn build_settings_items(&self, config: &ConfigService) -> Vec<MenuItem> {
         let settings = config.settings();
+        let chat_default_id = settings.surfaces.chat.generation.model_id.clone();
 
-        let default_model_display = settings
-            .default_model
+        let default_model_display = chat_default_id
             .as_ref()
             .and_then(|default_id| {
                 settings
@@ -210,7 +216,7 @@ impl MenuCoordinator {
                     .find(|m| &m.id == default_id)
                     .map(|m| m.display_name.clone())
             })
-            .or_else(|| settings.default_model.clone())
+            .or_else(|| chat_default_id.clone())
             .unwrap_or_default();
 
         let model_options: Vec<serde_json::Value> = settings
@@ -220,7 +226,7 @@ impl MenuCoordinator {
                 serde_json::json!({
                     "id": m.id,
                     "display_name": m.display_name,
-                    "is_default": settings.default_model.as_ref() == Some(&m.id),
+                    "is_default": chat_default_id.as_ref() == Some(&m.id),
                 })
             })
             .collect();
