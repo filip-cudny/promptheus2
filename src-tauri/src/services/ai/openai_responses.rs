@@ -10,10 +10,12 @@ use tokio_stream::StreamExt;
 use crate::models::message::{ContentPart, MessageContent, ProcessedMessage};
 use crate::models::settings::ModelConfig;
 
+use super::capabilities::{capabilities_for, ModelCapabilities};
 use super::provider::{AiProvider, CompletionRequest, StreamChunk, TokenUsage, ToolCallEvent};
 use super::sse::parse_sse_stream;
 use super::tools::ToolRegistry;
 use super::AiError;
+use crate::models::settings::Provider;
 
 pub struct OpenAiResponsesProvider {
     http_client: reqwest::Client,
@@ -162,11 +164,14 @@ fn build_request_body(request: &CompletionRequest, stream: bool, store: bool) ->
     }
 
     if let Some(ref effort) = request.parameters.reasoning_effort {
-        let mut reasoning = serde_json::json!({ "effort": effort });
-        if effort != "none" {
-            reasoning["summary"] = serde_json::json!("auto");
+        let caps = capabilities_for(&Provider::Openai, &request.model);
+        if caps.accepts_effort(effort) {
+            let mut reasoning = serde_json::json!({ "effort": effort });
+            if effort != "none" {
+                reasoning["summary"] = serde_json::json!("auto");
+            }
+            obj.insert("reasoning".into(), reasoning);
         }
-        obj.insert("reasoning".into(), reasoning);
     }
 
     if !request.tool_payloads.is_empty() {
@@ -270,8 +275,8 @@ struct ResponseUsage {
 
 #[async_trait]
 impl AiProvider for OpenAiResponsesProvider {
-    fn supported_params(&self) -> &'static [&'static str] {
-        &["temperature", "max_tokens", "top_p", "reasoning_effort"]
+    fn capabilities(&self, model: &str) -> ModelCapabilities {
+        capabilities_for(&Provider::Openai, model)
     }
 
     async fn complete(&self, request: CompletionRequest) -> Result<String, AiError> {

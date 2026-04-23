@@ -6,6 +6,7 @@ use futures::Stream;
 use crate::models::message::ProcessedMessage;
 use crate::models::settings::ModelParameters;
 
+use super::capabilities::ModelCapabilities;
 use super::AiError;
 
 pub struct CompletionRequest {
@@ -49,7 +50,7 @@ pub struct TokenUsage {
 
 #[async_trait]
 pub trait AiProvider: Send + Sync {
-    fn supported_params(&self) -> &'static [&'static str];
+    fn capabilities(&self, model: &str) -> ModelCapabilities;
 
     async fn complete(&self, request: CompletionRequest) -> Result<String, AiError>;
 

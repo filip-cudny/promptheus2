@@ -607,6 +607,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::ai::complete,
             commands::ai::complete_stream,
+            commands::ai::get_model_capabilities,
             commands::clipboard::get_clipboard_text,
             commands::clipboard::set_clipboard_text,
             commands::clipboard::clipboard_is_empty,

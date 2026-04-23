@@ -6,6 +6,16 @@ use tokio_stream::StreamExt;
 use crate::commands::settings::AppState;
 use crate::models::ai::StreamEvent;
 use crate::models::message::ProcessedMessage;
+use crate::services::ai::capabilities::{capabilities_for, ModelCapabilities};
+use crate::models::settings::Provider;
+
+#[tauri::command]
+pub async fn get_model_capabilities(
+    provider: Provider,
+    model: String,
+) -> Result<ModelCapabilities, String> {
+    Ok(capabilities_for(&provider, &model))
+}
 
 #[tauri::command]
 pub async fn complete(

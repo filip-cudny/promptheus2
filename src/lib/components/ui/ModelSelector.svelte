@@ -3,12 +3,11 @@
   import { ChevronDown, Brain } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import {
-    supportsReasoning,
-    getAvailableReasoningLevels,
     REASONING_LEVEL_LABELS,
     type ReasoningLevel,
   } from "$lib/constants/models";
-  import type { ModelConfig } from "$lib/types";
+  import { getModelCapabilities } from "$lib/services/capabilities";
+  import type { ModelCapabilities, ModelConfig } from "$lib/types";
 
   let {
     models,
@@ -30,21 +29,41 @@
 
   let modelDropdownOpen = $state(false);
   let reasoningDropdownOpen = $state(false);
+  let capabilitiesCache = $state<Record<string, ModelCapabilities>>({});
 
   let selectedModel = $derived(
     models.find((m) => m.id === selectedModelId) ?? models[0] ?? null,
   );
 
+  $effect(() => {
+    if (!selectedModel?.provider) return;
+    const key = `${selectedModel.provider}::${selectedModel.model}`;
+    if (capabilitiesCache[key]) return;
+    getModelCapabilities(selectedModel.provider, selectedModel.model).then(
+      (caps) => {
+        capabilitiesCache = { ...capabilitiesCache, [key]: caps };
+      },
+    );
+  });
+
+  let currentCapabilities = $derived.by(() => {
+    if (!selectedModel?.provider) return null;
+    const key = `${selectedModel.provider}::${selectedModel.model}`;
+    return capabilitiesCache[key] ?? null;
+  });
+
   let showReasoning = $derived(
-    selectedModel
-      ? supportsReasoning(selectedModel.provider, selectedModel.model) ||
-        selectedModel.parameters?.reasoning_effort != null
+    currentCapabilities
+      ? currentCapabilities.reasoning.kind !== "unsupported"
       : false,
   );
 
-  let availableLevels = $derived(
-    selectedModel ? getAvailableReasoningLevels(selectedModel.provider) : [],
-  );
+  let availableLevels = $derived.by<ReasoningLevel[]>(() => {
+    const reasoning = currentCapabilities?.reasoning;
+    if (!reasoning || reasoning.kind === "unsupported") return [];
+    if (reasoning.kind === "effort") return ["none", ...reasoning.allowed];
+    return ["none", "low", "medium", "high"];
+  });
 
   let currentLevel = $derived(
     (reasoningEffort as ReasoningLevel | null) ?? "none",

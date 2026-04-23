@@ -1,3 +1,15 @@
+export type Effort = "low" | "medium" | "high";
+
+export type ReasoningMode =
+  | { kind: "unsupported" }
+  | { kind: "effort"; allowed: Effort[] }
+  | { kind: "budget_tokens"; min: number; max: number }
+  | { kind: "toggle" };
+
+export interface ModelCapabilities {
+  reasoning: ReasoningMode;
+}
+
 export type ToolCallStatus = "pending" | "in_progress" | "completed" | "failed" | "cancelled";
 
 export type ToolCallType = "web_search" | "code_execution" | "file_read" | "file_write" | "api_call" | "custom";

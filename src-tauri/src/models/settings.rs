@@ -240,17 +240,6 @@ impl Default for ModelParameters {
 }
 
 impl ModelParameters {
-    pub fn active_known_params(&self) -> Vec<&'static str> {
-        let mut active = Vec::new();
-        if self.temperature.is_some() { active.push("temperature"); }
-        if self.max_tokens.is_some() { active.push("max_tokens"); }
-        if self.top_p.is_some() { active.push("top_p"); }
-        if self.frequency_penalty.is_some() { active.push("frequency_penalty"); }
-        if self.presence_penalty.is_some() { active.push("presence_penalty"); }
-        if self.reasoning_effort.is_some() { active.push("reasoning_effort"); }
-        active
-    }
-
     pub fn from_map(map: &HashMap<String, serde_json::Value>) -> Self {
         let mut params = Self::default();
         let mut extra = HashMap::new();

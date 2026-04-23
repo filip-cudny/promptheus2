@@ -1,3 +1,4 @@
+pub mod capabilities;
 pub mod openai;
 pub mod openai_responses;
 pub mod provider;
@@ -13,6 +14,7 @@ use futures::Stream;
 use crate::models::message::ProcessedMessage;
 use crate::models::settings::{ApiMode, ModelConfig, ModelParameters, Provider};
 
+use self::capabilities::{ModelCapabilities, ReasoningMode};
 use self::openai::OpenAiProvider;
 use self::openai_responses::OpenAiResponsesProvider;
 use self::provider::{AiProvider, CompletionRequest, StreamChunk};
@@ -140,11 +142,12 @@ impl AiService {
         messages: Vec<ProcessedMessage>,
     ) -> Result<String, AiError> {
         let entry = self.get_provider(model_id)?;
-        validate_params(&entry.parameters, entry.provider.as_ref(), &entry.model_name);
+        let caps = entry.provider.capabilities(&entry.model_name);
+        let parameters = normalize_params(&entry.parameters, &caps, &entry.model_name);
         let request = CompletionRequest {
             model: entry.model_name.clone(),
             messages,
-            parameters: entry.parameters.clone(),
+            parameters,
             tool_payloads: vec![],
         };
         entry.provider.complete(request).await
@@ -163,7 +166,8 @@ impl AiService {
             Some(overrides) => merge_parameters(&entry.parameters, &overrides),
             None => entry.parameters.clone(),
         };
-        validate_params(&parameters, entry.provider.as_ref(), &entry.model_name);
+        let caps = entry.provider.capabilities(&entry.model_name);
+        let parameters = normalize_params(&parameters, &caps, &entry.model_name);
 
         let mut tool_payloads: Vec<serde_json::Value> = match tools_override {
             Some(ref requested) => {
@@ -209,6 +213,11 @@ impl AiService {
         &self.inner.unavailable_models
     }
 
+    pub fn model_capabilities(&self, model_id: &str) -> Result<ModelCapabilities, AiError> {
+        let entry = self.get_provider(model_id)?;
+        Ok(entry.provider.capabilities(&entry.model_name))
+    }
+
     fn get_provider(&self, model_id: &str) -> Result<&ProviderEntry, AiError> {
         if let Some(reason) = self.inner.unavailable_models.get(model_id) {
             return Err(AiError::ModelUnavailable(reason.clone()));
@@ -234,14 +243,30 @@ fn merge_parameters(base: &ModelParameters, overrides: &ModelParameters) -> Mode
     }
 }
 
-fn validate_params(params: &ModelParameters, provider: &dyn AiProvider, model: &str) {
-    let supported = provider.supported_params();
-    for name in params.active_known_params() {
-        if !supported.contains(&name) {
-            log::warn!("{model}: parameter '{name}' not supported by this provider, ignoring");
+fn normalize_params(
+    params: &ModelParameters,
+    caps: &ModelCapabilities,
+    model: &str,
+) -> ModelParameters {
+    let mut result = params.clone();
+
+    if let Some(ref effort) = result.reasoning_effort {
+        let keep = match &caps.reasoning {
+            ReasoningMode::Effort { .. } => caps.accepts_effort(effort),
+            ReasoningMode::BudgetTokens { .. } | ReasoningMode::Toggle => true,
+            ReasoningMode::Unsupported => false,
+        };
+        if !keep {
+            log::warn!(
+                "{model}: dropping reasoning_effort='{effort}' — not supported by this model",
+            );
+            result.reasoning_effort = None;
         }
     }
+
     for (key, value) in &params.extra {
         log::debug!("{model}: passing through custom parameter '{key}': {value}");
     }
+
+    result
 }

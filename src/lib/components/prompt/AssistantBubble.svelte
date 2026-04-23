@@ -409,6 +409,9 @@
     flex: 1;
     min-width: 0;
     overflow-wrap: break-word;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
   }
 
   .retry-btn {
