@@ -390,6 +390,19 @@
               <Mic size={ICON_SIZE.md} />
             {/if}
           </button>
+          <button
+            class="action-btn dialog-btn"
+            class:disabled={chatDisabled}
+            title="Open new chat"
+            disabled={chatDisabled}
+            onclick={async () => {
+              if (chatDisabled) return;
+              await closeMenu();
+              await openConversationDialog("", "", undefined, undefined, undefined, undefined, true);
+            }}
+          >
+            <MessageSquareShare size={ICON_SIZE.md} />
+          </button>
         </div>
       {/if}
       {#if section.sectionId === "skills"}

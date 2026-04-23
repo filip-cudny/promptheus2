@@ -12,6 +12,7 @@ struct PendingDialogParams {
     last_interaction_only: bool,
     initial_input: Option<String>,
     auto_send_input: bool,
+    new_chat: bool,
 }
 
 static PENDING: Mutex<Option<PendingDialogParams>> = Mutex::new(None);
@@ -24,6 +25,7 @@ pub struct DialogInitParams {
     last_interaction_only: bool,
     initial_input: Option<String>,
     auto_send_input: bool,
+    new_chat: bool,
 }
 
 #[tauri::command]
@@ -35,10 +37,12 @@ pub async fn open_conversation_dialog(
     last_interaction_only: Option<bool>,
     initial_input: Option<String>,
     auto_send_input: Option<bool>,
+    new_chat: Option<bool>,
 ) -> Result<(), String> {
     let label = "conversation-dialog";
     let last_interaction_only = last_interaction_only.unwrap_or(false);
     let auto_send_input = auto_send_input.unwrap_or(false);
+    let new_chat = new_chat.unwrap_or(false);
 
     let config = DialogConfig {
         label,
@@ -56,6 +60,7 @@ pub async fn open_conversation_dialog(
         last_interaction_only,
         initial_input: initial_input.clone(),
         auto_send_input,
+        new_chat,
     });
 
     let (_, created) = dialog::open_or_focus(&app, &config).await?;
@@ -70,6 +75,7 @@ pub async fn open_conversation_dialog(
             auto_send_input,
             &skill_id,
             &skill_name,
+            new_chat,
         )?;
     }
 
@@ -89,6 +95,7 @@ pub fn get_dialog_init_params() -> Option<DialogInitParams> {
             last_interaction_only: p.last_interaction_only,
             initial_input: p.initial_input,
             auto_send_input: p.auto_send_input,
+            new_chat: p.new_chat,
         })
 }
 
@@ -101,8 +108,12 @@ fn emit_reuse_event(
     auto_send_input: bool,
     skill_id: &str,
     skill_name: &str,
+    new_chat: bool,
 ) -> Result<(), String> {
-    if let Some(entry_id) = history_entry_id {
+    if new_chat {
+        app.emit_to(label, "new-conversation", serde_json::json!({}))
+            .map_err(|e| e.to_string())
+    } else if let Some(entry_id) = history_entry_id {
         app.emit_to(
             label,
             "restore-history",
@@ -122,7 +133,7 @@ fn emit_reuse_event(
             }),
         )
         .map_err(|e| e.to_string())
-    } else {
+    } else if !skill_id.is_empty() {
         app.emit_to(
             label,
             "open-for-skill",
@@ -132,5 +143,7 @@ fn emit_reuse_event(
             }),
         )
         .map_err(|e| e.to_string())
+    } else {
+        Ok(())
     }
 }

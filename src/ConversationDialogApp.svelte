@@ -21,6 +21,7 @@
     last_interaction_only: boolean;
     initial_input: string | null;
     auto_send_input: boolean;
+    new_chat: boolean;
   }
 
   const skillsStore = getSkillsStore();
@@ -47,6 +48,7 @@
   let unlistenContextChanged: UnlistenFn | undefined;
   let unlistenVoiceInput: UnlistenFn | undefined;
   let unlistenOpenForSkill: UnlistenFn | undefined;
+  let unlistenNewConversation: UnlistenFn | undefined;
 
   function handleGlobalKeydown(e: KeyboardEvent) {
     if (e.key === "Escape" && store.isExecuting) {
@@ -76,7 +78,9 @@
   }
 
   async function applyInitParams(p: DialogInitParams) {
-    if (p.history_entry_id) {
+    if (p.new_chat) {
+      store.addTab();
+    } else if (p.history_entry_id) {
       await store.restoreFromHistory(p.history_entry_id, p.last_interaction_only);
     } else if (p.initial_input) {
       handleVoiceInput(p.skill_id, p.initial_input, p.auto_send_input);
@@ -119,6 +123,10 @@
 
     unlistenOpenForSkill = await listen<{ skill_id: string; skill_name: string }>("open-for-skill", (event) => {
       store.openForSkill(event.payload.skill_id, event.payload.skill_name);
+    });
+
+    unlistenNewConversation = await listen("new-conversation", () => {
+      store.addTab();
     });
 
     await autoShowContextIfNeeded();
@@ -164,6 +172,7 @@
     unlistenContextChanged?.();
     unlistenVoiceInput?.();
     unlistenOpenForSkill?.();
+    unlistenNewConversation?.();
     store.destroy();
   });
 </script>

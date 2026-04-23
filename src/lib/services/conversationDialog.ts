@@ -7,6 +7,7 @@ export async function openConversationDialog(
   lastInteractionOnly?: boolean,
   initialInput?: string,
   autoSendInput?: boolean,
+  newChat?: boolean,
 ): Promise<void> {
   await invoke("open_conversation_dialog", {
     skillId,
@@ -15,5 +16,6 @@ export async function openConversationDialog(
     lastInteractionOnly: lastInteractionOnly ?? false,
     initialInput: initialInput ?? null,
     autoSendInput: autoSendInput ?? false,
+    newChat: newChat ?? false,
   });
 }
