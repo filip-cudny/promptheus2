@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Pencil, Save } from "lucide-svelte";
+  import { Check, Copy, Pencil, Save } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
@@ -8,18 +8,45 @@
     editMode = $bindable(false),
     saveDisabled = false,
     onsave,
+    oncopy,
   }: {
     lineCount: number;
     tokenCount?: number;
     editMode?: boolean;
     saveDisabled?: boolean;
     onsave: () => void;
+    oncopy?: () => void | Promise<void>;
   } = $props();
+
+  let copied = $state(false);
+  let copyTimer: ReturnType<typeof setTimeout> | undefined;
+
+  async function handleCopy() {
+    if (!oncopy) return;
+    await oncopy();
+    copied = true;
+    clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => (copied = false), 1200);
+  }
 </script>
 
 <div class="editor-toolbar">
   <span class="line-count">{lineCount} {lineCount === 1 ? "line" : "lines"}{#if tokenCount !== undefined} · ~{tokenCount} tokens{/if}</span>
   <div class="spacer"></div>
+  {#if oncopy}
+    <button
+      class="mode-btn"
+      class:active={copied}
+      onclick={handleCopy}
+      title={copied ? "Copied" : "Copy"}
+    >
+      {#if copied}
+        <Check size={ICON_SIZE.sm} />
+      {:else}
+        <Copy size={ICON_SIZE.sm} />
+      {/if}
+    </button>
+  {/if}
   <button
     class="mode-btn"
     class:active={editMode}

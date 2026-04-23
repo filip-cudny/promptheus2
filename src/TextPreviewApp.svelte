@@ -50,7 +50,11 @@
   function hide() {
     emitTo(sourceWindow, "text-attachment-updated", { text, index });
     invoke("save_text_preview_geometry");
-    invoke("hide_dialog_window", { label: "text-preview" });
+    invoke("hide_dialog_window", { label: win.label });
+  }
+
+  async function copyText() {
+    await navigator.clipboard.writeText(text);
   }
 
   function handleInput(e: Event) {
@@ -58,9 +62,7 @@
   }
 
   onMount(() => {
-    const unlistenLoad = win.listen("load-text", () => {
-      loadText();
-    });
+    loadText();
 
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") hide();
@@ -68,14 +70,13 @@
     window.addEventListener("keydown", handleKey);
 
     return () => {
-      unlistenLoad.then((fn) => fn());
       window.removeEventListener("keydown", handleKey);
     };
   });
 </script>
 
 <div class="text-preview">
-  <EditorToolbar {lineCount} {tokenCount} bind:editMode saveDisabled={!isDirty} onsave={hide} />
+  <EditorToolbar {lineCount} {tokenCount} bind:editMode saveDisabled={!isDirty} onsave={hide} oncopy={copyText} />
 
   <div class="content">
     {#if editMode}

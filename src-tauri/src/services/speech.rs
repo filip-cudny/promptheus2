@@ -516,8 +516,6 @@ mod tests {
             language: None,
             keyterms_file: None,
             no_verbatim: None,
-            api_key_source: None,
-            api_key_env: None,
         }
     }
 

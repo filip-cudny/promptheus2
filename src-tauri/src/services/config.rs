@@ -40,7 +40,6 @@ impl ConfigService {
         let mut settings: Settings = serde_json::from_str(&content)?;
 
         migrate_model_params(&mut settings);
-        migrate_legacy_env_fields(&mut settings);
 
         if settings.default_model.is_none() && !settings.models.is_empty() {
             settings.default_model = Some(settings.models[0].id.clone());
@@ -144,7 +143,6 @@ impl ConfigService {
         let mut settings: Settings = serde_json::from_str(&content)?;
 
         migrate_model_params(&mut settings);
-        migrate_legacy_env_fields(&mut settings);
 
         if settings.default_model.is_none() && !settings.models.is_empty() {
             settings.default_model = Some(settings.models[0].id.clone());
@@ -429,19 +427,6 @@ pub fn migrate_model_params(settings: &mut Settings) {
     }
 }
 
-pub fn migrate_legacy_env_fields(settings: &mut Settings) {
-    for model in &mut settings.models {
-        if model.api_key.is_none() || model.api_key.as_deref() == Some("") {
-            if let Some(ref env_var) = model.api_key_env {
-                if !env_var.is_empty() {
-                    log::info!("migrating model '{}' from api_key_env to ${{}} syntax", model.display_name);
-                    model.api_key = Some(format!("${{{}}}", env_var));
-                }
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -467,8 +452,6 @@ mod tests {
             language: None,
             keyterms_file: None,
             no_verbatim: None,
-            api_key_source: None,
-            api_key_env: None,
         }
     }
 
@@ -490,8 +473,6 @@ mod tests {
             language: Some("en".to_string()),
             keyterms_file: None,
             no_verbatim: None,
-            api_key_source: None,
-            api_key_env: None,
         }
     }
 
@@ -617,20 +598,6 @@ mod tests {
         let models = saved["models"].as_array().unwrap();
         let direct = models.iter().find(|m| m["id"] == "direct-model").unwrap();
         assert_eq!(direct["api_key"].as_str().unwrap(), "sk-direct-secret");
-    }
-
-    #[test]
-    fn test_legacy_api_key_env_migrated() {
-        let dir = TempDir::new().unwrap();
-        let json = r#"{
-            "models": [{
-                "id": "1", "model": "gpt-4", "display_name": "GPT-4",
-                "api_key_source": "env", "api_key_env": "MY_KEY"
-            }]
-        }"#;
-        fs::write(dir.path().join("settings.json"), json).unwrap();
-        let service = ConfigService::load(dir.path(), None).expect("load");
-        assert_eq!(service.settings().models[0].api_key.as_deref(), Some("${MY_KEY}"));
     }
 
     #[test]

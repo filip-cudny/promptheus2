@@ -3,7 +3,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Mutex;
 
 use serde::Serialize;
-use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::commands::settings::AppState;
 use crate::services::dialog;
@@ -63,7 +63,6 @@ pub async fn open_text_preview(
 
     if let Some(win) = app.get_webview_window(&label) {
         log::debug!("open_text_preview: reusing existing window {}", label);
-        position_near_cursor(&win);
         win.show().map_err(|e| e.to_string())?;
         dialog::focus_window(&win)?;
         return Ok(());
@@ -75,15 +74,14 @@ pub async fn open_text_preview(
     );
 
     let state = app.state::<tokio::sync::Mutex<AppState>>();
-    let (width, height) = state
-        .lock()
-        .await
-        .ui_state
-        .get_geometry(GEOMETRY_KEY)
+    let geometry = state.lock().await.ui_state.get_geometry(GEOMETRY_KEY);
+
+    let (width, height) = geometry
+        .as_ref()
         .map(|g| (g.width, g.height))
         .unwrap_or((500.0, 400.0));
 
-    let win = WebviewWindowBuilder::new(
+    let mut builder = WebviewWindowBuilder::new(
         &app,
         &label,
         WebviewUrl::App("text-preview.html".into()),
@@ -93,14 +91,20 @@ pub async fn open_text_preview(
     .resizable(true)
     .decorations(true)
     .transparent(false)
-    .visible(false)
-    .build()
-    .map_err(|e| {
+    .visible(false);
+
+    if let Some(g) = &geometry {
+        builder = builder.position(g.x, g.y);
+    }
+
+    let win = builder.build().map_err(|e| {
         pending_remove(&label);
         e.to_string()
     })?;
 
-    position_near_cursor(&win);
+    if geometry.is_none() {
+        position_near_cursor(&win);
+    }
 
     let dock = app.state::<DockManager>();
     dock.dialog_opened(&app);
@@ -124,9 +128,6 @@ pub async fn open_text_preview(
 
     win.show().map_err(|e| e.to_string())?;
     dialog::focus_window(&win)?;
-
-    app.emit_to(&label, "load-text", ())
-        .map_err(|e| e.to_string())?;
 
     Ok(())
 }

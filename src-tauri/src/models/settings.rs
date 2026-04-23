@@ -161,12 +161,6 @@ pub struct ModelConfig {
 
     #[serde(default)]
     pub no_verbatim: Option<bool>,
-
-    #[serde(default, skip_serializing)]
-    pub api_key_source: Option<String>,
-
-    #[serde(default, skip_serializing)]
-    pub api_key_env: Option<String>,
 }
 
 impl ModelConfig {
@@ -596,12 +590,5 @@ mod tests {
     fn test_model_resolved_api_key_missing_env() {
         let config: ModelConfig = serde_json::from_str(r#"{"id":"1","model":"test","display_name":"Test","api_key":"${DEFINITELY_MISSING_KEY_XYZ}"}"#).unwrap();
         assert_eq!(config.resolved_api_key(), None);
-    }
-
-    #[test]
-    fn test_legacy_api_key_env_deserialized() {
-        let config: ModelConfig = serde_json::from_str(r#"{"id":"1","model":"test","display_name":"Test","api_key_env":"OPENAI_API_KEY","api_key_source":"env"}"#).unwrap();
-        assert_eq!(config.api_key_env.as_deref(), Some("OPENAI_API_KEY"));
-        assert_eq!(config.api_key_source.as_deref(), Some("env"));
     }
 }
