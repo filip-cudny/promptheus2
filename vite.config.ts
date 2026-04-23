@@ -29,6 +29,7 @@ export default defineConfig({
         "conversation-dialog": path.resolve("./conversation-dialog.html"),
         "context-editor": path.resolve("./context-editor.html"),
         "history-dialog": path.resolve("./history-dialog.html"),
+        "settings-dialog": path.resolve("./settings-dialog.html"),
         "image-preview": path.resolve("./image-preview.html"),
         "text-preview": path.resolve("./text-preview.html"),
         notification: path.resolve("./notification.html"),

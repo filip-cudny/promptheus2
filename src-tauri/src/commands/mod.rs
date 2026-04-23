@@ -13,6 +13,7 @@ pub mod execution;
 pub mod fs;
 pub mod conversation_dialog;
 pub mod settings;
+pub mod settings_dialog;
 pub mod skills;
 pub mod speech;
 pub mod text_preview;

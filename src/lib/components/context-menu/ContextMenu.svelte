@@ -10,7 +10,7 @@
   import LastInteractionSection from "./LastInteractionSection.svelte";
   import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
   import FloatingPanel from "$lib/components/ui/FloatingPanel.svelte";
-  import { ChevronRight, Info, MessageSquare, MessageSquareShare, Mic, Square, X } from "lucide-svelte";
+  import { ChevronRight, Info, MessageSquare, MessageSquareShare, Mic, Square, SquarePen, X } from "lucide-svelte";
   import { openConversationDialog } from "$lib/services/conversationDialog";
   import { isExecuting, getExecutingSkillId } from "$lib/stores/execution.svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
@@ -401,7 +401,7 @@
               await openConversationDialog("", "", undefined, undefined, undefined, undefined, true);
             }}
           >
-            <MessageSquareShare size={ICON_SIZE.md} />
+            <SquarePen size={ICON_SIZE.md} />
           </button>
         </div>
       {/if}
@@ -661,10 +661,6 @@
   .chat-button.disabled {
     color: rgba(255, 255, 255, 0.3);
     cursor: default;
-  }
-
-  .chat-mic-btn {
-    margin-right: 30px;
   }
 
   .separator {

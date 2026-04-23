@@ -90,7 +90,19 @@ export interface ModelParameters {
   frequency_penalty: number | null;
   presence_penalty: number | null;
   reasoning_effort: string | null;
+  [key: string]: unknown;
 }
+
+export const KNOWN_MODEL_PARAMETER_KEYS = [
+  "temperature",
+  "max_tokens",
+  "top_p",
+  "frequency_penalty",
+  "presence_penalty",
+  "reasoning_effort",
+] as const;
+
+export type KnownModelParameterKey = (typeof KNOWN_MODEL_PARAMETER_KEYS)[number];
 
 export interface KeymapGroup {
   context: string;

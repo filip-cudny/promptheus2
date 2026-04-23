@@ -258,22 +258,22 @@ pub enum ApiMode {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelParameters {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<u32>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub top_p: Option<f64>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frequency_penalty: Option<f64>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub presence_penalty: Option<f64>,
 
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
 
     #[serde(flatten)]
@@ -631,5 +631,66 @@ mod tests {
         assert_eq!(parsed.surfaces.title_generation.prompt, "Title prompt");
         assert_eq!(parsed.surfaces.speech_to_text.model_id.as_deref(), Some("stt-1"));
         assert_eq!(parsed.surfaces.speech_to_text.language.as_deref(), Some("en"));
+    }
+
+    #[test]
+    fn test_model_parameters_extra_roundtrip() {
+        let json = r#"{
+            "temperature": 0.7,
+            "max_tokens": 1024,
+            "thinking": {"type": "enabled", "budget_tokens": 8000},
+            "service_tier": "auto",
+            "response_format": {"type": "json_object"}
+        }"#;
+        let params: ModelParameters = serde_json::from_str(json).unwrap();
+        assert_eq!(params.temperature, Some(0.7));
+        assert_eq!(params.max_tokens, Some(1024));
+        assert!(params.extra.contains_key("thinking"));
+        assert!(params.extra.contains_key("service_tier"));
+        assert!(params.extra.contains_key("response_format"));
+
+        let serialized = serde_json::to_value(&params).unwrap();
+        let obj = serialized.as_object().unwrap();
+        assert_eq!(obj.get("temperature").and_then(|v| v.as_f64()), Some(0.7));
+        assert_eq!(obj.get("max_tokens").and_then(|v| v.as_u64()), Some(1024));
+        assert_eq!(
+            obj.get("service_tier").and_then(|v| v.as_str()),
+            Some("auto"),
+        );
+        let thinking = obj.get("thinking").and_then(|v| v.as_object()).unwrap();
+        assert_eq!(
+            thinking.get("budget_tokens").and_then(|v| v.as_u64()),
+            Some(8000),
+        );
+
+        let reparsed: ModelParameters = serde_json::from_value(serialized).unwrap();
+        assert_eq!(reparsed.temperature, params.temperature);
+        assert_eq!(reparsed.extra.len(), params.extra.len());
+        assert_eq!(reparsed.extra.get("service_tier"), params.extra.get("service_tier"));
+    }
+
+    #[test]
+    fn test_model_config_with_custom_parameters_roundtrip() {
+        let json = r#"{
+            "id": "abc",
+            "model": "claude-sonnet-4-6",
+            "display_name": "Sonnet",
+            "type": "text",
+            "provider": "anthropic",
+            "parameters": {
+                "temperature": 1.0,
+                "thinking": {"type": "enabled", "budget_tokens": 16000}
+            }
+        }"#;
+        let config: ModelConfig = serde_json::from_str(json).unwrap();
+        let params = config.parameters.clone().unwrap();
+        assert_eq!(params.temperature, Some(1.0));
+        assert!(params.extra.contains_key("thinking"));
+
+        let serialized = serde_json::to_string(&config).unwrap();
+        let reparsed: ModelConfig = serde_json::from_str(&serialized).unwrap();
+        let reparsed_params = reparsed.parameters.unwrap();
+        assert_eq!(reparsed_params.temperature, Some(1.0));
+        assert!(reparsed_params.extra.contains_key("thinking"));
     }
 }

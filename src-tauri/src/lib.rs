@@ -220,7 +220,12 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 });
             }
             "settings" => {
-                let _ = app.emit("open-settings", ());
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = commands::settings_dialog::open_settings_window(app, None).await {
+                        log::error!("failed to open settings window: {e}");
+                    }
+                });
             }
             "quit" => {
                 app.exit(0);
@@ -675,6 +680,8 @@ pub fn run() {
             commands::skills::reload_skills,
             commands::context_editor::open_context_editor,
             commands::history_dialog::open_history_dialog,
+            commands::settings_dialog::open_settings_window,
+            commands::settings_dialog::check_env_var,
             commands::image_preview::open_image_preview,
             commands::image_preview::get_pending_image,
             commands::image_preview::get_image_preview_work_area,
