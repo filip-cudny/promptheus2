@@ -666,7 +666,7 @@ pub fn resolve_environment_section_template(config: &ConfigService, active_app: 
 }
 
 pub fn build_system_prompt_base(config: &ConfigService, resolved_environment_section: Option<&str>, active_app: &str, recent_apps: &str) -> String {
-    let system_prompt = &config.settings().surfaces.chat.system_prompt;
+    let system_prompt = &config.settings().prompt_base.system_prompt;
     let input_format_guide = config.input_format_guide();
     let about_me = config.about_me();
 

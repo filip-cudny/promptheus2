@@ -319,7 +319,7 @@ impl ConfigService {
     }
 
     pub fn update_system_prompt(&mut self, prompt: String) {
-        self.settings.surfaces.chat.system_prompt = prompt;
+        self.settings.prompt_base.system_prompt = prompt;
     }
 
     pub fn update_skills_order(&mut self, order: Vec<String>) {
@@ -334,8 +334,7 @@ impl ConfigService {
     pub fn about_me(&self) -> String {
         let filename = self
             .settings
-            .surfaces
-            .chat
+            .prompt_base
             .about_me
             .as_deref()
             .unwrap_or("about_me.md");
@@ -346,8 +345,7 @@ impl ConfigService {
     pub fn environment_section_template(&self) -> String {
         let filename = self
             .settings
-            .surfaces
-            .chat
+            .prompt_base
             .environment_section
             .as_deref()
             .unwrap_or("environment_section.md");
@@ -416,11 +414,15 @@ fn parse_and_migrate(content: &str) -> Result<Settings, ConfigError> {
     let raw: serde_json::Value = serde_json::from_str(content)?;
     let needs_migration = raw
         .as_object()
-        .map(|obj| !obj.contains_key("surfaces") || has_legacy_fields(obj))
+        .map(|obj| {
+            !obj.contains_key("surfaces")
+                || has_legacy_fields(obj)
+                || has_chat_prompt_base_fields(obj)
+        })
         .unwrap_or(false);
 
     if needs_migration {
-        log::info!("migrating settings.json to new surface-based schema");
+        log::info!("migrating settings.json to new schema");
         let migrated = migrate_legacy_json(raw);
         let settings: Settings = serde_json::from_value(migrated)?;
         Ok(settings)
@@ -446,6 +448,20 @@ fn has_legacy_fields(obj: &serde_json::Map<String, serde_json::Value>) -> bool {
     LEGACY_KEYS.iter().any(|k| obj.contains_key(*k))
 }
 
+fn has_chat_prompt_base_fields(obj: &serde_json::Map<String, serde_json::Value>) -> bool {
+    let Some(chat) = obj
+        .get("surfaces")
+        .and_then(|v| v.as_object())
+        .and_then(|s| s.get("chat"))
+        .and_then(|c| c.as_object())
+    else {
+        return false;
+    };
+    chat.contains_key("system_prompt")
+        || chat.contains_key("about_me")
+        || chat.contains_key("environment_section")
+}
+
 fn migrate_legacy_json(mut raw: serde_json::Value) -> serde_json::Value {
     let Some(obj) = raw.as_object_mut() else {
         return raw;
@@ -456,9 +472,9 @@ fn migrate_legacy_json(mut raw: serde_json::Value) -> serde_json::Value {
     let speech_to_text_model = obj.remove("speech_to_text_model");
     let conversation_title_model = obj.remove("conversation_title_model");
     let conversation_title_prompt = obj.remove("conversation_title_prompt");
-    let system_prompt = obj.remove("system_prompt");
-    let about_me = obj.remove("about_me");
-    let environment_section = obj.remove("environment_section");
+    let mut system_prompt = obj.remove("system_prompt");
+    let mut about_me = obj.remove("about_me");
+    let mut environment_section = obj.remove("environment_section");
     let stt_prompt = obj.remove("stt_prompt");
     let selected_tools = obj.remove("selected_tools");
 
@@ -491,19 +507,19 @@ fn migrate_legacy_json(mut raw: serde_json::Value) -> serde_json::Value {
                     params.insert("reasoning_effort".to_string(), effort);
                 }
             }
-            if !chat.contains_key("system_prompt") {
-                if let Some(v) = system_prompt.clone() {
-                    chat.insert("system_prompt".to_string(), v);
+            if let Some(v) = chat.remove("system_prompt") {
+                if system_prompt.is_none() {
+                    system_prompt = Some(v);
                 }
             }
-            if !chat.contains_key("about_me") {
-                if let Some(v) = about_me.clone() {
-                    chat.insert("about_me".to_string(), v);
+            if let Some(v) = chat.remove("about_me") {
+                if about_me.is_none() {
+                    about_me = Some(v);
                 }
             }
-            if !chat.contains_key("environment_section") {
-                if let Some(v) = environment_section.clone() {
-                    chat.insert("environment_section".to_string(), v);
+            if let Some(v) = chat.remove("environment_section") {
+                if environment_section.is_none() {
+                    environment_section = Some(v);
                 }
             }
         },
@@ -580,6 +596,30 @@ fn migrate_legacy_json(mut raw: serde_json::Value) -> serde_json::Value {
     obj.insert(
         "surfaces".to_string(),
         serde_json::Value::Object(surfaces),
+    );
+
+    let mut prompt_base = obj
+        .remove("prompt_base")
+        .and_then(|v| v.as_object().cloned())
+        .unwrap_or_default();
+    if !prompt_base.contains_key("system_prompt") {
+        if let Some(v) = system_prompt {
+            prompt_base.insert("system_prompt".to_string(), v);
+        }
+    }
+    if !prompt_base.contains_key("about_me") {
+        if let Some(v) = about_me {
+            prompt_base.insert("about_me".to_string(), v);
+        }
+    }
+    if !prompt_base.contains_key("environment_section") {
+        if let Some(v) = environment_section {
+            prompt_base.insert("environment_section".to_string(), v);
+        }
+    }
+    obj.insert(
+        "prompt_base".to_string(),
+        serde_json::Value::Object(prompt_base),
     );
 
     if let Some(models) = obj.get_mut("models").and_then(|v| v.as_array_mut()) {
@@ -1150,9 +1190,9 @@ mod tests {
         assert_eq!(s.surfaces.chat.generation.model_id.as_deref(), Some("model-a"));
         assert_eq!(s.surfaces.chat.generation.parameters.reasoning_effort.as_deref(), Some("medium"));
         assert_eq!(s.surfaces.chat.generation.enabled_tools, vec!["web_search"]);
-        assert_eq!(s.surfaces.chat.system_prompt, "Custom system");
-        assert_eq!(s.surfaces.chat.about_me.as_deref(), Some("about_me.md"));
-        assert_eq!(s.surfaces.chat.environment_section.as_deref(), Some("environment_section.md"));
+        assert_eq!(s.prompt_base.system_prompt, "Custom system");
+        assert_eq!(s.prompt_base.about_me.as_deref(), Some("about_me.md"));
+        assert_eq!(s.prompt_base.environment_section.as_deref(), Some("environment_section.md"));
         assert_eq!(s.surfaces.quick_actions.generation.model_id.as_deref(), Some("model-b"));
         assert_eq!(s.surfaces.title_generation.generation.model_id.as_deref(), Some("model-c"));
         assert_eq!(s.surfaces.title_generation.prompt, "Make a title");
@@ -1188,6 +1228,46 @@ mod tests {
         let s = service.settings();
         assert_eq!(s.surfaces.chat.generation.model_id.as_deref(), Some("m1"));
         assert_eq!(s.surfaces.quick_actions.generation.model_id.as_deref(), Some("m1"));
+    }
+
+    #[test]
+    fn test_migrate_chat_prompt_fields_into_prompt_base() {
+        let dir = TempDir::new().unwrap();
+        let legacy = r#"{
+            "surfaces": {
+                "chat": {
+                    "generation": { "model_id": "m1", "parameters": {}, "enabled_tools": [] },
+                    "system_prompt": "Custom system",
+                    "about_me": "about_me.md",
+                    "environment_section": "environment_section.md"
+                },
+                "speech_to_text": { "model_id": "stt-1" }
+            },
+            "models": [
+                { "id": "m1", "type": "text", "model": "gpt-4", "display_name": "T", "provider": "openai", "api_key": "${OPENAI_API_KEY}" },
+                { "id": "stt-1", "type": "stt", "model": "whisper-1", "display_name": "STT", "api_key": "${OPENAI_API_KEY}" }
+            ]
+        }"#;
+        fs::write(dir.path().join("settings.json"), legacy).unwrap();
+        let service = ConfigService::load(dir.path(), None).expect("load");
+        let s = service.settings();
+
+        assert_eq!(s.prompt_base.system_prompt, "Custom system");
+        assert_eq!(s.prompt_base.about_me.as_deref(), Some("about_me.md"));
+        assert_eq!(
+            s.prompt_base.environment_section.as_deref(),
+            Some("environment_section.md")
+        );
+        assert_eq!(s.surfaces.chat.generation.model_id.as_deref(), Some("m1"));
+
+        let saved = fs::read_to_string(dir.path().join("settings.json")).unwrap();
+        let saved_json: serde_json::Value = serde_json::from_str(&saved).unwrap();
+        let chat = saved_json["surfaces"]["chat"].as_object().unwrap();
+        assert!(!chat.contains_key("system_prompt"));
+        assert!(!chat.contains_key("about_me"));
+        assert!(!chat.contains_key("environment_section"));
+        let prompt_base = saved_json["prompt_base"].as_object().unwrap();
+        assert_eq!(prompt_base["system_prompt"], "Custom system");
     }
 
     #[test]

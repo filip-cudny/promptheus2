@@ -38,16 +38,18 @@
     "monochromatic_notification_icons": true
   },
   "number_input_debounce_ms": 200,
+  "prompt_base": {
+    "system_prompt": "You are a helpful assistant.",
+    "about_me": "about_me.md",
+    "environment_section": "environment_section.md"
+  },
   "surfaces": {
     "chat": {
       "generation": {
         "model_id": "550e8400-e29b-41d4-a716-446655440000",
         "parameters": {},
         "enabled_tools": []
-      },
-      "system_prompt": "You are a helpful assistant.",
-      "about_me": "about_me.md",
-      "environment_section": "environment_section.md"
+      }
     },
     "quick_actions": {
       "generation": {

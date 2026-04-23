@@ -16,10 +16,17 @@ export interface Settings {
   notifications: NotificationSettings;
   number_input_debounce_ms: number;
   models: ModelConfig[];
+  prompt_base: PromptBase;
   surfaces: Surfaces;
   keymaps: KeymapGroup[];
   recent_apps_count: number;
   skills_order: string[];
+}
+
+export interface PromptBase {
+  system_prompt: string;
+  about_me: string | null;
+  environment_section: string | null;
 }
 
 export interface Surfaces {
@@ -37,9 +44,6 @@ export interface GenerationConfig {
 
 export interface ChatConfig {
   generation: GenerationConfig;
-  system_prompt: string;
-  about_me: string | null;
-  environment_section: string | null;
 }
 
 export interface QuickActionsConfig {

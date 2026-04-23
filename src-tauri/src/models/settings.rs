@@ -67,6 +67,9 @@ pub struct Settings {
     pub models: Vec<ModelConfig>,
 
     #[serde(default)]
+    pub prompt_base: PromptBase,
+
+    #[serde(default)]
     pub surfaces: Surfaces,
 
     #[serde(default)]
@@ -109,11 +112,14 @@ pub struct GenerationConfig {
     pub enabled_tools: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ChatConfig {
     #[serde(default)]
     pub generation: GenerationConfig,
+}
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptBase {
     #[serde(default = "default_system_prompt")]
     pub system_prompt: String,
 
@@ -124,10 +130,9 @@ pub struct ChatConfig {
     pub environment_section: Option<String>,
 }
 
-impl Default for ChatConfig {
+impl Default for PromptBase {
     fn default() -> Self {
         Self {
-            generation: GenerationConfig::default(),
             system_prompt: default_system_prompt(),
             about_me: None,
             environment_section: None,
@@ -433,6 +438,7 @@ impl Default for Settings {
             notifications: NotificationSettings::default(),
             number_input_debounce_ms: 200,
             models: Vec::new(),
+            prompt_base: PromptBase::default(),
             surfaces: Surfaces::default(),
             keymaps: Vec::new(),
             recent_apps_count: default_recent_apps_count(),
@@ -506,7 +512,7 @@ mod tests {
         assert_eq!(settings.number_input_debounce_ms, 200);
         assert_eq!(settings.menu_section_order.len(), 6);
         assert!(settings.models.is_empty());
-        assert_eq!(settings.surfaces.chat.system_prompt, "You are a helpful assistant.");
+        assert_eq!(settings.prompt_base.system_prompt, "You are a helpful assistant.");
     }
 
     #[test]
@@ -605,7 +611,7 @@ mod tests {
         let mut settings = Settings::default();
         settings.surfaces.chat.generation.model_id = Some("model-1".to_string());
         settings.surfaces.chat.generation.parameters.reasoning_effort = Some("medium".to_string());
-        settings.surfaces.chat.system_prompt = "Custom".to_string();
+        settings.prompt_base.system_prompt = "Custom".to_string();
         settings.surfaces.quick_actions.generation.model_id = Some("model-2".to_string());
         settings.surfaces.quick_actions.generation.parameters.reasoning_effort = Some("high".to_string());
         settings.surfaces.title_generation.generation.model_id = Some("model-3".to_string());
@@ -618,7 +624,7 @@ mod tests {
 
         assert_eq!(parsed.surfaces.chat.generation.model_id.as_deref(), Some("model-1"));
         assert_eq!(parsed.surfaces.chat.generation.parameters.reasoning_effort.as_deref(), Some("medium"));
-        assert_eq!(parsed.surfaces.chat.system_prompt, "Custom");
+        assert_eq!(parsed.prompt_base.system_prompt, "Custom");
         assert_eq!(parsed.surfaces.quick_actions.generation.model_id.as_deref(), Some("model-2"));
         assert_eq!(parsed.surfaces.quick_actions.generation.parameters.reasoning_effort.as_deref(), Some("high"));
         assert_eq!(parsed.surfaces.title_generation.generation.model_id.as_deref(), Some("model-3"));
