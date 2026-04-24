@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use serde::Serialize;
 use tauri::{Emitter, Manager};
 
+use crate::services::conversation_dialog as conversation_dialog_service;
 use crate::services::dialog::{self, focus_host_window, DialogConfig};
 
 struct PendingDialogParams {
@@ -98,6 +99,17 @@ fn surface_conversation_dialog(app: &tauri::AppHandle, label: &str) {
         }
     }
     let _ = focus_host_window(app, label);
+}
+
+#[tauri::command]
+pub async fn open_conversation_dialog_new_window(
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    log::info!(
+        target: "app_lib::commands::conversation_dialog",
+        "open_conversation_dialog_new_window",
+    );
+    conversation_dialog_service::open_new_instance(&app).await
 }
 
 #[tauri::command]

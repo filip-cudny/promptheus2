@@ -6,6 +6,7 @@ use tauri::{LogicalPosition, Manager, WebviewUrl, WebviewWindowBuilder, WindowEv
 use tokio::sync::Mutex;
 
 use super::ai_providers::{self, AiProvider, PROVIDERS};
+use super::conversation_dialog;
 use super::dialog::{self, focus_host_window, focus_window, save_geometry, DialogConfig};
 use super::dock::DockManager;
 use super::ui_state::WindowGeometry;
@@ -536,18 +537,17 @@ pub fn cleanup_host_state(app: &tauri::AppHandle, host_label: &str) {
     }
 }
 
+const PROMPTHEUS_PROVIDER_ID: &str = "promptheus";
+
 #[derive(Debug)]
 enum RouterMessage {
-    BackNav,
     ToolbarAction(ToolbarAction),
 }
 
 #[derive(Debug)]
 enum ToolbarAction {
     OpenProvider { provider_id: String },
-    NewChat,
-    OpenInNewWindow,
-    OpenPromptheus,
+    OpenProviderNewWindow { provider_id: String },
 }
 
 fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
@@ -557,7 +557,6 @@ fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
         .collect();
     let kind = params.remove("kind")?;
     match kind.as_str() {
-        "back_nav" => Some(RouterMessage::BackNav),
         "toolbar_action" => {
             let action = params.remove("action")?;
             match action.as_str() {
@@ -567,12 +566,11 @@ fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
                         provider_id,
                     }))
                 }
-                "new_chat" => Some(RouterMessage::ToolbarAction(ToolbarAction::NewChat)),
-                "open_in_new_window" => {
-                    Some(RouterMessage::ToolbarAction(ToolbarAction::OpenInNewWindow))
-                }
-                "open_promptheus" => {
-                    Some(RouterMessage::ToolbarAction(ToolbarAction::OpenPromptheus))
+                "open_provider_new_window" => {
+                    let provider_id = params.remove("provider_id")?;
+                    Some(RouterMessage::ToolbarAction(
+                        ToolbarAction::OpenProviderNewWindow { provider_id },
+                    ))
                 }
                 _ => None,
             }
@@ -590,23 +588,26 @@ async fn handle_router_message(app: &tauri::AppHandle, webview_label: &str, msg:
     let hosted = host_label == CONVERSATION_DIALOG_LABEL && host_label != webview_label;
 
     match msg {
-        RouterMessage::BackNav => {
-            if hosted {
-                if let Err(e) = hosted_swap_to_conversation_dialog(app) {
+        RouterMessage::ToolbarAction(ToolbarAction::OpenProvider { provider_id }) => {
+            if provider_id == PROMPTHEUS_PROVIDER_ID {
+                if hosted {
+                    if let Err(e) = hosted_swap_to_conversation_dialog(app) {
+                        log::warn!(
+                            target: "app_lib::services::ai_webview",
+                            "hosted swap to CD failed: {e}",
+                        );
+                    }
+                    return;
+                }
+                if let Err(e) = swap_to_conversation_dialog(app, webview_label).await {
                     log::warn!(
                         target: "app_lib::services::ai_webview",
-                        "back nav (hosted) failed: {e}",
+                        "swap to conversation-dialog failed: {e}",
                     );
                 }
                 return;
             }
-            close_by_label(app, webview_label);
-            if let Some(state) = app.try_state::<AiWebviewState>() {
-                state.remove_provider(webview_label);
-            }
-            focus_conversation_dialog(app);
-        }
-        RouterMessage::ToolbarAction(ToolbarAction::OpenProvider { provider_id }) => {
+
             let Some(provider) = ai_providers::find(&provider_id) else {
                 log::warn!(
                     target: "app_lib::services::ai_webview",
@@ -637,65 +638,28 @@ async fn handle_router_message(app: &tauri::AppHandle, webview_label: &str, msg:
                 state.set_provider(webview_label, provider.id);
             }
         }
-        RouterMessage::ToolbarAction(ToolbarAction::NewChat) => {
-            let Some(provider) = current_provider_for(app, webview_label) else {
-                return;
-            };
-            if hosted {
-                let Some(webview) = app.get_webview(webview_label) else {
-                    return;
-                };
-                match tauri::Url::parse(provider.url) {
-                    Ok(parsed) => {
-                        if let Err(e) = webview.navigate(parsed) {
-                            log::warn!(
-                                target: "app_lib::services::ai_webview",
-                                "new chat (hosted) failed: {e}",
-                            );
-                        }
-                    }
-                    Err(e) => log::warn!(
+        RouterMessage::ToolbarAction(ToolbarAction::OpenProviderNewWindow { provider_id }) => {
+            if provider_id == PROMPTHEUS_PROVIDER_ID {
+                if let Err(e) = conversation_dialog::open_new_instance(app).await {
+                    log::warn!(
                         target: "app_lib::services::ai_webview",
-                        "invalid provider url: {e}",
-                    ),
+                        "open new conversation-dialog failed: {e}",
+                    );
                 }
                 return;
             }
-            let Some(win) = app.get_webview_window(webview_label) else {
-                return;
-            };
-            if let Err(e) = navigate_webview(&win, provider.url) {
+
+            let Some(provider) = ai_providers::find(&provider_id) else {
                 log::warn!(
                     target: "app_lib::services::ai_webview",
-                    "new chat failed: {e}",
+                    "unknown provider in open_provider_new_window: {provider_id}",
                 );
-            }
-        }
-        RouterMessage::ToolbarAction(ToolbarAction::OpenInNewWindow) => {
-            let Some(provider) = current_provider_for(app, webview_label) else {
                 return;
             };
             if let Err(e) = open_new_instance(app, provider, None).await {
                 log::warn!(
                     target: "app_lib::services::ai_webview",
                     "open in new window failed: {e}",
-                );
-            }
-        }
-        RouterMessage::ToolbarAction(ToolbarAction::OpenPromptheus) => {
-            if hosted {
-                if let Err(e) = hosted_swap_to_conversation_dialog(app) {
-                    log::warn!(
-                        target: "app_lib::services::ai_webview",
-                        "hosted swap to CD failed: {e}",
-                    );
-                }
-                return;
-            }
-            if let Err(e) = swap_to_conversation_dialog(app, webview_label).await {
-                log::warn!(
-                    target: "app_lib::services::ai_webview",
-                    "swap to conversation-dialog failed: {e}",
                 );
             }
         }
@@ -729,13 +693,8 @@ fn derive_base_provider_id(rest: &str) -> Option<&'static str> {
 }
 
 fn initialization_script(provider: &AiProvider) -> String {
-    let providers_json = serde_json::to_string(
-        &PROVIDERS
-            .iter()
-            .map(|p| serde_json::json!({ "id": p.id, "name": p.name }))
-            .collect::<Vec<_>>(),
-    )
-    .unwrap_or_else(|_| "[]".to_string());
+    let providers_json = serde_json::to_string(&toolbar_providers())
+        .unwrap_or_else(|_| "[]".to_string());
     let provider_id_json =
         serde_json::to_string(provider.id).unwrap_or_else(|_| "\"\"".to_string());
     let sentinel_json =
@@ -753,6 +712,7 @@ fn initialization_script(provider: &AiProvider) -> String {
             g.providers = {providers_json};
             g.routerSentinel = {sentinel_json};
             g.toolbarId = {toolbar_element_id_json};
+            {switcher}
             {toolbar}
         }})();
         "#,
@@ -760,20 +720,35 @@ fn initialization_script(provider: &AiProvider) -> String {
         providers_json = providers_json,
         sentinel_json = sentinel_json,
         toolbar_element_id_json = toolbar_element_id_json,
+        switcher = PROVIDER_SWITCHER_JS,
         toolbar = TOOLBAR_BOOTSTRAP,
     )
 }
 
 fn reinject_script() -> String {
-    format!(
-        r#"
-        (function() {{
-            if (!window.__promptheus || !window.__promptheus.ensureToolbar) return;
-            window.__promptheus.ensureToolbar();
-        }})();
-        "#
-    )
+    r#"
+    (function() {
+        if (!window.__promptheus || !window.__promptheus.ensureToolbar) return;
+        window.__promptheus.ensureToolbar();
+    })();
+    "#
+    .to_string()
 }
+
+fn toolbar_providers() -> Vec<serde_json::Value> {
+    let mut list: Vec<serde_json::Value> = PROVIDERS
+        .iter()
+        .map(|p| serde_json::json!({ "id": p.id, "name": p.name }))
+        .collect();
+    list.push(serde_json::json!({
+        "id": PROMPTHEUS_PROVIDER_ID,
+        "name": "Promptheus",
+    }));
+    list
+}
+
+const PROVIDER_SWITCHER_JS: &str =
+    include_str!("../../../src/lib/providerSwitcher.js");
 
 const TOOLBAR_BOOTSTRAP: &str = r##"
 const S = g.routerSentinel;
@@ -788,91 +763,7 @@ function applyStyle(el, styles) {
     for (const k in styles) el.style.setProperty(k, styles[k]);
 }
 
-function makeIconButton(label, title, onClick) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = label;
-    if (title) b.title = title;
-    b.addEventListener("click", onClick);
-    applyStyle(b, {
-        "background": "rgba(255,255,255,0.08)",
-        "color": "#e8e8e8",
-        "border": "1px solid rgba(255,255,255,0.15)",
-        "border-radius": "6px",
-        "padding": "4px 10px",
-        "margin": "0 2px",
-        "font": "500 12px/1.2 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
-        "cursor": "pointer",
-        "user-select": "none",
-        "white-space": "nowrap",
-    });
-    b.addEventListener("mouseover", () => b.style.setProperty("background", "rgba(255,255,255,0.16)"));
-    b.addEventListener("mouseout", () => b.style.setProperty("background", "rgba(255,255,255,0.08)"));
-    return b;
-}
-
-function buildDropdown() {
-    const wrap = document.createElement("div");
-    applyStyle(wrap, { "position": "relative", "display": "inline-block" });
-
-    const current = g.providers.find((p) => p.id === g.providerId);
-    const btn = makeIconButton((current ? current.name : "AI") + " ▾", "Zmień providera", () => {
-        const shown = menu.style.display === "block";
-        menu.style.display = shown ? "none" : "block";
-    });
-    wrap.appendChild(btn);
-
-    const menu = document.createElement("div");
-    applyStyle(menu, {
-        "position": "absolute",
-        "top": "calc(100% + 4px)",
-        "left": "0",
-        "min-width": "140px",
-        "background": "rgba(30,30,30,0.96)",
-        "border": "1px solid rgba(255,255,255,0.15)",
-        "border-radius": "6px",
-        "box-shadow": "0 4px 12px rgba(0,0,0,0.3)",
-        "padding": "4px 0",
-        "display": "none",
-        "z-index": "2147483647",
-    });
-    const items = [{ id: "__promptheus__", name: "Promptheus", promptheus: true }].concat(g.providers);
-    items.forEach((p) => {
-        const item = document.createElement("button");
-        item.type = "button";
-        item.textContent = p.name;
-        applyStyle(item, {
-            "display": "block",
-            "width": "100%",
-            "padding": "8px 12px",
-            "background": "transparent",
-            "border": "none",
-            "color": "#e8e8e8",
-            "font": "500 12px/1.2 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
-            "cursor": "pointer",
-            "text-align": "left",
-            "white-space": "nowrap",
-        });
-        item.addEventListener("mouseover", () => item.style.setProperty("background", "rgba(255,255,255,0.08)"));
-        item.addEventListener("mouseout", () => item.style.setProperty("background", "transparent"));
-        item.addEventListener("click", () => {
-            menu.style.display = "none";
-            if (p.promptheus) {
-                sendAction({ kind: "toolbar_action", action: "open_promptheus" });
-            } else {
-                sendAction({ kind: "toolbar_action", action: "open_provider", provider_id: p.id });
-            }
-        });
-        menu.appendChild(item);
-    });
-    wrap.appendChild(menu);
-
-    document.addEventListener("click", (e) => {
-        if (!wrap.contains(e.target)) menu.style.display = "none";
-    });
-
-    return wrap;
-}
+let switcherHandle = null;
 
 function buildToolbar() {
     const bar = document.createElement("div");
@@ -885,21 +776,22 @@ function buildToolbar() {
         "display": "flex",
         "align-items": "center",
         "gap": "4px",
-        "padding": "4px 6px",
-        "background": "rgba(25,25,25,0.92)",
-        "border": "1px solid rgba(255,255,255,0.12)",
-        "border-radius": "8px",
-        "box-shadow": "0 2px 8px rgba(0,0,0,0.35)",
-        "backdrop-filter": "blur(8px)",
-        "-webkit-backdrop-filter": "blur(8px)",
         "font": "500 12px/1.2 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
         "user-select": "none",
     });
 
-    bar.appendChild(makeIconButton("←", "Wróć do czatu", () => sendAction({ kind: "back_nav" })));
-    bar.appendChild(buildDropdown());
-    bar.appendChild(makeIconButton("+ New chat", "Nowy czat", () => sendAction({ kind: "toolbar_action", action: "new_chat" })));
-    bar.appendChild(makeIconButton("⧉", "Otwórz w nowym oknie", () => sendAction({ kind: "toolbar_action", action: "open_in_new_window" })));
+    switcherHandle = globalThis.__promptheusSwitcher.create({
+        providers: g.providers,
+        activeId: g.providerId,
+        newWindowTitle: "Otwórz w nowym oknie",
+        onSelect: (id) => {
+            sendAction({ kind: "toolbar_action", action: "open_provider", provider_id: id });
+        },
+        onOpenNewWindow: (id) => {
+            sendAction({ kind: "toolbar_action", action: "open_provider_new_window", provider_id: id });
+        },
+    });
+    bar.appendChild(switcherHandle.element);
 
     return bar;
 }

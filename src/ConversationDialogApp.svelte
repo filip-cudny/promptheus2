@@ -8,7 +8,7 @@
   import { getSettings } from "$lib/services/settings";
   import { getContextWindowSize } from "$lib/utils/contextWindow";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import { PanelLeft, SquarePen, Bot, ExternalLink } from "lucide-svelte";
+  import { PanelLeft, SquarePen } from "lucide-svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
   import {
     getAiProviders,
@@ -16,9 +16,27 @@
     swapAiWebview,
     type AiProvider,
   } from "$lib/services/aiWebview";
+  import { openConversationDialogNewWindow } from "$lib/services/conversationDialog";
+  import "$lib/providerSwitcher.js";
   import ConversationArea from "$lib/components/prompt/ConversationArea.svelte";
   import InputArea from "$lib/components/prompt/InputArea.svelte";
   import TabSidebar from "$lib/components/prompt/TabSidebar.svelte";
+
+  const PROMPTHEUS_PROVIDER_ID = "promptheus";
+
+  type SwitcherProvider = { id: string; name: string };
+  type SwitcherHandle = {
+    element: HTMLElement;
+    setActive: (id: string) => void;
+    destroy: () => void;
+  };
+  type SwitcherFactory = (opts: {
+    providers: SwitcherProvider[];
+    activeId: string;
+    newWindowTitle?: string;
+    onSelect: (id: string) => void;
+    onOpenNewWindow: (id: string) => void;
+  }) => SwitcherHandle;
 
   interface DialogInitParams {
     skill_id: string;
@@ -43,17 +61,11 @@
   let models = $state<ModelConfig[]>([]);
   let defaultModelId = $state<string | null>(null);
   let aiProviders = $state<AiProvider[]>([]);
-  let aiMenuOpen = $state(false);
-  let aiMenuContainerEl: HTMLDivElement | undefined = $state();
+  let switcherMountEl: HTMLDivElement | undefined = $state();
+  let switcherHandle: SwitcherHandle | null = null;
 
-  function handleAiMenuPointerDown(e: PointerEvent) {
-    if (aiMenuOpen && aiMenuContainerEl && !aiMenuContainerEl.contains(e.target as Node)) {
-      aiMenuOpen = false;
-    }
-  }
-
-  async function handleOpenProvider(providerId: string) {
-    aiMenuOpen = false;
+  async function handleSwitcherSelect(providerId: string) {
+    if (providerId === PROMPTHEUS_PROVIDER_ID) return;
     try {
       await swapAiWebview(providerId, getCurrentWindow().label);
     } catch (e) {
@@ -61,14 +73,36 @@
     }
   }
 
-  async function handleOpenProviderNewWindow(e: MouseEvent, providerId: string) {
-    e.stopPropagation();
-    aiMenuOpen = false;
+  async function handleSwitcherOpenNewWindow(providerId: string) {
     try {
-      await openAiWebviewNewWindow(providerId);
+      if (providerId === PROMPTHEUS_PROVIDER_ID) {
+        await openConversationDialogNewWindow();
+      } else {
+        await openAiWebviewNewWindow(providerId);
+      }
     } catch (err) {
-      console.error("failed to open ai webview in new window", err);
+      console.error("failed to open provider in new window", err);
     }
+  }
+
+  function mountSwitcher() {
+    if (!switcherMountEl || switcherHandle) return;
+    const factory = (globalThis as unknown as {
+      __promptheusSwitcher?: { create: SwitcherFactory };
+    }).__promptheusSwitcher?.create;
+    if (!factory) return;
+    const providers: SwitcherProvider[] = [
+      { id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
+      ...aiProviders.map((p) => ({ id: p.id, name: p.name })),
+    ];
+    switcherHandle = factory({
+      providers,
+      activeId: PROMPTHEUS_PROVIDER_ID,
+      newWindowTitle: "Otwórz w nowym oknie",
+      onSelect: handleSwitcherSelect,
+      onOpenNewWindow: handleSwitcherOpenNewWindow,
+    });
+    switcherMountEl.appendChild(switcherHandle.element);
   }
 
   let contextWindowSize = $derived.by(() => {
@@ -134,6 +168,7 @@
   async function loadAiProviders() {
     try {
       aiProviders = await getAiProviders();
+      mountSwitcher();
     } catch (e) {
       console.error("failed to load ai providers", e);
     }
@@ -216,11 +251,11 @@
     unlistenVoiceInput?.();
     unlistenOpenForSkill?.();
     unlistenNewConversation?.();
+    switcherHandle?.destroy();
+    switcherHandle = null;
     store.destroy();
   });
 </script>
-
-<svelte:window onpointerdown={handleAiMenuPointerDown} />
 
 <div class="dialog-shell">
   <div class="top-buttons" class:sidebar-open={sidebarOpen}>
@@ -239,38 +274,7 @@
     >
       <SquarePen size={ICON_SIZE.md} />
     </button>
-    {#if aiProviders.length > 0}
-      <div class="ai-menu" bind:this={aiMenuContainerEl}>
-        <button
-          class="top-btn"
-          onclick={() => (aiMenuOpen = !aiMenuOpen)}
-          title="Otwórz AI w przeglądarce"
-        >
-          <Bot size={ICON_SIZE.md} />
-        </button>
-        {#if aiMenuOpen}
-          <div class="ai-menu-dropdown">
-            {#each aiProviders as provider (provider.id)}
-              <div class="ai-menu-row">
-                <button
-                  class="ai-menu-item"
-                  onclick={() => handleOpenProvider(provider.id)}
-                >
-                  {provider.name}
-                </button>
-                <button
-                  class="ai-menu-new-window"
-                  title="Otwórz w nowym oknie"
-                  onclick={(e) => handleOpenProviderNewWindow(e, provider.id)}
-                >
-                  <ExternalLink size={ICON_SIZE.sm} />
-                </button>
-              </div>
-            {/each}
-          </div>
-        {/if}
-      </div>
-    {/if}
+    <div class="switcher-mount" bind:this={switcherMountEl}></div>
   </div>
   <ConversationArea {store} />
   <InputArea {store} {models} {contextVisible} {contextDisabled} {contextInitialCollapsed} {contextWindowSize} {defaultModelId} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
@@ -345,59 +349,8 @@
     background: rgba(255, 255, 255, 0.1);
   }
 
-  .ai-menu {
-    position: relative;
-  }
-
-  .ai-menu-dropdown {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 0;
-    min-width: 140px;
-    background: #2a2a2a;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    padding: 4px 0;
-    z-index: 210;
-  }
-
-  .ai-menu-row {
-    display: flex;
-    align-items: stretch;
-  }
-
-  .ai-menu-row:hover {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .ai-menu-item {
-    flex: 1;
-    padding: 8px 12px;
-    background: none;
-    border: none;
-    color: #e0e0e0;
-    font: inherit;
-    font-size: 13px;
-    cursor: pointer;
-    text-align: left;
-    white-space: nowrap;
-  }
-
-  .ai-menu-new-window {
-    display: flex;
+  .switcher-mount {
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    padding: 0 10px;
-    background: none;
-    border: none;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.5);
-    cursor: pointer;
-  }
-
-  .ai-menu-new-window:hover {
-    color: rgba(255, 255, 255, 0.9);
-    background: rgba(255, 255, 255, 0.1);
   }
 </style>

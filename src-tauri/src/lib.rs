@@ -722,6 +722,7 @@ pub fn run() {
             commands::execution::respond_to_tool_call,
             commands::execution::retry_tool_call,
             commands::conversation_dialog::open_conversation_dialog,
+            commands::conversation_dialog::open_conversation_dialog_new_window,
             commands::conversation_dialog::get_dialog_init_params,
             commands::ai_webview::open_ai_webview,
             commands::ai_webview::open_ai_webview_new_window,

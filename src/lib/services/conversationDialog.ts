@@ -19,3 +19,7 @@ export async function openConversationDialog(
     newChat: newChat ?? false,
   });
 }
+
+export async function openConversationDialogNewWindow(): Promise<void> {
+  await invoke("open_conversation_dialog_new_window");
+}
