@@ -1,12 +1,12 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex as StdMutex;
 
-use tauri::webview::PageLoadEvent;
-use tauri::{Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::webview::{PageLoadEvent, WebviewBuilder};
+use tauri::{LogicalPosition, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tokio::sync::Mutex;
 
 use super::ai_providers::{self, AiProvider, PROVIDERS};
-use super::dialog::{self, focus_window, save_geometry, DialogConfig};
+use super::dialog::{self, focus_host_window, focus_window, save_geometry, DialogConfig};
 use super::dock::DockManager;
 use super::ui_state::WindowGeometry;
 use crate::commands::settings::AppState;
@@ -16,31 +16,59 @@ const DEFAULT_HEIGHT: f64 = 720.0;
 const ROUTER_SENTINEL: &str = "https://promptheus-ai-webview-router.invalid/";
 const TOOLBAR_ELEMENT_ID: &str = "__promptheus-toolbar";
 const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
+const CONVERSATION_DIALOG_TITLE: &str = "Promptheus — chat";
 
 #[derive(Default)]
 pub struct AiWebviewState {
+    hosted: StdMutex<HashMap<String, HashSet<&'static str>>>,
     current_provider: StdMutex<HashMap<String, &'static str>>,
 }
 
 impl AiWebviewState {
-    fn set(&self, label: &str, provider_id: &'static str) {
+    fn set_provider(&self, label: &str, provider_id: &'static str) {
         self.current_provider
             .lock()
             .unwrap()
             .insert(label.to_string(), provider_id);
     }
 
-    fn get(&self, label: &str) -> Option<&'static str> {
+    fn get_provider(&self, label: &str) -> Option<&'static str> {
         self.current_provider.lock().unwrap().get(label).copied()
     }
 
-    fn remove(&self, label: &str) {
+    fn remove_provider(&self, label: &str) {
         self.current_provider.lock().unwrap().remove(label);
+    }
+
+    fn has_hosted_child(&self, host_label: &str, provider_id: &'static str) -> bool {
+        self.hosted
+            .lock()
+            .unwrap()
+            .get(host_label)
+            .map(|set| set.contains(provider_id))
+            .unwrap_or(false)
+    }
+
+    fn mark_hosted_child(&self, host_label: &str, provider_id: &'static str) {
+        self.hosted
+            .lock()
+            .unwrap()
+            .entry(host_label.to_string())
+            .or_default()
+            .insert(provider_id);
+    }
+
+    fn drop_host(&self, host_label: &str) {
+        self.hosted.lock().unwrap().remove(host_label);
     }
 }
 
 pub fn window_label(provider: &AiProvider) -> String {
     format!("ai-webview-{}", provider.id)
+}
+
+fn hosted_child_label(host_label: &str, provider: &AiProvider) -> String {
+    format!("{host_label}::ai-webview-{}", provider.id)
 }
 
 pub async fn open_or_focus(
@@ -58,7 +86,7 @@ pub async fn open_or_focus(
         if let Some(u) = url.as_deref() {
             navigate_webview(&existing, u)?;
             if let Some(state) = app.try_state::<AiWebviewState>() {
-                state.set(&label, provider.id);
+                state.set_provider(&label, provider.id);
             }
         }
         return focus_window(&existing);
@@ -85,6 +113,173 @@ pub fn navigate(app: &tauri::AppHandle, provider_id: &str, url: &str) -> Result<
 }
 
 pub async fn swap_to_provider(
+    app: &tauri::AppHandle,
+    provider: &'static AiProvider,
+    from_label: &str,
+) -> Result<(), String> {
+    if from_label == CONVERSATION_DIALOG_LABEL
+        && app.get_window(CONVERSATION_DIALOG_LABEL).is_some()
+    {
+        return hosted_swap_to_provider(app, provider).await;
+    }
+
+    swap_to_provider_standalone(app, provider, from_label).await
+}
+
+pub async fn swap_to_conversation_dialog(
+    app: &tauri::AppHandle,
+    from_label: &str,
+) -> Result<(), String> {
+    if from_label == CONVERSATION_DIALOG_LABEL
+        && app.get_window(CONVERSATION_DIALOG_LABEL).is_some()
+    {
+        return hosted_swap_to_conversation_dialog(app);
+    }
+
+    swap_to_conversation_dialog_standalone(app, from_label).await
+}
+
+async fn hosted_swap_to_provider(
+    app: &tauri::AppHandle,
+    provider: &'static AiProvider,
+) -> Result<(), String> {
+    let host_label = CONVERSATION_DIALOG_LABEL;
+    let host = app
+        .get_window(host_label)
+        .ok_or_else(|| format!("missing host window: {host_label}"))?;
+
+    let child_label = hosted_child_label(host_label, provider);
+
+    let already_created = app
+        .try_state::<AiWebviewState>()
+        .map(|s| s.has_hosted_child(host_label, provider.id))
+        .unwrap_or(false);
+
+    if !already_created {
+        let inner = host.inner_size().map_err(|e| e.to_string())?;
+        let content_url = tauri::Url::parse(provider.url).map_err(|e| e.to_string())?;
+        let init_script = initialization_script(provider);
+        let reinject = reinject_script();
+
+        let app_for_nav = app.clone();
+        let nav_webview_label = child_label.clone();
+
+        let builder = WebviewBuilder::new(&child_label, WebviewUrl::External(content_url))
+            .initialization_script(&init_script)
+            .on_navigation(move |url| {
+                if !url.as_str().starts_with(ROUTER_SENTINEL) {
+                    return true;
+                }
+                match parse_router_message(url) {
+                    Some(msg) => {
+                        let app = app_for_nav.clone();
+                        let label = nav_webview_label.clone();
+                        tauri::async_runtime::spawn_blocking(move || {
+                            tauri::async_runtime::block_on(async move {
+                                handle_router_message(&app, &label, msg).await;
+                            });
+                        });
+                    }
+                    None => {
+                        log::warn!(
+                            target: "app_lib::services::ai_webview",
+                            "unparseable router url: {url}",
+                        );
+                    }
+                }
+                false
+            })
+            .on_page_load(move |webview, payload| {
+                if payload.event() == PageLoadEvent::Finished {
+                    if let Err(e) = webview.eval(&reinject) {
+                        log::warn!(
+                            target: "app_lib::services::ai_webview",
+                            "failed to re-inject toolbar: {e}",
+                        );
+                    }
+                }
+            });
+
+        host.add_child(builder, LogicalPosition::new(0.0, 0.0), inner)
+            .map_err(|e| e.to_string())?;
+
+        if let Some(state) = app.try_state::<AiWebviewState>() {
+            state.mark_hosted_child(host_label, provider.id);
+            state.set_provider(&child_label, provider.id);
+        }
+
+        log::info!(
+            target: "app_lib::services::ai_webview",
+            "hosted child created: host={host_label} label={child_label} url={}",
+            provider.url,
+        );
+    }
+
+    let target = app
+        .get_webview(&child_label)
+        .ok_or_else(|| format!("missing child webview: {child_label}"))?;
+    target.show().map_err(|e| e.to_string())?;
+
+    for webview in host.webviews() {
+        if webview.label() != child_label {
+            if let Err(e) = webview.hide() {
+                log::warn!(
+                    target: "app_lib::services::ai_webview",
+                    "hide {} failed: {e}",
+                    webview.label(),
+                );
+            }
+        }
+    }
+
+    target.set_focus().map_err(|e| e.to_string())?;
+
+    if let Err(e) = host.set_title(&format!("{} — Promptheus", provider.name)) {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "set_title failed: {e}",
+        );
+    }
+
+    focus_host_window(app, host_label)
+}
+
+fn hosted_swap_to_conversation_dialog(app: &tauri::AppHandle) -> Result<(), String> {
+    let host_label = CONVERSATION_DIALOG_LABEL;
+    let host = app
+        .get_window(host_label)
+        .ok_or_else(|| format!("missing host window: {host_label}"))?;
+
+    let cd_webview = app
+        .get_webview(CONVERSATION_DIALOG_LABEL)
+        .ok_or_else(|| format!("missing webview: {CONVERSATION_DIALOG_LABEL}"))?;
+    cd_webview.show().map_err(|e| e.to_string())?;
+
+    for webview in host.webviews() {
+        if webview.label() != CONVERSATION_DIALOG_LABEL {
+            if let Err(e) = webview.hide() {
+                log::warn!(
+                    target: "app_lib::services::ai_webview",
+                    "hide {} failed: {e}",
+                    webview.label(),
+                );
+            }
+        }
+    }
+
+    cd_webview.set_focus().map_err(|e| e.to_string())?;
+
+    if let Err(e) = host.set_title(CONVERSATION_DIALOG_TITLE) {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "set_title failed: {e}",
+        );
+    }
+
+    focus_host_window(app, host_label)
+}
+
+async fn swap_to_provider_standalone(
     app: &tauri::AppHandle,
     provider: &'static AiProvider,
     from_label: &str,
@@ -119,43 +314,42 @@ pub async fn swap_to_provider(
     open_or_focus(app, provider, None).await
 }
 
-pub async fn swap_to_conversation_dialog(
+async fn swap_to_conversation_dialog_standalone(
     app: &tauri::AppHandle,
     from_label: &str,
 ) -> Result<(), String> {
-    if from_label == CONVERSATION_DIALOG_LABEL {
-        if let Some(win) = app.get_webview_window(CONVERSATION_DIALOG_LABEL) {
-            return focus_window(&win);
+    if app.get_window(CONVERSATION_DIALOG_LABEL).is_some() {
+        hosted_swap_to_conversation_dialog(app)?;
+        if from_label != CONVERSATION_DIALOG_LABEL
+            && app.get_window(from_label).is_some()
+        {
+            close_by_label(app, from_label);
+        }
+        return Ok(());
+    }
+
+    if let Some(geom) = read_window_geometry(app, from_label) {
+        let state = app.state::<Mutex<AppState>>();
+        let mut guard = state.lock().await;
+        if let Err(e) = guard
+            .ui_state
+            .set_geometry(CONVERSATION_DIALOG_LABEL, geom)
+        {
+            log::warn!(
+                target: "app_lib::services::ai_webview",
+                "failed to seed conversation-dialog geometry: {e}",
+            );
         }
     }
 
-    let target_already_open = app
-        .get_webview_window(CONVERSATION_DIALOG_LABEL)
-        .is_some();
-    if !target_already_open {
-        if let Some(geom) = read_window_geometry(app, from_label) {
-            let state = app.state::<Mutex<AppState>>();
-            let mut guard = state.lock().await;
-            if let Err(e) = guard
-                .ui_state
-                .set_geometry(CONVERSATION_DIALOG_LABEL, geom)
-            {
-                log::warn!(
-                    target: "app_lib::services::ai_webview",
-                    "failed to seed conversation-dialog geometry: {e}",
-                );
-            }
-        }
-    }
-
-    if from_label != CONVERSATION_DIALOG_LABEL && app.get_webview_window(from_label).is_some() {
+    if from_label != CONVERSATION_DIALOG_LABEL && app.get_window(from_label).is_some() {
         close_by_label(app, from_label);
     }
 
     let config = DialogConfig {
         label: CONVERSATION_DIALOG_LABEL,
         url: "conversation-dialog.html".into(),
-        title: "Promptheus — chat",
+        title: CONVERSATION_DIALOG_TITLE,
         default_width: 700.0,
         default_height: 600.0,
         geometry_key: CONVERSATION_DIALOG_LABEL,
@@ -165,7 +359,7 @@ pub async fn swap_to_conversation_dialog(
 }
 
 fn read_window_geometry(app: &tauri::AppHandle, label: &str) -> Option<WindowGeometry> {
-    let win = app.get_webview_window(label)?;
+    let win = app.get_window(label)?;
     let pos = win.outer_position().ok()?;
     let size = win.inner_size().ok()?;
     let scale = win.scale_factor().unwrap_or(1.0);
@@ -271,7 +465,7 @@ async fn open_window(
     let win = builder.build().map_err(|e| e.to_string())?;
 
     if let Some(webview_state) = app.try_state::<AiWebviewState>() {
-        webview_state.set(&label_owned, provider.id);
+        webview_state.set_provider(&label_owned, provider.id);
     }
 
     let dock = app.state::<DockManager>();
@@ -286,7 +480,7 @@ async fn open_window(
         }
         WindowEvent::Destroyed => {
             if let Some(state) = app_handle.try_state::<AiWebviewState>() {
-                state.remove(&label_for_event);
+                state.remove_provider(&label_for_event);
             }
             let dock = app_handle.state::<DockManager>();
             dock.dialog_closed(&app_handle);
@@ -321,13 +515,24 @@ fn close_by_label(app: &tauri::AppHandle, label: &str) {
 }
 
 pub fn focus_conversation_dialog(app: &tauri::AppHandle) {
-    if let Some(win) = app.get_webview_window("conversation-dialog") {
-        if let Err(e) = focus_window(&win) {
+    if app.get_window(CONVERSATION_DIALOG_LABEL).is_some() {
+        if let Err(e) = focus_host_window(app, CONVERSATION_DIALOG_LABEL) {
             log::warn!(
                 target: "app_lib::services::ai_webview",
                 "failed to focus conversation-dialog: {e}",
             );
         }
+    }
+}
+
+pub fn host_window_for_webview(app: &tauri::AppHandle, webview_label: &str) -> Option<String> {
+    app.get_webview(webview_label)
+        .map(|w| w.window().label().to_string())
+}
+
+pub fn cleanup_host_state(app: &tauri::AppHandle, host_label: &str) {
+    if let Some(state) = app.try_state::<AiWebviewState>() {
+        state.drop_host(host_label);
     }
 }
 
@@ -376,16 +581,28 @@ fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
     }
 }
 
-async fn handle_router_message(app: &tauri::AppHandle, label: &str, msg: RouterMessage) {
+async fn handle_router_message(app: &tauri::AppHandle, webview_label: &str, msg: RouterMessage) {
     log::info!(
         target: "app_lib::services::ai_webview",
-        "router message on {label}: {msg:?}",
+        "router message on {webview_label}: {msg:?}",
     );
+    let host_label = host_window_for_webview(app, webview_label).unwrap_or_default();
+    let hosted = host_label == CONVERSATION_DIALOG_LABEL && host_label != webview_label;
+
     match msg {
         RouterMessage::BackNav => {
-            close_by_label(app, label);
+            if hosted {
+                if let Err(e) = hosted_swap_to_conversation_dialog(app) {
+                    log::warn!(
+                        target: "app_lib::services::ai_webview",
+                        "back nav (hosted) failed: {e}",
+                    );
+                }
+                return;
+            }
+            close_by_label(app, webview_label);
             if let Some(state) = app.try_state::<AiWebviewState>() {
-                state.remove(label);
+                state.remove_provider(webview_label);
             }
             focus_conversation_dialog(app);
         }
@@ -397,7 +614,16 @@ async fn handle_router_message(app: &tauri::AppHandle, label: &str, msg: RouterM
                 );
                 return;
             };
-            let Some(win) = app.get_webview_window(label) else {
+            if hosted {
+                if let Err(e) = hosted_swap_to_provider(app, provider).await {
+                    log::warn!(
+                        target: "app_lib::services::ai_webview",
+                        "hosted swap to provider failed: {e}",
+                    );
+                }
+                return;
+            }
+            let Some(win) = app.get_webview_window(webview_label) else {
                 return;
             };
             if let Err(e) = navigate_webview(&win, provider.url) {
@@ -408,14 +634,34 @@ async fn handle_router_message(app: &tauri::AppHandle, label: &str, msg: RouterM
                 return;
             }
             if let Some(state) = app.try_state::<AiWebviewState>() {
-                state.set(label, provider.id);
+                state.set_provider(webview_label, provider.id);
             }
         }
         RouterMessage::ToolbarAction(ToolbarAction::NewChat) => {
-            let Some(provider) = current_provider_for(app, label) else {
+            let Some(provider) = current_provider_for(app, webview_label) else {
                 return;
             };
-            let Some(win) = app.get_webview_window(label) else {
+            if hosted {
+                let Some(webview) = app.get_webview(webview_label) else {
+                    return;
+                };
+                match tauri::Url::parse(provider.url) {
+                    Ok(parsed) => {
+                        if let Err(e) = webview.navigate(parsed) {
+                            log::warn!(
+                                target: "app_lib::services::ai_webview",
+                                "new chat (hosted) failed: {e}",
+                            );
+                        }
+                    }
+                    Err(e) => log::warn!(
+                        target: "app_lib::services::ai_webview",
+                        "invalid provider url: {e}",
+                    ),
+                }
+                return;
+            }
+            let Some(win) = app.get_webview_window(webview_label) else {
                 return;
             };
             if let Err(e) = navigate_webview(&win, provider.url) {
@@ -426,7 +672,7 @@ async fn handle_router_message(app: &tauri::AppHandle, label: &str, msg: RouterM
             }
         }
         RouterMessage::ToolbarAction(ToolbarAction::OpenInNewWindow) => {
-            let Some(provider) = current_provider_for(app, label) else {
+            let Some(provider) = current_provider_for(app, webview_label) else {
                 return;
             };
             if let Err(e) = open_new_instance(app, provider, None).await {
@@ -437,7 +683,16 @@ async fn handle_router_message(app: &tauri::AppHandle, label: &str, msg: RouterM
             }
         }
         RouterMessage::ToolbarAction(ToolbarAction::OpenPromptheus) => {
-            if let Err(e) = swap_to_conversation_dialog(app, label).await {
+            if hosted {
+                if let Err(e) = hosted_swap_to_conversation_dialog(app) {
+                    log::warn!(
+                        target: "app_lib::services::ai_webview",
+                        "hosted swap to CD failed: {e}",
+                    );
+                }
+                return;
+            }
+            if let Err(e) = swap_to_conversation_dialog(app, webview_label).await {
                 log::warn!(
                     target: "app_lib::services::ai_webview",
                     "swap to conversation-dialog failed: {e}",
@@ -450,21 +705,27 @@ async fn handle_router_message(app: &tauri::AppHandle, label: &str, msg: RouterM
 fn current_provider_for(app: &tauri::AppHandle, label: &str) -> Option<&'static AiProvider> {
     let id = app
         .try_state::<AiWebviewState>()
-        .and_then(|s| s.get(label))
-        .or_else(|| label.strip_prefix("ai-webview-").map(derive_base_provider_id))?;
+        .and_then(|s| s.get_provider(label))
+        .or_else(|| derive_provider_id_from_label(label))?;
     ai_providers::find(id)
 }
 
-fn derive_base_provider_id(rest: &str) -> &str {
+fn derive_provider_id_from_label(label: &str) -> Option<&'static str> {
+    let rest = label.rsplit("::").next().unwrap_or(label);
+    let rest = rest.strip_prefix("ai-webview-")?;
+    derive_base_provider_id(rest)
+}
+
+fn derive_base_provider_id(rest: &str) -> Option<&'static str> {
     if let Some(provider) = PROVIDERS.iter().find(|p| p.id == rest) {
-        return provider.id;
+        return Some(provider.id);
     }
     if let Some((head, _)) = rest.rsplit_once('-') {
         if let Some(provider) = PROVIDERS.iter().find(|p| p.id == head) {
-            return provider.id;
+            return Some(provider.id);
         }
     }
-    rest
+    None
 }
 
 fn initialization_script(provider: &AiProvider) -> String {

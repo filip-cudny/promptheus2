@@ -1,6 +1,7 @@
-use tauri::Manager;
+use tauri::{LogicalPosition, LogicalSize, Manager, Window, WindowEvent};
 use tokio::sync::Mutex;
 
+use super::ai_webview;
 use super::dock::DockManager;
 use super::ui_state::WindowGeometry;
 use crate::commands::settings::AppState;
@@ -22,6 +23,12 @@ pub async fn open_or_focus(
         existing.set_focus().map_err(|e| e.to_string())?;
         return Ok((existing, false));
     }
+    if app.get_window(config.label).is_some() {
+        return Err(format!(
+            "window {} exists as a multi-webview host; caller must handle reuse explicitly",
+            config.label
+        ));
+    }
 
     let state = app.state::<Mutex<AppState>>();
     let geometry = state.lock().await.ui_state.get_geometry(config.geometry_key);
@@ -31,21 +38,35 @@ pub async fn open_or_focus(
         .map(|g| (g.width, g.height))
         .unwrap_or((config.default_width, config.default_height));
 
-    let mut builder = tauri::WebviewWindowBuilder::new(
-        app,
-        config.label,
-        tauri::WebviewUrl::App(config.url.clone().into()),
-    )
-    .title(config.title)
-    .inner_size(width, height)
-    .resizable(true)
-    .decorations(true);
+    let mut window_builder = Window::builder(app, config.label)
+        .title(config.title)
+        .inner_size(width, height)
+        .resizable(true)
+        .decorations(true);
 
     if let Some(g) = &geometry {
-        builder = builder.position(g.x, g.y);
+        window_builder = window_builder.position(g.x, g.y);
     }
 
-    let win = builder.build().map_err(|e| e.to_string())?;
+    let window = window_builder.build().map_err(|e| e.to_string())?;
+
+    let inner = window.inner_size().map_err(|e| e.to_string())?;
+    let webview_builder = tauri::webview::WebviewBuilder::new(
+        config.label,
+        tauri::WebviewUrl::App(config.url.clone().into()),
+    );
+
+    window
+        .add_child(
+            webview_builder,
+            LogicalPosition::new(0.0, 0.0),
+            inner,
+        )
+        .map_err(|e| e.to_string())?;
+
+    let win = app
+        .get_webview_window(config.label)
+        .ok_or_else(|| format!("failed to attach webview for {}", config.label))?;
 
     let dock = app.state::<DockManager>();
     dock.dialog_opened(app);
@@ -53,13 +74,43 @@ pub async fn open_or_focus(
     let app_handle = app.clone();
     let label = config.label;
     let geometry_key = config.geometry_key;
-    win.on_window_event(move |event| match event {
-        tauri::WindowEvent::CloseRequested { .. } => {
+    let resize_label = config.label.to_string();
+    let resize_app = app.clone();
+
+    window.on_window_event(move |event| match event {
+        WindowEvent::CloseRequested { .. } => {
             save_geometry(&app_handle, label, geometry_key);
         }
-        tauri::WindowEvent::Destroyed => {
+        WindowEvent::Destroyed => {
+            ai_webview::cleanup_host_state(&app_handle, label);
             let dock = app_handle.state::<DockManager>();
             dock.dialog_closed(&app_handle);
+        }
+        WindowEvent::Resized(size) => {
+            let Some(host) = resize_app.get_window(&resize_label) else {
+                return;
+            };
+            let scale = host.scale_factor().unwrap_or(1.0);
+            let logical = LogicalSize::new(
+                size.width as f64 / scale,
+                size.height as f64 / scale,
+            );
+            for webview in host.webviews() {
+                if let Err(e) = webview.set_size(logical) {
+                    log::warn!(
+                        target: "app_lib::services::dialog",
+                        "resize webview {} failed: {e}",
+                        webview.label(),
+                    );
+                }
+                if let Err(e) = webview.set_position(LogicalPosition::new(0.0, 0.0)) {
+                    log::warn!(
+                        target: "app_lib::services::dialog",
+                        "reposition webview {} failed: {e}",
+                        webview.label(),
+                    );
+                }
+            }
         }
         _ => {}
     });
@@ -68,7 +119,7 @@ pub async fn open_or_focus(
 }
 
 pub fn save_geometry(app: &tauri::AppHandle, window_label: &str, geometry_key: &str) {
-    let Some(win) = app.get_webview_window(window_label) else {
+    let Some(win) = app.get_window(window_label) else {
         return;
     };
 
@@ -117,3 +168,28 @@ pub fn focus_window(win: &tauri::WebviewWindow) -> Result<(), String> {
     win.set_focus().map_err(|e| e.to_string())
 }
 
+pub fn focus_host_window(app: &tauri::AppHandle, label: &str) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::glib::object::Cast;
+        use gtk::prelude::GtkWindowExt;
+        use gtk::prelude::WidgetExt;
+
+        if let Some(win) = app.get_window(label) {
+            if let Ok(gtk_win) = win.gtk_window() {
+                if let Some(gdk_win) = gtk_win.window() {
+                    if let Ok(x11_win) = gdk_win.downcast::<gdkx11::X11Window>() {
+                        let timestamp = gdkx11::functions::x11_get_server_time(&x11_win);
+                        gtk_win.present_with_time(timestamp);
+                        return Ok(());
+                    }
+                }
+            }
+        }
+    }
+
+    if let Some(win) = app.get_window(label) {
+        return win.set_focus().map_err(|e| e.to_string());
+    }
+    Err(format!("no window: {label}"))
+}

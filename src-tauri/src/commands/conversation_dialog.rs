@@ -1,9 +1,9 @@
 use std::sync::Mutex;
 
 use serde::Serialize;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
-use crate::services::dialog::{self, DialogConfig};
+use crate::services::dialog::{self, focus_host_window, DialogConfig};
 
 struct PendingDialogParams {
     skill_id: String,
@@ -63,9 +63,8 @@ pub async fn open_conversation_dialog(
         new_chat,
     });
 
-    let (_, created) = dialog::open_or_focus(&app, &config).await?;
-
-    if !created {
+    if app.get_window(label).is_some() {
+        surface_conversation_dialog(&app, label);
         emit_reuse_event(
             &app,
             label,
@@ -77,9 +76,28 @@ pub async fn open_conversation_dialog(
             &skill_name,
             new_chat,
         )?;
+        return Ok(());
     }
 
+    let (_, _created) = dialog::open_or_focus(&app, &config).await?;
     Ok(())
+}
+
+fn surface_conversation_dialog(app: &tauri::AppHandle, label: &str) {
+    if let Some(host) = app.get_window(label) {
+        for webview in host.webviews() {
+            if webview.label() == label {
+                let _ = webview.show();
+                let _ = webview.set_focus();
+            } else {
+                let _ = webview.hide();
+            }
+        }
+        if let Err(e) = host.set_title("Promptheus — chat") {
+            log::warn!("set_title failed: {e}");
+        }
+    }
+    let _ = focus_host_window(app, label);
 }
 
 #[tauri::command]
