@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex as StdMutex;
 
 use tauri::webview::{PageLoadEvent, WebviewBuilder};
+use tauri::window::Color;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tokio::sync::Mutex;
 
@@ -16,6 +17,7 @@ use crate::commands::settings::AppState;
 
 const DEFAULT_WIDTH: f64 = 1000.0;
 const DEFAULT_HEIGHT: f64 = 720.0;
+const AI_WEBVIEW_BG: Color = Color(0xff, 0xff, 0xff, 0xff);
 const ROUTER_SENTINEL: &str = "https://promptheus-ai-webview-router.invalid/";
 const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
 const CONVERSATION_DIALOG_TITLE: &str = "Promptheus — chat";
@@ -287,6 +289,7 @@ async fn hosted_swap_to_provider(
 
         let builder = WebviewBuilder::new(&child_label, WebviewUrl::External(content_url))
             .auto_resize()
+            .background_color(AI_WEBVIEW_BG)
             .user_agent(ai_webview_user_agent())
             .initialization_script(&init_script)
             .on_navigation(move |url| {
@@ -725,6 +728,7 @@ async fn open_window(
             .title(format!("{} — Promptheus", provider.name))
             .inner_size(width, height)
             .resizable(true)
+            .background_color(AI_WEBVIEW_BG)
             .user_agent(ai_webview_user_agent())
             .initialization_script(&init_script)
             .on_navigation(move |url| {

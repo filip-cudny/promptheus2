@@ -1,3 +1,4 @@
+use tauri::window::Color;
 use tauri::{LogicalPosition, LogicalSize, Manager, Rect, Window, WindowEvent};
 use tokio::sync::Mutex;
 
@@ -9,6 +10,7 @@ use crate::commands::settings::AppState;
 const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
 pub const SHELL_TOOLBAR_LABEL: &str = "shell-toolbar";
 pub const TOOLBAR_HEIGHT: f64 = 40.0;
+const SHELL_BG: Color = Color(0x1e, 0x1e, 0x1e, 0xff);
 
 pub struct DialogConfig {
     pub label: &'static str,
@@ -124,7 +126,8 @@ pub async fn open_or_focus(
     let mut window_builder = Window::builder(app, config.label)
         .title(config.title)
         .inner_size(width, height)
-        .resizable(true);
+        .resizable(true)
+        .background_color(SHELL_BG);
 
     #[cfg(target_os = "macos")]
     {
@@ -155,7 +158,8 @@ pub async fn open_or_focus(
             SHELL_TOOLBAR_LABEL,
             tauri::WebviewUrl::App("shell-toolbar.html".into()),
         )
-        .auto_resize();
+        .auto_resize()
+        .background_color(SHELL_BG);
         let toolbar_webview = window
             .add_child(toolbar_builder, toolbar_pos, toolbar_size)
             .map_err(|e| e.to_string())?;
@@ -166,7 +170,8 @@ pub async fn open_or_focus(
             config.label,
             tauri::WebviewUrl::App(config.url.clone().into()),
         )
-        .auto_resize();
+        .auto_resize()
+        .background_color(SHELL_BG);
         let content_webview = window
             .add_child(content_builder, content_pos, content_size)
             .map_err(|e| e.to_string())?;
@@ -178,7 +183,8 @@ pub async fn open_or_focus(
             config.label,
             tauri::WebviewUrl::App(config.url.clone().into()),
         )
-        .auto_resize();
+        .auto_resize()
+        .background_color(SHELL_BG);
         window
             .add_child(
                 content_builder,
