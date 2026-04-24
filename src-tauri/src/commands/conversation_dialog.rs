@@ -4,7 +4,7 @@ use serde::Serialize;
 use tauri::{Emitter, Manager};
 
 use crate::services::conversation_dialog as conversation_dialog_service;
-use crate::services::dialog::{self, focus_host_window, DialogConfig};
+use crate::services::dialog::{self, focus_host_window, DialogConfig, SHELL_TOOLBAR_LABEL};
 
 struct PendingDialogParams {
     skill_id: String,
@@ -85,11 +85,16 @@ pub async fn open_conversation_dialog(
 }
 
 fn surface_conversation_dialog(app: &tauri::AppHandle, label: &str) {
+    use crate::services::ai_webview;
+
     if let Some(host) = app.get_window(label) {
         for webview in host.webviews() {
-            if webview.label() == label {
+            let wv_label = webview.label();
+            if wv_label == label {
                 let _ = webview.show();
                 let _ = webview.set_focus();
+            } else if wv_label == SHELL_TOOLBAR_LABEL {
+                let _ = webview.show();
             } else {
                 let _ = webview.hide();
             }
@@ -98,6 +103,8 @@ fn surface_conversation_dialog(app: &tauri::AppHandle, label: &str) {
             log::warn!("set_title failed: {e}");
         }
     }
+    ai_webview::mark_active_webview(app, label, label);
+    ai_webview::emit_active_changed_for(app, None);
     let _ = focus_host_window(app, label);
 }
 

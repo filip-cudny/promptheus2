@@ -2,12 +2,14 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Mutex as StdMutex;
 
 use tauri::webview::{PageLoadEvent, WebviewBuilder};
-use tauri::{LogicalPosition, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tokio::sync::Mutex;
 
-use super::ai_providers::{self, AiProvider, PROVIDERS};
-use super::conversation_dialog;
-use super::dialog::{self, focus_host_window, focus_window, save_geometry, DialogConfig};
+use super::ai_providers::AiProvider;
+use super::dialog::{
+    self, configure_linux_child_packing, content_layout, focus_host_window, focus_window,
+    save_geometry, DialogConfig, LinuxChildRole, SHELL_TOOLBAR_LABEL,
+};
 use super::dock::DockManager;
 use super::ui_state::WindowGeometry;
 use crate::commands::settings::AppState;
@@ -15,7 +17,6 @@ use crate::commands::settings::AppState;
 const DEFAULT_WIDTH: f64 = 1000.0;
 const DEFAULT_HEIGHT: f64 = 720.0;
 const ROUTER_SENTINEL: &str = "https://promptheus-ai-webview-router.invalid/";
-const TOOLBAR_ELEMENT_ID: &str = "__promptheus-toolbar";
 const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
 const CONVERSATION_DIALOG_TITLE: &str = "Promptheus — chat";
 
@@ -23,6 +24,9 @@ const CONVERSATION_DIALOG_TITLE: &str = "Promptheus — chat";
 pub struct AiWebviewState {
     hosted: StdMutex<HashMap<String, HashSet<&'static str>>>,
     current_provider: StdMutex<HashMap<String, &'static str>>,
+    active_webview: StdMutex<HashMap<String, String>>,
+    previous_active: StdMutex<HashMap<String, String>>,
+    palette_open: StdMutex<HashMap<String, bool>>,
 }
 
 impl AiWebviewState {
@@ -31,10 +35,6 @@ impl AiWebviewState {
             .lock()
             .unwrap()
             .insert(label.to_string(), provider_id);
-    }
-
-    fn get_provider(&self, label: &str) -> Option<&'static str> {
-        self.current_provider.lock().unwrap().get(label).copied()
     }
 
     fn remove_provider(&self, label: &str) {
@@ -61,11 +61,90 @@ impl AiWebviewState {
 
     fn drop_host(&self, host_label: &str) {
         self.hosted.lock().unwrap().remove(host_label);
+        self.active_webview.lock().unwrap().remove(host_label);
+        self.previous_active.lock().unwrap().remove(host_label);
+        self.palette_open.lock().unwrap().remove(host_label);
     }
+
+    fn set_active(&self, host_label: &str, webview_label: &str) {
+        self.active_webview
+            .lock()
+            .unwrap()
+            .insert(host_label.to_string(), webview_label.to_string());
+    }
+
+    fn get_active(&self, host_label: &str) -> Option<String> {
+        self.active_webview
+            .lock()
+            .unwrap()
+            .get(host_label)
+            .cloned()
+    }
+
+    fn set_previous_active(&self, host_label: &str, webview_label: &str) {
+        self.previous_active
+            .lock()
+            .unwrap()
+            .insert(host_label.to_string(), webview_label.to_string());
+    }
+
+    fn take_previous_active(&self, host_label: &str) -> Option<String> {
+        self.previous_active.lock().unwrap().remove(host_label)
+    }
+
+    fn set_palette_open(&self, host_label: &str, open: bool) {
+        self.palette_open
+            .lock()
+            .unwrap()
+            .insert(host_label.to_string(), open);
+    }
+
+    fn is_palette_open(&self, host_label: &str) -> bool {
+        self.palette_open
+            .lock()
+            .unwrap()
+            .get(host_label)
+            .copied()
+            .unwrap_or(false)
+    }
+}
+
+pub fn is_palette_open(app: &tauri::AppHandle, host_label: &str) -> bool {
+    app.try_state::<AiWebviewState>()
+        .map(|s| s.is_palette_open(host_label))
+        .unwrap_or(false)
+}
+
+pub fn active_provider_for(app: &tauri::AppHandle, host_label: &str) -> Option<String> {
+    let state = app.try_state::<AiWebviewState>()?;
+    let active = state.get_active(host_label)?;
+    if active == host_label {
+        return None;
+    }
+    let provider = state
+        .current_provider
+        .lock()
+        .unwrap()
+        .get(&active)
+        .map(|s| s.to_string());
+    provider
 }
 
 pub fn window_label(provider: &AiProvider) -> String {
     format!("ai-webview-{}", provider.id)
+}
+
+fn host_logical_size(host: &tauri::Window) -> Result<(f64, f64), String> {
+    let physical = host.inner_size().map_err(|e| e.to_string())?;
+    let scale = host.scale_factor().map_err(|e| e.to_string())?;
+    Ok((
+        physical.width as f64 / scale,
+        physical.height as f64 / scale,
+    ))
+}
+
+fn is_toolbar_label(label: &str) -> bool {
+    label == SHELL_TOOLBAR_LABEL
 }
 
 fn hosted_child_label(host_label: &str, provider: &AiProvider) -> String {
@@ -113,6 +192,32 @@ pub fn navigate(app: &tauri::AppHandle, provider_id: &str, url: &str) -> Result<
     navigate_webview(&win, url)
 }
 
+pub fn new_chat_in_host(app: &tauri::AppHandle, host_label: &str) -> Result<(), String> {
+    let state = app
+        .try_state::<AiWebviewState>()
+        .ok_or_else(|| "ai webview state missing".to_string())?;
+    let active_label = state
+        .get_active(host_label)
+        .ok_or_else(|| "no active webview".to_string())?;
+    if active_label == host_label {
+        return Err("promptheus provider has no new chat action".into());
+    }
+    let provider_id = {
+        let guard = state.current_provider.lock().unwrap();
+        guard
+            .get(&active_label)
+            .copied()
+            .ok_or_else(|| format!("no provider for {active_label}"))?
+    };
+    let provider = super::ai_providers::find(provider_id)
+        .ok_or_else(|| format!("unknown provider: {provider_id}"))?;
+    let webview = app
+        .get_webview(&active_label)
+        .ok_or_else(|| format!("missing webview: {active_label}"))?;
+    let parsed = tauri::Url::parse(provider.url).map_err(|e| e.to_string())?;
+    webview.navigate(parsed).map_err(|e| e.to_string())
+}
+
 pub async fn swap_to_provider(
     app: &tauri::AppHandle,
     provider: &'static AiProvider,
@@ -157,7 +262,8 @@ async fn hosted_swap_to_provider(
         .unwrap_or(false);
 
     if !already_created {
-        let inner = host.inner_size().map_err(|e| e.to_string())?;
+        let (logical_w, logical_h) = host_logical_size(&host)?;
+        let (pos, size) = content_layout(logical_w, logical_h);
         let content_url = tauri::Url::parse(provider.url).map_err(|e| e.to_string())?;
         let init_script = initialization_script(provider);
         let reinject = reinject_script();
@@ -195,14 +301,16 @@ async fn hosted_swap_to_provider(
                     if let Err(e) = webview.eval(&reinject) {
                         log::warn!(
                             target: "app_lib::services::ai_webview",
-                            "failed to re-inject toolbar: {e}",
+                            "failed to re-inject keybind script: {e}",
                         );
                     }
                 }
             });
 
-        host.add_child(builder, LogicalPosition::new(0.0, 0.0), inner)
+        let child_webview = host
+            .add_child(builder, pos, size)
             .map_err(|e| e.to_string())?;
+        configure_linux_child_packing(&child_webview, LinuxChildRole::Content);
 
         if let Some(state) = app.try_state::<AiWebviewState>() {
             state.mark_hosted_child(host_label, provider.id);
@@ -222,14 +330,15 @@ async fn hosted_swap_to_provider(
     target.show().map_err(|e| e.to_string())?;
 
     for webview in host.webviews() {
-        if webview.label() != child_label {
-            if let Err(e) = webview.hide() {
-                log::warn!(
-                    target: "app_lib::services::ai_webview",
-                    "hide {} failed: {e}",
-                    webview.label(),
-                );
-            }
+        let label = webview.label();
+        if label == child_label || is_toolbar_label(label) {
+            continue;
+        }
+        if let Err(e) = webview.hide() {
+            log::warn!(
+                target: "app_lib::services::ai_webview",
+                "hide {label} failed: {e}",
+            );
         }
     }
 
@@ -241,6 +350,11 @@ async fn hosted_swap_to_provider(
             "set_title failed: {e}",
         );
     }
+
+    if let Some(state) = app.try_state::<AiWebviewState>() {
+        state.set_active(host_label, &child_label);
+    }
+    emit_active_changed(app, Some(provider.id));
 
     focus_host_window(app, host_label)
 }
@@ -257,14 +371,15 @@ fn hosted_swap_to_conversation_dialog(app: &tauri::AppHandle) -> Result<(), Stri
     cd_webview.show().map_err(|e| e.to_string())?;
 
     for webview in host.webviews() {
-        if webview.label() != CONVERSATION_DIALOG_LABEL {
-            if let Err(e) = webview.hide() {
-                log::warn!(
-                    target: "app_lib::services::ai_webview",
-                    "hide {} failed: {e}",
-                    webview.label(),
-                );
-            }
+        let label = webview.label();
+        if label == CONVERSATION_DIALOG_LABEL || is_toolbar_label(label) {
+            continue;
+        }
+        if let Err(e) = webview.hide() {
+            log::warn!(
+                target: "app_lib::services::ai_webview",
+                "hide {label} failed: {e}",
+            );
         }
     }
 
@@ -277,7 +392,177 @@ fn hosted_swap_to_conversation_dialog(app: &tauri::AppHandle) -> Result<(), Stri
         );
     }
 
+    if let Some(state) = app.try_state::<AiWebviewState>() {
+        state.set_active(host_label, CONVERSATION_DIALOG_LABEL);
+    }
+    emit_active_changed(app, None);
+
     focus_host_window(app, host_label)
+}
+
+fn emit_active_changed(app: &tauri::AppHandle, provider_id: Option<&str>) {
+    let payload = serde_json::json!({ "provider_id": provider_id });
+    if let Err(e) = app.emit("shell:active-changed", payload) {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "emit shell:active-changed failed: {e}",
+        );
+    }
+}
+
+pub fn emit_active_changed_for(app: &tauri::AppHandle, provider_id: Option<&str>) {
+    emit_active_changed(app, provider_id);
+}
+
+pub fn mark_active_webview(app: &tauri::AppHandle, host_label: &str, webview_label: &str) {
+    if let Some(state) = app.try_state::<AiWebviewState>() {
+        state.set_active(host_label, webview_label);
+    }
+}
+
+pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result<(), String> {
+    let host = app
+        .get_window(host_label)
+        .ok_or_else(|| format!("missing host window: {host_label}"))?;
+
+    let state = app
+        .try_state::<AiWebviewState>()
+        .ok_or_else(|| "ai webview state missing".to_string())?;
+
+    if state.is_palette_open(host_label) {
+        if let Some(cd) = app.get_webview(CONVERSATION_DIALOG_LABEL) {
+            let _ = cd.set_focus();
+        }
+        return Ok(());
+    }
+
+    let previous = state
+        .get_active(host_label)
+        .unwrap_or_else(|| CONVERSATION_DIALOG_LABEL.to_string());
+    state.set_previous_active(host_label, &previous);
+    state.set_palette_open(host_label, true);
+
+    let cd = app
+        .get_webview(CONVERSATION_DIALOG_LABEL)
+        .ok_or_else(|| format!("missing webview: {CONVERSATION_DIALOG_LABEL}"))?;
+
+    for webview in host.webviews() {
+        let label = webview.label();
+        if label == CONVERSATION_DIALOG_LABEL || is_toolbar_label(label) {
+            continue;
+        }
+        if let Err(e) = webview.hide() {
+            log::warn!(
+                target: "app_lib::services::ai_webview",
+                "palette hide {label} failed: {e}",
+            );
+        }
+    }
+
+    cd.show().map_err(|e| e.to_string())?;
+    cd.set_focus().map_err(|e| e.to_string())?;
+
+    let payload = serde_json::json!({ "previous_label": previous });
+    if let Err(e) = app.emit("shell:palette-opened", payload) {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "emit shell:palette-opened failed: {e}",
+        );
+    }
+
+    Ok(())
+}
+
+pub async fn swap_from_palette(
+    app: &tauri::AppHandle,
+    host_label: &str,
+    selected_provider_id: Option<String>,
+) -> Result<(), String> {
+    let state = app
+        .try_state::<AiWebviewState>()
+        .ok_or_else(|| "ai webview state missing".to_string())?;
+
+    if !state.is_palette_open(host_label) {
+        return Ok(());
+    }
+
+    state.set_palette_open(host_label, false);
+
+    let previous = state
+        .take_previous_active(host_label)
+        .unwrap_or_else(|| CONVERSATION_DIALOG_LABEL.to_string());
+
+    if let Err(e) = app.emit("shell:palette-closed", serde_json::json!({})) {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "emit shell:palette-closed failed: {e}",
+        );
+    }
+
+    match selected_provider_id.as_deref() {
+        Some(PROMPTHEUS_PROVIDER_ID) => {
+            hosted_swap_to_conversation_dialog(app)?;
+        }
+        Some(id) => {
+            let Some(provider) = super::ai_providers::find(id) else {
+                log::warn!(
+                    target: "app_lib::services::ai_webview",
+                    "palette: unknown provider {id}",
+                );
+                return restore_previous_webview(app, host_label, &previous);
+            };
+            hosted_swap_to_provider(app, provider).await?;
+        }
+        None => {
+            restore_previous_webview(app, host_label, &previous)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn restore_previous_webview(
+    app: &tauri::AppHandle,
+    host_label: &str,
+    previous_label: &str,
+) -> Result<(), String> {
+    let host = app
+        .get_window(host_label)
+        .ok_or_else(|| format!("missing host window: {host_label}"))?;
+
+    let target = app
+        .get_webview(previous_label)
+        .ok_or_else(|| format!("missing webview: {previous_label}"))?;
+
+    for webview in host.webviews() {
+        let label = webview.label();
+        if label == previous_label || is_toolbar_label(label) {
+            continue;
+        }
+        if let Err(e) = webview.hide() {
+            log::warn!(
+                target: "app_lib::services::ai_webview",
+                "restore hide {label} failed: {e}",
+            );
+        }
+    }
+
+    target.show().map_err(|e| e.to_string())?;
+    target.set_focus().map_err(|e| e.to_string())?;
+
+    if let Some(state) = app.try_state::<AiWebviewState>() {
+        state.set_active(host_label, previous_label);
+    }
+
+    let provider_id = if previous_label == CONVERSATION_DIALOG_LABEL {
+        None
+    } else {
+        app.try_state::<AiWebviewState>()
+            .and_then(|s| s.current_provider.lock().unwrap().get(previous_label).copied())
+    };
+    emit_active_changed(app, provider_id);
+
+    Ok(())
 }
 
 async fn swap_to_provider_standalone(
@@ -541,13 +826,7 @@ const PROMPTHEUS_PROVIDER_ID: &str = "promptheus";
 
 #[derive(Debug)]
 enum RouterMessage {
-    ToolbarAction(ToolbarAction),
-}
-
-#[derive(Debug)]
-enum ToolbarAction {
-    OpenProvider { provider_id: String },
-    OpenProviderNewWindow { provider_id: String },
+    OpenPalette,
 }
 
 fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
@@ -557,24 +836,7 @@ fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
         .collect();
     let kind = params.remove("kind")?;
     match kind.as_str() {
-        "toolbar_action" => {
-            let action = params.remove("action")?;
-            match action.as_str() {
-                "open_provider" => {
-                    let provider_id = params.remove("provider_id")?;
-                    Some(RouterMessage::ToolbarAction(ToolbarAction::OpenProvider {
-                        provider_id,
-                    }))
-                }
-                "open_provider_new_window" => {
-                    let provider_id = params.remove("provider_id")?;
-                    Some(RouterMessage::ToolbarAction(
-                        ToolbarAction::OpenProviderNewWindow { provider_id },
-                    ))
-                }
-                _ => None,
-            }
-        }
+        "open_palette" => Some(RouterMessage::OpenPalette),
         _ => None,
     }
 }
@@ -585,122 +847,29 @@ async fn handle_router_message(app: &tauri::AppHandle, webview_label: &str, msg:
         "router message on {webview_label}: {msg:?}",
     );
     let host_label = host_window_for_webview(app, webview_label).unwrap_or_default();
-    let hosted = host_label == CONVERSATION_DIALOG_LABEL && host_label != webview_label;
 
     match msg {
-        RouterMessage::ToolbarAction(ToolbarAction::OpenProvider { provider_id }) => {
-            if provider_id == PROMPTHEUS_PROVIDER_ID {
-                if hosted {
-                    if let Err(e) = hosted_swap_to_conversation_dialog(app) {
-                        log::warn!(
-                            target: "app_lib::services::ai_webview",
-                            "hosted swap to CD failed: {e}",
-                        );
-                    }
-                    return;
-                }
-                if let Err(e) = swap_to_conversation_dialog(app, webview_label).await {
-                    log::warn!(
-                        target: "app_lib::services::ai_webview",
-                        "swap to conversation-dialog failed: {e}",
-                    );
-                }
-                return;
-            }
-
-            let Some(provider) = ai_providers::find(&provider_id) else {
-                log::warn!(
-                    target: "app_lib::services::ai_webview",
-                    "unknown provider in open_provider: {provider_id}",
-                );
-                return;
+        RouterMessage::OpenPalette => {
+            let target_host = if host_label.is_empty() {
+                CONVERSATION_DIALOG_LABEL.to_string()
+            } else {
+                host_label
             };
-            if hosted {
-                if let Err(e) = hosted_swap_to_provider(app, provider).await {
-                    log::warn!(
-                        target: "app_lib::services::ai_webview",
-                        "hosted swap to provider failed: {e}",
-                    );
-                }
-                return;
-            }
-            let Some(win) = app.get_webview_window(webview_label) else {
-                return;
-            };
-            if let Err(e) = navigate_webview(&win, provider.url) {
+            if let Err(e) = swap_to_palette(app, &target_host).await {
                 log::warn!(
                     target: "app_lib::services::ai_webview",
-                    "switch provider failed: {e}",
-                );
-                return;
-            }
-            if let Some(state) = app.try_state::<AiWebviewState>() {
-                state.set_provider(webview_label, provider.id);
-            }
-        }
-        RouterMessage::ToolbarAction(ToolbarAction::OpenProviderNewWindow { provider_id }) => {
-            if provider_id == PROMPTHEUS_PROVIDER_ID {
-                if let Err(e) = conversation_dialog::open_new_instance(app).await {
-                    log::warn!(
-                        target: "app_lib::services::ai_webview",
-                        "open new conversation-dialog failed: {e}",
-                    );
-                }
-                return;
-            }
-
-            let Some(provider) = ai_providers::find(&provider_id) else {
-                log::warn!(
-                    target: "app_lib::services::ai_webview",
-                    "unknown provider in open_provider_new_window: {provider_id}",
-                );
-                return;
-            };
-            if let Err(e) = open_new_instance(app, provider, None).await {
-                log::warn!(
-                    target: "app_lib::services::ai_webview",
-                    "open in new window failed: {e}",
+                    "swap_to_palette failed: {e}",
                 );
             }
         }
     }
-}
-
-fn current_provider_for(app: &tauri::AppHandle, label: &str) -> Option<&'static AiProvider> {
-    let id = app
-        .try_state::<AiWebviewState>()
-        .and_then(|s| s.get_provider(label))
-        .or_else(|| derive_provider_id_from_label(label))?;
-    ai_providers::find(id)
-}
-
-fn derive_provider_id_from_label(label: &str) -> Option<&'static str> {
-    let rest = label.rsplit("::").next().unwrap_or(label);
-    let rest = rest.strip_prefix("ai-webview-")?;
-    derive_base_provider_id(rest)
-}
-
-fn derive_base_provider_id(rest: &str) -> Option<&'static str> {
-    if let Some(provider) = PROVIDERS.iter().find(|p| p.id == rest) {
-        return Some(provider.id);
-    }
-    if let Some((head, _)) = rest.rsplit_once('-') {
-        if let Some(provider) = PROVIDERS.iter().find(|p| p.id == head) {
-            return Some(provider.id);
-        }
-    }
-    None
 }
 
 fn initialization_script(provider: &AiProvider) -> String {
-    let providers_json = serde_json::to_string(&toolbar_providers())
-        .unwrap_or_else(|_| "[]".to_string());
     let provider_id_json =
         serde_json::to_string(provider.id).unwrap_or_else(|_| "\"\"".to_string());
     let sentinel_json =
         serde_json::to_string(ROUTER_SENTINEL).unwrap_or_else(|_| "\"\"".to_string());
-    let toolbar_element_id_json =
-        serde_json::to_string(TOOLBAR_ELEMENT_ID).unwrap_or_else(|_| "\"\"".to_string());
 
     format!(
         r#"
@@ -709,106 +878,51 @@ fn initialization_script(provider: &AiProvider) -> String {
             const g = window.__promptheus = window.__promptheus || {{}};
             g.__installed = true;
             g.providerId = {provider_id_json};
-            g.providers = {providers_json};
             g.routerSentinel = {sentinel_json};
-            g.toolbarId = {toolbar_element_id_json};
-            {switcher}
-            {toolbar}
+            {palette}
         }})();
         "#,
         provider_id_json = provider_id_json,
-        providers_json = providers_json,
         sentinel_json = sentinel_json,
-        toolbar_element_id_json = toolbar_element_id_json,
-        switcher = PROVIDER_SWITCHER_JS,
-        toolbar = TOOLBAR_BOOTSTRAP,
+        palette = PALETTE_KEYBIND_JS,
     )
 }
 
 fn reinject_script() -> String {
     r#"
     (function() {
-        if (!window.__promptheus || !window.__promptheus.ensureToolbar) return;
-        window.__promptheus.ensureToolbar();
+        if (!window.__promptheus || !window.__promptheus.ensurePaletteKeybind) return;
+        window.__promptheus.ensurePaletteKeybind();
     })();
     "#
     .to_string()
 }
 
-fn toolbar_providers() -> Vec<serde_json::Value> {
-    let mut list: Vec<serde_json::Value> = PROVIDERS
-        .iter()
-        .map(|p| serde_json::json!({ "id": p.id, "name": p.name }))
-        .collect();
-    list.push(serde_json::json!({
-        "id": PROMPTHEUS_PROVIDER_ID,
-        "name": "Promptheus",
-    }));
-    list
-}
-
-const PROVIDER_SWITCHER_JS: &str =
-    include_str!("../../../src/lib/providerSwitcher.js");
-
-const TOOLBAR_BOOTSTRAP: &str = r##"
+const PALETTE_KEYBIND_JS: &str = r##"
 const S = g.routerSentinel;
-const TOOLBAR_ID = g.toolbarId;
 
-function sendAction(params) {
+function sendRouter(params) {
     const qs = new URLSearchParams(params).toString();
     window.location.href = S + "?" + qs;
 }
 
-function applyStyle(el, styles) {
-    for (const k in styles) el.style.setProperty(k, styles[k]);
+function paletteKeydown(e) {
+    if (!(e.metaKey || e.ctrlKey)) return;
+    if (e.shiftKey || e.altKey) return;
+    const key = typeof e.key === "string" ? e.key.toLowerCase() : "";
+    if (key !== "p") return;
+    e.preventDefault();
+    e.stopPropagation();
+    sendRouter({ kind: "open_palette" });
 }
 
-let switcherHandle = null;
-
-function buildToolbar() {
-    const bar = document.createElement("div");
-    bar.id = TOOLBAR_ID;
-    applyStyle(bar, {
-        "position": "fixed",
-        "top": "8px",
-        "left": "8px",
-        "z-index": "2147483647",
-        "display": "flex",
-        "align-items": "center",
-        "gap": "4px",
-        "font": "500 12px/1.2 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
-        "user-select": "none",
-    });
-
-    switcherHandle = globalThis.__promptheusSwitcher.create({
-        providers: g.providers,
-        activeId: g.providerId,
-        newWindowTitle: "Otwórz w nowym oknie",
-        onSelect: (id) => {
-            sendAction({ kind: "toolbar_action", action: "open_provider", provider_id: id });
-        },
-        onOpenNewWindow: (id) => {
-            sendAction({ kind: "toolbar_action", action: "open_provider_new_window", provider_id: id });
-        },
-    });
-    bar.appendChild(switcherHandle.element);
-
-    return bar;
+function ensurePaletteKeybind() {
+    if (g.__paletteInstalled) return;
+    g.__paletteInstalled = true;
+    document.addEventListener("keydown", paletteKeydown, true);
+    window.addEventListener("keydown", paletteKeydown, true);
 }
 
-function ensureToolbar() {
-    if (document.getElementById(TOOLBAR_ID)) return;
-    const root = document.body || document.documentElement;
-    if (!root) return;
-    root.appendChild(buildToolbar());
-}
-
-g.ensureToolbar = ensureToolbar;
-
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", ensureToolbar, { once: true });
-} else {
-    ensureToolbar();
-}
-setInterval(ensureToolbar, 1500);
+g.ensurePaletteKeybind = ensurePaletteKeybind;
+ensurePaletteKeybind();
 "##;

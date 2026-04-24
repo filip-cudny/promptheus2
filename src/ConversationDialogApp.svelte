@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -10,33 +10,16 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import { PanelLeft, SquarePen } from "lucide-svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
-  import {
-    getAiProviders,
-    openAiWebviewNewWindow,
-    swapAiWebview,
-    type AiProvider,
-  } from "$lib/services/aiWebview";
-  import { openConversationDialogNewWindow } from "$lib/services/conversationDialog";
-  import "$lib/providerSwitcher.js";
   import ConversationArea from "$lib/components/prompt/ConversationArea.svelte";
   import InputArea from "$lib/components/prompt/InputArea.svelte";
   import TabSidebar from "$lib/components/prompt/TabSidebar.svelte";
-
-  const PROMPTHEUS_PROVIDER_ID = "promptheus";
-
-  type SwitcherProvider = { id: string; name: string };
-  type SwitcherHandle = {
-    element: HTMLElement;
-    setActive: (id: string) => void;
-    destroy: () => void;
-  };
-  type SwitcherFactory = (opts: {
-    providers: SwitcherProvider[];
-    activeId: string;
-    newWindowTitle?: string;
-    onSelect: (id: string) => void;
-    onOpenNewWindow: (id: string) => void;
-  }) => SwitcherHandle;
+  import {
+    CONVERSATION_DIALOG_LABEL,
+    PROMPTHEUS_PROVIDER_ID,
+    closePalette,
+    openPalette,
+  } from "$lib/services/shellToolbar";
+  import { getAiProviders, type AiProvider } from "$lib/services/aiWebview";
 
   interface DialogInitParams {
     skill_id: string;
@@ -48,7 +31,10 @@
     new_chat: boolean;
   }
 
+  type PaletteEntry = { id: string; name: string };
+
   const skillsStore = getSkillsStore();
+  const HOST_LABEL = CONVERSATION_DIALOG_LABEL;
 
   const store = createConversationStore("", "");
 
@@ -60,50 +46,24 @@
   let contextInitialCollapsed = $state(false);
   let models = $state<ModelConfig[]>([]);
   let defaultModelId = $state<string | null>(null);
+
   let aiProviders = $state<AiProvider[]>([]);
-  let switcherMountEl: HTMLDivElement | undefined = $state();
-  let switcherHandle: SwitcherHandle | null = null;
+  let paletteOpen = $state(false);
+  let paletteQuery = $state("");
+  let paletteIndex = $state(0);
+  let paletteInputEl: HTMLInputElement | undefined = $state();
+  let paletteActiveId = $state<string>(PROMPTHEUS_PROVIDER_ID);
 
-  async function handleSwitcherSelect(providerId: string) {
-    if (providerId === PROMPTHEUS_PROVIDER_ID) return;
-    try {
-      await swapAiWebview(providerId, getCurrentWindow().label);
-    } catch (e) {
-      console.error("failed to swap ai webview", e);
-    }
-  }
+  let providers = $derived<PaletteEntry[]>([
+    { id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
+    ...aiProviders.map((p) => ({ id: p.id, name: p.name })),
+  ]);
 
-  async function handleSwitcherOpenNewWindow(providerId: string) {
-    try {
-      if (providerId === PROMPTHEUS_PROVIDER_ID) {
-        await openConversationDialogNewWindow();
-      } else {
-        await openAiWebviewNewWindow(providerId);
-      }
-    } catch (err) {
-      console.error("failed to open provider in new window", err);
-    }
-  }
-
-  function mountSwitcher() {
-    if (!switcherMountEl || switcherHandle) return;
-    const factory = (globalThis as unknown as {
-      __promptheusSwitcher?: { create: SwitcherFactory };
-    }).__promptheusSwitcher?.create;
-    if (!factory) return;
-    const providers: SwitcherProvider[] = [
-      { id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
-      ...aiProviders.map((p) => ({ id: p.id, name: p.name })),
-    ];
-    switcherHandle = factory({
-      providers,
-      activeId: PROMPTHEUS_PROVIDER_ID,
-      newWindowTitle: "Otwórz w nowym oknie",
-      onSelect: handleSwitcherSelect,
-      onOpenNewWindow: handleSwitcherOpenNewWindow,
-    });
-    switcherMountEl.appendChild(switcherHandle.element);
-  }
+  let filtered = $derived.by<PaletteEntry[]>(() => {
+    const q = paletteQuery.trim().toLowerCase();
+    if (!q) return providers;
+    return providers.filter((p) => p.name.toLowerCase().includes(q));
+  });
 
   let contextWindowSize = $derived.by(() => {
     const activeModelId = store.modelId ?? defaultModelId;
@@ -117,11 +77,64 @@
   let unlistenVoiceInput: UnlistenFn | undefined;
   let unlistenOpenForSkill: UnlistenFn | undefined;
   let unlistenNewConversation: UnlistenFn | undefined;
+  let unlistenPaletteOpened: UnlistenFn | undefined;
+  let unlistenPaletteClosed: UnlistenFn | undefined;
+  let unlistenActive: UnlistenFn | undefined;
 
-  function handleGlobalKeydown(e: KeyboardEvent) {
+  async function handleGlobalKeydown(e: KeyboardEvent) {
+    if (paletteOpen) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        await dismissPalette(null);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const entry = filtered[paletteIndex];
+        if (entry) {
+          await dismissPalette(entry.id);
+        }
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        paletteIndex = Math.min(filtered.length - 1, paletteIndex + 1);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        paletteIndex = Math.max(0, paletteIndex - 1);
+        return;
+      }
+      return;
+    }
+
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        await openPalette(HOST_LABEL);
+      } catch (err) {
+        console.error("open_palette failed", err);
+      }
+      return;
+    }
+
     if (e.key === "Escape" && store.isExecuting) {
       e.preventDefault();
       store.abortExecution();
+    }
+  }
+
+  async function dismissPalette(selectedId: string | null) {
+    try {
+      await closePalette(HOST_LABEL, selectedId);
+    } catch (e) {
+      console.error("close_palette failed", e);
     }
   }
 
@@ -165,21 +178,24 @@
     } catch {}
   }
 
-  async function loadAiProviders() {
-    try {
-      aiProviders = await getAiProviders();
-      mountSwitcher();
-    } catch (e) {
-      console.error("failed to load ai providers", e);
+  $effect(() => {
+    const _ = filtered.length;
+    if (paletteIndex >= filtered.length) {
+      paletteIndex = Math.max(0, filtered.length - 1);
     }
-  }
+  });
 
   onMount(async () => {
-    window.addEventListener("keydown", handleGlobalKeydown);
+    window.addEventListener("keydown", handleGlobalKeydown, true);
     skillsStore.init();
     await store.initFromSettings();
     loadModelInfo();
-    loadAiProviders();
+
+    try {
+      aiProviders = await getAiProviders();
+    } catch (e) {
+      console.error("getAiProviders failed", e);
+    }
 
     const reconnected = await store.tryReconnect();
 
@@ -205,6 +221,26 @@
 
     unlistenNewConversation = await listen("new-conversation", () => {
       store.addTab();
+    });
+
+    unlistenActive = await listen<{ provider_id: string | null }>(
+      "shell:active-changed",
+      (ev) => {
+        paletteActiveId = ev.payload.provider_id ?? PROMPTHEUS_PROVIDER_ID;
+      },
+    );
+
+    unlistenPaletteOpened = await listen("shell:palette-opened", async () => {
+      paletteOpen = true;
+      paletteQuery = "";
+      paletteIndex = 0;
+      await tick();
+      paletteInputEl?.focus();
+    });
+
+    unlistenPaletteClosed = await listen("shell:palette-closed", () => {
+      paletteOpen = false;
+      paletteQuery = "";
     });
 
     await autoShowContextIfNeeded();
@@ -245,14 +281,15 @@
   }
 
   onDestroy(() => {
-    window.removeEventListener("keydown", handleGlobalKeydown);
+    window.removeEventListener("keydown", handleGlobalKeydown, true);
     unlistenRestore?.();
     unlistenContextChanged?.();
     unlistenVoiceInput?.();
     unlistenOpenForSkill?.();
     unlistenNewConversation?.();
-    switcherHandle?.destroy();
-    switcherHandle = null;
+    unlistenPaletteOpened?.();
+    unlistenPaletteClosed?.();
+    unlistenActive?.();
     store.destroy();
   });
 </script>
@@ -274,14 +311,66 @@
     >
       <SquarePen size={ICON_SIZE.md} />
     </button>
-    <div class="switcher-mount" bind:this={switcherMountEl}></div>
   </div>
   <ConversationArea {store} />
   <InputArea {store} {models} {contextVisible} {contextDisabled} {contextInitialCollapsed} {contextWindowSize} {defaultModelId} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
   <TabSidebar {store} open={sidebarOpen} onClose={() => sidebarOpen = false} />
 </div>
 
+{#if paletteOpen}
+  <div class="palette-root">
+    <button
+      type="button"
+      aria-label="Close palette"
+      class="palette-scrim"
+      onclick={() => dismissPalette(null)}
+    ></button>
+    <div class="palette-modal" role="dialog" aria-modal="true">
+      <input
+        bind:this={paletteInputEl}
+        bind:value={paletteQuery}
+        oninput={() => (paletteIndex = 0)}
+        class="palette-input"
+        type="text"
+        placeholder="Switch provider..."
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <div class="palette-list" role="listbox">
+        {#each filtered as entry, i (entry.id)}
+          <button
+            type="button"
+            role="option"
+            aria-selected={i === paletteIndex}
+            class="palette-item"
+            class:highlight={i === paletteIndex}
+            onmouseenter={() => (paletteIndex = i)}
+            onclick={() => dismissPalette(entry.id)}
+          >
+            <span class="palette-item-name">{entry.name}</span>
+            {#if entry.id === paletteActiveId}
+              <span class="palette-item-badge">active</span>
+            {/if}
+          </button>
+        {:else}
+          <div class="palette-empty">no matches</div>
+        {/each}
+      </div>
+      <div class="palette-footer">
+        <span>↑↓ navigate</span>
+        <span>↵ select</span>
+        <span>esc close</span>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
+  :global(html),
+  :global(body) {
+    background: #1e1e1e;
+  }
+
   .dialog-shell {
     display: flex;
     flex-direction: column;
@@ -349,8 +438,100 @@
     background: rgba(255, 255, 255, 0.1);
   }
 
-  .switcher-mount {
-    display: inline-flex;
+  .palette-root {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding-top: 80px;
+    z-index: 1000;
+  }
+
+  .palette-scrim {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    border: 0;
+    padding: 0;
+    cursor: default;
+  }
+
+  .palette-modal {
+    position: relative;
+    width: min(520px, 80%);
+    background: #252525;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .palette-input {
+    appearance: none;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: transparent;
+    color: #fff;
+    font: inherit;
+    font-size: 14px;
+    padding: 12px 14px;
+    outline: none;
+  }
+
+  .palette-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .palette-item {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.85);
+    font: inherit;
+    text-align: left;
+    padding: 8px 14px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
     align-items: center;
+    gap: 12px;
+  }
+
+  .palette-item.highlight {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .palette-item-name {
+    font-size: 13px;
+  }
+
+  .palette-item-badge {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 3px;
+    padding: 1px 5px;
+  }
+
+  .palette-empty {
+    color: rgba(255, 255, 255, 0.4);
+    padding: 16px;
+    text-align: center;
+  }
+
+  .palette-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 6px 14px;
+    display: flex;
+    gap: 12px;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 11px;
   }
 </style>

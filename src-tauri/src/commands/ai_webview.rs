@@ -93,3 +93,39 @@ pub fn get_ai_providers() -> Vec<AiProviderDto> {
 pub fn get_ai_provider(provider_id: String) -> Option<AiProviderDto> {
     ai_providers::find(&provider_id).map(AiProviderDto::from)
 }
+
+#[tauri::command]
+pub fn get_active_provider(app: tauri::AppHandle, host_label: String) -> Option<String> {
+    ai_webview::active_provider_for(&app, &host_label)
+}
+
+#[tauri::command]
+pub fn new_chat_in_host(app: tauri::AppHandle, host_label: String) -> Result<(), String> {
+    log::info!(
+        target: "app_lib::commands::ai_webview",
+        "new_chat_in_host host={host_label}",
+    );
+    ai_webview::new_chat_in_host(&app, &host_label)
+}
+
+#[tauri::command]
+pub async fn open_palette(app: tauri::AppHandle, host_label: String) -> Result<(), String> {
+    log::info!(
+        target: "app_lib::commands::ai_webview",
+        "open_palette host={host_label}",
+    );
+    ai_webview::swap_to_palette(&app, &host_label).await
+}
+
+#[tauri::command]
+pub async fn close_palette(
+    app: tauri::AppHandle,
+    host_label: String,
+    selected_provider_id: Option<String>,
+) -> Result<(), String> {
+    log::info!(
+        target: "app_lib::commands::ai_webview",
+        "close_palette host={host_label} selected={selected_provider_id:?}",
+    );
+    ai_webview::swap_from_palette(&app, &host_label, selected_provider_id).await
+}

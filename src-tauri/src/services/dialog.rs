@@ -6,6 +6,10 @@ use super::dock::DockManager;
 use super::ui_state::WindowGeometry;
 use crate::commands::settings::AppState;
 
+const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
+pub const SHELL_TOOLBAR_LABEL: &str = "shell-toolbar";
+pub const TOOLBAR_HEIGHT: f64 = 40.0;
+
 pub struct DialogConfig {
     pub label: &'static str,
     pub url: String,
@@ -14,6 +18,83 @@ pub struct DialogConfig {
     pub default_height: f64,
     pub geometry_key: &'static str,
 }
+
+pub fn uses_custom_titlebar(label: &str) -> bool {
+    label == CONVERSATION_DIALOG_LABEL
+}
+
+fn logical_window_size(win: &tauri::Window) -> Result<(f64, f64), String> {
+    let physical = win.inner_size().map_err(|e| e.to_string())?;
+    let scale = win.scale_factor().map_err(|e| e.to_string())?;
+    Ok((
+        physical.width as f64 / scale,
+        physical.height as f64 / scale,
+    ))
+}
+
+pub fn toolbar_layout(logical_w: f64) -> (LogicalPosition<f64>, LogicalSize<f64>) {
+    (
+        LogicalPosition::new(0.0, 0.0),
+        LogicalSize::new(logical_w, TOOLBAR_HEIGHT),
+    )
+}
+
+pub fn content_layout(
+    logical_w: f64,
+    logical_h: f64,
+) -> (LogicalPosition<f64>, LogicalSize<f64>) {
+    let h = (logical_h - TOOLBAR_HEIGHT).max(0.0);
+    (LogicalPosition::new(0.0, TOOLBAR_HEIGHT), LogicalSize::new(logical_w, h))
+}
+
+#[cfg(target_os = "linux")]
+pub fn configure_linux_child_packing(webview: &tauri::Webview, role: LinuxChildRole) {
+    let role = role;
+    if let Err(e) = webview.with_webview(move |pv| {
+        use gtk::prelude::{BoxExt, WidgetExt};
+        let wv = pv.inner();
+        let Some(parent) = WidgetExt::parent(&wv) else {
+            return;
+        };
+        use gtk::glib::object::Cast;
+        let Ok(vbox) = parent.downcast::<gtk::Box>() else {
+            return;
+        };
+        match role {
+            LinuxChildRole::Toolbar => {
+                vbox.set_child_packing(&wv, false, false, 0, gtk::PackType::Start);
+                WidgetExt::set_size_request(&wv, -1, TOOLBAR_HEIGHT as i32);
+            }
+            LinuxChildRole::Content => {
+                vbox.set_child_packing(&wv, true, true, 0, gtk::PackType::Start);
+                WidgetExt::set_size_request(&wv, -1, -1);
+            }
+        }
+    }) {
+        log::warn!(
+            target: "app_lib::services::dialog",
+            "configure_linux_child_packing failed for {}: {e}",
+            webview.label(),
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
+pub enum LinuxChildRole {
+    Toolbar,
+    Content,
+}
+
+#[cfg(not(target_os = "linux"))]
+#[derive(Clone, Copy)]
+pub enum LinuxChildRole {
+    Toolbar,
+    Content,
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn configure_linux_child_packing(_webview: &tauri::Webview, _role: LinuxChildRole) {}
 
 pub async fn open_or_focus(
     app: &tauri::AppHandle,
@@ -38,11 +119,13 @@ pub async fn open_or_focus(
         .map(|g| (g.width, g.height))
         .unwrap_or((config.default_width, config.default_height));
 
+    let custom_titlebar = uses_custom_titlebar(config.label);
+
     let mut window_builder = Window::builder(app, config.label)
         .title(config.title)
         .inner_size(width, height)
         .resizable(true)
-        .decorations(true);
+        .decorations(!custom_titlebar);
 
     if let Some(g) = &geometry {
         window_builder = window_builder.position(g.x, g.y);
@@ -50,19 +133,43 @@ pub async fn open_or_focus(
 
     let window = window_builder.build().map_err(|e| e.to_string())?;
 
-    let inner = window.inner_size().map_err(|e| e.to_string())?;
-    let webview_builder = tauri::webview::WebviewBuilder::new(
-        config.label,
-        tauri::WebviewUrl::App(config.url.clone().into()),
-    );
+    let (logical_w, logical_h) = logical_window_size(&window)?;
 
-    window
-        .add_child(
-            webview_builder,
-            LogicalPosition::new(0.0, 0.0),
-            inner,
-        )
-        .map_err(|e| e.to_string())?;
+    if custom_titlebar {
+        let (toolbar_pos, toolbar_size) = toolbar_layout(logical_w);
+        let toolbar_builder = tauri::webview::WebviewBuilder::new(
+            SHELL_TOOLBAR_LABEL,
+            tauri::WebviewUrl::App("shell-toolbar.html".into()),
+        );
+        let toolbar_webview = window
+            .add_child(toolbar_builder, toolbar_pos, toolbar_size)
+            .map_err(|e| e.to_string())?;
+        configure_linux_child_packing(&toolbar_webview, LinuxChildRole::Toolbar);
+
+        let (content_pos, content_size) = content_layout(logical_w, logical_h);
+        let content_builder = tauri::webview::WebviewBuilder::new(
+            config.label,
+            tauri::WebviewUrl::App(config.url.clone().into()),
+        );
+        let content_webview = window
+            .add_child(content_builder, content_pos, content_size)
+            .map_err(|e| e.to_string())?;
+        configure_linux_child_packing(&content_webview, LinuxChildRole::Content);
+
+        ai_webview::mark_active_webview(app, config.label, config.label);
+    } else {
+        let content_builder = tauri::webview::WebviewBuilder::new(
+            config.label,
+            tauri::WebviewUrl::App(config.url.clone().into()),
+        );
+        window
+            .add_child(
+                content_builder,
+                LogicalPosition::new(0.0, 0.0),
+                LogicalSize::new(logical_w, logical_h),
+            )
+            .map_err(|e| e.to_string())?;
+    }
 
     let win = app
         .get_webview_window(config.label)
@@ -76,6 +183,7 @@ pub async fn open_or_focus(
     let geometry_key = config.geometry_key;
     let resize_label = config.label.to_string();
     let resize_app = app.clone();
+    let resize_custom_titlebar = custom_titlebar;
 
     window.on_window_event(move |event| match event {
         WindowEvent::CloseRequested { .. } => {
@@ -86,36 +194,76 @@ pub async fn open_or_focus(
             let dock = app_handle.state::<DockManager>();
             dock.dialog_closed(&app_handle);
         }
-        WindowEvent::Resized(size) => {
+        WindowEvent::Resized(_) => {
             let Some(host) = resize_app.get_window(&resize_label) else {
                 return;
             };
-            let scale = host.scale_factor().unwrap_or(1.0);
-            let logical = LogicalSize::new(
-                size.width as f64 / scale,
-                size.height as f64 / scale,
-            );
-            for webview in host.webviews() {
-                if let Err(e) = webview.set_size(logical) {
-                    log::warn!(
-                        target: "app_lib::services::dialog",
-                        "resize webview {} failed: {e}",
-                        webview.label(),
-                    );
-                }
-                if let Err(e) = webview.set_position(LogicalPosition::new(0.0, 0.0)) {
-                    log::warn!(
-                        target: "app_lib::services::dialog",
-                        "reposition webview {} failed: {e}",
-                        webview.label(),
-                    );
-                }
-            }
+            apply_layout(&host, resize_custom_titlebar);
         }
         _ => {}
     });
 
     Ok((win, true))
+}
+
+pub fn apply_layout(host: &tauri::Window, custom_titlebar: bool) {
+    let (logical_w, logical_h) = match logical_window_size(host) {
+        Ok(v) => v,
+        Err(e) => {
+            log::warn!(
+                target: "app_lib::services::dialog",
+                "apply_layout: failed to get size: {e}",
+            );
+            return;
+        }
+    };
+
+    let (toolbar_pos, toolbar_size) = toolbar_layout(logical_w);
+    let (content_pos, content_size) = content_layout(logical_w, logical_h);
+
+    for webview in host.webviews() {
+        let label = webview.label();
+        if custom_titlebar && label == SHELL_TOOLBAR_LABEL {
+            if let Err(e) = webview.set_position(toolbar_pos) {
+                log::warn!(
+                    target: "app_lib::services::dialog",
+                    "reposition toolbar failed: {e}",
+                );
+            }
+            if let Err(e) = webview.set_size(toolbar_size) {
+                log::warn!(
+                    target: "app_lib::services::dialog",
+                    "resize toolbar failed: {e}",
+                );
+            }
+        } else if custom_titlebar {
+            if let Err(e) = webview.set_position(content_pos) {
+                log::warn!(
+                    target: "app_lib::services::dialog",
+                    "reposition {label} failed: {e}",
+                );
+            }
+            if let Err(e) = webview.set_size(content_size) {
+                log::warn!(
+                    target: "app_lib::services::dialog",
+                    "resize {label} failed: {e}",
+                );
+            }
+        } else {
+            if let Err(e) = webview.set_position(LogicalPosition::new(0.0, 0.0)) {
+                log::warn!(
+                    target: "app_lib::services::dialog",
+                    "reposition {label} failed: {e}",
+                );
+            }
+            if let Err(e) = webview.set_size(LogicalSize::new(logical_w, logical_h)) {
+                log::warn!(
+                    target: "app_lib::services::dialog",
+                    "resize {label} failed: {e}",
+                );
+            }
+        }
+    }
 }
 
 pub fn save_geometry(app: &tauri::AppHandle, window_label: &str, geometry_key: &str) {

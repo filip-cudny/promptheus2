@@ -27,6 +27,7 @@ export default defineConfig({
         main: path.resolve("./index.html"),
         "context-menu": path.resolve("./context-menu.html"),
         "conversation-dialog": path.resolve("./conversation-dialog.html"),
+        "shell-toolbar": path.resolve("./shell-toolbar.html"),
         "context-editor": path.resolve("./context-editor.html"),
         "history-dialog": path.resolve("./history-dialog.html"),
         "settings-dialog": path.resolve("./settings-dialog.html"),
