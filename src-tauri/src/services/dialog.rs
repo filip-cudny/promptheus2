@@ -1,4 +1,4 @@
-use tauri::{LogicalPosition, LogicalSize, Manager, Window, WindowEvent};
+use tauri::{LogicalPosition, LogicalSize, Manager, Rect, Window, WindowEvent};
 use tokio::sync::Mutex;
 
 use super::ai_webview;
@@ -124,8 +124,22 @@ pub async fn open_or_focus(
     let mut window_builder = Window::builder(app, config.label)
         .title(config.title)
         .inner_size(width, height)
-        .resizable(true)
-        .decorations(!custom_titlebar);
+        .resizable(true);
+
+    #[cfg(target_os = "macos")]
+    {
+        window_builder = window_builder.decorations(true);
+        if custom_titlebar {
+            window_builder = window_builder
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true);
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        window_builder = window_builder.decorations(!custom_titlebar);
+    }
 
     if let Some(g) = &geometry {
         window_builder = window_builder.position(g.x, g.y);
@@ -140,7 +154,8 @@ pub async fn open_or_focus(
         let toolbar_builder = tauri::webview::WebviewBuilder::new(
             SHELL_TOOLBAR_LABEL,
             tauri::WebviewUrl::App("shell-toolbar.html".into()),
-        );
+        )
+        .auto_resize();
         let toolbar_webview = window
             .add_child(toolbar_builder, toolbar_pos, toolbar_size)
             .map_err(|e| e.to_string())?;
@@ -150,7 +165,8 @@ pub async fn open_or_focus(
         let content_builder = tauri::webview::WebviewBuilder::new(
             config.label,
             tauri::WebviewUrl::App(config.url.clone().into()),
-        );
+        )
+        .auto_resize();
         let content_webview = window
             .add_child(content_builder, content_pos, content_size)
             .map_err(|e| e.to_string())?;
@@ -161,7 +177,8 @@ pub async fn open_or_focus(
         let content_builder = tauri::webview::WebviewBuilder::new(
             config.label,
             tauri::WebviewUrl::App(config.url.clone().into()),
-        );
+        )
+        .auto_resize();
         window
             .add_child(
                 content_builder,
@@ -194,11 +211,14 @@ pub async fn open_or_focus(
             let dock = app_handle.state::<DockManager>();
             dock.dialog_closed(&app_handle);
         }
-        WindowEvent::Resized(_) => {
+        WindowEvent::Resized(size) => {
             let Some(host) = resize_app.get_window(&resize_label) else {
                 return;
             };
-            apply_layout(&host, resize_custom_titlebar);
+            let scale = host.scale_factor().unwrap_or(1.0);
+            let logical_w = size.width as f64 / scale;
+            let logical_h = size.height as f64 / scale;
+            apply_layout(&host, resize_custom_titlebar, logical_w, logical_h);
         }
         _ => {}
     });
@@ -206,62 +226,35 @@ pub async fn open_or_focus(
     Ok((win, true))
 }
 
-pub fn apply_layout(host: &tauri::Window, custom_titlebar: bool) {
-    let (logical_w, logical_h) = match logical_window_size(host) {
-        Ok(v) => v,
-        Err(e) => {
-            log::warn!(
-                target: "app_lib::services::dialog",
-                "apply_layout: failed to get size: {e}",
-            );
-            return;
-        }
-    };
-
+pub fn apply_layout(
+    host: &tauri::Window,
+    custom_titlebar: bool,
+    logical_w: f64,
+    logical_h: f64,
+) {
     let (toolbar_pos, toolbar_size) = toolbar_layout(logical_w);
     let (content_pos, content_size) = content_layout(logical_w, logical_h);
+    let full_pos = LogicalPosition::new(0.0, 0.0);
+    let full_size = LogicalSize::new(logical_w, logical_h);
 
     for webview in host.webviews() {
-        let label = webview.label();
-        if custom_titlebar && label == SHELL_TOOLBAR_LABEL {
-            if let Err(e) = webview.set_position(toolbar_pos) {
-                log::warn!(
-                    target: "app_lib::services::dialog",
-                    "reposition toolbar failed: {e}",
-                );
-            }
-            if let Err(e) = webview.set_size(toolbar_size) {
-                log::warn!(
-                    target: "app_lib::services::dialog",
-                    "resize toolbar failed: {e}",
-                );
-            }
+        let label = webview.label().to_string();
+        let (pos, size) = if custom_titlebar && label == SHELL_TOOLBAR_LABEL {
+            (toolbar_pos, toolbar_size)
         } else if custom_titlebar {
-            if let Err(e) = webview.set_position(content_pos) {
-                log::warn!(
-                    target: "app_lib::services::dialog",
-                    "reposition {label} failed: {e}",
-                );
-            }
-            if let Err(e) = webview.set_size(content_size) {
-                log::warn!(
-                    target: "app_lib::services::dialog",
-                    "resize {label} failed: {e}",
-                );
-            }
+            (content_pos, content_size)
         } else {
-            if let Err(e) = webview.set_position(LogicalPosition::new(0.0, 0.0)) {
-                log::warn!(
-                    target: "app_lib::services::dialog",
-                    "reposition {label} failed: {e}",
-                );
-            }
-            if let Err(e) = webview.set_size(LogicalSize::new(logical_w, logical_h)) {
-                log::warn!(
-                    target: "app_lib::services::dialog",
-                    "resize {label} failed: {e}",
-                );
-            }
+            (full_pos, full_size)
+        };
+
+        if let Err(e) = webview.set_bounds(Rect {
+            position: pos.into(),
+            size: size.into(),
+        }) {
+            log::warn!(
+                target: "app_lib::services::dialog",
+                "set_bounds {label} failed: {e}",
+            );
         }
     }
 }

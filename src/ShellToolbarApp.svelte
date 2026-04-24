@@ -2,7 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { Minus, Plus, Square, SquareArrowOutUpRight, X } from "lucide-svelte";
+  import { ChevronDown, Minus, Plus, Square, SquareArrowOutUpRight, X } from "lucide-svelte";
   import {
     getAiProviders,
     openAiWebviewNewWindow,
@@ -14,8 +14,10 @@
     CONVERSATION_DIALOG_LABEL,
     PROMPTHEUS_PROVIDER_ID,
     getActiveProvider,
+    hideProviderMenu,
     newChatInHost,
     openPalette,
+    showProviderMenu,
   } from "$lib/services/shellToolbar";
 
   const HOST_LABEL = CONVERSATION_DIALOG_LABEL;
@@ -25,13 +27,21 @@
   let aiProviders = $state<AiProvider[]>([]);
   let activeId = $state<string>(PROMPTHEUS_PROVIDER_ID);
   let isMaximized = $state(false);
+  let providerDropdownOpen = $state(false);
+  let triggerEl = $state<HTMLButtonElement | null>(null);
 
   let providers = $derived<{ id: string; name: string }[]>([
     { id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
     ...aiProviders.map((p) => ({ id: p.id, name: p.name })),
   ]);
 
+  let activeProvider = $derived(
+    providers.find((p) => p.id === activeId) ?? providers[0],
+  );
+
   let unlistenActive: UnlistenFn | undefined;
+  let unlistenSelect: UnlistenFn | undefined;
+  let unlistenClosed: UnlistenFn | undefined;
 
   async function refreshActive() {
     try {
@@ -43,6 +53,7 @@
   }
 
   async function selectProvider(id: string) {
+    providerDropdownOpen = false;
     if (id === activeId) return;
     try {
       if (id === PROMPTHEUS_PROVIDER_ID) {
@@ -52,6 +63,37 @@
       }
     } catch (e) {
       console.error("shell toolbar swap failed", e);
+    }
+  }
+
+  async function toggleProviderDropdown(e: MouseEvent) {
+    e.stopPropagation();
+    if (providerDropdownOpen) {
+      providerDropdownOpen = false;
+      try {
+        await hideProviderMenu();
+      } catch (err) {
+        console.error("hide_provider_menu failed", err);
+      }
+      return;
+    }
+
+    const btn = triggerEl;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    const hostWin = getCurrentWindow();
+    try {
+      const pos = await hostWin.outerPosition();
+      const scale = await hostWin.scaleFactor();
+      const anchorX = pos.x / scale + rect.left;
+      const anchorY = pos.y / scale + rect.bottom + 4;
+      const width = Math.max(rect.width, 160);
+      const height = providers.length * 28 + 8;
+      providerDropdownOpen = true;
+      await showProviderMenu(anchorX, anchorY, width, height, providers, activeId);
+    } catch (err) {
+      providerDropdownOpen = false;
+      console.error("show_provider_menu failed", err);
     }
   }
 
@@ -130,28 +172,41 @@
         activeId = ev.payload.provider_id ?? PROMPTHEUS_PROVIDER_ID;
       },
     );
+
+    unlistenSelect = await listen<{ provider_id: string }>(
+      "provider-menu:select",
+      (ev) => {
+        providerDropdownOpen = false;
+        void selectProvider(ev.payload.provider_id);
+      },
+    );
+
+    unlistenClosed = await listen("provider-menu:closed", () => {
+      providerDropdownOpen = false;
+    });
   });
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleGlobalKeydown, true);
     unlistenActive?.();
+    unlistenSelect?.();
+    unlistenClosed?.();
   });
 </script>
 
-<div class="titlebar" data-tauri-drag-region>
-  <div class="switcher" role="tablist">
-    {#each providers as p (p.id)}
-      <button
-        type="button"
-        role="tab"
-        aria-selected={activeId === p.id}
-        class="tab"
-        class:active={activeId === p.id}
-        onclick={() => selectProvider(p.id)}
-      >
-        {p.name}
-      </button>
-    {/each}
+<div class="titlebar" class:mac={isMac} data-tauri-drag-region>
+  <div class="switcher">
+    <button
+      bind:this={triggerEl}
+      type="button"
+      class="trigger"
+      aria-haspopup="listbox"
+      aria-expanded={providerDropdownOpen}
+      onmousedown={toggleProviderDropdown}
+    >
+      <span class="trigger-label">{activeProvider?.name ?? "Promptheus"}</span>
+      <ChevronDown size={14} />
+    </button>
   </div>
 
   <div class="drag-fill" data-tauri-drag-region></div>
@@ -177,17 +232,19 @@
       <SquareArrowOutUpRight size={14} />
     </button>
 
-    <div class="sep"></div>
+    {#if !isMac}
+      <div class="sep"></div>
 
-    <button type="button" class="win-btn" title="Minimize" onclick={handleMinimize}>
-      <Minus size={14} />
-    </button>
-    <button type="button" class="win-btn" title={isMaximized ? "Restore" : "Maximize"} onclick={handleToggleMaximize}>
-      <Square size={12} />
-    </button>
-    <button type="button" class="win-btn close" title="Close" onclick={handleClose}>
-      <X size={14} />
-    </button>
+      <button type="button" class="win-btn" title="Minimize" onclick={handleMinimize}>
+        <Minus size={14} />
+      </button>
+      <button type="button" class="win-btn" title={isMaximized ? "Restore" : "Maximize"} onclick={handleToggleMaximize}>
+        <Square size={12} />
+      </button>
+      <button type="button" class="win-btn close" title="Close" onclick={handleClose}>
+        <X size={14} />
+      </button>
+    {/if}
   </div>
 </div>
 
@@ -214,34 +271,46 @@
     box-sizing: border-box;
   }
 
-  .switcher {
-    display: inline-flex;
-    gap: 2px;
-    padding: 2px;
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.04);
+  .titlebar.mac {
+    padding-left: 80px;
   }
 
-  .tab {
+  .switcher {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .trigger {
     appearance: none;
-    border: 0;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.55);
-    padding: 4px 10px;
-    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+    color: #fff;
+    padding: 4px 6px 4px 10px;
+    border-radius: 6px;
     font: inherit;
     cursor: pointer;
     line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 110px;
   }
 
-  .tab:hover {
-    color: rgba(255, 255, 255, 0.9);
-    background: rgba(255, 255, 255, 0.04);
+  .trigger:hover {
+    background: rgba(255, 255, 255, 0.08);
   }
 
-  .tab.active {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.12);
+  .trigger-label {
+    flex: 1;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .trigger :global(svg) {
+    color: rgba(255, 255, 255, 0.55);
+    flex-shrink: 0;
   }
 
   .drag-fill {
@@ -315,7 +384,7 @@
   }
 
   .win-btn.close:hover {
-    background: #e81123;
+    background: rgba(255, 255, 255, 0.12);
     color: #fff;
   }
 </style>

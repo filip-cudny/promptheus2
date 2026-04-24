@@ -26,3 +26,25 @@ export async function closePalette(
 ): Promise<void> {
   await invoke("close_palette", { hostLabel, selectedProviderId });
 }
+
+export async function showProviderMenu(
+  anchorX: number,
+  anchorY: number,
+  width: number,
+  height: number,
+  providers: { id: string; name: string }[],
+  activeId: string,
+): Promise<void> {
+  await invoke("show_provider_menu", {
+    anchorX,
+    anchorY,
+    width,
+    height,
+    providers,
+    activeId,
+  });
+}
+
+export async function hideProviderMenu(): Promise<void> {
+  await invoke("hide_provider_menu");
+}

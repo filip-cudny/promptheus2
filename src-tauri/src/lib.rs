@@ -231,6 +231,22 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     .visible(false)
     .build()?;
 
+    WebviewWindowBuilder::new(
+        app,
+        "provider-menu",
+        tauri::WebviewUrl::App("provider-menu.html".into()),
+    )
+    .title("")
+    .inner_size(180.0, 120.0)
+    .resizable(false)
+    .decorations(false)
+    .transparent(true)
+    .shadow(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .visible(false)
+    .build()?;
+
     Ok(())
 }
 
@@ -736,6 +752,10 @@ pub fn run() {
             commands::ai_webview::new_chat_in_host,
             commands::ai_webview::open_palette,
             commands::ai_webview::close_palette,
+            commands::provider_menu::show_provider_menu,
+            commands::provider_menu::hide_provider_menu,
+            commands::provider_menu::size_provider_menu,
+            commands::provider_menu::provider_menu_select,
             commands::skills::list_skills,
             commands::skills::get_skill,
             commands::skills::get_skill_body,

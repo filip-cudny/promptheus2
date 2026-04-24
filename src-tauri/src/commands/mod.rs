@@ -10,6 +10,7 @@ pub mod image_preview;
 pub mod mcp;
 pub mod menu;
 pub mod notification;
+pub mod provider_menu;
 pub mod execution;
 pub mod fs;
 pub mod conversation_dialog;

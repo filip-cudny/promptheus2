@@ -20,6 +20,20 @@ const ROUTER_SENTINEL: &str = "https://promptheus-ai-webview-router.invalid/";
 const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
 const CONVERSATION_DIALOG_TITLE: &str = "Promptheus — chat";
 
+const AI_WEBVIEW_USER_AGENT_MACOS: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15";
+const AI_WEBVIEW_USER_AGENT_LINUX: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15";
+const AI_WEBVIEW_USER_AGENT_WINDOWS: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
+fn ai_webview_user_agent() -> &'static str {
+    if cfg!(target_os = "macos") {
+        AI_WEBVIEW_USER_AGENT_MACOS
+    } else if cfg!(target_os = "windows") {
+        AI_WEBVIEW_USER_AGENT_WINDOWS
+    } else {
+        AI_WEBVIEW_USER_AGENT_LINUX
+    }
+}
+
 #[derive(Default)]
 pub struct AiWebviewState {
     hosted: StdMutex<HashMap<String, HashSet<&'static str>>>,
@@ -272,6 +286,8 @@ async fn hosted_swap_to_provider(
         let nav_webview_label = child_label.clone();
 
         let builder = WebviewBuilder::new(&child_label, WebviewUrl::External(content_url))
+            .auto_resize()
+            .user_agent(ai_webview_user_agent())
             .initialization_script(&init_script)
             .on_navigation(move |url| {
                 if !url.as_str().starts_with(ROUTER_SENTINEL) {
@@ -709,6 +725,7 @@ async fn open_window(
             .title(format!("{} — Promptheus", provider.name))
             .inner_size(width, height)
             .resizable(true)
+            .user_agent(ai_webview_user_agent())
             .initialization_script(&init_script)
             .on_navigation(move |url| {
                 if !url.as_str().starts_with(ROUTER_SENTINEL) {
@@ -873,6 +890,7 @@ fn initialization_script(provider: &AiProvider) -> String {
 
     format!(
         r#"
+        {dark_mode}
         (function() {{
             if (window.__promptheus && window.__promptheus.__installed) return;
             const g = window.__promptheus = window.__promptheus || {{}};
@@ -885,6 +903,7 @@ fn initialization_script(provider: &AiProvider) -> String {
         provider_id_json = provider_id_json,
         sentinel_json = sentinel_json,
         palette = PALETTE_KEYBIND_JS,
+        dark_mode = DARK_MODE_JS,
     )
 }
 
@@ -897,6 +916,36 @@ fn reinject_script() -> String {
     "#
     .to_string()
 }
+
+const DARK_MODE_JS: &str = r##"
+(function() {
+    try {
+        const native = window.matchMedia ? window.matchMedia.bind(window) : null;
+        if (native) {
+            window.matchMedia = function(query) {
+                const result = native(query);
+                if (typeof query === "string" && query.indexOf("prefers-color-scheme") !== -1) {
+                    const wantsDark = query.indexOf("dark") !== -1;
+                    try {
+                        Object.defineProperty(result, "matches", { value: wantsDark, configurable: true });
+                    } catch (_) {}
+                }
+                return result;
+            };
+        }
+    } catch (_) {}
+    try {
+        if (document.documentElement) {
+            document.documentElement.style.colorScheme = "dark";
+        }
+    } catch (_) {}
+    try {
+        if (window.localStorage) {
+            window.localStorage.setItem("theme", "dark");
+        }
+    } catch (_) {}
+})();
+"##;
 
 const PALETTE_KEYBIND_JS: &str = r##"
 const S = g.routerSentinel;
