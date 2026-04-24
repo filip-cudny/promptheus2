@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod ai_webview;
 pub mod clipboard;
 pub mod context;
 pub mod context_editor;

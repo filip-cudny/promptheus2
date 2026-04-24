@@ -525,6 +525,7 @@ pub fn run() {
             }
 
             app.manage(DockManager::new());
+            app.manage(services::ai_webview::AiWebviewState::default());
 
             let skills_dir = config_dir.join("skills");
             let mut skill_service = SkillService::load(
@@ -674,6 +675,14 @@ pub fn run() {
             commands::execution::retry_tool_call,
             commands::conversation_dialog::open_conversation_dialog,
             commands::conversation_dialog::get_dialog_init_params,
+            commands::ai_webview::open_ai_webview,
+            commands::ai_webview::open_ai_webview_new_window,
+            commands::ai_webview::swap_ai_webview,
+            commands::ai_webview::swap_to_conversation_dialog,
+            commands::ai_webview::navigate_ai_webview,
+            commands::ai_webview::close_ai_webview,
+            commands::ai_webview::get_ai_providers,
+            commands::ai_webview::get_ai_provider,
             commands::skills::list_skills,
             commands::skills::get_skill,
             commands::skills::get_skill_body,

@@ -1,4 +1,6 @@
 pub mod ai;
+pub mod ai_providers;
+pub mod ai_webview;
 pub mod autostart;
 pub mod clipboard;
 pub mod env_resolve;
