@@ -137,6 +137,66 @@ pub fn window_label(provider: &AiProvider) -> String {
     format!("ai-webview-{}", provider.id)
 }
 
+#[cfg(target_os = "linux")]
+fn install_media_permissions(pv: tauri::webview::PlatformWebview) {
+    use webkit2gtk::glib::object::ObjectExt;
+    use webkit2gtk::{
+        DeviceInfoPermissionRequest, PermissionRequestExt, SettingsExt,
+        UserMediaPermissionRequest, WebViewExt,
+    };
+
+    let wk = pv.inner();
+    if let Some(settings) = WebViewExt::settings(&wk) {
+        settings.set_enable_media_stream(true);
+        settings.set_enable_mediasource(true);
+        settings.set_enable_media_capabilities(true);
+        settings.set_enable_webrtc(true);
+    }
+
+    wk.connect_permission_request(|_, req| {
+        if req.is::<UserMediaPermissionRequest>() || req.is::<DeviceInfoPermissionRequest>() {
+            req.allow();
+            true
+        } else {
+            false
+        }
+    });
+}
+
+fn enable_media_for_window(win: &tauri::WebviewWindow) {
+    #[cfg(target_os = "linux")]
+    {
+        let label = win.label().to_string();
+        if let Err(e) = win.with_webview(install_media_permissions) {
+            log::warn!(
+                target: "app_lib::services::ai_webview",
+                "install media permissions failed for window {label}: {e}",
+            );
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = win;
+    }
+}
+
+fn enable_media_for_webview(webview: &tauri::Webview) {
+    #[cfg(target_os = "linux")]
+    {
+        let label = webview.label().to_string();
+        if let Err(e) = webview.with_webview(install_media_permissions) {
+            log::warn!(
+                target: "app_lib::services::ai_webview",
+                "install media permissions failed for webview {label}: {e}",
+            );
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = webview;
+    }
+}
+
 fn host_logical_size(host: &tauri::Window) -> Result<(f64, f64), String> {
     let physical = host.inner_size().map_err(|e| e.to_string())?;
     let scale = host.scale_factor().map_err(|e| e.to_string())?;
@@ -317,6 +377,7 @@ async fn hosted_swap_to_provider(
         let child_webview = host
             .add_child(builder, pos, size)
             .map_err(|e| e.to_string())?;
+        enable_media_for_webview(&child_webview);
         configure_linux_child_packing(&child_webview, LinuxChildRole::Content);
         if cfg!(target_os = "linux") && uses_custom_titlebar(host_label) {
             attach_undecorated_resize_handler(&child_webview);
@@ -792,6 +853,7 @@ async fn open_window(
     }
 
     let win = builder.build().map_err(|e| e.to_string())?;
+    enable_media_for_window(&win);
 
     if let Some(webview_state) = app.try_state::<AiWebviewState>() {
         webview_state.set_provider(&label_owned, provider.id);

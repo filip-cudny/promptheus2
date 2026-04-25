@@ -322,6 +322,7 @@
   .icon-btn {
     appearance: none;
     border: 0;
+    padding: 0;
     background: transparent;
     color: rgba(255, 255, 255, 0.5);
     width: 26px;
@@ -331,6 +332,10 @@
     justify-content: center;
     border-radius: 4px;
     cursor: pointer;
+  }
+
+  .icon-btn :global(svg) {
+    display: block;
   }
 
   .icon-btn:hover:not(:disabled) {
