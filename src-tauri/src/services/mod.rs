@@ -19,6 +19,8 @@ pub mod monitor;
 pub mod notification;
 pub mod placeholder;
 pub mod hotkeys;
+#[cfg(target_os = "macos")]
+pub mod macos_panel;
 pub mod execution;
 pub mod skill;
 pub mod skill_message;

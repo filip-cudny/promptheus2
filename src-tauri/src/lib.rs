@@ -182,7 +182,7 @@ use providers::{LastInteractionMenuProvider, SkillMenuProvider, SpeechMenuProvid
 fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     use tauri::webview::WebviewWindowBuilder;
 
-    WebviewWindowBuilder::new(
+    let context_menu_window = WebviewWindowBuilder::new(
         app,
         "context-menu",
         tauri::WebviewUrl::App("context-menu.html".into()),
@@ -196,6 +196,15 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     .skip_taskbar(true)
     .visible(false)
     .build()?;
+
+    #[cfg(target_os = "macos")]
+    {
+        if let Err(e) = services::macos_panel::make_nonactivating_panel(&context_menu_window) {
+            log::warn!("failed to convert context-menu to non-activating panel: {e}");
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = context_menu_window;
 
     let notif = WebviewWindowBuilder::new(
         app,

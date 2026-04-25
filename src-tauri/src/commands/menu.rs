@@ -197,6 +197,12 @@ pub async fn focus_context_menu(app: tauri::AppHandle) -> Result<(), String> {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    {
+        return crate::services::macos_panel::make_key_without_activating(&win);
+    }
+
+    #[cfg(not(target_os = "macos"))]
     win.set_focus().map_err(|e| e.to_string())
 }
 
