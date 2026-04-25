@@ -2,6 +2,7 @@
   import { onDestroy, onMount, tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { createConversationStore } from "$lib/stores/conversation.svelte";
   import { hasContext } from "$lib/services/context";
@@ -34,6 +35,7 @@
 
   const skillsStore = getSkillsStore();
   const HOST_LABEL = getCurrentWindow().label;
+  const SELF_TARGET = getCurrentWebview().label;
 
   const store = createConversationStore("", "");
 
@@ -208,39 +210,61 @@
       (event) => {
         store.restoreFromHistory(event.payload.entry_id, event.payload.last_interaction_only);
       },
+      { target: SELF_TARGET },
     );
 
-    unlistenVoiceInput = await listen<{ text: string; auto_send: boolean }>("voice-input", (event) => {
-      handleVoiceInput("", event.payload.text, event.payload.auto_send);
-    });
+    unlistenVoiceInput = await listen<{ text: string; auto_send: boolean }>(
+      "voice-input",
+      (event) => {
+        handleVoiceInput("", event.payload.text, event.payload.auto_send);
+      },
+      { target: SELF_TARGET },
+    );
 
-    unlistenOpenForSkill = await listen<{ skill_id: string; skill_name: string }>("open-for-skill", (event) => {
-      store.openForSkill(event.payload.skill_id, event.payload.skill_name);
-    });
+    unlistenOpenForSkill = await listen<{ skill_id: string; skill_name: string }>(
+      "open-for-skill",
+      (event) => {
+        store.openForSkill(event.payload.skill_id, event.payload.skill_name);
+      },
+      { target: SELF_TARGET },
+    );
 
-    unlistenNewConversation = await listen("new-conversation", () => {
-      store.addTab();
-    });
+    unlistenNewConversation = await listen(
+      "new-conversation",
+      () => {
+        store.addTab();
+      },
+      { target: SELF_TARGET },
+    );
 
     unlistenActive = await listen<{ provider_id: string | null }>(
       "shell:active-changed",
       (ev) => {
         paletteActiveId = ev.payload.provider_id ?? PROMPTHEUS_PROVIDER_ID;
       },
+      { target: SELF_TARGET },
     );
 
-    unlistenPaletteOpened = await listen("shell:palette-opened", async () => {
-      paletteOpen = true;
-      paletteQuery = "";
-      paletteIndex = 0;
-      await tick();
-      paletteInputEl?.focus();
-    });
+    unlistenPaletteOpened = await listen(
+      "shell:palette-opened",
+      async () => {
+        paletteOpen = true;
+        paletteQuery = "";
+        paletteIndex = 0;
+        await tick();
+        paletteInputEl?.focus();
+      },
+      { target: SELF_TARGET },
+    );
 
-    unlistenPaletteClosed = await listen("shell:palette-closed", () => {
-      paletteOpen = false;
-      paletteQuery = "";
-    });
+    unlistenPaletteClosed = await listen(
+      "shell:palette-closed",
+      () => {
+        paletteOpen = false;
+        paletteQuery = "";
+      },
+      { target: SELF_TARGET },
+    );
 
     await autoShowContextIfNeeded();
 

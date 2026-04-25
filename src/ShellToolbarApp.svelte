@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { ChevronDown, Minus, Plus, Square, SquareArrowOutUpRight, X } from "lucide-svelte";
+  import { ChevronDown, Minus, Square, SquareArrowOutUpRight, X } from "lucide-svelte";
   import {
     getAiProviders,
-    openAiWebviewNewWindow,
     swapAiWebview,
     swapToConversationDialog,
     type AiProvider,
@@ -15,12 +15,12 @@
     PROMPTHEUS_PROVIDER_ID,
     getActiveProvider,
     hideProviderMenu,
-    newChatInHost,
     openPalette,
     showProviderMenu,
   } from "$lib/services/shellToolbar";
 
   const HOST_LABEL = getCurrentWindow().label;
+  const SELF_TARGET = getCurrentWebview().label;
   const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
   const shortcutHint = isMac ? "⌘P" : "Ctrl P";
 
@@ -90,28 +90,18 @@
       const width = Math.max(rect.width, 160);
       const height = providers.length * 28 + 8;
       providerDropdownOpen = true;
-      await showProviderMenu(anchorX, anchorY, width, height, providers, activeId);
+      await showProviderMenu(HOST_LABEL, anchorX, anchorY, width, height, providers, activeId);
     } catch (err) {
       providerDropdownOpen = false;
       console.error("show_provider_menu failed", err);
     }
   }
 
-  async function handleNewChat() {
-    try {
-      await newChatInHost(HOST_LABEL);
-    } catch (e) {
-      console.error("new chat failed", e);
-    }
-  }
-
   async function handleOpenInNewWindow() {
     try {
-      if (activeId === PROMPTHEUS_PROVIDER_ID) {
-        await openConversationDialogNewWindow();
-      } else {
-        await openAiWebviewNewWindow(activeId);
-      }
+      const providerId =
+        activeId === PROMPTHEUS_PROVIDER_ID ? undefined : activeId;
+      await openConversationDialogNewWindow(HOST_LABEL, providerId);
     } catch (e) {
       console.error("open in new window failed", e);
     }
@@ -173,6 +163,7 @@
       (ev) => {
         activeId = ev.payload.provider_id ?? PROMPTHEUS_PROVIDER_ID;
       },
+      { target: SELF_TARGET },
     );
 
     unlistenSelect = await listen<{ provider_id: string }>(
@@ -181,11 +172,16 @@
         providerDropdownOpen = false;
         void selectProvider(ev.payload.provider_id);
       },
+      { target: SELF_TARGET },
     );
 
-    unlistenClosed = await listen("provider-menu:closed", () => {
-      providerDropdownOpen = false;
-    });
+    unlistenClosed = await listen(
+      "provider-menu:closed",
+      () => {
+        providerDropdownOpen = false;
+      },
+      { target: SELF_TARGET },
+    );
   });
 
   onDestroy(() => {
@@ -197,6 +193,8 @@
 </script>
 
 <div class="titlebar" class:mac={isMac} data-tauri-drag-region>
+  <span class="hint" title="Open command palette">{shortcutHint}</span>
+
   <div class="switcher">
     <button
       bind:this={triggerEl}
@@ -211,30 +209,19 @@
     </button>
   </div>
 
+  <button
+    type="button"
+    class="icon-btn"
+    title="Open in new window"
+    onclick={handleOpenInNewWindow}
+  >
+    <SquareArrowOutUpRight size={14} />
+  </button>
+
   <div class="drag-fill" data-tauri-drag-region></div>
 
-  <div class="actions">
-    <span class="hint" title="Open command palette">{shortcutHint}</span>
-    <button
-      type="button"
-      class="icon-btn"
-      title="New chat"
-      onclick={handleNewChat}
-    >
-      <Plus size={14} />
-    </button>
-    <button
-      type="button"
-      class="icon-btn"
-      title="Open in new window"
-      onclick={handleOpenInNewWindow}
-    >
-      <SquareArrowOutUpRight size={14} />
-    </button>
-
-    {#if !isMac}
-      <div class="sep"></div>
-
+  {#if !isMac}
+    <div class="actions">
       <button type="button" class="win-btn" title="Minimize" onclick={handleMinimize}>
         <Minus size={14} />
       </button>
@@ -244,8 +231,8 @@
       <button type="button" class="win-btn close" title="Close" onclick={handleClose}>
         <X size={14} />
       </button>
-    {/if}
-  </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -330,7 +317,6 @@
     padding: 2px 6px;
     border-radius: 4px;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    margin-right: 4px;
   }
 
   .icon-btn {

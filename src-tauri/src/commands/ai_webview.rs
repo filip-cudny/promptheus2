@@ -21,14 +21,15 @@ pub async fn open_ai_webview_new_window(
     app: tauri::AppHandle,
     provider_id: String,
     url: Option<String>,
+    source_label: Option<String>,
 ) -> Result<(), String> {
     log::info!(
         target: "app_lib::commands::ai_webview",
-        "open_ai_webview_new_window: {provider_id} url={url:?}",
+        "open_ai_webview_new_window: {provider_id} url={url:?} source={source_label:?}",
     );
     let provider = ai_providers::find(&provider_id)
         .ok_or_else(|| format!("unknown provider: {provider_id}"))?;
-    ai_webview::open_new_instance(&app, provider, url).await
+    ai_webview::open_new_instance(&app, provider, url, source_label).await
 }
 
 #[tauri::command]

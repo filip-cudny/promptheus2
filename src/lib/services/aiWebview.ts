@@ -14,8 +14,16 @@ export async function openAiWebview(providerId: string, url?: string): Promise<v
   await invoke("open_ai_webview", { providerId, url: url ?? null });
 }
 
-export async function openAiWebviewNewWindow(providerId: string, url?: string): Promise<void> {
-  await invoke("open_ai_webview_new_window", { providerId, url: url ?? null });
+export async function openAiWebviewNewWindow(
+  providerId: string,
+  url?: string,
+  sourceLabel?: string,
+): Promise<void> {
+  await invoke("open_ai_webview_new_window", {
+    providerId,
+    url: url ?? null,
+    sourceLabel: sourceLabel ?? null,
+  });
 }
 
 export async function swapAiWebview(providerId: string, fromLabel: string): Promise<void> {

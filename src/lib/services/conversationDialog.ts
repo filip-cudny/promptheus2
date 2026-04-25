@@ -20,6 +20,12 @@ export async function openConversationDialog(
   });
 }
 
-export async function openConversationDialogNewWindow(): Promise<void> {
-  await invoke("open_conversation_dialog_new_window");
+export async function openConversationDialogNewWindow(
+  sourceLabel?: string,
+  providerId?: string,
+): Promise<void> {
+  await invoke("open_conversation_dialog_new_window", {
+    sourceLabel: sourceLabel ?? null,
+    providerId: providerId ?? null,
+  });
 }

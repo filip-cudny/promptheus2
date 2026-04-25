@@ -1,7 +1,21 @@
+use std::sync::Mutex;
+
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager};
 
+use crate::services::dialog::shell_toolbar_label_for;
+
 const MENU_LABEL: &str = "provider-menu";
+
+static MENU_HOST: Mutex<Option<String>> = Mutex::new(None);
+
+fn store_menu_host(host_label: String) {
+    *MENU_HOST.lock().unwrap_or_else(|e| e.into_inner()) = Some(host_label);
+}
+
+fn take_menu_host() -> Option<String> {
+    MENU_HOST.lock().unwrap_or_else(|e| e.into_inner()).take()
+}
 
 #[derive(Deserialize)]
 pub struct ProviderEntry {
@@ -29,6 +43,7 @@ struct SelectPayload {
 #[tauri::command]
 pub async fn show_provider_menu(
     app: AppHandle,
+    host_label: String,
     anchor_x: f64,
     anchor_y: f64,
     width: f64,
@@ -38,7 +53,7 @@ pub async fn show_provider_menu(
 ) -> Result<(), String> {
     log::debug!(
         target: "app_lib::commands::provider_menu",
-        "show_provider_menu: anchor=({anchor_x}, {anchor_y}) size=({width}x{height}) active={active_id} count={}",
+        "show_provider_menu: host={host_label} anchor=({anchor_x}, {anchor_y}) size=({width}x{height}) active={active_id} count={}",
         providers.len(),
     );
 
@@ -62,6 +77,8 @@ pub async fn show_provider_menu(
     app.emit_to(MENU_LABEL, "provider-menu:show", payload)
         .map_err(|e| e.to_string())?;
 
+    store_menu_host(host_label);
+
     win.show().map_err(|e| e.to_string())?;
     win.set_focus().map_err(|e| e.to_string())?;
 
@@ -73,7 +90,10 @@ pub async fn hide_provider_menu(app: AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window(MENU_LABEL) {
         win.hide().map_err(|e| e.to_string())?;
     }
-    let _ = app.emit("provider-menu:closed", ());
+    if let Some(host) = take_menu_host() {
+        let toolbar = shell_toolbar_label_for(&host);
+        let _ = app.emit_to(toolbar.as_str(), "provider-menu:closed", ());
+    }
     Ok(())
 }
 
@@ -104,8 +124,21 @@ pub async fn provider_menu_select(
         let _ = win.hide();
     }
 
-    app.emit("provider-menu:select", SelectPayload { provider_id })
-        .map_err(|e| e.to_string())?;
-    let _ = app.emit("provider-menu:closed", ());
+    let Some(host) = take_menu_host() else {
+        log::warn!(
+            target: "app_lib::commands::provider_menu",
+            "provider_menu_select: no recorded host for selection {provider_id}",
+        );
+        return Ok(());
+    };
+    let toolbar = shell_toolbar_label_for(&host);
+
+    app.emit_to(
+        toolbar.as_str(),
+        "provider-menu:select",
+        SelectPayload { provider_id },
+    )
+    .map_err(|e| e.to_string())?;
+    let _ = app.emit_to(toolbar.as_str(), "provider-menu:closed", ());
     Ok(())
 }

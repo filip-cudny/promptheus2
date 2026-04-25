@@ -28,6 +28,7 @@ export async function closePalette(
 }
 
 export async function showProviderMenu(
+  hostLabel: string,
   anchorX: number,
   anchorY: number,
   width: number,
@@ -36,6 +37,7 @@ export async function showProviderMenu(
   activeId: string,
 ): Promise<void> {
   await invoke("show_provider_menu", {
+    hostLabel,
     anchorX,
     anchorY,
     width,

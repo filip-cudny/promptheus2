@@ -3,6 +3,8 @@ use std::sync::Mutex;
 use serde::Serialize;
 use tauri::{Emitter, Manager};
 
+use crate::services::ai_providers;
+use crate::services::ai_webview;
 use crate::services::dialog::{self, focus_host_window, is_shell_toolbar_label, DialogConfig};
 
 struct PendingDialogParams {
@@ -103,19 +105,25 @@ fn surface_conversation_dialog(app: &tauri::AppHandle, label: &str) {
         }
     }
     ai_webview::mark_active_webview(app, label, label);
-    ai_webview::emit_active_changed_for(app, None);
+    ai_webview::emit_active_changed_for(app, label, None);
     let _ = focus_host_window(app, label);
 }
 
 #[tauri::command]
 pub async fn open_conversation_dialog_new_window(
     app: tauri::AppHandle,
+    source_label: Option<String>,
+    provider_id: Option<String>,
 ) -> Result<(), String> {
     let label = next_conversation_dialog_label(&app);
     log::info!(
         target: "app_lib::commands::conversation_dialog",
-        "open_conversation_dialog_new_window label={label}",
+        "open_conversation_dialog_new_window label={label} source={source_label:?} provider={provider_id:?}",
     );
+
+    if let Some(src) = source_label.as_deref() {
+        dialog::seed_geometry_from(&app, src, &label).await;
+    }
 
     let config = DialogConfig {
         label: label.clone(),
@@ -123,10 +131,19 @@ pub async fn open_conversation_dialog_new_window(
         title: "Promptheus — chat".into(),
         default_width: 700.0,
         default_height: 600.0,
-        geometry_key: label,
+        geometry_key: label.clone(),
     };
 
     let (_, _) = dialog::open_or_focus(&app, &config).await?;
+
+    if let Some(pid) = provider_id.as_deref() {
+        if !pid.is_empty() && pid != "promptheus" {
+            let provider = ai_providers::find(pid)
+                .ok_or_else(|| format!("unknown provider: {pid}"))?;
+            ai_webview::swap_to_provider(&app, provider, &label).await?;
+        }
+    }
+
     Ok(())
 }
 

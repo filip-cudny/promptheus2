@@ -9,8 +9,8 @@ use tokio::sync::Mutex;
 use super::ai_providers::AiProvider;
 use super::dialog::{
     self, attach_undecorated_resize_handler, configure_linux_child_packing, content_layout,
-    focus_host_window, focus_window, is_shell_toolbar_label, save_geometry, uses_custom_titlebar,
-    DialogConfig, LinuxChildRole,
+    focus_host_window, focus_window, is_conversation_dialog_host, is_shell_toolbar_label,
+    save_geometry, shell_toolbar_label_for, uses_custom_titlebar, DialogConfig, LinuxChildRole,
 };
 use super::dock::DockManager;
 use super::ui_state::WindowGeometry;
@@ -182,8 +182,12 @@ pub async fn open_new_instance(
     app: &tauri::AppHandle,
     provider: &'static AiProvider,
     url: Option<String>,
+    source_label: Option<String>,
 ) -> Result<(), String> {
     let label = next_available_label(app, provider);
+    if let Some(src) = source_label.as_deref() {
+        dialog::seed_geometry_from(app, src, &label).await;
+    }
     open_window(app, provider, &label, url).await
 }
 
@@ -228,10 +232,8 @@ pub async fn swap_to_provider(
     provider: &'static AiProvider,
     from_label: &str,
 ) -> Result<(), String> {
-    if from_label == CONVERSATION_DIALOG_LABEL
-        && app.get_window(CONVERSATION_DIALOG_LABEL).is_some()
-    {
-        return hosted_swap_to_provider(app, provider).await;
+    if is_conversation_dialog_host(from_label) && app.get_window(from_label).is_some() {
+        return hosted_swap_to_provider(app, from_label, provider).await;
     }
 
     swap_to_provider_standalone(app, provider, from_label).await
@@ -241,10 +243,8 @@ pub async fn swap_to_conversation_dialog(
     app: &tauri::AppHandle,
     from_label: &str,
 ) -> Result<(), String> {
-    if from_label == CONVERSATION_DIALOG_LABEL
-        && app.get_window(CONVERSATION_DIALOG_LABEL).is_some()
-    {
-        return hosted_swap_to_conversation_dialog(app);
+    if is_conversation_dialog_host(from_label) && app.get_window(from_label).is_some() {
+        return hosted_swap_to_conversation_dialog(app, from_label);
     }
 
     swap_to_conversation_dialog_standalone(app, from_label).await
@@ -252,9 +252,9 @@ pub async fn swap_to_conversation_dialog(
 
 async fn hosted_swap_to_provider(
     app: &tauri::AppHandle,
+    host_label: &str,
     provider: &'static AiProvider,
 ) -> Result<(), String> {
-    let host_label = CONVERSATION_DIALOG_LABEL;
     let host = app
         .get_window(host_label)
         .ok_or_else(|| format!("missing host window: {host_label}"))?;
@@ -364,25 +364,27 @@ async fn hosted_swap_to_provider(
     if let Some(state) = app.try_state::<AiWebviewState>() {
         state.set_active(host_label, &child_label);
     }
-    emit_active_changed(app, Some(provider.id));
+    emit_active_changed(app, host_label, Some(provider.id));
 
     focus_host_window(app, host_label)
 }
 
-fn hosted_swap_to_conversation_dialog(app: &tauri::AppHandle) -> Result<(), String> {
-    let host_label = CONVERSATION_DIALOG_LABEL;
+fn hosted_swap_to_conversation_dialog(
+    app: &tauri::AppHandle,
+    host_label: &str,
+) -> Result<(), String> {
     let host = app
         .get_window(host_label)
         .ok_or_else(|| format!("missing host window: {host_label}"))?;
 
     let cd_webview = app
-        .get_webview(CONVERSATION_DIALOG_LABEL)
-        .ok_or_else(|| format!("missing webview: {CONVERSATION_DIALOG_LABEL}"))?;
+        .get_webview(host_label)
+        .ok_or_else(|| format!("missing webview: {host_label}"))?;
     cd_webview.show().map_err(|e| e.to_string())?;
 
     for webview in host.webviews() {
         let label = webview.label();
-        if label == CONVERSATION_DIALOG_LABEL || is_toolbar_label(label) {
+        if label == host_label || is_toolbar_label(label) {
             continue;
         }
         if let Err(e) = webview.hide() {
@@ -403,25 +405,36 @@ fn hosted_swap_to_conversation_dialog(app: &tauri::AppHandle) -> Result<(), Stri
     }
 
     if let Some(state) = app.try_state::<AiWebviewState>() {
-        state.set_active(host_label, CONVERSATION_DIALOG_LABEL);
+        state.set_active(host_label, host_label);
     }
-    emit_active_changed(app, None);
+    emit_active_changed(app, host_label, None);
 
     focus_host_window(app, host_label)
 }
 
-fn emit_active_changed(app: &tauri::AppHandle, provider_id: Option<&str>) {
+fn emit_active_changed(app: &tauri::AppHandle, host_label: &str, provider_id: Option<&str>) {
     let payload = serde_json::json!({ "provider_id": provider_id });
-    if let Err(e) = app.emit("shell:active-changed", payload) {
+    let toolbar_label = shell_toolbar_label_for(host_label);
+    if let Err(e) = app.emit_to(host_label, "shell:active-changed", payload.clone()) {
         log::warn!(
             target: "app_lib::services::ai_webview",
-            "emit shell:active-changed failed: {e}",
+            "emit_to({host_label}) shell:active-changed failed: {e}",
+        );
+    }
+    if let Err(e) = app.emit_to(toolbar_label.as_str(), "shell:active-changed", payload) {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "emit_to({toolbar_label}) shell:active-changed failed: {e}",
         );
     }
 }
 
-pub fn emit_active_changed_for(app: &tauri::AppHandle, provider_id: Option<&str>) {
-    emit_active_changed(app, provider_id);
+pub fn emit_active_changed_for(
+    app: &tauri::AppHandle,
+    host_label: &str,
+    provider_id: Option<&str>,
+) {
+    emit_active_changed(app, host_label, provider_id);
 }
 
 pub fn mark_active_webview(app: &tauri::AppHandle, host_label: &str, webview_label: &str) {
@@ -440,7 +453,7 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
         .ok_or_else(|| "ai webview state missing".to_string())?;
 
     if state.is_palette_open(host_label) {
-        if let Some(cd) = app.get_webview(CONVERSATION_DIALOG_LABEL) {
+        if let Some(cd) = app.get_webview(host_label) {
             let _ = cd.set_focus();
         }
         return Ok(());
@@ -448,17 +461,17 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
 
     let previous = state
         .get_active(host_label)
-        .unwrap_or_else(|| CONVERSATION_DIALOG_LABEL.to_string());
+        .unwrap_or_else(|| host_label.to_string());
     state.set_previous_active(host_label, &previous);
     state.set_palette_open(host_label, true);
 
     let cd = app
-        .get_webview(CONVERSATION_DIALOG_LABEL)
-        .ok_or_else(|| format!("missing webview: {CONVERSATION_DIALOG_LABEL}"))?;
+        .get_webview(host_label)
+        .ok_or_else(|| format!("missing webview: {host_label}"))?;
 
     for webview in host.webviews() {
         let label = webview.label();
-        if label == CONVERSATION_DIALOG_LABEL || is_toolbar_label(label) {
+        if label == host_label || is_toolbar_label(label) {
             continue;
         }
         if let Err(e) = webview.hide() {
@@ -473,10 +486,17 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
     cd.set_focus().map_err(|e| e.to_string())?;
 
     let payload = serde_json::json!({ "previous_label": previous });
-    if let Err(e) = app.emit("shell:palette-opened", payload) {
+    let toolbar_label = shell_toolbar_label_for(host_label);
+    if let Err(e) = app.emit_to(host_label, "shell:palette-opened", payload.clone()) {
         log::warn!(
             target: "app_lib::services::ai_webview",
-            "emit shell:palette-opened failed: {e}",
+            "emit_to({host_label}) shell:palette-opened failed: {e}",
+        );
+    }
+    if let Err(e) = app.emit_to(toolbar_label.as_str(), "shell:palette-opened", payload) {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "emit_to({toolbar_label}) shell:palette-opened failed: {e}",
         );
     }
 
@@ -500,18 +520,26 @@ pub async fn swap_from_palette(
 
     let previous = state
         .take_previous_active(host_label)
-        .unwrap_or_else(|| CONVERSATION_DIALOG_LABEL.to_string());
+        .unwrap_or_else(|| host_label.to_string());
 
-    if let Err(e) = app.emit("shell:palette-closed", serde_json::json!({})) {
+    let payload = serde_json::json!({});
+    let toolbar_label = shell_toolbar_label_for(host_label);
+    if let Err(e) = app.emit_to(host_label, "shell:palette-closed", payload.clone()) {
         log::warn!(
             target: "app_lib::services::ai_webview",
-            "emit shell:palette-closed failed: {e}",
+            "emit_to({host_label}) shell:palette-closed failed: {e}",
+        );
+    }
+    if let Err(e) = app.emit_to(toolbar_label.as_str(), "shell:palette-closed", payload) {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "emit_to({toolbar_label}) shell:palette-closed failed: {e}",
         );
     }
 
     match selected_provider_id.as_deref() {
         Some(PROMPTHEUS_PROVIDER_ID) => {
-            hosted_swap_to_conversation_dialog(app)?;
+            hosted_swap_to_conversation_dialog(app, host_label)?;
         }
         Some(id) => {
             let Some(provider) = super::ai_providers::find(id) else {
@@ -521,7 +549,7 @@ pub async fn swap_from_palette(
                 );
                 return restore_previous_webview(app, host_label, &previous);
             };
-            hosted_swap_to_provider(app, provider).await?;
+            hosted_swap_to_provider(app, host_label, provider).await?;
         }
         None => {
             restore_previous_webview(app, host_label, &previous)?;
@@ -564,13 +592,13 @@ fn restore_previous_webview(
         state.set_active(host_label, previous_label);
     }
 
-    let provider_id = if previous_label == CONVERSATION_DIALOG_LABEL {
+    let provider_id = if previous_label == host_label {
         None
     } else {
         app.try_state::<AiWebviewState>()
             .and_then(|s| s.current_provider.lock().unwrap().get(previous_label).copied())
     };
-    emit_active_changed(app, provider_id);
+    emit_active_changed(app, host_label, provider_id);
 
     Ok(())
 }
@@ -580,6 +608,10 @@ async fn swap_to_provider_standalone(
     provider: &'static AiProvider,
     from_label: &str,
 ) -> Result<(), String> {
+    debug_assert!(
+        !is_conversation_dialog_host(from_label),
+        "standalone swap should not run for conversation-dialog host: {from_label}",
+    );
     let target_label = window_label(provider);
 
     if from_label == target_label {
@@ -615,7 +647,7 @@ async fn swap_to_conversation_dialog_standalone(
     from_label: &str,
 ) -> Result<(), String> {
     if app.get_window(CONVERSATION_DIALOG_LABEL).is_some() {
-        hosted_swap_to_conversation_dialog(app)?;
+        hosted_swap_to_conversation_dialog(app, CONVERSATION_DIALOG_LABEL)?;
         if from_label != CONVERSATION_DIALOG_LABEL
             && app.get_window(from_label).is_some()
         {

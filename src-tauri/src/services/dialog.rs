@@ -21,9 +21,13 @@ pub struct DialogConfig {
     pub geometry_key: String,
 }
 
-pub fn uses_custom_titlebar(label: &str) -> bool {
+pub fn is_conversation_dialog_host(label: &str) -> bool {
     label == CONVERSATION_DIALOG_LABEL
         || label.starts_with(&format!("{CONVERSATION_DIALOG_LABEL}-"))
+}
+
+pub fn uses_custom_titlebar(label: &str) -> bool {
+    is_conversation_dialog_host(label)
 }
 
 pub fn shell_toolbar_label_for(host_label: &str) -> String {
@@ -440,6 +444,41 @@ pub fn save_geometry(app: &tauri::AppHandle, window_label: &str, geometry_key: &
             log::warn!("failed to save window geometry: {e}");
         }
     });
+}
+
+pub async fn seed_geometry_from(
+    app: &tauri::AppHandle,
+    source_label: &str,
+    target_key: &str,
+) {
+    let Some(win) = app.get_window(source_label) else {
+        log::debug!(
+            target: "app_lib::services::dialog",
+            "seed_geometry_from: no source window {source_label}",
+        );
+        return;
+    };
+
+    let (Ok(pos), Ok(size)) = (win.outer_position(), win.inner_size()) else {
+        return;
+    };
+
+    let scale = win.scale_factor().unwrap_or(1.0);
+    let geom = WindowGeometry {
+        x: pos.x as f64 / scale,
+        y: pos.y as f64 / scale,
+        width: size.width as f64 / scale,
+        height: size.height as f64 / scale,
+    };
+
+    let state = app.state::<Mutex<AppState>>();
+    let mut guard = state.lock().await;
+    if let Err(e) = guard.ui_state.set_geometry(target_key, geom) {
+        log::warn!(
+            target: "app_lib::services::dialog",
+            "seed_geometry_from {source_label} -> {target_key} failed: {e}",
+        );
+    }
 }
 
 pub fn focus_window(win: &tauri::WebviewWindow) -> Result<(), String> {
