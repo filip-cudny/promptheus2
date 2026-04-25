@@ -10,8 +10,8 @@
     swapToConversationDialog,
     type AiProvider,
   } from "$lib/services/aiWebview";
+  import { openConversationDialogNewWindow } from "$lib/services/conversationDialog";
   import {
-    CONVERSATION_DIALOG_LABEL,
     PROMPTHEUS_PROVIDER_ID,
     getActiveProvider,
     hideProviderMenu,
@@ -20,7 +20,7 @@
     showProviderMenu,
   } from "$lib/services/shellToolbar";
 
-  const HOST_LABEL = CONVERSATION_DIALOG_LABEL;
+  const HOST_LABEL = getCurrentWindow().label;
   const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
   const shortcutHint = isMac ? "⌘P" : "Ctrl P";
 
@@ -98,7 +98,6 @@
   }
 
   async function handleNewChat() {
-    if (activeId === PROMPTHEUS_PROVIDER_ID) return;
     try {
       await newChatInHost(HOST_LABEL);
     } catch (e) {
@@ -107,9 +106,12 @@
   }
 
   async function handleOpenInNewWindow() {
-    if (activeId === PROMPTHEUS_PROVIDER_ID) return;
     try {
-      await openAiWebviewNewWindow(activeId);
+      if (activeId === PROMPTHEUS_PROVIDER_ID) {
+        await openConversationDialogNewWindow();
+      } else {
+        await openAiWebviewNewWindow(activeId);
+      }
     } catch (e) {
       console.error("open in new window failed", e);
     }
@@ -217,7 +219,6 @@
       type="button"
       class="icon-btn"
       title="New chat"
-      disabled={activeId === PROMPTHEUS_PROVIDER_ID}
       onclick={handleNewChat}
     >
       <Plus size={14} />
@@ -226,7 +227,6 @@
       type="button"
       class="icon-btn"
       title="Open in new window"
-      disabled={activeId === PROMPTHEUS_PROVIDER_ID}
       onclick={handleOpenInNewWindow}
     >
       <SquareArrowOutUpRight size={14} />

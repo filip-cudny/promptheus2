@@ -8,8 +8,9 @@ use tokio::sync::Mutex;
 
 use super::ai_providers::AiProvider;
 use super::dialog::{
-    self, configure_linux_child_packing, content_layout, focus_host_window, focus_window,
-    save_geometry, DialogConfig, LinuxChildRole, SHELL_TOOLBAR_LABEL,
+    self, attach_undecorated_resize_handler, configure_linux_child_packing, content_layout,
+    focus_host_window, focus_window, is_shell_toolbar_label, save_geometry, uses_custom_titlebar,
+    DialogConfig, LinuxChildRole,
 };
 use super::dock::DockManager;
 use super::ui_state::WindowGeometry;
@@ -21,20 +22,6 @@ const AI_WEBVIEW_BG: Color = Color(0xff, 0xff, 0xff, 0xff);
 const ROUTER_SENTINEL: &str = "https://promptheus-ai-webview-router.invalid/";
 const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
 const CONVERSATION_DIALOG_TITLE: &str = "Promptheus — chat";
-
-const AI_WEBVIEW_USER_AGENT_MACOS: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15";
-const AI_WEBVIEW_USER_AGENT_LINUX: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15";
-const AI_WEBVIEW_USER_AGENT_WINDOWS: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
-
-fn ai_webview_user_agent() -> &'static str {
-    if cfg!(target_os = "macos") {
-        AI_WEBVIEW_USER_AGENT_MACOS
-    } else if cfg!(target_os = "windows") {
-        AI_WEBVIEW_USER_AGENT_WINDOWS
-    } else {
-        AI_WEBVIEW_USER_AGENT_LINUX
-    }
-}
 
 #[derive(Default)]
 pub struct AiWebviewState {
@@ -160,7 +147,7 @@ fn host_logical_size(host: &tauri::Window) -> Result<(f64, f64), String> {
 }
 
 fn is_toolbar_label(label: &str) -> bool {
-    label == SHELL_TOOLBAR_LABEL
+    is_shell_toolbar_label(label)
 }
 
 fn hosted_child_label(host_label: &str, provider: &AiProvider) -> String {
@@ -216,7 +203,9 @@ pub fn new_chat_in_host(app: &tauri::AppHandle, host_label: &str) -> Result<(), 
         .get_active(host_label)
         .ok_or_else(|| "no active webview".to_string())?;
     if active_label == host_label {
-        return Err("promptheus provider has no new chat action".into());
+        return app
+            .emit_to(host_label, "new-conversation", serde_json::json!({}))
+            .map_err(|e| e.to_string());
     }
     let provider_id = {
         let guard = state.current_provider.lock().unwrap();
@@ -290,7 +279,6 @@ async fn hosted_swap_to_provider(
         let builder = WebviewBuilder::new(&child_label, WebviewUrl::External(content_url))
             .auto_resize()
             .background_color(AI_WEBVIEW_BG)
-            .user_agent(ai_webview_user_agent())
             .initialization_script(&init_script)
             .on_navigation(move |url| {
                 if !url.as_str().starts_with(ROUTER_SENTINEL) {
@@ -330,6 +318,9 @@ async fn hosted_swap_to_provider(
             .add_child(builder, pos, size)
             .map_err(|e| e.to_string())?;
         configure_linux_child_packing(&child_webview, LinuxChildRole::Content);
+        if cfg!(target_os = "linux") && uses_custom_titlebar(host_label) {
+            attach_undecorated_resize_handler(&child_webview);
+        }
 
         if let Some(state) = app.try_state::<AiWebviewState>() {
             state.mark_hosted_child(host_label, provider.id);
@@ -652,12 +643,12 @@ async fn swap_to_conversation_dialog_standalone(
     }
 
     let config = DialogConfig {
-        label: CONVERSATION_DIALOG_LABEL,
+        label: CONVERSATION_DIALOG_LABEL.into(),
         url: "conversation-dialog.html".into(),
-        title: CONVERSATION_DIALOG_TITLE,
+        title: CONVERSATION_DIALOG_TITLE.into(),
         default_width: 700.0,
         default_height: 600.0,
-        geometry_key: CONVERSATION_DIALOG_LABEL,
+        geometry_key: CONVERSATION_DIALOG_LABEL.into(),
     };
     let (win, _) = dialog::open_or_focus(app, &config).await?;
     focus_window(&win)
@@ -729,7 +720,6 @@ async fn open_window(
             .inner_size(width, height)
             .resizable(true)
             .background_color(AI_WEBVIEW_BG)
-            .user_agent(ai_webview_user_agent())
             .initialization_script(&init_script)
             .on_navigation(move |url| {
                 if !url.as_str().starts_with(ROUTER_SENTINEL) {

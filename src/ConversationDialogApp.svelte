@@ -14,7 +14,6 @@
   import InputArea from "$lib/components/prompt/InputArea.svelte";
   import TabSidebar from "$lib/components/prompt/TabSidebar.svelte";
   import {
-    CONVERSATION_DIALOG_LABEL,
     PROMPTHEUS_PROVIDER_ID,
     closePalette,
     openPalette,
@@ -34,7 +33,7 @@
   type PaletteEntry = { id: string; name: string };
 
   const skillsStore = getSkillsStore();
-  const HOST_LABEL = CONVERSATION_DIALOG_LABEL;
+  const HOST_LABEL = getCurrentWindow().label;
 
   const store = createConversationStore("", "");
 

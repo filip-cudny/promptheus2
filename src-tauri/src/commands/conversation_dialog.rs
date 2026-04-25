@@ -3,8 +3,7 @@ use std::sync::Mutex;
 use serde::Serialize;
 use tauri::{Emitter, Manager};
 
-use crate::services::conversation_dialog as conversation_dialog_service;
-use crate::services::dialog::{self, focus_host_window, DialogConfig, SHELL_TOOLBAR_LABEL};
+use crate::services::dialog::{self, focus_host_window, is_shell_toolbar_label, DialogConfig};
 
 struct PendingDialogParams {
     skill_id: String,
@@ -46,12 +45,12 @@ pub async fn open_conversation_dialog(
     let new_chat = new_chat.unwrap_or(false);
 
     let config = DialogConfig {
-        label,
+        label: label.into(),
         url: "conversation-dialog.html".into(),
-        title: "Promptheus — chat",
+        title: "Promptheus — chat".into(),
         default_width: 700.0,
         default_height: 600.0,
-        geometry_key: "conversation-dialog",
+        geometry_key: "conversation-dialog".into(),
     };
 
     *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(PendingDialogParams {
@@ -93,7 +92,7 @@ fn surface_conversation_dialog(app: &tauri::AppHandle, label: &str) {
             if wv_label == label {
                 let _ = webview.show();
                 let _ = webview.set_focus();
-            } else if wv_label == SHELL_TOOLBAR_LABEL {
+            } else if is_shell_toolbar_label(wv_label) {
                 let _ = webview.show();
             } else {
                 let _ = webview.hide();
@@ -112,11 +111,39 @@ fn surface_conversation_dialog(app: &tauri::AppHandle, label: &str) {
 pub async fn open_conversation_dialog_new_window(
     app: tauri::AppHandle,
 ) -> Result<(), String> {
+    let label = next_conversation_dialog_label(&app);
     log::info!(
         target: "app_lib::commands::conversation_dialog",
-        "open_conversation_dialog_new_window",
+        "open_conversation_dialog_new_window label={label}",
     );
-    conversation_dialog_service::open_new_instance(&app).await
+
+    let config = DialogConfig {
+        label: label.clone(),
+        url: "conversation-dialog.html".into(),
+        title: "Promptheus — chat".into(),
+        default_width: 700.0,
+        default_height: 600.0,
+        geometry_key: label,
+    };
+
+    let (_, _) = dialog::open_or_focus(&app, &config).await?;
+    Ok(())
+}
+
+fn next_conversation_dialog_label(app: &tauri::AppHandle) -> String {
+    use tauri::Manager;
+    let base = "conversation-dialog";
+    if app.get_window(base).is_none() {
+        return base.to_string();
+    }
+    let mut i = 2u32;
+    loop {
+        let candidate = format!("{base}-{i}");
+        if app.get_window(&candidate).is_none() {
+            return candidate;
+        }
+        i += 1;
+    }
 }
 
 #[tauri::command]

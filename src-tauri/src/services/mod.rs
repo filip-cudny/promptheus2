@@ -8,7 +8,6 @@ pub mod shell_env;
 pub mod mcp;
 pub mod config;
 pub mod conversation_context;
-pub mod conversation_dialog;
 pub mod context;
 pub mod database;
 pub mod dialog;

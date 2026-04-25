@@ -14,12 +14,12 @@ pub async fn open_settings_window(
     section: Option<String>,
 ) -> Result<(), String> {
     let config = DialogConfig {
-        label: "settings-dialog",
+        label: "settings-dialog".into(),
         url: "settings-dialog.html".into(),
-        title: "Settings",
+        title: "Settings".into(),
         default_width: 960.0,
         default_height: 640.0,
-        geometry_key: "settings-dialog",
+        geometry_key: "settings-dialog".into(),
     };
 
     let (win, created) = dialog::open_or_focus(&app, &config).await?;

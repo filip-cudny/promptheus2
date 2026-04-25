@@ -3,7 +3,7 @@
   "identifier": "default",
   "description": "Capability for all windows",
   "windows": ["main", "context-menu", "context-editor", "image-preview", "text-preview-*", "history-dialog", "settings-dialog", "notification", "provider-menu"],
-  "webviews": ["conversation-dialog", "shell-toolbar"],
+  "webviews": ["conversation-dialog", "conversation-dialog-*", "shell-toolbar", "shell-toolbar-*"],
   "permissions": [
     "core:default",
     "core:tray:default",
