@@ -291,6 +291,26 @@ pub async fn open_or_focus(
 
     let window = window_builder.build().map_err(|e| e.to_string())?;
 
+    #[cfg(target_os = "macos")]
+    if custom_titlebar {
+        let main_thread_window = window.clone();
+        let label_for_log = config.label.clone();
+        if let Err(e) = window.run_on_main_thread(move || {
+            if let Err(err) = super::macos_panel::enable_fullscreen_primary(&main_thread_window) {
+                log::warn!(
+                    target: "app_lib::services::dialog",
+                    "enable_fullscreen_primary failed for {label_for_log}: {err}",
+                );
+            }
+        }) {
+            log::warn!(
+                target: "app_lib::services::dialog",
+                "run_on_main_thread for enable_fullscreen_primary failed for {}: {e}",
+                config.label,
+            );
+        }
+    }
+
     let (logical_w, logical_h) = logical_window_size(&window)?;
 
     let needs_undecorated_resize = cfg!(target_os = "linux") && custom_titlebar;

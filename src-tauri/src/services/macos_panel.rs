@@ -6,7 +6,7 @@ use std::sync::Once;
 use objc2::ffi::object_setClass;
 use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, Sel};
 use objc2::{class, msg_send, sel};
-use objc2_app_kit::{NSPanel, NSWindow, NSWindowStyleMask};
+use objc2_app_kit::{NSPanel, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
 
 // Custom NSPanel subclass: canBecomeKeyWindow=YES, canBecomeMainWindow=NO.
 // OR'ing NonactivatingPanel into the style mask after object_setClass is not
@@ -101,6 +101,29 @@ pub fn hide_panel(window: &tauri::WebviewWindow) -> Result<(), String> {
     unsafe {
         let ns_window: &NSWindow = &*(ptr as *const NSWindow);
         ns_window.orderOut(None);
+    }
+
+    Ok(())
+}
+
+// Force the green traffic-light button into native fullscreen-arrows mode.
+// Tauri's `TitleBarStyle::Overlay` + `hidden_title(true)` leaves the window
+// without `FullScreenPrimary` collection behavior, so AppKit falls back to
+// "+" (zoom) by default. Setting it explicitly restores the native default:
+// arrows on hover, "+" on Option+hover.
+pub fn enable_fullscreen_primary(window: &tauri::Window) -> Result<(), String> {
+    let ptr = window.ns_window().map_err(|e| e.to_string())?;
+    if ptr.is_null() {
+        return Err("ns_window pointer is null".into());
+    }
+
+    unsafe {
+        let ns_window: &NSWindow = &*(ptr as *const NSWindow);
+        let mut behavior = ns_window.collectionBehavior();
+        behavior.remove(NSWindowCollectionBehavior::FullScreenNone);
+        behavior.remove(NSWindowCollectionBehavior::FullScreenAuxiliary);
+        behavior.insert(NSWindowCollectionBehavior::FullScreenPrimary);
+        ns_window.setCollectionBehavior(behavior);
     }
 
     Ok(())
