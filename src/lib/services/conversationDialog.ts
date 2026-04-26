@@ -8,16 +8,22 @@ export async function openConversationDialog(
   initialInput?: string,
   autoSendInput?: boolean,
   newChat?: boolean,
+  skillModel?: string | null,
 ): Promise<void> {
   await invoke("open_conversation_dialog", {
     skillId,
     skillName,
+    skillModel: skillModel ?? null,
     historyEntryId: historyEntryId ?? null,
     lastInteractionOnly: lastInteractionOnly ?? false,
     initialInput: initialInput ?? null,
     autoSendInput: autoSendInput ?? false,
     newChat: newChat ?? false,
   });
+}
+
+export async function focusOrOpenChat(): Promise<void> {
+  await invoke("focus_or_open_chat");
 }
 
 export async function openConversationDialogNewWindow(

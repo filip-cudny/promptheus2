@@ -511,8 +511,15 @@ async function openDialogForItem(index: number) {
   if (!data?.skill_id) return;
   const skillId = data.skill_id;
   const skillName = data.skill_name ?? item.label;
+  let skillModel: string | null = null;
+  try {
+    const skill = await invoke<{ model?: string | null }>("get_skill", { name: skillId });
+    skillModel = skill?.model ?? null;
+  } catch (e) {
+    error(`get_skill failed for ${skillId}: ${e}`);
+  }
   await closeMenu();
-  await openConversationDialog(skillId, skillName);
+  await openConversationDialog(skillId, skillName, undefined, undefined, undefined, undefined, undefined, skillModel);
 }
 
 export {

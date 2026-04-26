@@ -1,4 +1,4 @@
-use tauri::State;
+use tauri::{Manager, State};
 use tokio::sync::Mutex;
 
 use crate::commands::settings::AppState;
@@ -124,6 +124,21 @@ pub async fn get_webview_provider(
 #[tauri::command]
 pub fn get_active_provider(app: tauri::AppHandle, host_label: String) -> Option<String> {
     ai_webview::active_provider_for(&app, &host_label)
+}
+
+#[tauri::command]
+pub fn take_pending_provider(
+    app: tauri::AppHandle,
+    host_label: String,
+) -> Option<String> {
+    let pending = app
+        .try_state::<ai_webview::AiWebviewState>()
+        .and_then(|s| s.take_pending_provider(&host_label));
+    log::debug!(
+        target: "app_lib::commands::ai_webview",
+        "take_pending_provider: host={host_label} -> {pending:?}",
+    );
+    pending
 }
 
 #[tauri::command]

@@ -25,6 +25,7 @@
   interface DialogInitParams {
     skill_id: string;
     skill_name: string;
+    skill_model: string | null;
     history_entry_id: string | null;
     last_interaction_only: boolean;
     initial_input: string | null;
@@ -177,7 +178,7 @@
     } else if (p.initial_input) {
       handleVoiceInput(p.skill_id, p.initial_input, p.auto_send_input);
     } else if (p.skill_id) {
-      store.openForSkill(p.skill_id, p.skill_name);
+      store.openForSkill(p.skill_id, p.skill_name, p.skill_model);
     }
   }
 
@@ -228,10 +229,10 @@
       { target: SELF_TARGET },
     );
 
-    unlistenOpenForSkill = await listen<{ skill_id: string; skill_name: string }>(
+    unlistenOpenForSkill = await listen<{ skill_id: string; skill_name: string; skill_model: string | null }>(
       "open-for-skill",
       (event) => {
-        store.openForSkill(event.payload.skill_id, event.payload.skill_name);
+        store.openForSkill(event.payload.skill_id, event.payload.skill_name, event.payload.skill_model);
       },
       { target: SELF_TARGET },
     );

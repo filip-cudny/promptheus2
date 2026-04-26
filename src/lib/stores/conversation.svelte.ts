@@ -879,7 +879,7 @@ export function createConversationStore(
     return skillId ? `/${skillId} ` : "";
   }
 
-  function openForSkill(skillId: string, skillName: string): boolean {
+  function openForSkill(skillId: string, skillName: string, skillModel?: string | null): boolean {
     const tab = getTab(activeTabId);
     const prefix = skillInputPrefix(skillId);
 
@@ -887,11 +887,13 @@ export function createConversationStore(
       tab.input_text = prefix;
       tab.pristine_input = prefix || null;
       tab.tab_name = skillName || null;
+      if (skillModel) tab.model_id = skillModel;
       return false;
     } else {
       const newTab = createTabState(skillName || null, tabDefaults());
       newTab.input_text = prefix;
       newTab.pristine_input = prefix || null;
+      if (skillModel) newTab.model_id = skillModel;
       tabs.push(newTab);
       activeTabId = newTab.tab_id;
       return true;

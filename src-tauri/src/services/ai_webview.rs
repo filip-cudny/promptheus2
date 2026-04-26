@@ -31,6 +31,7 @@ pub struct AiWebviewState {
     active_webview: StdMutex<HashMap<String, String>>,
     previous_active: StdMutex<HashMap<String, String>>,
     palette_open: StdMutex<HashMap<String, bool>>,
+    pending_provider: StdMutex<HashMap<String, String>>,
 }
 
 impl AiWebviewState {
@@ -77,6 +78,18 @@ impl AiWebviewState {
         self.active_webview.lock().unwrap().remove(host_label);
         self.previous_active.lock().unwrap().remove(host_label);
         self.palette_open.lock().unwrap().remove(host_label);
+        self.pending_provider.lock().unwrap().remove(host_label);
+    }
+
+    pub fn set_pending_provider(&self, host_label: &str, provider_id: &str) {
+        self.pending_provider
+            .lock()
+            .unwrap()
+            .insert(host_label.to_string(), provider_id.to_string());
+    }
+
+    pub fn take_pending_provider(&self, host_label: &str) -> Option<String> {
+        self.pending_provider.lock().unwrap().remove(host_label)
     }
 
     fn set_active(&self, host_label: &str, webview_label: &str) {

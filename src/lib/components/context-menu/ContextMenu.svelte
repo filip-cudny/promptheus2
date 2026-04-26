@@ -10,8 +10,19 @@
   import LastInteractionSection from "./LastInteractionSection.svelte";
   import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
   import FloatingPanel from "$lib/components/ui/FloatingPanel.svelte";
-  import { ChevronRight, Info, MessageSquare, MessageSquareShare, Mic, Square, SquarePen, X } from "lucide-svelte";
-  import { openConversationDialog } from "$lib/services/conversationDialog";
+  import { ChevronRight, Info, MessageSquare, MessageSquareShare, Mic, Square, X } from "lucide-svelte";
+  import {
+    focusOrOpenChat,
+    openConversationDialog,
+    openConversationDialogNewWindow,
+  } from "$lib/services/conversationDialog";
+  import {
+    getWebviewProviders,
+    type WebviewProvider,
+  } from "$lib/services/aiWebview";
+  import { PROMPTHEUS_PROVIDER_ID } from "$lib/services/shellToolbar";
+  import { onSettingsChanged } from "$lib/services/events";
+  import ProviderMenuList from "$lib/components/provider-menu/ProviderMenuList.svelte";
   import { isExecuting, getExecutingSkillId } from "$lib/stores/execution.svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { updateSurfaceModel, updateSurfaceReasoningEffort, setSpeechToTextModel } from "$lib/services/settings";
@@ -121,6 +132,50 @@
   let activeInfoAnchorEl: HTMLElement | undefined = $state();
   let hoverEnabled = $state(false);
   let shiftHeld = $state(false);
+  let chatProvidersOpen = $state(false);
+  let chatRowEl: HTMLElement | undefined = $state();
+  let webviewProviders = $state<WebviewProvider[]>([]);
+  let unlistenSettings: (() => void) | undefined;
+
+  let providerEntries = $derived<{ id: string; name: string; url?: string | null }[]>([
+    { id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
+    ...webviewProviders.map((p) => ({ id: p.id, name: p.name, url: p.url })),
+  ]);
+
+  async function refreshWebviewProviders() {
+    try {
+      webviewProviders = await getWebviewProviders();
+    } catch (e) {
+      console.error("getWebviewProviders failed", e);
+    }
+  }
+
+  function closeChatProviders() {
+    if (!chatProvidersOpen) return;
+    chatProvidersOpen = false;
+  }
+
+  function openChatProviders(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (chatProvidersOpen) {
+      closeChatProviders();
+      return;
+    }
+    closePanels();
+    chatProvidersOpen = true;
+  }
+
+  async function pickChatProvider(providerId: string) {
+    closeChatProviders();
+    await closeMenu();
+    try {
+      const arg = providerId === PROMPTHEUS_PROVIDER_ID ? undefined : providerId;
+      await openConversationDialogNewWindow(undefined, arg);
+    } catch (err) {
+      console.error("openConversationDialogNewWindow failed", err);
+    }
+  }
 
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Shift") shiftHeld = true;
@@ -251,6 +306,7 @@
   function closePanels() {
     closeSettingsPanel();
     closeInfoPanel();
+    closeChatProviders();
   }
 
   function handleMouseMove() {
@@ -324,6 +380,9 @@
   onMount(async () => {
     await init();
 
+    await refreshWebviewProviders();
+    unlistenSettings = await onSettingsChanged(refreshWebviewProviders);
+
     const win = getCurrentWebviewWindow();
     win.onFocusChanged(({ payload: focused }) => {
       if (!focused) {
@@ -340,6 +399,7 @@
 
   onDestroy(() => {
     destroy();
+    unlistenSettings?.();
   });
 </script>
 
@@ -357,7 +417,14 @@
       {#if section.sectionId === "chat"}
         {@const chatRecording = isRecordingChat()}
         {@const chatDisabled = isRecording() && !chatRecording}
-        <div class="chat-row" class:selected={chatRecording} role="menuitem" onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}>
+        <div
+          class="chat-row"
+          class:selected={chatRecording}
+          role="menuitem"
+          bind:this={chatRowEl}
+          onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}
+          oncontextmenu={(e) => { if (!chatDisabled) openChatProviders(e); else e.preventDefault(); }}
+        >
           <button
             class="chat-button"
             class:disabled={chatDisabled}
@@ -367,7 +434,7 @@
                 await toggleChatRecording();
               } else {
                 await closeMenu();
-                await openConversationDialog("", "");
+                await focusOrOpenChat();
               }
             }}
           >
@@ -388,20 +455,13 @@
               <Mic size={ICON_SIZE.md} />
             {/if}
           </button>
-          <button
-            class="action-btn dialog-btn"
-            class:disabled={chatDisabled}
-            title="Open new chat"
-            disabled={chatDisabled}
-            onclick={async () => {
-              if (chatDisabled) return;
-              await closeMenu();
-              await openConversationDialog("", "", undefined, undefined, undefined, undefined, true);
-            }}
-          >
-            <SquarePen size={ICON_SIZE.md} />
-          </button>
         </div>
+        <FloatingPanel visible={chatProvidersOpen} anchorEl={chatRowEl} fitContent onclose={closeChatProviders}>
+          <ProviderMenuList
+            providers={providerEntries}
+            onSelect={(id) => { void pickChatProvider(id); }}
+          />
+        </FloatingPanel>
       {/if}
       {#if section.sectionId === "skills"}
         <div data-section="skills-anchor"></div>
@@ -752,6 +812,10 @@
 
   .action-btn.dialog-btn {
     margin-right: 8px;
+  }
+
+  .action-btn.chat-mic-btn {
+    margin-right: 30px;
   }
 
   .action-btn.cancel-hint {

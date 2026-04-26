@@ -8,6 +8,7 @@
     getWebviewProviders,
     swapAiWebview,
     swapToConversationDialog,
+    takePendingProvider,
     type WebviewProvider,
   } from "$lib/services/aiWebview";
   import { openConversationDialogNewWindow } from "$lib/services/conversationDialog";
@@ -160,14 +161,6 @@
   onMount(async () => {
     window.addEventListener("keydown", handleGlobalKeydown, true);
 
-    await refreshWebviewProviders();
-    unlistenSettingsChanged = await onSettingsChanged(refreshWebviewProviders);
-    await refreshActive();
-
-    try {
-      isMaximized = await getCurrentWindow().isMaximized();
-    } catch {}
-
     unlistenActive = await listen<{ provider_id: string | null }>(
       "shell:active-changed",
       (ev) => {
@@ -192,6 +185,23 @@
       },
       { target: SELF_TARGET },
     );
+
+    await refreshWebviewProviders();
+    unlistenSettingsChanged = await onSettingsChanged(refreshWebviewProviders);
+    await refreshActive();
+
+    try {
+      isMaximized = await getCurrentWindow().isMaximized();
+    } catch {}
+
+    try {
+      const pending = await takePendingProvider(HOST_LABEL);
+      if (pending) {
+        await selectProvider(pending);
+      }
+    } catch (e) {
+      console.error("take_pending_provider failed", e);
+    }
   });
 
   onDestroy(() => {

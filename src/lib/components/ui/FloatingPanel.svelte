@@ -6,12 +6,14 @@
     visible,
     anchorEl,
     position = "auto",
+    fitContent = false,
     onclose,
     children,
   }: {
     visible: boolean;
     anchorEl: HTMLElement | undefined;
     position?: "above" | "below" | "auto";
+    fitContent?: boolean;
     onclose: () => void;
     children: Snippet;
   } = $props();
@@ -54,7 +56,13 @@
     }
 
     top = Math.max(4, Math.min(top, viewportHeight - panelHeight - 4));
-    style = `top: ${top}px`;
+
+    if (fitContent) {
+      const left = Math.max(4, anchorRect.left);
+      style = `top: ${top}px; left: ${left}px; right: auto; width: max-content;`;
+    } else {
+      style = `top: ${top}px`;
+    }
   }
 
   function handlePointerDown(e: PointerEvent) {
@@ -77,6 +85,7 @@
     class="floating-panel"
     class:expand-down={animating && expandDirection === "down"}
     class:expand-up={animating && expandDirection === "up"}
+    class:flush={fitContent}
     bind:this={panelEl}
     {style}
     onanimationend={handleAnimationEnd}
@@ -115,6 +124,11 @@
     padding: 8px 12px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     box-sizing: border-box;
+  }
+
+  .floating-panel.flush {
+    padding: 4px 0;
+    overflow: hidden;
   }
 
   .floating-panel.expand-down {

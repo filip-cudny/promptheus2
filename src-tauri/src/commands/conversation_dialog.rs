@@ -9,6 +9,7 @@ use crate::services::dialog::{self, focus_host_window, is_shell_toolbar_label, D
 struct PendingDialogParams {
     skill_id: String,
     skill_name: String,
+    skill_model: Option<String>,
     history_entry_id: Option<String>,
     last_interaction_only: bool,
     initial_input: Option<String>,
@@ -22,6 +23,7 @@ static PENDING: Mutex<Option<PendingDialogParams>> = Mutex::new(None);
 pub struct DialogInitParams {
     skill_id: String,
     skill_name: String,
+    skill_model: Option<String>,
     history_entry_id: Option<String>,
     last_interaction_only: bool,
     initial_input: Option<String>,
@@ -34,6 +36,7 @@ pub async fn open_conversation_dialog(
     app: tauri::AppHandle,
     skill_id: String,
     skill_name: String,
+    skill_model: Option<String>,
     history_entry_id: Option<String>,
     last_interaction_only: Option<bool>,
     initial_input: Option<String>,
@@ -57,6 +60,7 @@ pub async fn open_conversation_dialog(
     *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(PendingDialogParams {
         skill_id: skill_id.clone(),
         skill_name: skill_name.clone(),
+        skill_model: skill_model.clone(),
         history_entry_id: history_entry_id.clone(),
         last_interaction_only,
         initial_input: initial_input.clone(),
@@ -75,6 +79,7 @@ pub async fn open_conversation_dialog(
             auto_send_input,
             &skill_id,
             &skill_name,
+            skill_model.as_deref(),
             new_chat,
         )?;
         return Ok(());
@@ -109,6 +114,31 @@ fn surface_conversation_dialog(app: &tauri::AppHandle, label: &str) {
 }
 
 #[tauri::command]
+pub async fn focus_or_open_chat(app: tauri::AppHandle) -> Result<(), String> {
+    let label = "conversation-dialog";
+
+    if app.get_window(label).is_some() {
+        log::debug!(
+            target: "app_lib::commands::conversation_dialog",
+            "focus_or_open_chat: focusing existing host {label}",
+        );
+        return focus_host_window(&app, label);
+    }
+
+    let config = DialogConfig {
+        label: label.into(),
+        url: "conversation-dialog.html".into(),
+        title: "Promptheus — chat".into(),
+        default_width: 700.0,
+        default_height: 600.0,
+        geometry_key: "conversation-dialog".into(),
+    };
+
+    let (_, _) = dialog::open_or_focus(&app, &config).await?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn open_conversation_dialog_new_window(
     app: tauri::AppHandle,
     source_label: Option<String>,
@@ -133,16 +163,23 @@ pub async fn open_conversation_dialog_new_window(
         geometry_key: label.clone(),
     };
 
-    let (_, _) = dialog::open_or_focus(&app, &config).await?;
-
     if let Some(pid) = provider_id.as_deref() {
         if !pid.is_empty() && pid != "promptheus" {
-            let provider = ai_webview::lookup_webview_provider(&app, pid)
-                .await
-                .ok_or_else(|| format!("unknown provider: {pid}"))?;
-            ai_webview::swap_to_provider(&app, provider, &label).await?;
+            if let Some(state) = app.try_state::<ai_webview::AiWebviewState>() {
+                state.set_pending_provider(&label, pid);
+                log::info!(
+                    target: "app_lib::commands::conversation_dialog",
+                    "open_conversation_dialog_new_window: stored pending provider {pid} for {label}",
+                );
+            }
         }
     }
+
+    let (_, _) = dialog::open_or_focus(&app, &config).await?;
+    log::info!(
+        target: "app_lib::commands::conversation_dialog",
+        "open_conversation_dialog_new_window: window created label={label}",
+    );
 
     Ok(())
 }
@@ -172,6 +209,7 @@ pub fn get_dialog_init_params() -> Option<DialogInitParams> {
         .map(|p| DialogInitParams {
             skill_id: p.skill_id,
             skill_name: p.skill_name,
+            skill_model: p.skill_model,
             history_entry_id: p.history_entry_id,
             last_interaction_only: p.last_interaction_only,
             initial_input: p.initial_input,
@@ -189,6 +227,7 @@ fn emit_reuse_event(
     auto_send_input: bool,
     skill_id: &str,
     skill_name: &str,
+    skill_model: Option<&str>,
     new_chat: bool,
 ) -> Result<(), String> {
     if new_chat {
@@ -221,6 +260,7 @@ fn emit_reuse_event(
             serde_json::json!({
                 "skill_id": skill_id,
                 "skill_name": skill_name,
+                "skill_model": skill_model,
             }),
         )
         .map_err(|e| e.to_string())

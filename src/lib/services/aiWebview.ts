@@ -38,6 +38,10 @@ export async function swapAiWebview(providerId: string, fromLabel: string): Prom
   await invoke("swap_ai_webview", { providerId, fromLabel });
 }
 
+export async function takePendingProvider(hostLabel: string): Promise<string | null> {
+  return await invoke<string | null>("take_pending_provider", { hostLabel });
+}
+
 export async function swapToConversationDialog(fromLabel: string): Promise<void> {
   await invoke("swap_to_conversation_dialog", { fromLabel });
 }
