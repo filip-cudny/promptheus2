@@ -464,6 +464,9 @@ async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {
+            log::info!(target: "app_lib", "second instance suppressed");
+        }))
         .plugin(
             {
                 let mut log_builder = tauri_plugin_log::Builder::new()
@@ -721,6 +724,8 @@ pub fn run() {
             commands::menu::execute_menu_item,
             commands::menu::refresh_menu_providers,
             commands::menu::show_context_menu_window,
+            commands::menu::show_context_menu_panel,
+            commands::menu::hide_context_menu_panel,
             commands::menu::focus_context_menu,
             commands::history::get_history,
             commands::history::get_conversations,

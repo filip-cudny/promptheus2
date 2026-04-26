@@ -162,15 +162,51 @@ pub async fn show_context_menu_window(app: tauri::AppHandle) -> Result<(), Strin
     app.emit_to("context-menu", "show-context-menu", payload)
         .map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn show_context_menu_panel(app: tauri::AppHandle) -> Result<(), String> {
+    let win = app
+        .get_webview_window("context-menu")
+        .ok_or("context-menu window not found")?;
+
     #[cfg(target_os = "macos")]
     {
-        let dock = app.state::<crate::services::dock::DockManager>();
-        if !dock.has_open_dialogs() {
-            app.show().map_err(|e| e.to_string())?;
-        }
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let win_clone = win.clone();
+        app.run_on_main_thread(move || {
+            let _ = tx.send(
+                crate::services::macos_panel::show_panel_without_activating(&win_clone),
+            );
+        })
+        .map_err(|e| e.to_string())?;
+        return rx.await.map_err(|e| e.to_string())?;
     }
 
-    Ok(())
+    #[cfg(not(target_os = "macos"))]
+    win.show().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn hide_context_menu_panel(app: tauri::AppHandle) -> Result<(), String> {
+    let win = app
+        .get_webview_window("context-menu")
+        .ok_or("context-menu window not found")?;
+
+    #[cfg(target_os = "macos")]
+    {
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let win_clone = win.clone();
+        app.run_on_main_thread(move || {
+            let _ = tx.send(crate::services::macos_panel::hide_panel(&win_clone));
+        })
+        .map_err(|e| e.to_string())?;
+        return rx.await.map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    win.hide().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -199,7 +235,13 @@ pub async fn focus_context_menu(app: tauri::AppHandle) -> Result<(), String> {
 
     #[cfg(target_os = "macos")]
     {
-        return crate::services::macos_panel::make_key_without_activating(&win);
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let win_clone = win.clone();
+        app.run_on_main_thread(move || {
+            let _ = tx.send(crate::services::macos_panel::make_key_without_activating(&win_clone));
+        })
+        .map_err(|e| e.to_string())?;
+        return rx.await.map_err(|e| e.to_string())?;
     }
 
     #[cfg(not(target_os = "macos"))]

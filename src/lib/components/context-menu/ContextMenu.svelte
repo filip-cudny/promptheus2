@@ -28,6 +28,7 @@
     suppressClose,
     isSuppressed,
     resumeClose,
+    isInBlurGrace,
     moveSelection,
     executeItem,
     executeSelected,
@@ -203,34 +204,30 @@
 
     positionFromHeight(height);
     hoverEnabled = false;
-    suppressClose();
-    await win.hide();
-    if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
     await win.setSize(new LogicalSize(MENU_WIDTH, height));
-    if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
+    if (gen !== resizeGeneration || !isVisible()) return;
     if (wa) {
       currentWindowPos = { x, y };
       await win.setPosition(new LogicalPosition(x, y));
-      if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
+      if (gen !== resizeGeneration || !isVisible()) return;
     }
-    await win.show();
-    if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
+    await invoke("show_context_menu_panel");
+    if (gen !== resizeGeneration || !isVisible()) return;
 
     const correctedHeight = menuEl.scrollHeight + 2;
     if (correctedHeight !== height) {
       height = correctedHeight;
       positionFromHeight(height);
       await win.setSize(new LogicalSize(MENU_WIDTH, height));
-      if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
+      if (gen !== resizeGeneration || !isVisible()) return;
       if (wa) {
         currentWindowPos = { x, y };
         await win.setPosition(new LogicalPosition(x, y));
-        if (gen !== resizeGeneration || !isVisible()) { resumeClose(); return; }
+        if (gen !== resizeGeneration || !isVisible()) return;
       }
     }
 
     await invoke("focus_context_menu");
-    resumeClose();
     lastShownTrigger = getOpenTrigger();
     logDebug(`[ctx-menu] opened at (${x}, ${y}), size ${MENU_WIDTH}x${height}`);
   }
@@ -334,6 +331,7 @@
           resumeClose();
           return;
         }
+        if (isInBlurGrace()) return;
         closeMenu();
       }
     });

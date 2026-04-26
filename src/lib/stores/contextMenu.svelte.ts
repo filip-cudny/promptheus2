@@ -23,7 +23,10 @@ let _isTranscribing = $state(false);
 let _suppressClose = $state(false);
 let _recordingSkillId = $state<string | null>(null);
 let _openTrigger = $state(0);
+let _openedAt = 0;
 let _workArea: WorkArea | null = null;
+
+const BLUR_GRACE_MS = 500;
 let numberBuffer = "";
 let numberTimer: ReturnType<typeof setTimeout> | null = null;
 let unlisten: (() => void) | null = null;
@@ -82,6 +85,10 @@ function isSuppressed(): boolean {
 
 function resumeClose() {
   _suppressClose = false;
+}
+
+function isInBlurGrace(): boolean {
+  return Date.now() - _openedAt < BLUR_GRACE_MS;
 }
 
 function getRecordingSkillId(): string | null {
@@ -155,6 +162,7 @@ async function openMenu(workArea: WorkArea | null) {
     _items = applyItemStates(fetched);
     _selectedIndex = -1;
     numberBuffer = "";
+    _openedAt = Date.now();
     _visible = true;
     _openTrigger++;
   } catch (e) {
@@ -163,13 +171,13 @@ async function openMenu(workArea: WorkArea | null) {
 }
 
 async function closeMenu() {
+  if (!_visible) return;
   _visible = false;
   _items = [];
   _selectedIndex = -1;
   numberBuffer = "";
 
-  const win = getCurrentWebviewWindow();
-  await win.hide();
+  await invoke("hide_context_menu_panel");
 }
 
 function moveSelection(direction: 1 | -1) {
@@ -521,6 +529,7 @@ export {
   suppressClose,
   isSuppressed,
   resumeClose,
+  isInBlurGrace,
   moveSelection,
   executeItem,
   executeSelected,
