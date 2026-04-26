@@ -100,6 +100,7 @@
   :global(html),
   :global(body) {
     background: transparent;
+    margin: 0;
   }
 
   .menu {
@@ -110,7 +111,6 @@
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 6px;
     padding: 4px 0;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     color: #e0e0e0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 12px;
@@ -153,7 +153,6 @@
     height: 100%;
     display: block;
     object-fit: contain;
-    filter: brightness(0) invert(1);
   }
 
   .favicon-placeholder {

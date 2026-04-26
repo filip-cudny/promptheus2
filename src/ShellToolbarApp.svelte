@@ -285,15 +285,15 @@
     appearance: none;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.04);
-    color: #fff;
-    padding: 4px 6px 4px 8px;
+    color: rgba(255, 255, 255, 0.90);
+    padding: 7px 6px 7px 8px;
     border-radius: 6px;
     font: inherit;
     cursor: pointer;
     line-height: 1;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 10px;
     min-width: 110px;
   }
 
@@ -311,7 +311,7 @@
     width: 100%;
     height: 100%;
     display: block;
-    transform: scale(1.25);
+    transform: scale(1.5);
     transform-origin: center;
   }
 
@@ -320,9 +320,8 @@
     height: 100%;
     display: block;
     object-fit: contain;
-    transform: scale(1.25);
+    transform: scale(1.5);
     transform-origin: center;
-    filter: brightness(0) invert(1);
   }
 
   .trigger:hover {

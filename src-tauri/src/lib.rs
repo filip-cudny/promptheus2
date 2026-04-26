@@ -250,7 +250,6 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     .resizable(false)
     .decorations(false)
     .transparent(true)
-    .shadow(false)
     .always_on_top(true)
     .skip_taskbar(true)
     .visible(false)

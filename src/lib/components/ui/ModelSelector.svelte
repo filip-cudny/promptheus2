@@ -236,7 +236,7 @@
   .dropdown {
     position: absolute;
     bottom: calc(100% + 4px);
-    left: 0;
+    right: 0;
     z-index: 1000;
     width: 220px;
     background: #252525;
@@ -247,8 +247,8 @@
   }
 
   .reasoning-dropdown {
-    left: 0;
-    width: 220px;
+    right: 0;
+    width: 160px;
   }
 
   .dropdown-item {
