@@ -3,7 +3,6 @@ use std::sync::Mutex;
 use serde::Serialize;
 use tauri::{Emitter, Manager};
 
-use crate::services::ai_providers;
 use crate::services::ai_webview;
 use crate::services::dialog::{self, focus_host_window, is_shell_toolbar_label, DialogConfig};
 
@@ -138,7 +137,8 @@ pub async fn open_conversation_dialog_new_window(
 
     if let Some(pid) = provider_id.as_deref() {
         if !pid.is_empty() && pid != "promptheus" {
-            let provider = ai_providers::find(pid)
+            let provider = ai_webview::lookup_webview_provider(&app, pid)
+                .await
                 .ok_or_else(|| format!("unknown provider: {pid}"))?;
             ai_webview::swap_to_provider(&app, provider, &label).await?;
         }

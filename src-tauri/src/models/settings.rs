@@ -83,6 +83,37 @@ pub struct Settings {
 
     #[serde(default)]
     pub skills_order: Vec<String>,
+
+    #[serde(default = "default_webview_providers")]
+    pub webview_providers: Vec<WebviewProvider>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WebviewProvider {
+    pub id: String,
+    pub name: String,
+    pub url: String,
+}
+
+impl Settings {
+    pub fn find_webview_provider(&self, id: &str) -> Option<&WebviewProvider> {
+        self.webview_providers.iter().find(|p| p.id == id)
+    }
+}
+
+pub fn default_webview_providers() -> Vec<WebviewProvider> {
+    vec![
+        WebviewProvider {
+            id: "claude".to_string(),
+            name: "Claude".to_string(),
+            url: "https://claude.ai/".to_string(),
+        },
+        WebviewProvider {
+            id: "chatgpt".to_string(),
+            name: "ChatGPT".to_string(),
+            url: "https://chatgpt.com/".to_string(),
+        },
+    ]
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -444,6 +475,7 @@ impl Default for Settings {
             recent_apps_count: default_recent_apps_count(),
             mcp_servers: HashMap::new(),
             skills_order: Vec::new(),
+            webview_providers: default_webview_providers(),
         }
     }
 }
@@ -667,6 +699,45 @@ mod tests {
         assert_eq!(reparsed.temperature, params.temperature);
         assert_eq!(reparsed.extra.len(), params.extra.len());
         assert_eq!(reparsed.extra.get("service_tier"), params.extra.get("service_tier"));
+    }
+
+    #[test]
+    fn test_webview_providers_default_when_missing() {
+        let settings: Settings = serde_json::from_str("{}").expect("parse");
+        assert_eq!(settings.webview_providers.len(), 2);
+        assert_eq!(settings.webview_providers[0].id, "claude");
+        assert_eq!(settings.webview_providers[1].id, "chatgpt");
+    }
+
+    #[test]
+    fn test_webview_providers_explicit_empty_stays_empty() {
+        let settings: Settings = serde_json::from_str(r#"{ "webview_providers": [] }"#).expect("parse");
+        assert!(settings.webview_providers.is_empty());
+    }
+
+    #[test]
+    fn test_webview_providers_roundtrip() {
+        let mut settings = Settings::default();
+        settings.webview_providers = vec![
+            WebviewProvider {
+                id: "mistral".to_string(),
+                name: "Mistral".to_string(),
+                url: "https://chat.mistral.ai/".to_string(),
+            },
+        ];
+        let json = serde_json::to_string(&settings).unwrap();
+        let parsed: Settings = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.webview_providers.len(), 1);
+        assert_eq!(parsed.webview_providers[0].id, "mistral");
+        assert_eq!(parsed.webview_providers[0].name, "Mistral");
+    }
+
+    #[test]
+    fn test_find_webview_provider() {
+        let settings = Settings::default();
+        let p = settings.find_webview_provider("claude").expect("found");
+        assert_eq!(p.name, "Claude");
+        assert!(settings.find_webview_provider("nope").is_none());
     }
 
     #[test]

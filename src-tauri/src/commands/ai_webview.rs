@@ -1,9 +1,27 @@
-use crate::services::ai_providers::{self, AiProviderDto, PROVIDERS};
+use tauri::State;
+use tokio::sync::Mutex;
+
+use crate::commands::settings::AppState;
+use crate::models::settings::WebviewProvider;
 use crate::services::ai_webview;
+
+async fn require_provider(
+    state: &State<'_, Mutex<AppState>>,
+    provider_id: &str,
+) -> Result<WebviewProvider, String> {
+    let guard = state.lock().await;
+    guard
+        .config
+        .settings()
+        .find_webview_provider(provider_id)
+        .cloned()
+        .ok_or_else(|| format!("unknown provider: {provider_id}"))
+}
 
 #[tauri::command]
 pub async fn open_ai_webview(
     app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
     provider_id: String,
     url: Option<String>,
 ) -> Result<(), String> {
@@ -11,14 +29,14 @@ pub async fn open_ai_webview(
         target: "app_lib::commands::ai_webview",
         "open_ai_webview: {provider_id} url={url:?}",
     );
-    let provider = ai_providers::find(&provider_id)
-        .ok_or_else(|| format!("unknown provider: {provider_id}"))?;
+    let provider = require_provider(&state, &provider_id).await?;
     ai_webview::open_or_focus(&app, provider, url).await
 }
 
 #[tauri::command]
 pub async fn open_ai_webview_new_window(
     app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
     provider_id: String,
     url: Option<String>,
     source_label: Option<String>,
@@ -27,14 +45,14 @@ pub async fn open_ai_webview_new_window(
         target: "app_lib::commands::ai_webview",
         "open_ai_webview_new_window: {provider_id} url={url:?} source={source_label:?}",
     );
-    let provider = ai_providers::find(&provider_id)
-        .ok_or_else(|| format!("unknown provider: {provider_id}"))?;
+    let provider = require_provider(&state, &provider_id).await?;
     ai_webview::open_new_instance(&app, provider, url, source_label).await
 }
 
 #[tauri::command]
 pub async fn swap_ai_webview(
     app: tauri::AppHandle,
+    state: State<'_, Mutex<AppState>>,
     provider_id: String,
     from_label: String,
 ) -> Result<(), String> {
@@ -42,8 +60,7 @@ pub async fn swap_ai_webview(
         target: "app_lib::commands::ai_webview",
         "swap_ai_webview: {provider_id} from={from_label}",
     );
-    let provider = ai_providers::find(&provider_id)
-        .ok_or_else(|| format!("unknown provider: {provider_id}"))?;
+    let provider = require_provider(&state, &provider_id).await?;
     ai_webview::swap_to_provider(&app, provider, &from_label).await
 }
 
@@ -78,21 +95,30 @@ pub fn close_ai_webview(app: tauri::AppHandle, provider_id: String) -> Result<()
         target: "app_lib::commands::ai_webview",
         "close_ai_webview: {provider_id}",
     );
-    let provider = ai_providers::find(&provider_id)
-        .ok_or_else(|| format!("unknown provider: {provider_id}"))?;
-    ai_webview::close(&app, provider)?;
+    ai_webview::close(&app, &provider_id)?;
     ai_webview::focus_conversation_dialog(&app);
     Ok(())
 }
 
 #[tauri::command]
-pub fn get_ai_providers() -> Vec<AiProviderDto> {
-    PROVIDERS.iter().map(AiProviderDto::from).collect()
+pub async fn get_webview_providers(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<WebviewProvider>, String> {
+    let guard = state.lock().await;
+    Ok(guard.config.settings().webview_providers.clone())
 }
 
 #[tauri::command]
-pub fn get_ai_provider(provider_id: String) -> Option<AiProviderDto> {
-    ai_providers::find(&provider_id).map(AiProviderDto::from)
+pub async fn get_webview_provider(
+    state: State<'_, Mutex<AppState>>,
+    provider_id: String,
+) -> Result<Option<WebviewProvider>, String> {
+    let guard = state.lock().await;
+    Ok(guard
+        .config
+        .settings()
+        .find_webview_provider(&provider_id)
+        .cloned())
 }
 
 #[tauri::command]

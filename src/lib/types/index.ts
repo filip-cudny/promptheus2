@@ -21,6 +21,13 @@ export interface Settings {
   keymaps: KeymapGroup[];
   recent_apps_count: number;
   skills_order: string[];
+  webview_providers: WebviewProvider[];
+}
+
+export interface WebviewProvider {
+  id: string;
+  name: string;
+  url: string;
 }
 
 export interface PromptBase {

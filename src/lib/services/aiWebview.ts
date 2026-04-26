@@ -1,13 +1,21 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export interface AiProvider {
+export interface WebviewProvider {
   id: string;
   name: string;
   url: string;
 }
 
-export async function getAiProviders(): Promise<AiProvider[]> {
-  return await invoke<AiProvider[]>("get_ai_providers");
+export async function getWebviewProviders(): Promise<WebviewProvider[]> {
+  return await invoke<WebviewProvider[]>("get_webview_providers");
+}
+
+export async function getWebviewProvider(
+  providerId: string,
+): Promise<WebviewProvider | null> {
+  return await invoke<WebviewProvider | null>("get_webview_provider", {
+    providerId,
+  });
 }
 
 export async function openAiWebview(providerId: string, url?: string): Promise<void> {

@@ -6,7 +6,7 @@ use tauri::window::Color;
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tokio::sync::Mutex;
 
-use super::ai_providers::AiProvider;
+use crate::models::settings::WebviewProvider;
 use super::dialog::{
     self, attach_undecorated_resize_handler, configure_linux_child_packing, content_layout,
     focus_host_window, focus_window, is_conversation_dialog_host, is_shell_toolbar_label,
@@ -25,26 +25,36 @@ const CONVERSATION_DIALOG_TITLE: &str = "Promptheus — chat";
 
 #[derive(Default)]
 pub struct AiWebviewState {
-    hosted: StdMutex<HashMap<String, HashSet<&'static str>>>,
-    current_provider: StdMutex<HashMap<String, &'static str>>,
+    hosted: StdMutex<HashMap<String, HashSet<String>>>,
+    current_provider: StdMutex<HashMap<String, String>>,
+    provider_snapshots: StdMutex<HashMap<String, WebviewProvider>>,
     active_webview: StdMutex<HashMap<String, String>>,
     previous_active: StdMutex<HashMap<String, String>>,
     palette_open: StdMutex<HashMap<String, bool>>,
 }
 
 impl AiWebviewState {
-    fn set_provider(&self, label: &str, provider_id: &'static str) {
+    fn set_provider(&self, label: &str, provider: &WebviewProvider) {
         self.current_provider
             .lock()
             .unwrap()
-            .insert(label.to_string(), provider_id);
+            .insert(label.to_string(), provider.id.clone());
+        self.provider_snapshots
+            .lock()
+            .unwrap()
+            .insert(label.to_string(), provider.clone());
     }
 
     fn remove_provider(&self, label: &str) {
         self.current_provider.lock().unwrap().remove(label);
+        self.provider_snapshots.lock().unwrap().remove(label);
     }
 
-    fn has_hosted_child(&self, host_label: &str, provider_id: &'static str) -> bool {
+    fn snapshot(&self, label: &str) -> Option<WebviewProvider> {
+        self.provider_snapshots.lock().unwrap().get(label).cloned()
+    }
+
+    fn has_hosted_child(&self, host_label: &str, provider_id: &str) -> bool {
         self.hosted
             .lock()
             .unwrap()
@@ -53,13 +63,13 @@ impl AiWebviewState {
             .unwrap_or(false)
     }
 
-    fn mark_hosted_child(&self, host_label: &str, provider_id: &'static str) {
+    fn mark_hosted_child(&self, host_label: &str, provider_id: &str) {
         self.hosted
             .lock()
             .unwrap()
             .entry(host_label.to_string())
             .or_default()
-            .insert(provider_id);
+            .insert(provider_id.to_string());
     }
 
     fn drop_host(&self, host_label: &str) {
@@ -129,11 +139,11 @@ pub fn active_provider_for(app: &tauri::AppHandle, host_label: &str) -> Option<S
         .lock()
         .unwrap()
         .get(&active)
-        .map(|s| s.to_string());
+        .cloned();
     provider
 }
 
-pub fn window_label(provider: &AiProvider) -> String {
+pub fn window_label(provider: &WebviewProvider) -> String {
     format!("ai-webview-{}", provider.id)
 }
 
@@ -210,16 +220,16 @@ fn is_toolbar_label(label: &str) -> bool {
     is_shell_toolbar_label(label)
 }
 
-fn hosted_child_label(host_label: &str, provider: &AiProvider) -> String {
+fn hosted_child_label(host_label: &str, provider: &WebviewProvider) -> String {
     format!("{host_label}::ai-webview-{}", provider.id)
 }
 
 pub async fn open_or_focus(
     app: &tauri::AppHandle,
-    provider: &'static AiProvider,
+    provider: WebviewProvider,
     url: Option<String>,
 ) -> Result<(), String> {
-    let label = window_label(provider);
+    let label = window_label(&provider);
 
     if let Some(existing) = app.get_webview_window(&label) {
         log::info!(
@@ -229,7 +239,7 @@ pub async fn open_or_focus(
         if let Some(u) = url.as_deref() {
             navigate_webview(&existing, u)?;
             if let Some(state) = app.try_state::<AiWebviewState>() {
-                state.set_provider(&label, provider.id);
+                state.set_provider(&label, &provider);
             }
         }
         return focus_window(&existing);
@@ -240,11 +250,11 @@ pub async fn open_or_focus(
 
 pub async fn open_new_instance(
     app: &tauri::AppHandle,
-    provider: &'static AiProvider,
+    provider: WebviewProvider,
     url: Option<String>,
     source_label: Option<String>,
 ) -> Result<(), String> {
-    let label = next_available_label(app, provider);
+    let label = next_available_label(app, &provider);
     if let Some(src) = source_label.as_deref() {
         dialog::seed_geometry_from(app, src, &label).await;
     }
@@ -271,25 +281,19 @@ pub fn new_chat_in_host(app: &tauri::AppHandle, host_label: &str) -> Result<(), 
             .emit_to(host_label, "new-conversation", serde_json::json!({}))
             .map_err(|e| e.to_string());
     }
-    let provider_id = {
-        let guard = state.current_provider.lock().unwrap();
-        guard
-            .get(&active_label)
-            .copied()
-            .ok_or_else(|| format!("no provider for {active_label}"))?
-    };
-    let provider = super::ai_providers::find(provider_id)
-        .ok_or_else(|| format!("unknown provider: {provider_id}"))?;
+    let provider = state
+        .snapshot(&active_label)
+        .ok_or_else(|| format!("no provider snapshot for {active_label}"))?;
     let webview = app
         .get_webview(&active_label)
         .ok_or_else(|| format!("missing webview: {active_label}"))?;
-    let parsed = tauri::Url::parse(provider.url).map_err(|e| e.to_string())?;
+    let parsed = tauri::Url::parse(&provider.url).map_err(|e| e.to_string())?;
     webview.navigate(parsed).map_err(|e| e.to_string())
 }
 
 pub async fn swap_to_provider(
     app: &tauri::AppHandle,
-    provider: &'static AiProvider,
+    provider: WebviewProvider,
     from_label: &str,
 ) -> Result<(), String> {
     if is_conversation_dialog_host(from_label) && app.get_window(from_label).is_some() {
@@ -313,24 +317,24 @@ pub async fn swap_to_conversation_dialog(
 async fn hosted_swap_to_provider(
     app: &tauri::AppHandle,
     host_label: &str,
-    provider: &'static AiProvider,
+    provider: WebviewProvider,
 ) -> Result<(), String> {
     let host = app
         .get_window(host_label)
         .ok_or_else(|| format!("missing host window: {host_label}"))?;
 
-    let child_label = hosted_child_label(host_label, provider);
+    let child_label = hosted_child_label(host_label, &provider);
 
     let already_created = app
         .try_state::<AiWebviewState>()
-        .map(|s| s.has_hosted_child(host_label, provider.id))
+        .map(|s| s.has_hosted_child(host_label, &provider.id))
         .unwrap_or(false);
 
     if !already_created {
         let (logical_w, logical_h) = host_logical_size(&host)?;
         let (pos, size) = content_layout(logical_w, logical_h);
-        let content_url = tauri::Url::parse(provider.url).map_err(|e| e.to_string())?;
-        let init_script = initialization_script(provider);
+        let content_url = tauri::Url::parse(&provider.url).map_err(|e| e.to_string())?;
+        let init_script = initialization_script(&provider);
         let reinject = reinject_script();
 
         let app_for_nav = app.clone();
@@ -384,8 +388,8 @@ async fn hosted_swap_to_provider(
         }
 
         if let Some(state) = app.try_state::<AiWebviewState>() {
-            state.mark_hosted_child(host_label, provider.id);
-            state.set_provider(&child_label, provider.id);
+            state.mark_hosted_child(host_label, &provider.id);
+            state.set_provider(&child_label, &provider);
         }
 
         log::info!(
@@ -425,7 +429,7 @@ async fn hosted_swap_to_provider(
     if let Some(state) = app.try_state::<AiWebviewState>() {
         state.set_active(host_label, &child_label);
     }
-    emit_active_changed(app, host_label, Some(provider.id));
+    emit_active_changed(app, host_label, Some(&provider.id));
 
     focus_host_window(app, host_label)
 }
@@ -473,7 +477,7 @@ fn hosted_swap_to_conversation_dialog(
     focus_host_window(app, host_label)
 }
 
-fn emit_active_changed(app: &tauri::AppHandle, host_label: &str, provider_id: Option<&str>) {
+pub fn emit_active_changed(app: &tauri::AppHandle, host_label: &str, provider_id: Option<&str>) {
     let payload = serde_json::json!({ "provider_id": provider_id });
     let toolbar_label = shell_toolbar_label_for(host_label);
     if let Err(e) = app.emit_to(host_label, "shell:active-changed", payload.clone()) {
@@ -603,7 +607,8 @@ pub async fn swap_from_palette(
             hosted_swap_to_conversation_dialog(app, host_label)?;
         }
         Some(id) => {
-            let Some(provider) = super::ai_providers::find(id) else {
+            let provider = lookup_webview_provider(app, id).await;
+            let Some(provider) = provider else {
                 log::warn!(
                     target: "app_lib::services::ai_webview",
                     "palette: unknown provider {id}",
@@ -618,6 +623,15 @@ pub async fn swap_from_palette(
     }
 
     Ok(())
+}
+
+pub async fn lookup_webview_provider(
+    app: &tauri::AppHandle,
+    id: &str,
+) -> Option<WebviewProvider> {
+    let state = app.state::<Mutex<AppState>>();
+    let guard = state.lock().await;
+    guard.config.settings().find_webview_provider(id).cloned()
 }
 
 fn restore_previous_webview(
@@ -657,23 +671,23 @@ fn restore_previous_webview(
         None
     } else {
         app.try_state::<AiWebviewState>()
-            .and_then(|s| s.current_provider.lock().unwrap().get(previous_label).copied())
+            .and_then(|s| s.current_provider.lock().unwrap().get(previous_label).cloned())
     };
-    emit_active_changed(app, host_label, provider_id);
+    emit_active_changed(app, host_label, provider_id.as_deref());
 
     Ok(())
 }
 
 async fn swap_to_provider_standalone(
     app: &tauri::AppHandle,
-    provider: &'static AiProvider,
+    provider: WebviewProvider,
     from_label: &str,
 ) -> Result<(), String> {
     debug_assert!(
         !is_conversation_dialog_host(from_label),
         "standalone swap should not run for conversation-dialog host: {from_label}",
     );
-    let target_label = window_label(provider);
+    let target_label = window_label(&provider);
 
     if from_label == target_label {
         if let Some(win) = app.get_webview_window(&target_label) {
@@ -765,7 +779,7 @@ fn navigate_webview(win: &tauri::WebviewWindow, url: &str) -> Result<(), String>
     win.navigate(parsed).map_err(|e| e.to_string())
 }
 
-fn next_available_label(app: &tauri::AppHandle, provider: &AiProvider) -> String {
+fn next_available_label(app: &tauri::AppHandle, provider: &WebviewProvider) -> String {
     let base = window_label(provider);
     if app.get_webview_window(&base).is_none() {
         return base;
@@ -782,7 +796,7 @@ fn next_available_label(app: &tauri::AppHandle, provider: &AiProvider) -> String
 
 async fn open_window(
     app: &tauri::AppHandle,
-    provider: &'static AiProvider,
+    provider: WebviewProvider,
     label: &str,
     url: Option<String>,
 ) -> Result<(), String> {
@@ -797,10 +811,10 @@ async fn open_window(
         .map(|g| (g.width, g.height))
         .unwrap_or((DEFAULT_WIDTH, DEFAULT_HEIGHT));
 
-    let content = url.as_deref().unwrap_or(provider.url);
-    let content_url = tauri::Url::parse(content).map_err(|e| e.to_string())?;
+    let content = url.as_deref().unwrap_or(provider.url.as_str()).to_string();
+    let content_url = tauri::Url::parse(&content).map_err(|e| e.to_string())?;
 
-    let init_script = initialization_script(provider);
+    let init_script = initialization_script(&provider);
     let reinject = reinject_script();
 
     let label_owned = label.to_string();
@@ -856,7 +870,7 @@ async fn open_window(
     enable_media_for_window(&win);
 
     if let Some(webview_state) = app.try_state::<AiWebviewState>() {
-        webview_state.set_provider(&label_owned, provider.id);
+        webview_state.set_provider(&label_owned, &provider);
     }
 
     let dock = app.state::<DockManager>();
@@ -888,8 +902,12 @@ async fn open_window(
     Ok(())
 }
 
-pub fn close(app: &tauri::AppHandle, provider: &AiProvider) -> Result<(), String> {
-    close_by_label(app, &window_label(provider));
+pub fn close(app: &tauri::AppHandle, provider_id: &str) -> Result<(), String> {
+    let label = format!("ai-webview-{provider_id}");
+    close_by_label(app, &label);
+    if let Some(state) = app.try_state::<AiWebviewState>() {
+        state.remove_provider(&label);
+    }
     Ok(())
 }
 
@@ -970,9 +988,9 @@ async fn handle_router_message(app: &tauri::AppHandle, webview_label: &str, msg:
     }
 }
 
-fn initialization_script(provider: &AiProvider) -> String {
+fn initialization_script(provider: &WebviewProvider) -> String {
     let provider_id_json =
-        serde_json::to_string(provider.id).unwrap_or_else(|_| "\"\"".to_string());
+        serde_json::to_string(&provider.id).unwrap_or_else(|_| "\"\"".to_string());
     let sentinel_json =
         serde_json::to_string(ROUTER_SENTINEL).unwrap_or_else(|_| "\"\"".to_string());
 

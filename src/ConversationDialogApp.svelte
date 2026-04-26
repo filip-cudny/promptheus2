@@ -19,7 +19,8 @@
     closePalette,
     openPalette,
   } from "$lib/services/shellToolbar";
-  import { getAiProviders, type AiProvider } from "$lib/services/aiWebview";
+  import { getWebviewProviders, type WebviewProvider } from "$lib/services/aiWebview";
+  import { onSettingsChanged } from "$lib/services/events";
 
   interface DialogInitParams {
     skill_id: string;
@@ -48,7 +49,7 @@
   let models = $state<ModelConfig[]>([]);
   let defaultModelId = $state<string | null>(null);
 
-  let aiProviders = $state<AiProvider[]>([]);
+  let webviewProviders = $state<WebviewProvider[]>([]);
   let paletteOpen = $state(false);
   let paletteQuery = $state("");
   let paletteIndex = $state(0);
@@ -57,7 +58,7 @@
 
   let providers = $derived<PaletteEntry[]>([
     { id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
-    ...aiProviders.map((p) => ({ id: p.id, name: p.name })),
+    ...webviewProviders.map((p) => ({ id: p.id, name: p.name })),
   ]);
 
   let filtered = $derived.by<PaletteEntry[]>(() => {
@@ -81,6 +82,15 @@
   let unlistenPaletteOpened: UnlistenFn | undefined;
   let unlistenPaletteClosed: UnlistenFn | undefined;
   let unlistenActive: UnlistenFn | undefined;
+  let unlistenSettingsChanged: UnlistenFn | undefined;
+
+  async function refreshWebviewProviders() {
+    try {
+      webviewProviders = await getWebviewProviders();
+    } catch (e) {
+      console.error("getWebviewProviders failed", e);
+    }
+  }
 
   async function handleGlobalKeydown(e: KeyboardEvent) {
     if (paletteOpen) {
@@ -192,11 +202,8 @@
     await store.initFromSettings();
     loadModelInfo();
 
-    try {
-      aiProviders = await getAiProviders();
-    } catch (e) {
-      console.error("getAiProviders failed", e);
-    }
+    await refreshWebviewProviders();
+    unlistenSettingsChanged = await onSettingsChanged(refreshWebviewProviders);
 
     const reconnected = await store.tryReconnect();
 
@@ -313,6 +320,7 @@
     unlistenPaletteOpened?.();
     unlistenPaletteClosed?.();
     unlistenActive?.();
+    unlistenSettingsChanged?.();
     store.destroy();
   });
 </script>

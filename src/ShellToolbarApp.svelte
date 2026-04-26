@@ -5,12 +5,13 @@
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { ChevronDown, Minus, Square, SquareArrowOutUpRight, X } from "lucide-svelte";
   import {
-    getAiProviders,
+    getWebviewProviders,
     swapAiWebview,
     swapToConversationDialog,
-    type AiProvider,
+    type WebviewProvider,
   } from "$lib/services/aiWebview";
   import { openConversationDialogNewWindow } from "$lib/services/conversationDialog";
+  import { onSettingsChanged } from "$lib/services/events";
   import {
     PROMPTHEUS_PROVIDER_ID,
     getActiveProvider,
@@ -24,7 +25,7 @@
   const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
   const shortcutHint = isMac ? "⌘P" : "Ctrl P";
 
-  let aiProviders = $state<AiProvider[]>([]);
+  let webviewProviders = $state<WebviewProvider[]>([]);
   let activeId = $state<string>(PROMPTHEUS_PROVIDER_ID);
   let isMaximized = $state(false);
   let providerDropdownOpen = $state(false);
@@ -32,7 +33,7 @@
 
   let providers = $derived<{ id: string; name: string }[]>([
     { id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
-    ...aiProviders.map((p) => ({ id: p.id, name: p.name })),
+    ...webviewProviders.map((p) => ({ id: p.id, name: p.name })),
   ]);
 
   let activeProvider = $derived(
@@ -42,6 +43,15 @@
   let unlistenActive: UnlistenFn | undefined;
   let unlistenSelect: UnlistenFn | undefined;
   let unlistenClosed: UnlistenFn | undefined;
+  let unlistenSettingsChanged: UnlistenFn | undefined;
+
+  async function refreshWebviewProviders() {
+    try {
+      webviewProviders = await getWebviewProviders();
+    } catch (e) {
+      console.error("getWebviewProviders failed", e);
+    }
+  }
 
   async function refreshActive() {
     try {
@@ -147,11 +157,8 @@
   onMount(async () => {
     window.addEventListener("keydown", handleGlobalKeydown, true);
 
-    try {
-      aiProviders = await getAiProviders();
-    } catch (e) {
-      console.error("getAiProviders failed", e);
-    }
+    await refreshWebviewProviders();
+    unlistenSettingsChanged = await onSettingsChanged(refreshWebviewProviders);
     await refreshActive();
 
     try {
@@ -189,6 +196,7 @@
     unlistenActive?.();
     unlistenSelect?.();
     unlistenClosed?.();
+    unlistenSettingsChanged?.();
   });
 </script>
 

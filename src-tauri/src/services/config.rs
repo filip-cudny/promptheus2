@@ -801,6 +801,59 @@ pub fn validate(settings: &Settings) -> Result<(), ConfigError> {
         }
     }
 
+    validate_webview_providers(settings)?;
+
+    Ok(())
+}
+
+fn validate_webview_providers(settings: &Settings) -> Result<(), ConfigError> {
+    let mut seen = std::collections::HashSet::new();
+    for provider in &settings.webview_providers {
+        if provider.id.is_empty() {
+            return Err(ConfigError::InvalidSettings(
+                "webview_providers entry missing 'id'".to_string(),
+            ));
+        }
+        if !provider
+            .id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        {
+            return Err(ConfigError::InvalidSettings(format!(
+                "webview_providers id '{}' must match [a-zA-Z0-9_-]+",
+                provider.id
+            )));
+        }
+        if !seen.insert(provider.id.clone()) {
+            return Err(ConfigError::InvalidSettings(format!(
+                "Duplicate webview_providers id: '{}'",
+                provider.id
+            )));
+        }
+        if provider.name.is_empty() {
+            return Err(ConfigError::InvalidSettings(format!(
+                "webview_providers '{}' has empty 'name'",
+                provider.id
+            )));
+        }
+        match tauri::Url::parse(&provider.url) {
+            Ok(parsed) => {
+                let scheme = parsed.scheme();
+                if scheme != "http" && scheme != "https" {
+                    return Err(ConfigError::InvalidSettings(format!(
+                        "webview_providers '{}' url must use http or https scheme",
+                        provider.id
+                    )));
+                }
+            }
+            Err(e) => {
+                return Err(ConfigError::InvalidSettings(format!(
+                    "webview_providers '{}' has invalid url: {}",
+                    provider.id, e
+                )));
+            }
+        }
+    }
     Ok(())
 }
 
@@ -1268,6 +1321,71 @@ mod tests {
         assert!(!chat.contains_key("environment_section"));
         let prompt_base = saved_json["prompt_base"].as_object().unwrap();
         assert_eq!(prompt_base["system_prompt"], "Custom system");
+    }
+
+    #[test]
+    fn test_validate_webview_providers_duplicate_id() {
+        use crate::models::settings::WebviewProvider;
+        let mut settings = Settings {
+            models: vec![test_model("1", "${KEY}")],
+            ..Default::default()
+        };
+        settings.webview_providers = vec![
+            WebviewProvider {
+                id: "claude".into(),
+                name: "Claude".into(),
+                url: "https://claude.ai/".into(),
+            },
+            WebviewProvider {
+                id: "claude".into(),
+                name: "Other".into(),
+                url: "https://other.example/".into(),
+            },
+        ];
+        let err = validate(&settings).unwrap_err().to_string();
+        assert!(err.contains("Duplicate webview_providers"), "got: {err}");
+    }
+
+    #[test]
+    fn test_validate_webview_providers_invalid_id_chars() {
+        use crate::models::settings::WebviewProvider;
+        let mut settings = Settings {
+            models: vec![test_model("1", "${KEY}")],
+            ..Default::default()
+        };
+        settings.webview_providers = vec![WebviewProvider {
+            id: "claude pro".into(),
+            name: "Claude Pro".into(),
+            url: "https://claude.ai/".into(),
+        }];
+        let err = validate(&settings).unwrap_err().to_string();
+        assert!(err.contains("[a-zA-Z0-9_-]+"), "got: {err}");
+    }
+
+    #[test]
+    fn test_validate_webview_providers_invalid_scheme() {
+        use crate::models::settings::WebviewProvider;
+        let mut settings = Settings {
+            models: vec![test_model("1", "${KEY}")],
+            ..Default::default()
+        };
+        settings.webview_providers = vec![WebviewProvider {
+            id: "ftp-thing".into(),
+            name: "FTP".into(),
+            url: "ftp://example.com/".into(),
+        }];
+        let err = validate(&settings).unwrap_err().to_string();
+        assert!(err.contains("http or https"), "got: {err}");
+    }
+
+    #[test]
+    fn test_validate_webview_providers_empty_list_ok() {
+        let mut settings = Settings {
+            models: vec![test_model("1", "${KEY}")],
+            ..Default::default()
+        };
+        settings.webview_providers.clear();
+        validate(&settings).expect("empty list should validate");
     }
 
     #[test]

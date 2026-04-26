@@ -144,5 +144,8 @@
     "translate-english",
     "translate-polish",
     "process-with-context"
+  ],
+  "webview_providers": [
+    { "id": "claude", "name": "Claude", "url": "https://claude.ai/" }
   ]
 }
