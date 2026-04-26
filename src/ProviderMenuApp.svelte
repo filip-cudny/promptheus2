@@ -3,8 +3,9 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { providerIconSvg } from "$lib/icons/providerIcons";
 
-  type Provider = { id: string; name: string };
+  type Provider = { id: string; name: string; url?: string | null };
   type ShowPayload = {
     providers: Provider[];
     active_id: string;
@@ -76,6 +77,7 @@
 
 <div id="menu-root" class="menu" role="listbox">
   {#each providers as p (p.id)}
+    {@const iconSvg = providerIconSvg(p)}
     <button
       type="button"
       role="option"
@@ -84,7 +86,12 @@
       class:active={activeId === p.id}
       onclick={() => pick(p.id)}
     >
-      {p.name}
+      {#if iconSvg}
+        <span class="favicon" aria-hidden="true">{@html iconSvg}</span>
+      {:else}
+        <span class="favicon favicon-placeholder" aria-hidden="true"></span>
+      {/if}
+      <span class="label">{p.name}</span>
     </button>
   {/each}
 </div>
@@ -103,7 +110,7 @@
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 6px;
     padding: 4px 0;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     color: #e0e0e0;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 12px;
@@ -120,6 +127,44 @@
     cursor: pointer;
     font: inherit;
     line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .favicon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+  }
+
+  .favicon :global(svg) {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .favicon :global(img) {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+    filter: brightness(0) invert(1);
+  }
+
+  .favicon-placeholder {
+    background: transparent;
+  }
+
+  .label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .item:hover {

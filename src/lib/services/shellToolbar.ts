@@ -33,7 +33,7 @@ export async function showProviderMenu(
   anchorY: number,
   width: number,
   height: number,
-  providers: { id: string; name: string }[],
+  providers: { id: string; name: string; url?: string }[],
   activeId: string,
 ): Promise<void> {
   await invoke("show_provider_menu", {

@@ -19,6 +19,7 @@
     openPalette,
     showProviderMenu,
   } from "$lib/services/shellToolbar";
+  import { providerIconSvg } from "$lib/icons/providerIcons";
 
   const HOST_LABEL = getCurrentWindow().label;
   const SELF_TARGET = getCurrentWebview().label;
@@ -31,14 +32,16 @@
   let providerDropdownOpen = $state(false);
   let triggerEl = $state<HTMLButtonElement | null>(null);
 
-  let providers = $derived<{ id: string; name: string }[]>([
+  let providers = $derived<{ id: string; name: string; url?: string }[]>([
     { id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
-    ...webviewProviders.map((p) => ({ id: p.id, name: p.name })),
+    ...webviewProviders.map((p) => ({ id: p.id, name: p.name, url: p.url })),
   ]);
 
   let activeProvider = $derived(
     providers.find((p) => p.id === activeId) ?? providers[0],
   );
+
+  let activeIconSvg = $derived(providerIconSvg(activeProvider));
 
   let unlistenActive: UnlistenFn | undefined;
   let unlistenSelect: UnlistenFn | undefined;
@@ -212,6 +215,9 @@
       aria-expanded={providerDropdownOpen}
       onmousedown={toggleProviderDropdown}
     >
+      {#if activeIconSvg}
+        <span class="trigger-icon" aria-hidden="true">{@html activeIconSvg}</span>
+      {/if}
       <span class="trigger-label">{activeProvider?.name ?? "Promptheus"}</span>
       <ChevronDown size={14} />
     </button>
@@ -280,15 +286,43 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.04);
     color: #fff;
-    padding: 4px 6px 4px 10px;
+    padding: 4px 6px 4px 8px;
     border-radius: 6px;
     font: inherit;
     cursor: pointer;
     line-height: 1;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     min-width: 110px;
+  }
+
+  .trigger-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+  }
+
+  .trigger-icon :global(svg) {
+    width: 100%;
+    height: 100%;
+    display: block;
+    transform: scale(1.25);
+    transform-origin: center;
+  }
+
+  .trigger-icon :global(img) {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+    transform: scale(1.25);
+    transform-origin: center;
+    filter: brightness(0) invert(1);
   }
 
   .trigger:hover {

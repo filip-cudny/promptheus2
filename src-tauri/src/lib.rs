@@ -275,6 +275,7 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     TrayIconBuilder::with_id("main-tray")
         .icon(tray_icon_image)
+        .icon_as_template(true)
         .menu(&menu)
         .show_menu_on_left_click(true)
         .tooltip("Promptheus")

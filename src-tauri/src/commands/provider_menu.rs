@@ -21,6 +21,8 @@ fn take_menu_host() -> Option<String> {
 pub struct ProviderEntry {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub url: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -33,6 +35,7 @@ struct ShowPayload {
 struct ProviderEntryDto {
     id: String,
     name: String,
+    url: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -69,7 +72,11 @@ pub async fn show_provider_menu(
     let payload = ShowPayload {
         providers: providers
             .into_iter()
-            .map(|p| ProviderEntryDto { id: p.id, name: p.name })
+            .map(|p| ProviderEntryDto {
+                id: p.id,
+                name: p.name,
+                url: p.url,
+            })
             .collect(),
         active_id,
     };
