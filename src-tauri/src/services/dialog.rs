@@ -253,6 +253,8 @@ pub async fn open_or_focus(
         ));
     }
 
+    ai_webview::cleanup_host_state(app, &config.label);
+
     let state = app.state::<Mutex<AppState>>();
     let geometry = state.lock().await.ui_state.get_geometry(&config.geometry_key);
 

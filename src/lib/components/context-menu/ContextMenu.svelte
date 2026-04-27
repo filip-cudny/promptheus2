@@ -10,7 +10,8 @@
   import LastInteractionSection from "./LastInteractionSection.svelte";
   import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
   import FloatingPanel from "$lib/components/ui/FloatingPanel.svelte";
-  import { ChevronRight, Info, MessageSquare, MessageSquareShare, Mic, Square, X } from "lucide-svelte";
+  import MenuList from "$lib/components/ui/MenuList.svelte";
+  import { ChevronRight, MessageSquare, MessageSquareShare, Mic, Square, X } from "lucide-svelte";
   import {
     focusOrOpenChat,
     openConversationDialog,
@@ -128,8 +129,8 @@
   let menuEl: HTMLDivElement | undefined = $state();
   let settingsOpen = $state(false);
   let settingsAnchorEl: HTMLElement | undefined = $state();
-  let activeInfoId = $state("");
-  let activeInfoAnchorEl: HTMLElement | undefined = $state();
+  let activeActionMenuId = $state("");
+  let activeActionAnchorEl: HTMLElement | undefined = $state();
   let hoverEnabled = $state(false);
   let shiftHeld = $state(false);
   let chatProvidersOpen = $state(false);
@@ -184,7 +185,7 @@
     switch (e.key) {
       case "Escape":
         e.preventDefault();
-        if (settingsOpen || activeInfoId) {
+        if (settingsOpen || activeActionMenuId || chatProvidersOpen) {
           closePanels();
         } else {
           closeMenu();
@@ -295,17 +296,32 @@
     }
   }
 
-  function closeInfoPanel() {
-    if (activeInfoId) {
-      logDebug(`[ctx-menu] closing info panel: ${activeInfoId}`);
-      activeInfoId = "";
+  function closeActionMenu() {
+    if (activeActionMenuId) {
+      logDebug(`[ctx-menu] closing action menu: ${activeActionMenuId}`);
+      activeActionMenuId = "";
+      activeActionAnchorEl = undefined;
       resumeClose();
     }
   }
 
+  function openActionMenu(e: MouseEvent, item: MenuItem, executingThis: boolean) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (executingThis) return;
+    if (activeActionMenuId === item.id) {
+      closeActionMenu();
+      return;
+    }
+    closePanels();
+    activeActionMenuId = item.id;
+    activeActionAnchorEl = e.currentTarget as HTMLElement;
+    suppressClose();
+  }
+
   function closePanels() {
     closeSettingsPanel();
-    closeInfoPanel();
+    closeActionMenu();
     closeChatProviders();
   }
 
@@ -428,37 +444,28 @@
           <button
             class="chat-button"
             class:disabled={chatDisabled}
-            onclick={async () => {
+            onclick={async (e) => {
               if (chatDisabled) return;
-              if (chatRecording) {
+              if (chatRecording || e.shiftKey) {
                 await toggleChatRecording();
-              } else {
-                await closeMenu();
-                await focusOrOpenChat();
+                return;
               }
+              await closeMenu();
+              await focusOrOpenChat();
             }}
-          >
-            <MessageSquare size={ICON_SIZE.md} />
-            <span>Chat</span>
-          </button>
-          <button
-            class="action-btn mic-btn chat-mic-btn"
-            class:disabled={chatDisabled}
-            class:shift-accent={shiftHeld && !chatDisabled && !chatRecording}
-            title={chatRecording ? "Stop recording" : "Voice input for chat"}
-            disabled={chatDisabled}
-            onclick={() => toggleChatRecording()}
           >
             {#if chatRecording}
               <Square size={ICON_SIZE.md} />
             {:else}
-              <Mic size={ICON_SIZE.md} />
+              <MessageSquare size={ICON_SIZE.md} />
             {/if}
+            <span>Chat</span>
           </button>
         </div>
-        <FloatingPanel visible={chatProvidersOpen} anchorEl={chatRowEl} fitContent onclose={closeChatProviders}>
+        <FloatingPanel visible={chatProvidersOpen} anchorEl={chatRowEl} flush onclose={closeChatProviders}>
           <ProviderMenuList
             providers={providerEntries}
+            expand
             onSelect={(id) => { void pickChatProvider(id); }}
           />
         </FloatingPanel>
@@ -567,11 +574,16 @@
           <LastInteractionSection data={lastInteractionData} />
         {:else}
           {@const executingThis = item.item_type === "skill" && isExecutingSkill(item)}
+          {@const recordingThis = item.item_type === "skill" && isRecordingThisSkill(item)}
+          {@const micDisabled = executingThis || (!item.enabled && !recordingThis)}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="menu-item-row"
             class:selected={globalIndex === currentSelectedIndex}
             onmouseenter={() => { if (hoverEnabled && item.enabled) setSelectedIndex(globalIndex); }}
+            oncontextmenu={item.item_type === "skill"
+              ? (e) => openActionMenu(e, item, executingThis)
+              : undefined}
           >
             <button
               class="menu-item"
@@ -592,7 +604,7 @@
                 {#if skillIndex >= 0}
                   {#if executingThis}
                     <span class="prompt-number executing"><X size={ICON_SIZE.sm} /></span>
-                  {:else if isRecordingThisSkill(item)}
+                  {:else if recordingThis}
                     <span class="prompt-number executing"><Square size={ICON_SIZE.sm} /></span>
                   {:else}
                     <span class="prompt-number">{skillIndex + 1}.</span>
@@ -601,56 +613,61 @@
               {/if}
               <span class="item-label">{item.label}</span>
             </button>
-            {#if item.item_type === "skill"}
-              {@const recordingThis = isRecordingThisSkill(item)}
-              {@const infoDisabled = executingThis || recordingThis}
-              {@const micDisabled = executingThis || (!item.enabled && !recordingThis)}
-              {#if item.tooltip}
+          </div>
+          {#if item.item_type === "skill"}
+            <FloatingPanel
+              visible={activeActionMenuId === item.id}
+              anchorEl={activeActionAnchorEl}
+              flush
+              onclose={closeActionMenu}
+            >
+              <MenuList role="menu" expand>
                 <button
-                  class="action-btn info-btn"
-                  class:disabled={infoDisabled}
-                  class:active={activeInfoId === item.id}
-                  onclick={(e) => {
-                    e.stopPropagation();
-                    if (infoDisabled) return;
-                    if (activeInfoId === item.id) {
-                      closeInfoPanel();
-                    } else {
-                      closePanels();
-                      activeInfoId = item.id;
-                      activeInfoAnchorEl = e.currentTarget as HTMLElement;
-                      suppressClose();
-                    }
+                  type="button"
+                  role="menuitem"
+                  class="menu-list-item"
+                  onclick={() => {
+                    closeActionMenu();
+                    void openDialogForItem(globalIndex);
                   }}
                 >
-                  <Info size={ICON_SIZE.sm} />
+                  <MessageSquareShare size={ICON_SIZE.md} />
+                  <span class="menu-list-label">Open in dialog</span>
                 </button>
-              {/if}
-              <button
-                class="action-btn mic-btn"
-                class:disabled={micDisabled}
-                class:shift-accent={shiftHeld && !micDisabled && !recordingThis && !executingThis}
-                title={recordingThis ? "Stop recording" : "Voice input"}
-                disabled={micDisabled}
-                onclick={() => startAlternativeExecution(globalIndex)}
-              >
-                <Mic size={ICON_SIZE.md} />
-              </button>
-              <button
-                class="action-btn dialog-btn"
-                title="Open dialog"
-                onclick={() => openDialogForItem(globalIndex)}
-              >
-                <MessageSquareShare size={ICON_SIZE.md} />
-              </button>
-            {/if}
-          </div>
-          <FloatingPanel visible={activeInfoId === item.id} anchorEl={activeInfoAnchorEl} onclose={closeInfoPanel}>
-            <div class="info-panel-text">{item.tooltip}</div>
-          </FloatingPanel>
+                <button
+                  type="button"
+                  role="menuitem"
+                  class="menu-list-item"
+                  disabled={micDisabled}
+                  onclick={() => {
+                    closeActionMenu();
+                    void startAlternativeExecution(globalIndex);
+                  }}
+                >
+                  <Mic size={ICON_SIZE.md} />
+                  <span class="menu-list-label">
+                    {recordingThis ? "Stop recording" : "Run with transcription"}
+                  </span>
+                  <span class="menu-list-shortcut">⇧</span>
+                </button>
+                {#if item.tooltip}
+                  <div class="menu-list-separator"></div>
+                  <div class="menu-list-info">{item.tooltip}</div>
+                {/if}
+              </MenuList>
+            </FloatingPanel>
+          {/if}
         {/if}
       {/each}
     {/each}
+    {#if menuItems.some((i) => i.item_type === "skill")}
+      <div class="footer-hint" class:active={shiftHeld}>
+        <span class="footer-hint-key">⇧</span>
+        <span>voice input</span>
+        <span class="footer-hint-sep">·</span>
+        <span>right-click for actions</span>
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -795,61 +812,6 @@
     text-overflow: ellipsis;
   }
 
-  .action-btn {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    padding: 0;
-    border: none;
-    border-radius: 4px;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.3);
-    cursor: pointer;
-  }
-
-  .action-btn.dialog-btn {
-    margin-right: 8px;
-  }
-
-  .action-btn.chat-mic-btn {
-    margin-right: 30px;
-  }
-
-  .action-btn.cancel-hint {
-    margin-right: 8px;
-    cursor: default;
-    pointer-events: none;
-  }
-
-  .action-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.8);
-  }
-
-  .action-btn.disabled {
-    color: rgba(255, 255, 255, 0.15);
-    cursor: default;
-    pointer-events: none;
-  }
-
-  .action-btn.hidden-placeholder {
-    visibility: hidden;
-    pointer-events: none;
-  }
-
-  .mic-btn.shift-accent {
-    color: rgba(255, 255, 255, 0.6);
-  }
-
-  .info-btn {
-    color: rgba(255, 255, 255, 0.15);
-    width: 18px;
-    height: 18px;
-  }
-
   .settings-toggle {
     gap: 4px;
   }
@@ -871,13 +833,27 @@
     margin-bottom: 4px;
   }
 
-  .info-btn.active {
-    color: rgba(255, 255, 255, 0.6);
+  .footer-hint {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px 2px;
+    margin-top: 2px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.25);
+    user-select: none;
+    transition: color 120ms ease;
   }
 
-  .info-panel-text {
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 12px;
-    line-height: 1.4;
+  .footer-hint.active {
+    color: rgba(255, 255, 255, 0.55);
+  }
+
+  .footer-hint-key {
+    font-weight: 600;
+  }
+
+  .footer-hint-sep {
+    color: rgba(255, 255, 255, 0.18);
   }
 </style>

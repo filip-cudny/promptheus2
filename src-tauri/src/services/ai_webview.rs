@@ -73,12 +73,17 @@ impl AiWebviewState {
             .insert(provider_id.to_string());
     }
 
+    fn unmark_hosted_child(&self, host_label: &str, provider_id: &str) {
+        if let Some(set) = self.hosted.lock().unwrap().get_mut(host_label) {
+            set.remove(provider_id);
+        }
+    }
+
     fn drop_host(&self, host_label: &str) {
         self.hosted.lock().unwrap().remove(host_label);
         self.active_webview.lock().unwrap().remove(host_label);
         self.previous_active.lock().unwrap().remove(host_label);
         self.palette_open.lock().unwrap().remove(host_label);
-        self.pending_provider.lock().unwrap().remove(host_label);
     }
 
     pub fn set_pending_provider(&self, host_label: &str, provider_id: &str) {
@@ -332,20 +337,56 @@ async fn hosted_swap_to_provider(
     host_label: &str,
     provider: WebviewProvider,
 ) -> Result<(), String> {
+    log::debug!(
+        target: "app_lib::services::ai_webview",
+        "hosted_swap_to_provider: ENTER host={host_label} provider_id={} provider_url={}",
+        provider.id,
+        provider.url,
+    );
+
     let host = app
         .get_window(host_label)
         .ok_or_else(|| format!("missing host window: {host_label}"))?;
 
+    let pre_webviews: Vec<String> = host.webviews().iter().map(|w| w.label().to_string()).collect();
+    log::debug!(
+        target: "app_lib::services::ai_webview",
+        "hosted_swap_to_provider: pre-state host={host_label} webviews={pre_webviews:?}",
+    );
+
     let child_label = hosted_child_label(host_label, &provider);
 
-    let already_created = app
+    let state_says_created = app
         .try_state::<AiWebviewState>()
         .map(|s| s.has_hosted_child(host_label, &provider.id))
         .unwrap_or(false);
+    let webview_exists = app.get_webview(&child_label).is_some();
+    let already_created = webview_exists;
+
+    if state_says_created && !webview_exists {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "hosted_swap_to_provider: stale hosted-state for {child_label} (state says created but webview missing) — clearing",
+        );
+        if let Some(s) = app.try_state::<AiWebviewState>() {
+            s.unmark_hosted_child(host_label, &provider.id);
+            s.remove_provider(&child_label);
+        }
+    }
+
+    log::debug!(
+        target: "app_lib::services::ai_webview",
+        "hosted_swap_to_provider: child_label={child_label} already_created={already_created} (state_says={state_says_created}, webview_exists={webview_exists})",
+    );
 
     if !already_created {
         let (logical_w, logical_h) = host_logical_size(&host)?;
         let (pos, size) = content_layout(logical_w, logical_h);
+        log::debug!(
+            target: "app_lib::services::ai_webview",
+            "hosted_swap_to_provider: creating child host_size=({logical_w},{logical_h}) pos=({},{}) size=({},{})",
+            pos.x, pos.y, size.width, size.height,
+        );
         let content_url = tauri::Url::parse(&provider.url).map_err(|e| e.to_string())?;
         let init_script = initialization_script(&provider);
         let reinject = reinject_script();
@@ -361,6 +402,10 @@ async fn hosted_swap_to_provider(
                 if !url.as_str().starts_with(ROUTER_SENTINEL) {
                     return true;
                 }
+                log::debug!(
+                    target: "app_lib::services::ai_webview",
+                    "on_navigation: router sentinel detected webview={nav_webview_label} url={url}",
+                );
                 match parse_router_message(url) {
                     Some(msg) => {
                         let app = app_for_nav.clone();
@@ -382,6 +427,12 @@ async fn hosted_swap_to_provider(
             })
             .on_page_load(move |webview, payload| {
                 if payload.event() == PageLoadEvent::Finished {
+                    log::debug!(
+                        target: "app_lib::services::ai_webview",
+                        "on_page_load Finished: webview={} url={}",
+                        webview.label(),
+                        webview.url().map(|u| u.to_string()).unwrap_or_default(),
+                    );
                     if let Err(e) = webview.eval(&reinject) {
                         log::warn!(
                             target: "app_lib::services::ai_webview",
@@ -391,9 +442,22 @@ async fn hosted_swap_to_provider(
                 }
             });
 
-        let child_webview = host
-            .add_child(builder, pos, size)
-            .map_err(|e| e.to_string())?;
+        let child_webview = match host.add_child(builder, pos, size) {
+            Ok(w) => {
+                log::info!(
+                    target: "app_lib::services::ai_webview",
+                    "hosted_swap_to_provider: add_child OK host={host_label} label={child_label}",
+                );
+                w
+            }
+            Err(e) => {
+                log::error!(
+                    target: "app_lib::services::ai_webview",
+                    "hosted_swap_to_provider: add_child FAILED host={host_label} label={child_label}: {e}",
+                );
+                return Err(e.to_string());
+            }
+        };
         enable_media_for_webview(&child_webview);
         configure_linux_child_packing(&child_webview, LinuxChildRole::Content);
         if cfg!(target_os = "linux") && uses_custom_titlebar(host_label) {
@@ -405,9 +469,11 @@ async fn hosted_swap_to_provider(
             state.set_provider(&child_label, &provider);
         }
 
+        let post_create_webviews: Vec<String> =
+            host.webviews().iter().map(|w| w.label().to_string()).collect();
         log::info!(
             target: "app_lib::services::ai_webview",
-            "hosted child created: host={host_label} label={child_label} url={}",
+            "hosted child created: host={host_label} label={child_label} url={} host_webviews_now={post_create_webviews:?}",
             provider.url,
         );
     }
@@ -415,22 +481,54 @@ async fn hosted_swap_to_provider(
     let target = app
         .get_webview(&child_label)
         .ok_or_else(|| format!("missing child webview: {child_label}"))?;
-    target.show().map_err(|e| e.to_string())?;
+    match target.show() {
+        Ok(_) => log::debug!(
+            target: "app_lib::services::ai_webview",
+            "hosted_swap_to_provider: target.show OK label={child_label}",
+        ),
+        Err(e) => {
+            log::error!(
+                target: "app_lib::services::ai_webview",
+                "hosted_swap_to_provider: target.show FAILED label={child_label}: {e}",
+            );
+            return Err(e.to_string());
+        }
+    }
 
     for webview in host.webviews() {
         let label = webview.label();
         if label == child_label || is_toolbar_label(label) {
+            log::trace!(
+                target: "app_lib::services::ai_webview",
+                "hosted_swap_to_provider: skip-hide {label} (target or toolbar)",
+            );
             continue;
         }
-        if let Err(e) = webview.hide() {
-            log::warn!(
+        match webview.hide() {
+            Ok(_) => log::debug!(
                 target: "app_lib::services::ai_webview",
-                "hide {label} failed: {e}",
-            );
+                "hosted_swap_to_provider: hide OK label={label}",
+            ),
+            Err(e) => log::warn!(
+                target: "app_lib::services::ai_webview",
+                "hosted_swap_to_provider: hide FAILED label={label}: {e}",
+            ),
         }
     }
 
-    target.set_focus().map_err(|e| e.to_string())?;
+    match target.set_focus() {
+        Ok(_) => log::debug!(
+            target: "app_lib::services::ai_webview",
+            "hosted_swap_to_provider: set_focus OK label={child_label}",
+        ),
+        Err(e) => {
+            log::error!(
+                target: "app_lib::services::ai_webview",
+                "hosted_swap_to_provider: set_focus FAILED label={child_label}: {e}",
+            );
+            return Err(e.to_string());
+        }
+    }
 
     if let Err(e) = host.set_title(&format!("{} — Promptheus", provider.name)) {
         log::warn!(
@@ -522,6 +620,11 @@ pub fn mark_active_webview(app: &tauri::AppHandle, host_label: &str, webview_lab
 }
 
 pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result<(), String> {
+    log::debug!(
+        target: "app_lib::services::ai_webview",
+        "swap_to_palette: ENTER host={host_label}",
+    );
+
     let host = app
         .get_window(host_label)
         .ok_or_else(|| format!("missing host window: {host_label}"))?;
@@ -531,6 +634,10 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
         .ok_or_else(|| "ai webview state missing".to_string())?;
 
     if state.is_palette_open(host_label) {
+        log::debug!(
+            target: "app_lib::services::ai_webview",
+            "swap_to_palette: already open host={host_label} (no-op)",
+        );
         if let Some(cd) = app.get_webview(host_label) {
             let _ = cd.set_focus();
         }
@@ -540,6 +647,10 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
     let previous = state
         .get_active(host_label)
         .unwrap_or_else(|| host_label.to_string());
+    log::debug!(
+        target: "app_lib::services::ai_webview",
+        "swap_to_palette: previous_active={previous} host={host_label}",
+    );
     state.set_previous_active(host_label, &previous);
     state.set_palette_open(host_label, true);
 
@@ -586,11 +697,20 @@ pub async fn swap_from_palette(
     host_label: &str,
     selected_provider_id: Option<String>,
 ) -> Result<(), String> {
+    log::debug!(
+        target: "app_lib::services::ai_webview",
+        "swap_from_palette: ENTER host={host_label} selected={selected_provider_id:?}",
+    );
+
     let state = app
         .try_state::<AiWebviewState>()
         .ok_or_else(|| "ai webview state missing".to_string())?;
 
     if !state.is_palette_open(host_label) {
+        log::debug!(
+            target: "app_lib::services::ai_webview",
+            "swap_from_palette: palette not open host={host_label} (no-op)",
+        );
         return Ok(());
     }
 
@@ -599,6 +719,10 @@ pub async fn swap_from_palette(
     let previous = state
         .take_previous_active(host_label)
         .unwrap_or_else(|| host_label.to_string());
+    log::debug!(
+        target: "app_lib::services::ai_webview",
+        "swap_from_palette: previous_active={previous} host={host_label}",
+    );
 
     let payload = serde_json::json!({});
     let toolbar_label = shell_toolbar_label_for(host_label);
@@ -617,9 +741,17 @@ pub async fn swap_from_palette(
 
     match selected_provider_id.as_deref() {
         Some(PROMPTHEUS_PROVIDER_ID) => {
+            log::debug!(
+                target: "app_lib::services::ai_webview",
+                "swap_from_palette: routing to hosted_swap_to_conversation_dialog host={host_label}",
+            );
             hosted_swap_to_conversation_dialog(app, host_label)?;
         }
         Some(id) => {
+            log::debug!(
+                target: "app_lib::services::ai_webview",
+                "swap_from_palette: looking up provider id={id}",
+            );
             let provider = lookup_webview_provider(app, id).await;
             let Some(provider) = provider else {
                 log::warn!(
@@ -628,13 +760,26 @@ pub async fn swap_from_palette(
                 );
                 return restore_previous_webview(app, host_label, &previous);
             };
+            log::debug!(
+                target: "app_lib::services::ai_webview",
+                "swap_from_palette: routing to hosted_swap_to_provider host={host_label} provider_id={}",
+                provider.id,
+            );
             hosted_swap_to_provider(app, host_label, provider).await?;
         }
         None => {
+            log::debug!(
+                target: "app_lib::services::ai_webview",
+                "swap_from_palette: no selection, restoring previous={previous} host={host_label}",
+            );
             restore_previous_webview(app, host_label, &previous)?;
         }
     }
 
+    log::debug!(
+        target: "app_lib::services::ai_webview",
+        "swap_from_palette: DONE host={host_label}",
+    );
     Ok(())
 }
 

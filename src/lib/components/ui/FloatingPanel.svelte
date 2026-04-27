@@ -7,6 +7,7 @@
     anchorEl,
     position = "auto",
     fitContent = false,
+    flush,
     onclose,
     children,
   }: {
@@ -14,9 +15,12 @@
     anchorEl: HTMLElement | undefined;
     position?: "above" | "below" | "auto";
     fitContent?: boolean;
+    flush?: boolean;
     onclose: () => void;
     children: Snippet;
   } = $props();
+
+  let isFlush = $derived(flush ?? fitContent);
 
   let panelEl: HTMLDivElement | undefined = $state();
   let style = $state("");
@@ -85,7 +89,7 @@
     class="floating-panel"
     class:expand-down={animating && expandDirection === "down"}
     class:expand-up={animating && expandDirection === "up"}
-    class:flush={fitContent}
+    class:flush={isFlush}
     bind:this={panelEl}
     {style}
     onanimationend={handleAnimationEnd}
