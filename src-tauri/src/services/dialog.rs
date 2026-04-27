@@ -291,7 +291,16 @@ pub async fn open_or_focus(
         window_builder = window_builder.position(g.x, g.y);
     }
 
-    let window = window_builder.build().map_err(|e| e.to_string())?;
+    let dock = app.state::<DockManager>();
+    dock.dialog_opened(app);
+
+    let window = match window_builder.build() {
+        Ok(w) => w,
+        Err(e) => {
+            dock.rollback_open(app);
+            return Err(e.to_string());
+        }
+    };
 
     #[cfg(target_os = "macos")]
     if custom_titlebar {
@@ -371,9 +380,6 @@ pub async fn open_or_focus(
     let win = app
         .get_webview_window(&config.label)
         .ok_or_else(|| format!("failed to attach webview for {}", config.label))?;
-
-    let dock = app.state::<DockManager>();
-    dock.dialog_opened(app);
 
     let app_handle = app.clone();
     let label = config.label.clone();
