@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex as StdMutex;
+use std::time::{Duration, Instant};
 
 use tauri::webview::{PageLoadEvent, WebviewBuilder};
 use tauri::window::Color;
@@ -7,6 +8,7 @@ use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tokio::sync::Mutex;
 
 use crate::models::settings::WebviewProvider;
+use crate::services::notification::NotificationLevel;
 use super::dialog::{
     self, attach_undecorated_resize_handler, configure_linux_child_packing, content_layout,
     focus_host_window, focus_window, is_conversation_dialog_host, is_shell_toolbar_label,
@@ -23,6 +25,14 @@ const ROUTER_SENTINEL: &str = "https://promptheus-ai-webview-router.invalid/";
 const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
 const CONVERSATION_DIALOG_TITLE: &str = "Promptheus — chat";
 
+const COLD_SUSPEND_IDLE_THRESHOLD: Duration = Duration::from_secs(90 * 60);
+pub const COLD_SUSPEND_POLL_INTERVAL: Duration = Duration::from_secs(60);
+const UNRESPONSIVE_GRACE_SECONDS: u32 = 20;
+
+fn is_suspendable_webview_label(label: &str) -> bool {
+    label.starts_with("ai-webview-") || label.contains("::ai-webview-")
+}
+
 #[derive(Default)]
 pub struct AiWebviewState {
     hosted: StdMutex<HashMap<String, HashSet<String>>>,
@@ -32,6 +42,8 @@ pub struct AiWebviewState {
     previous_active: StdMutex<HashMap<String, String>>,
     palette_open: StdMutex<HashMap<String, bool>>,
     pending_provider: StdMutex<HashMap<String, String>>,
+    last_active: StdMutex<HashMap<String, Instant>>,
+    suspended: StdMutex<HashMap<String, String>>,
 }
 
 impl AiWebviewState {
@@ -84,6 +96,15 @@ impl AiWebviewState {
         self.active_webview.lock().unwrap().remove(host_label);
         self.previous_active.lock().unwrap().remove(host_label);
         self.palette_open.lock().unwrap().remove(host_label);
+        let prefix = format!("{host_label}::");
+        self.last_active
+            .lock()
+            .unwrap()
+            .retain(|k, _| !k.starts_with(&prefix) && k != host_label);
+        self.suspended
+            .lock()
+            .unwrap()
+            .retain(|k, _| !k.starts_with(&prefix) && k != host_label);
     }
 
     pub fn set_pending_provider(&self, host_label: &str, provider_id: &str) {
@@ -102,6 +123,68 @@ impl AiWebviewState {
             .lock()
             .unwrap()
             .insert(host_label.to_string(), webview_label.to_string());
+        self.last_active
+            .lock()
+            .unwrap()
+            .insert(webview_label.to_string(), Instant::now());
+    }
+
+    fn touch_last_active(&self, webview_label: &str) {
+        self.last_active
+            .lock()
+            .unwrap()
+            .insert(webview_label.to_string(), Instant::now());
+    }
+
+    pub fn is_suspended(&self, webview_label: &str) -> bool {
+        self.suspended.lock().unwrap().contains_key(webview_label)
+    }
+
+    fn mark_suspended(&self, webview_label: &str, restore_url: String) {
+        self.suspended
+            .lock()
+            .unwrap()
+            .insert(webview_label.to_string(), restore_url);
+    }
+
+    fn take_suspended_url(&self, webview_label: &str) -> Option<String> {
+        self.suspended.lock().unwrap().remove(webview_label)
+    }
+
+    fn unmark_suspended(&self, webview_label: &str) {
+        self.suspended.lock().unwrap().remove(webview_label);
+    }
+
+    fn cold_suspend_candidates(&self, idle_threshold: Duration) -> Vec<String> {
+        let now = Instant::now();
+        let active: HashSet<String> = self
+            .active_webview
+            .lock()
+            .unwrap()
+            .values()
+            .cloned()
+            .collect();
+        let suspended = self.suspended.lock().unwrap();
+        self.last_active
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|(label, last)| {
+                if !is_suspendable_webview_label(label) {
+                    return None;
+                }
+                if active.contains(label) {
+                    return None;
+                }
+                if suspended.contains_key(label) {
+                    return None;
+                }
+                if now.duration_since(*last) < idle_threshold {
+                    return None;
+                }
+                Some(label.clone())
+            })
+            .collect()
     }
 
     fn get_active(&self, host_label: &str) -> Option<String> {
@@ -168,8 +251,10 @@ pub fn window_label(provider: &WebviewProvider) -> String {
 #[cfg(target_os = "linux")]
 fn install_media_permissions(
     pv: tauri::webview::PlatformWebview,
+    app: tauri::AppHandle,
     webview_label: String,
 ) {
+    use webkit2gtk::glib;
     use webkit2gtk::glib::object::ObjectExt;
     use webkit2gtk::{
         DeviceInfoPermissionRequest, PermissionRequestExt, SettingsExt,
@@ -193,12 +278,181 @@ fn install_media_permissions(
         }
     });
 
-    let label_for_term = webview_label;
+    let label_for_term = webview_label.clone();
     wk.connect_web_process_terminated(move |_, reason| {
         log::warn!(
             target: "app_lib::services::ai_webview",
             "web process terminated: webview={label_for_term} reason={reason:?}",
         );
+    });
+
+    let label_for_watch = webview_label;
+    let app_for_watch = app;
+    wk.connect_is_web_process_responsive_notify(move |wv| {
+        let responsive = wv.is_web_process_responsive();
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "responsiveness changed: webview={label_for_watch} responsive={responsive}",
+        );
+        if responsive {
+            return;
+        }
+        let label = label_for_watch.clone();
+        let app = app_for_watch.clone();
+        let wv_weak = wv.downgrade();
+        glib::timeout_add_seconds_local_once(UNRESPONSIVE_GRACE_SECONDS, move || {
+            let Some(wv) = wv_weak.upgrade() else { return };
+            if wv.is_web_process_responsive() {
+                log::info!(
+                    target: "app_lib::services::ai_webview",
+                    "responsiveness recovered: webview={label}",
+                );
+                return;
+            }
+            log::error!(
+                target: "app_lib::services::ai_webview",
+                "web process unresponsive >{UNRESPONSIVE_GRACE_SECONDS}s, restarting: webview={label}",
+            );
+            wv.terminate_web_process();
+            wv.reload();
+            let provider_name = provider_display_name(&app, &label);
+            emit_provider_lifecycle_toast(
+                &app,
+                "provider_restarted",
+                NotificationLevel::Warning,
+                format!("{provider_name} was unresponsive"),
+                Some(format!("Restarted to recover (was unresponsive {UNRESPONSIVE_GRACE_SECONDS}s+)")),
+            );
+        });
+    });
+}
+
+fn provider_display_name(app: &tauri::AppHandle, webview_label: &str) -> String {
+    app.try_state::<AiWebviewState>()
+        .and_then(|s| s.snapshot(webview_label))
+        .map(|p| p.name)
+        .unwrap_or_else(|| "Provider".to_string())
+}
+
+fn resume_if_suspended(app: &tauri::AppHandle, webview_label: &str) {
+    let Some(state) = app.try_state::<AiWebviewState>() else {
+        return;
+    };
+    if !state.is_suspended(webview_label) {
+        return;
+    }
+    let Some(webview) = app.get_webview(webview_label) else {
+        state.unmark_suspended(webview_label);
+        return;
+    };
+    let restore_url = state
+        .take_suspended_url(webview_label)
+        .or_else(|| state.snapshot(webview_label).map(|p| p.url));
+    let Some(url_str) = restore_url else {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "resume_if_suspended: no restore URL for {webview_label}",
+        );
+        return;
+    };
+    let url = match tauri::Url::parse(&url_str) {
+        Ok(u) => u,
+        Err(e) => {
+            log::warn!(
+                target: "app_lib::services::ai_webview",
+                "resume_if_suspended: invalid restore URL '{url_str}' for {webview_label}: {e}",
+            );
+            return;
+        }
+    };
+    if let Err(e) = webview.navigate(url) {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "resume_if_suspended: navigate failed for {webview_label}: {e}",
+        );
+        return;
+    }
+    log::info!(
+        target: "app_lib::services::ai_webview",
+        "resumed suspended webview: {webview_label} -> {url_str}",
+    );
+}
+
+pub fn run_cold_suspend_pass(app: tauri::AppHandle) {
+    let Some(state) = app.try_state::<AiWebviewState>() else {
+        return;
+    };
+    let candidates = state.cold_suspend_candidates(COLD_SUSPEND_IDLE_THRESHOLD);
+    if candidates.is_empty() {
+        return;
+    }
+    log::info!(
+        target: "app_lib::services::ai_webview",
+        "cold-suspend pass: candidates={candidates:?}",
+    );
+    for label in candidates {
+        cold_suspend_one(&app, &label);
+    }
+}
+
+fn cold_suspend_one(app: &tauri::AppHandle, webview_label: &str) {
+    let Some(webview) = app.get_webview(webview_label) else {
+        if let Some(state) = app.try_state::<AiWebviewState>() {
+            state.unmark_suspended(webview_label);
+        }
+        return;
+    };
+    let current_url = match webview.url() {
+        Ok(u) => u.to_string(),
+        Err(e) => {
+            log::warn!(
+                target: "app_lib::services::ai_webview",
+                "cold-suspend: cannot read current URL for {webview_label}: {e}",
+            );
+            return;
+        }
+    };
+    let blank = match tauri::Url::parse("about:blank") {
+        Ok(u) => u,
+        Err(_) => return,
+    };
+    if let Err(e) = webview.navigate(blank) {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "cold-suspend: navigate to about:blank failed for {webview_label}: {e}",
+        );
+        return;
+    }
+    if let Some(state) = app.try_state::<AiWebviewState>() {
+        state.mark_suspended(webview_label, current_url.clone());
+    }
+    log::info!(
+        target: "app_lib::services::ai_webview",
+        "cold-suspend: webview={webview_label} parked (saved {current_url})",
+    );
+}
+
+fn emit_provider_lifecycle_toast(
+    app: &tauri::AppHandle,
+    event_name: &'static str,
+    level: NotificationLevel,
+    title: String,
+    message: Option<String>,
+) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<Mutex<AppState>>();
+        let guard = state.lock().await;
+        let settings = guard.config.settings().notifications.clone();
+        if let Err(e) = guard
+            .notifications
+            .notify(event_name, level, title, message, &settings)
+        {
+            log::warn!(
+                target: "app_lib::services::ai_webview",
+                "lifecycle toast emit failed: {e}",
+            );
+        }
     });
 }
 
@@ -206,9 +460,10 @@ fn enable_media_for_window(win: &tauri::WebviewWindow) {
     #[cfg(target_os = "linux")]
     {
         let label = win.label().to_string();
+        let app = win.app_handle().clone();
         let label_for_install = label.clone();
         if let Err(e) = win.with_webview(move |pv| {
-            install_media_permissions(pv, label_for_install);
+            install_media_permissions(pv, app, label_for_install);
         }) {
             log::warn!(
                 target: "app_lib::services::ai_webview",
@@ -226,9 +481,10 @@ fn enable_media_for_webview(webview: &tauri::Webview) {
     #[cfg(target_os = "linux")]
     {
         let label = webview.label().to_string();
+        let app = webview.app_handle().clone();
         let label_for_install = label.clone();
         if let Err(e) = webview.with_webview(move |pv| {
-            install_media_permissions(pv, label_for_install);
+            install_media_permissions(pv, app, label_for_install);
         }) {
             log::warn!(
                 target: "app_lib::services::ai_webview",
@@ -275,7 +531,13 @@ pub async fn open_or_focus(
             navigate_webview(&existing, u)?;
             if let Some(state) = app.try_state::<AiWebviewState>() {
                 state.set_provider(&label, &provider);
+                state.unmark_suspended(&label);
             }
+        } else {
+            resume_if_suspended(app, &label);
+        }
+        if let Some(state) = app.try_state::<AiWebviewState>() {
+            state.touch_last_active(&label);
         }
         return focus_window(&existing);
     }
@@ -498,6 +760,7 @@ async fn hosted_swap_to_provider(
     let target = app
         .get_webview(&child_label)
         .ok_or_else(|| format!("missing child webview: {child_label}"))?;
+    resume_if_suspended(app, &child_label);
     match target.show() {
         Ok(_) => log::debug!(
             target: "app_lib::services::ai_webview",
@@ -835,6 +1098,7 @@ fn restore_previous_webview(
         }
     }
 
+    resume_if_suspended(app, previous_label);
     target.show().map_err(|e| e.to_string())?;
     target.set_focus().map_err(|e| e.to_string())?;
 

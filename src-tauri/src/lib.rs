@@ -118,6 +118,23 @@ fn detect_frontmost_app() -> String {
     String::new()
 }
 
+#[cfg(target_os = "linux")]
+fn install_webkit_memory_pressure() {
+    use webkit2gtk::{MemoryPressureSettings, WebsiteDataManager};
+
+    let mut settings = MemoryPressureSettings::new();
+    settings.set_memory_limit(2048);
+    settings.set_conservative_threshold(0.50);
+    settings.set_strict_threshold(0.75);
+    settings.set_kill_threshold(0.95);
+    settings.set_poll_interval(30.0);
+    WebsiteDataManager::set_memory_pressure_settings(&mut settings);
+    log::info!(
+        target: "app_lib",
+        "WebKit memory pressure: limit=2048MB conservative=0.50 strict=0.75 kill=0.95 poll=30s",
+    );
+}
+
 const CAPABILITY_FILES: &[(&str, &str)] = &[(
     "default.json",
     include_str!("../capabilities/default.json"),
@@ -511,6 +528,9 @@ pub fn run() {
         .setup(|app| {
             assert_no_ai_webview_ipc_grant();
 
+            #[cfg(target_os = "linux")]
+            install_webkit_memory_pressure();
+
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
 
@@ -712,6 +732,31 @@ pub fn run() {
                             log::warn!(
                                 target: "app_lib::heartbeat",
                                 "heartbeat dispatch #{n} failed: {e}",
+                            );
+                        }
+                    }
+                });
+            }
+
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let mut interval = tokio::time::interval(
+                        services::ai_webview::COLD_SUSPEND_POLL_INTERVAL,
+                    );
+                    interval.set_missed_tick_behavior(
+                        tokio::time::MissedTickBehavior::Delay,
+                    );
+                    interval.tick().await;
+                    loop {
+                        interval.tick().await;
+                        let app = app_handle.clone();
+                        if let Err(e) = app_handle.run_on_main_thread(move || {
+                            services::ai_webview::run_cold_suspend_pass(app);
+                        }) {
+                            log::warn!(
+                                target: "app_lib::ai_webview",
+                                "cold-suspend dispatch failed: {e}",
                             );
                         }
                     }

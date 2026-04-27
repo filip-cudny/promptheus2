@@ -6,7 +6,9 @@ odpowiadać — context menu nie odpala się, hotkeye nie skutkują, system
 pokazuje "Wait / Force Quit".
 
 Stan: **niereprodukowane w kontrolowanych warunkach**, czekamy na powtórzenie
-z włączonymi logami diagnostycznymi (sekcja niżej).
+z włączonymi logami diagnostycznymi (sekcja niżej). W sesji 2 (2026-04-27)
+wdrożono trzy uzupełniające warstwy zabezpieczeń — patrz "Wdrożone
+zabezpieczenia — sesja 2" niżej.
 
 ---
 
@@ -166,7 +168,7 @@ mocno spowolniona ale nie zacięta.
 
 ---
 
-## Co zostało zrobione w tej sesji
+## Co zostało zrobione w tej sesji (sesja 1, 2026-04-27)
 
 Cofnięto wszystkie zmiany behawioralne (`#1` auto-reload, `#2` suspend-on-hide,
 `#4` reload button). Pozostawiono **wyłącznie logi diagnostyczne**, których
@@ -230,6 +232,118 @@ specjalnego `RUST_LOG` nie trzeba (`app_lib` ma domyślnie `debug`).
 
 ---
 
+## Wdrożone zabezpieczenia — sesja 2 (2026-04-27)
+
+Po analizie planu z sesji 1 wdrożono trzy uzupełniające warstwy. Filozofia:
+**zero kosztu UX dla zdrowego stanu**, łapanie problemu na różnych etapach
+(profilaktyka pamięci → wykrycie zawieszki → cold-suspend po długim idle).
+Wszystkie warstwy stackują się — każda działa też samodzielnie.
+
+### Layer 1 — globalne ciśnienie pamięci WebKit (Linux)
+
+`lib.rs::install_webkit_memory_pressure()` wywoływane na początku setup,
+**zanim** powstanie pierwszy webview (wymóg API
+`WebsiteDataManager::set_memory_pressure_settings`):
+
+```
+limit                   = 2048 MB per content process
+conservative_threshold  = 0.50  (start GC)
+strict_threshold        = 0.75  (twardy GC, drop caches)
+kill_threshold          = 0.95  (proces sam się ubija — Layer 2 reloaduje)
+poll_interval           = 30 s
+```
+
+Cel: WebKit aktywnie zwalnia pamięć w długo żyjących stronach (np. ChatGPT
+po godzinach), zamiast czekać na OOM. Adresuje hipotezę #4 (heap pressure
+w długo żyjącej stronie).
+
+Wymaga `webkit2gtk = { features = ["v2_34"] }` w Cargo.toml.
+
+### Layer 2 — watchdog responsywności content procesu (Linux)
+
+`services/ai_webview.rs::install_media_permissions` podpina
+`connect_is_web_process_responsive_notify`. Gdy WebKit zgłosi że proces
+przestał odpowiadać:
+
+1. Log warn `responsiveness changed: webview=… responsive=false`.
+2. Grace period 20 s przez `glib::timeout_add_seconds_local_once`.
+3. Po grace, jeśli nadal nieresponsywny → `terminate_web_process()` +
+   `reload()` + toast Warning "X was unresponsive — Restarted to recover".
+
+Adresuje hipotezy #1 i #2 (utrata kontekstu GPUProcess, zacięty reconnect
+websocket/SSE). Sygnalizuje main loop "puść tego content procesu" zanim
+user kliknie i zablokuje wątek główny synchronicznym IPC.
+
+**Ograniczenie**: działa tylko gdy main loop jeszcze chodzi w momencie
+emisji sygnału. Jeśli main loop został zablokowany jeszcze szybciej niż
+WebKit zdążył wystawić sygnał — Layer 2 nie zadziała. To dokładnie
+scenariusz z sekcji "Diagnoza"; Layer 3 jest profilaktyczny dla tego
+przypadku.
+
+### Layer 3 — cold-suspend po długim idle (cross-platform)
+
+Tokio task w `lib.rs` co 60 s wywołuje
+`services::ai_webview::run_cold_suspend_pass` przez `run_on_main_thread`.
+Pass iteruje po webview-ach providerów (`ai-webview-*` lub
+`*::ai-webview-*`) i wybiera kandydatów:
+
+- nie aktywny w żadnym hostcie,
+- nie suspended,
+- last_active > **90 min** temu (`COLD_SUSPEND_IDLE_THRESHOLD`).
+
+Dla każdego: zapisuje aktualny URL przez `webview.url()` (konkretna
+ścieżka, np. `chat.openai.com/c/<conv-id>`, nie strona główna providera),
+navigate'uje na `about:blank`, mark_suspended z URL, log info
+`cold-suspend: webview=… parked`.
+
+Resume (`resume_if_suspended`) wpięty w `hosted_swap_to_provider`,
+`restore_previous_webview`, `open_or_focus`. Przy switchu na suspended
+webview: `take_suspended_url` → `webview.navigate(url)` → unmark. Sesja
+serwerowa (cookies, localStorage) nietknięta — strona ładuje się od nowa,
+user wraca dokładnie tam gdzie był.
+
+**Cross-platform świadomie**: na macOS Jetsam i App Nap już dbają o
+pamięć/CPU w tle, ale pozbawienie zalegających stron ich DOM/JS heap po
+długim idle pomaga oba systemy. Próg 90 min zachowuje instant switching
+dla normalnego user flow (przeklikiwanie 3 providerów co kilka minut
+**nigdy** nie odpala suspend).
+
+Realizuje to samo co rozważane wcześniej `#2` (suspend ukrytych
+providerów), ale:
+
+- nie traci instant switching (próg 90 min vs natychmiast po hide),
+- używa public `webview.navigate(url)` zamiast `terminate_web_process` —
+  działa też na macOS,
+- przywraca **konkretny URL** po reload, nie tylko home providera.
+
+Bez toasta — cold-suspend dzieje się cicho, dopiero przy resume user
+widzi krótki reload (1-2 s) na ostatnio odwiedzonej URL.
+
+### Co warto wiedzieć
+
+- Heartbeat task (sesja 1) i per-step elapsed logi w `commands/menu.rs` /
+  `services/dialog.rs` **zostają** — służą do potwierdzania, że nowe
+  warstwy faktycznie redukują występowanie freeze, a jeśli się powtórzy,
+  do wskazania innej przyczyny.
+- Layer 2 toast (Warning) i logi `responsiveness changed` są jedynym
+  user-visible sygnałem że coś poszło nie tak; brak takich logów w okolicy
+  freeze = WebKit nie zauważył hangu (trzeba watchdog zewnętrzny).
+- Layer 3 nie ma toasta — cichy, idle-only mechanizm. Stan można
+  zweryfikować w logach po `cold-suspend: webview=…`.
+
+### Świadomie odrzucone w sesji 2
+
+- **Watchdog responsywności na macOS** — WKWebView nie expose'uje
+  publicznego analogu `is-web-process-responsive`. Prywatne API
+  (`_isWebProcessResponsive`) to App Store rejection territory; brak
+  realnego problemu do rozwiązania (macOS nie wykazuje freeze).
+- **Suspend natychmiastowy na hide** — niszczy instant switching, czyli
+  feature który user świadomie chce zachować.
+- **Reload button w toolbarze** — pozostaje odrzucone z powodów z sesji 1
+  (klik nie dotrze do handlera gdy main loop leży).
+
+---
+
 ## Procedura analizy po następnej reprodukcji
 
 1. Odtwórz scenariusz: ChatGPT w hostowanym dialogu, idle 15+ min, próba
@@ -247,6 +361,24 @@ specjalnego `RUST_LOG` nie trzeba (`app_lib` ma domyślnie `debug`).
    pierwszy log bez następnika — ten konkretny call jest miejscem zacięcia.
    Realne kandydaty: `x11_get_server_time` (X11 round-trip), `gtk_window()`
    (czeka na main loop), `emit_to(...)` (IPC do dziecka).
+6. Sprawdź sygnały Layer 2: `responsiveness changed: webview=… responsive=false`.
+   - **Pojawia się** + `unresponsive >20s, restarting:` → watchdog złapał
+     hang, ale jeśli freeze i tak nastąpił, znaczy że main loop był martwy
+     przed grace period (sygnał wstał za późno albo glib timer został
+     zablokowany razem z main loop).
+   - **Pojawia się** ale brak restart-loga → grace period nie doszedł do
+     końca; glib timer zablokowany. Watchdog zewnętrzny (heartbeat-driven
+     terminate przez `run_on_main_thread` z timeoutem) byłby kolejnym
+     krokiem.
+   - **Nie pojawia się** → WebKit nie zauważył hangu, content process wisi
+     w sposób który WebKit traktuje jako responsywny. Trzeba diagnozy
+     zewnętrznej (gdb attach, `wchan` na main thread).
+7. Sprawdź sygnały Layer 3: `cold-suspend: webview=…`.
+   - **Pojawia się** dla providera, na którym nastąpił freeze → cold-suspend
+     uderzył ale za późno (provider już wisiał). Rozważ obniżenie
+     `COLD_SUSPEND_IDLE_THRESHOLD`.
+   - **Nie pojawia się** → provider był używany w ciągu ostatnich 90 min
+     albo był aktywny w momencie freeze. Layer 3 nie miał szansy zadziałać.
 
 ---
 
@@ -254,16 +386,24 @@ specjalnego `RUST_LOG` nie trzeba (`app_lib` ma domyślnie `debug`).
 
 - Tauri `=2.10.3`, feature `unstable` (wymagane dla `add_child` /
   multi-webview)
-- `webkit2gtk =2.0.2` (Rust crate, pinned)
+- `webkit2gtk =2.0.2` z feature `v2_34` (od sesji 2 — odsłania
+  `MemoryPressureSettings`, `is_web_process_responsive`,
+  `terminate_web_process`)
 - `gtk 0.18`, `gdkx11 0.18`
 - Linux/X11, GNOME (xdotool dla `detect_frontmost_app_x11`)
+- System runtime: `libwebkit2gtk-4.1` 2.50.4 (Ubuntu 24.04) — feature
+  flag w crate'cie tylko otwiera widoczność API, nie zmienia runtime'u
 
 ## Pliki, których to dotyczy
 
 - `src-tauri/src/services/ai_webview.rs` — hosting multi-webview,
-  `install_media_permissions`, swap functions
+  `install_media_permissions` (Layer 2 watchdog), `cold_suspend_one` /
+  `run_cold_suspend_pass` / `resume_if_suspended` (Layer 3),
+  `AiWebviewState` (`last_active`, `suspended`)
 - `src-tauri/src/services/dialog.rs` — `focus_window`, `focus_host_window`
 - `src-tauri/src/commands/menu.rs` — `show_context_menu_window`,
   `focus_context_menu`
-- `src-tauri/src/lib.rs` — heartbeat task w setup, hotkey handler
-- `src-tauri/Cargo.toml` — wersje webkit2gtk, tauri, gtk
+- `src-tauri/src/lib.rs` — heartbeat task, `install_webkit_memory_pressure`
+  (Layer 1), tokio task cold-suspend (Layer 3), hotkey handler
+- `src-tauri/Cargo.toml` — wersje webkit2gtk (z feature `v2_34`), tauri,
+  gtk
