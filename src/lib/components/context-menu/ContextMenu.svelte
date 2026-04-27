@@ -11,7 +11,7 @@
   import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
   import FloatingPanel from "$lib/components/ui/FloatingPanel.svelte";
   import MenuList from "$lib/components/ui/MenuList.svelte";
-  import { ChevronRight, MessageSquare, MessageSquareShare, Mic, Square, X } from "lucide-svelte";
+  import { ArrowBigUp, ChevronRight, MessageSquare, MessageSquareShare, Mic, Square, X } from "lucide-svelte";
   import {
     focusOrOpenChat,
     openConversationDialog,
@@ -131,6 +131,53 @@
   let settingsAnchorEl: HTMLElement | undefined = $state();
   let activeActionMenuId = $state("");
   let activeActionAnchorEl: HTMLElement | undefined = $state();
+  let skillMetadata = $state<Record<string, SkillMeta>>({});
+
+  type SkillMeta = {
+    model: string | null;
+    parameters: Record<string, unknown> | null;
+  };
+
+  type MetaEntry = { key: string; value: string };
+
+  function buildMetaEntries(
+    meta: SkillMeta | undefined,
+    modelNames: Map<string, string>,
+  ): MetaEntry[] {
+    if (!meta) return [];
+    const out: MetaEntry[] = [];
+    if (meta.model) {
+      out.push({ key: "model", value: modelNames.get(meta.model) ?? meta.model });
+    }
+    if (meta.parameters) {
+      for (const [k, v] of Object.entries(meta.parameters)) {
+        if (v === null || v === undefined) continue;
+        const value = typeof v === "object" ? JSON.stringify(v) : String(v);
+        out.push({ key: k, value });
+      }
+    }
+    return out;
+  }
+
+  async function fetchSkillMetadata(skillId: string) {
+    if (skillId in skillMetadata) return;
+    skillMetadata = { ...skillMetadata, [skillId]: { model: null, parameters: null } };
+    try {
+      const skill = await invoke<{
+        model?: string | null;
+        parameters?: Record<string, unknown> | null;
+      }>("get_skill", { name: skillId });
+      skillMetadata = {
+        ...skillMetadata,
+        [skillId]: {
+          model: skill?.model ?? null,
+          parameters: skill?.parameters ?? null,
+        },
+      };
+    } catch (e) {
+      logDebug(`get_skill failed for ${skillId}: ${e}`);
+    }
+  }
   let hoverEnabled = $state(false);
   let shiftHeld = $state(false);
   let chatProvidersOpen = $state(false);
@@ -317,6 +364,8 @@
     activeActionMenuId = item.id;
     activeActionAnchorEl = e.currentTarget as HTMLElement;
     suppressClose();
+    const skillId = (item.data as { skill_id?: string } | null)?.skill_id;
+    if (skillId) void fetchSkillMetadata(skillId);
   }
 
   function closePanels() {
@@ -375,6 +424,14 @@
   let modelsData = $derived.by(() => {
     const modelsItem = getItems().find((i) => i.item_type === "models");
     return modelsItem ? extractModelsData(modelsItem) : null;
+  });
+  let modelNames = $derived.by(() => {
+    const map = new Map<string, string>();
+    if (modelsData) {
+      for (const m of modelsData.models) map.set(m.id, m.display_name);
+      for (const m of modelsData.stt_models) map.set(m.id, m.display_name);
+    }
+    return map;
   });
   let menuItems = $derived(getItems());
   let allSkillItems = $derived(getAllSkillItems());
@@ -648,11 +705,25 @@
                   <span class="menu-list-label">
                     {recordingThis ? "Stop recording" : "Run with transcription"}
                   </span>
-                  <span class="menu-list-shortcut">⇧</span>
+                  <span class="menu-list-shortcut"><ArrowBigUp size={14} strokeWidth={2.25} /></span>
                 </button>
-                {#if item.tooltip}
+                {@const skillId = (item.data as { skill_id?: string } | null)?.skill_id ?? ""}
+                {@const metaEntries = buildMetaEntries(skillMetadata[skillId], modelNames)}
+                {#if item.tooltip || metaEntries.length > 0}
                   <div class="menu-list-separator"></div>
-                  <div class="menu-list-info">{item.tooltip}</div>
+                  {#if item.tooltip}
+                    <div class="menu-list-info">{item.tooltip}</div>
+                  {/if}
+                  {#if metaEntries.length > 0}
+                    <div class="menu-list-meta-group">
+                      {#each metaEntries as entry (entry.key)}
+                        <div class="menu-list-meta">
+                          <span class="menu-list-meta-key">{entry.key}</span>
+                          <span class="menu-list-meta-value">{entry.value}</span>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
                 {/if}
               </MenuList>
             </FloatingPanel>
@@ -662,7 +733,7 @@
     {/each}
     {#if menuItems.some((i) => i.item_type === "skill")}
       <div class="footer-hint" class:active={shiftHeld}>
-        <span class="footer-hint-key">⇧</span>
+        <span class="footer-hint-key"><ArrowBigUp size={12} strokeWidth={2.25} /></span>
         <span>voice input</span>
         <span class="footer-hint-sep">·</span>
         <span>right-click for actions</span>
@@ -839,7 +910,7 @@
     gap: 6px;
     padding: 4px 12px 2px;
     margin-top: 2px;
-    font-size: 10px;
+    font-size: 11px;
     color: rgba(255, 255, 255, 0.25);
     user-select: none;
     transition: color 120ms ease;
@@ -850,7 +921,8 @@
   }
 
   .footer-hint-key {
-    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
   }
 
   .footer-hint-sep {

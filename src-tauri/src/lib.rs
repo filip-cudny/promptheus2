@@ -684,6 +684,40 @@ pub fn run() {
                 });
             }
 
+            {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let mut interval =
+                        tokio::time::interval(tokio::time::Duration::from_secs(5));
+                    interval.set_missed_tick_behavior(
+                        tokio::time::MissedTickBehavior::Delay,
+                    );
+                    let mut counter: u64 = 0;
+                    loop {
+                        interval.tick().await;
+                        counter += 1;
+                        let n = counter;
+                        let dispatched_at = std::time::Instant::now();
+                        log::info!(
+                            target: "app_lib::heartbeat",
+                            "heartbeat dispatch #{n}",
+                        );
+                        if let Err(e) = app_handle.run_on_main_thread(move || {
+                            let elapsed = dispatched_at.elapsed();
+                            log::info!(
+                                target: "app_lib::heartbeat",
+                                "heartbeat tick #{n} delay={elapsed:?}",
+                            );
+                        }) {
+                            log::warn!(
+                                target: "app_lib::heartbeat",
+                                "heartbeat dispatch #{n} failed: {e}",
+                            );
+                        }
+                    }
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

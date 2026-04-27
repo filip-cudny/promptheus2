@@ -504,18 +504,37 @@ pub async fn seed_geometry_from(
 }
 
 pub fn focus_window(win: &tauri::WebviewWindow) -> Result<(), String> {
+    let label = win.label().to_string();
+    log::debug!(target: "app_lib::services::dialog", "focus_window({label}): ENTER");
     #[cfg(target_os = "linux")]
     {
         use gtk::glib::object::Cast;
         use gtk::prelude::GtkWindowExt;
         use gtk::prelude::WidgetExt;
 
+        let t0 = std::time::Instant::now();
         if let Ok(gtk_win) = win.gtk_window() {
+            log::debug!(
+                target: "app_lib::services::dialog",
+                "focus_window({label}): gtk_window OK in {:?}",
+                t0.elapsed(),
+            );
             if let Some(gdk_win) = gtk_win.window() {
                 if let Ok(x11_win) = gdk_win.downcast::<gdkx11::X11Window>() {
+                    let t1 = std::time::Instant::now();
                     let timestamp = gdkx11::functions::x11_get_server_time(&x11_win);
-                    log::debug!("focus_window({}): present_with_time({})", win.label(), timestamp);
+                    log::debug!(
+                        target: "app_lib::services::dialog",
+                        "focus_window({label}): x11_get_server_time={timestamp} in {:?}",
+                        t1.elapsed(),
+                    );
+                    let t2 = std::time::Instant::now();
                     gtk_win.present_with_time(timestamp);
+                    log::debug!(
+                        target: "app_lib::services::dialog",
+                        "focus_window({label}): present_with_time done in {:?}",
+                        t2.elapsed(),
+                    );
                     return Ok(());
                 }
             }
@@ -526,6 +545,7 @@ pub fn focus_window(win: &tauri::WebviewWindow) -> Result<(), String> {
 }
 
 pub fn focus_host_window(app: &tauri::AppHandle, label: &str) -> Result<(), String> {
+    log::debug!(target: "app_lib::services::dialog", "focus_host_window({label}): ENTER");
     #[cfg(target_os = "linux")]
     {
         use gtk::glib::object::Cast;
@@ -533,11 +553,29 @@ pub fn focus_host_window(app: &tauri::AppHandle, label: &str) -> Result<(), Stri
         use gtk::prelude::WidgetExt;
 
         if let Some(win) = app.get_window(label) {
+            let t0 = std::time::Instant::now();
             if let Ok(gtk_win) = win.gtk_window() {
+                log::debug!(
+                    target: "app_lib::services::dialog",
+                    "focus_host_window({label}): gtk_window OK in {:?}",
+                    t0.elapsed(),
+                );
                 if let Some(gdk_win) = gtk_win.window() {
                     if let Ok(x11_win) = gdk_win.downcast::<gdkx11::X11Window>() {
+                        let t1 = std::time::Instant::now();
                         let timestamp = gdkx11::functions::x11_get_server_time(&x11_win);
+                        log::debug!(
+                            target: "app_lib::services::dialog",
+                            "focus_host_window({label}): x11_get_server_time={timestamp} in {:?}",
+                            t1.elapsed(),
+                        );
+                        let t2 = std::time::Instant::now();
                         gtk_win.present_with_time(timestamp);
+                        log::debug!(
+                            target: "app_lib::services::dialog",
+                            "focus_host_window({label}): present_with_time done in {:?}",
+                            t2.elapsed(),
+                        );
                         return Ok(());
                     }
                 }

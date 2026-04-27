@@ -19,7 +19,6 @@ pub struct Skill {
     pub display_name: String,
     pub description: Option<String>,
     pub model: Option<String>,
-    #[serde(skip)]
     pub parameters: Option<HashMap<String, serde_json::Value>>,
     pub body: String,
     #[serde(skip)]

@@ -135,12 +135,28 @@ pub async fn execute_menu_item(
 
 #[tauri::command]
 pub async fn show_context_menu_window(app: tauri::AppHandle) -> Result<(), String> {
+    log::debug!(target: "app_lib::commands::menu", "show_context_menu_window: ENTER");
     let win = app
         .get_webview_window("context-menu")
         .ok_or("context-menu window not found")?;
 
+    log::debug!(target: "app_lib::commands::menu", "show_context_menu_window: calling cursor_position()");
+    let t0 = std::time::Instant::now();
     let cursor_pos = win.cursor_position().map_err(|e| e.to_string())?;
+    log::debug!(
+        target: "app_lib::commands::menu",
+        "show_context_menu_window: cursor_position OK in {:?} -> ({}, {})",
+        t0.elapsed(), cursor_pos.x, cursor_pos.y,
+    );
+
+    let t1 = std::time::Instant::now();
     let monitor = find_monitor_at(&app, cursor_pos.x as i32, cursor_pos.y as i32)?;
+    log::debug!(
+        target: "app_lib::commands::menu",
+        "show_context_menu_window: find_monitor_at OK in {:?}",
+        t1.elapsed(),
+    );
+
     let work = monitor.work_area();
     let scale = monitor.scale_factor();
 
@@ -159,8 +175,14 @@ pub async fn show_context_menu_window(app: tauri::AppHandle) -> Result<(), Strin
         payload.work_x, payload.work_y, payload.work_width, payload.work_height,
     );
 
+    let t2 = std::time::Instant::now();
     app.emit_to("context-menu", "show-context-menu", payload)
         .map_err(|e| e.to_string())?;
+    log::debug!(
+        target: "app_lib::commands::menu",
+        "show_context_menu_window: emit_to OK in {:?}",
+        t2.elapsed(),
+    );
 
     Ok(())
 }
@@ -211,6 +233,7 @@ pub async fn hide_context_menu_panel(app: tauri::AppHandle) -> Result<(), String
 
 #[tauri::command]
 pub async fn focus_context_menu(app: tauri::AppHandle) -> Result<(), String> {
+    log::debug!(target: "app_lib::commands::menu", "focus_context_menu: ENTER");
     let win = app
         .get_webview_window("context-menu")
         .ok_or("context-menu window not found")?;
@@ -221,12 +244,31 @@ pub async fn focus_context_menu(app: tauri::AppHandle) -> Result<(), String> {
         use gtk::prelude::GtkWindowExt;
         use gtk::prelude::WidgetExt;
 
+        log::debug!(target: "app_lib::commands::menu", "focus_context_menu: calling gtk_window()");
+        let t0 = std::time::Instant::now();
         if let Ok(gtk_win) = win.gtk_window() {
+            log::debug!(
+                target: "app_lib::commands::menu",
+                "focus_context_menu: gtk_window OK in {:?}",
+                t0.elapsed(),
+            );
             if let Some(gdk_win) = gtk_win.window() {
                 if let Ok(x11_win) = gdk_win.downcast::<gdkx11::X11Window>() {
+                    log::debug!(target: "app_lib::commands::menu", "focus_context_menu: calling x11_get_server_time");
+                    let t1 = std::time::Instant::now();
                     let timestamp = gdkx11::functions::x11_get_server_time(&x11_win);
-                    log::debug!("focus_context_menu: present_with_time({})", timestamp);
+                    log::debug!(
+                        target: "app_lib::commands::menu",
+                        "focus_context_menu: x11_get_server_time={timestamp} in {:?}",
+                        t1.elapsed(),
+                    );
+                    let t2 = std::time::Instant::now();
                     gtk_win.present_with_time(timestamp);
+                    log::debug!(
+                        target: "app_lib::commands::menu",
+                        "focus_context_menu: present_with_time done in {:?}",
+                        t2.elapsed(),
+                    );
                     return Ok(());
                 }
             }

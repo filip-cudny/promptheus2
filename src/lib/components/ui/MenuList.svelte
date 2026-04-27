@@ -37,11 +37,11 @@
     border: 0;
     background: transparent;
     color: rgba(255, 255, 255, 0.85);
-    padding: 6px 12px;
+    padding: 7px 12px;
     text-align: left;
     cursor: pointer;
     font: inherit;
-    line-height: 1;
+    line-height: 1.35;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -73,9 +73,10 @@
   }
 
   .menu-list :global(.menu-list-shortcut) {
-    color: rgba(255, 255, 255, 0.35);
-    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
     padding-left: 8px;
+    display: inline-flex;
+    align-items: center;
   }
 
   .menu-list :global(.menu-list-separator) {
@@ -90,6 +91,35 @@
     font-size: 12px;
     line-height: 1.4;
     white-space: normal;
+  }
+
+  .menu-list :global(.menu-list-meta-group) {
+    padding: 2px 0 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .menu-list :global(.menu-list-meta) {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 2px 12px;
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  .menu-list :global(.menu-list-meta-key) {
+    color: rgba(255, 255, 255, 0.35);
+    flex-shrink: 0;
+  }
+
+  .menu-list :global(.menu-list-meta-value) {
+    color: rgba(255, 255, 255, 0.7);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    margin-left: auto;
+    text-align: right;
+    word-break: break-all;
   }
 
   .menu-list :global(.menu-list-icon) {

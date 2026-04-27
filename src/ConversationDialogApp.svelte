@@ -110,13 +110,13 @@
         }
         return;
       }
-      if (e.key === "ArrowDown") {
+      if (e.key === "ArrowDown" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "j")) {
         e.preventDefault();
         e.stopImmediatePropagation();
         paletteIndex = Math.min(filtered.length - 1, paletteIndex + 1);
         return;
       }
-      if (e.key === "ArrowUp") {
+      if (e.key === "ArrowUp" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k")) {
         e.preventDefault();
         e.stopImmediatePropagation();
         paletteIndex = Math.max(0, paletteIndex - 1);
@@ -389,7 +389,7 @@
         {/each}
       </div>
       <div class="palette-footer">
-        <span>↑↓ navigate</span>
+        <span>↑↓ / ⌃jk navigate</span>
         <span>↵ select</span>
         <span>esc close</span>
       </div>

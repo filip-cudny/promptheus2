@@ -18,7 +18,7 @@ use crate::commands::settings::AppState;
 
 const DEFAULT_WIDTH: f64 = 1000.0;
 const DEFAULT_HEIGHT: f64 = 720.0;
-const AI_WEBVIEW_BG: Color = Color(0xff, 0xff, 0xff, 0xff);
+const AI_WEBVIEW_BG: Color = Color(0x1e, 0x1e, 0x1e, 0xff);
 const ROUTER_SENTINEL: &str = "https://promptheus-ai-webview-router.invalid/";
 const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
 const CONVERSATION_DIALOG_TITLE: &str = "Promptheus — chat";
@@ -166,7 +166,10 @@ pub fn window_label(provider: &WebviewProvider) -> String {
 }
 
 #[cfg(target_os = "linux")]
-fn install_media_permissions(pv: tauri::webview::PlatformWebview) {
+fn install_media_permissions(
+    pv: tauri::webview::PlatformWebview,
+    webview_label: String,
+) {
     use webkit2gtk::glib::object::ObjectExt;
     use webkit2gtk::{
         DeviceInfoPermissionRequest, PermissionRequestExt, SettingsExt,
@@ -189,13 +192,24 @@ fn install_media_permissions(pv: tauri::webview::PlatformWebview) {
             false
         }
     });
+
+    let label_for_term = webview_label;
+    wk.connect_web_process_terminated(move |_, reason| {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "web process terminated: webview={label_for_term} reason={reason:?}",
+        );
+    });
 }
 
 fn enable_media_for_window(win: &tauri::WebviewWindow) {
     #[cfg(target_os = "linux")]
     {
         let label = win.label().to_string();
-        if let Err(e) = win.with_webview(install_media_permissions) {
+        let label_for_install = label.clone();
+        if let Err(e) = win.with_webview(move |pv| {
+            install_media_permissions(pv, label_for_install);
+        }) {
             log::warn!(
                 target: "app_lib::services::ai_webview",
                 "install media permissions failed for window {label}: {e}",
@@ -212,7 +226,10 @@ fn enable_media_for_webview(webview: &tauri::Webview) {
     #[cfg(target_os = "linux")]
     {
         let label = webview.label().to_string();
-        if let Err(e) = webview.with_webview(install_media_permissions) {
+        let label_for_install = label.clone();
+        if let Err(e) = webview.with_webview(move |pv| {
+            install_media_permissions(pv, label_for_install);
+        }) {
             log::warn!(
                 target: "app_lib::services::ai_webview",
                 "install media permissions failed for webview {label}: {e}",
