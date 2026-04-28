@@ -9,7 +9,8 @@
   import { getSettings } from "$lib/services/settings";
   import { getContextWindowSize } from "$lib/utils/contextWindow";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import { PanelLeft, SquarePen } from "lucide-svelte";
+  import { PanelLeft, RefreshCw, SquarePen } from "lucide-svelte";
+  import { providerIconSvg } from "$lib/icons/providerIcons";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
   import ConversationArea from "$lib/components/prompt/ConversationArea.svelte";
   import InputArea from "$lib/components/prompt/InputArea.svelte";
@@ -34,7 +35,7 @@
     new_chat: boolean;
   }
 
-  type ProviderEntry = { kind: "provider"; id: string; name: string };
+  type ProviderEntry = { kind: "provider"; id: string; name: string; url?: string };
   type ActionEntry = { kind: "action"; id: string; name: string };
   type PaletteEntry = ProviderEntry | ActionEntry;
 
@@ -64,7 +65,7 @@
 
   let providers = $derived<ProviderEntry[]>([
     { kind: "provider", id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
-    ...webviewProviders.map<ProviderEntry>((p) => ({ kind: "provider", id: p.id, name: p.name })),
+    ...webviewProviders.map<ProviderEntry>((p) => ({ kind: "provider", id: p.id, name: p.name, url: p.url })),
   ]);
 
   let activeProviderName = $derived(
@@ -408,7 +409,7 @@
         oninput={() => (paletteIndex = 0)}
         class="palette-input"
         type="text"
-        placeholder="Switch provider..."
+        placeholder="Search providers and actions..."
         autocomplete="off"
         spellcheck="false"
       />
@@ -426,6 +427,16 @@
             onmouseenter={() => (paletteIndex = i)}
             onclick={() => selectEntry(entry)}
           >
+            <span class="palette-item-icon" aria-hidden="true">
+              {#if entry.kind === "provider"}
+                {@const iconSvg = providerIconSvg(entry)}
+                {#if iconSvg}
+                  {@html iconSvg}
+                {/if}
+              {:else}
+                <RefreshCw size={14} />
+              {/if}
+            </span>
             <span class="palette-item-name">{entry.name}</span>
             {#if entry.kind === "provider" && entry.id === paletteActiveId}
               <span class="palette-item-badge">active</span>
@@ -589,7 +600,31 @@
     background: rgba(255, 255, 255, 0.08);
   }
 
+  .palette-item-icon {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .palette-item-icon :global(svg) {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .palette-item-icon :global(img) {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+  }
+
   .palette-item-name {
+    flex: 1;
     font-size: 13px;
   }
 

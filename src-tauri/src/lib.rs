@@ -821,6 +821,7 @@ pub fn run() {
             commands::history::update_history_entry_title,
             commands::history::update_history_rendered,
             commands::history::search_history,
+            commands::history::list_history_skills,
             commands::execution::execute_skill,
             commands::execution::resolve_environment_section,
             commands::execution::release_conversation_context,

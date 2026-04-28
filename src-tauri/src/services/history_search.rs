@@ -1,8 +1,11 @@
+use chrono::{Local, NaiveDateTime, TimeZone, Utc};
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
 use serde::{Deserialize, Serialize};
 
 use crate::models::history::{HistoryEntry, HistoryEntryType};
+
+const TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -27,6 +30,10 @@ pub struct SearchQuery {
     pub query: String,
     pub type_filter: HistoryTypeFilter,
     pub status_filter: HistoryStatusFilter,
+    #[serde(default)]
+    pub skill_ids: Vec<String>,
+    #[serde(default)]
+    pub date_from: Option<i64>,
     pub limit: usize,
     pub offset: usize,
 }
@@ -113,6 +120,17 @@ fn sort_key(entry: &HistoryEntry) -> &str {
         .unwrap_or(entry.timestamp.as_str())
 }
 
+fn entry_timestamp(entry: &HistoryEntry) -> Option<i64> {
+    let raw = entry
+        .updated_at
+        .as_deref()
+        .or(entry.created_at.as_deref())
+        .unwrap_or(entry.timestamp.as_str());
+    let naive = NaiveDateTime::parse_from_str(raw, TIMESTAMP_FORMAT).ok()?;
+    let local_dt = Local.from_local_datetime(&naive).single()?;
+    Some(local_dt.with_timezone(&Utc).timestamp())
+}
+
 pub struct HistorySearch {
     matcher: Matcher,
 }
@@ -125,11 +143,23 @@ impl HistorySearch {
     }
 
     pub fn run(&mut self, entries: &[HistoryEntry], query: &SearchQuery) -> SearchResponse {
-        let filtered: Vec<&HistoryEntry> = entries
+        let mut filtered: Vec<&HistoryEntry> = entries
             .iter()
             .filter(|e| matches_type_filter(e, query.type_filter))
             .filter(|e| matches_status_filter(e, query.status_filter))
             .collect();
+
+        if !query.skill_ids.is_empty() {
+            filtered.retain(|e| {
+                e.skill_id
+                    .as_ref()
+                    .map_or(false, |id| query.skill_ids.iter().any(|q| q == id))
+            });
+        }
+
+        if let Some(from) = query.date_from {
+            filtered.retain(|e| entry_timestamp(e).map_or(false, |ts| ts >= from));
+        }
 
         let trimmed_query = query.query.trim();
 
@@ -262,9 +292,15 @@ mod tests {
             query: String::new(),
             type_filter: HistoryTypeFilter::All,
             status_filter: HistoryStatusFilter::All,
+            skill_ids: Vec::new(),
+            date_from: None,
             limit: 50,
             offset: 0,
         }
+    }
+
+    fn local_format(ts: chrono::DateTime<Local>) -> String {
+        ts.format(TIMESTAMP_FORMAT).to_string()
     }
 
     #[test]
@@ -417,6 +453,77 @@ mod tests {
     }
 
     #[test]
+    fn skill_filter_single_id_keeps_only_matching_entries() {
+        let mut search = HistorySearch::new();
+
+        let mut a = make_entry("a", "translate body");
+        a.skill_id = Some("translate".into());
+        a.skill_name = Some("Translate".into());
+
+        let mut b = make_entry("b", "summarize body");
+        b.skill_id = Some("summarize".into());
+        b.skill_name = Some("Summarize".into());
+
+        let c = make_entry("c", "no skill");
+
+        let entries = vec![a, b, c];
+
+        let mut q = empty_query();
+        q.skill_ids = vec!["translate".into()];
+
+        let response = search.run(&entries, &q);
+        assert_eq!(response.total, 1);
+        assert_eq!(response.results[0].entry.id, "a");
+    }
+
+    #[test]
+    fn skill_filter_multiple_ids_uses_or_semantics() {
+        let mut search = HistorySearch::new();
+
+        let mut a = make_entry("a", "translate body");
+        a.skill_id = Some("translate".into());
+
+        let mut b = make_entry("b", "summarize body");
+        b.skill_id = Some("summarize".into());
+
+        let mut c = make_entry("c", "rewrite body");
+        c.skill_id = Some("rewrite".into());
+
+        let entries = vec![a, b, c];
+
+        let mut q = empty_query();
+        q.skill_ids = vec!["translate".into(), "rewrite".into()];
+
+        let response = search.run(&entries, &q);
+        assert_eq!(response.total, 2);
+        let ids: Vec<String> = response
+            .results
+            .iter()
+            .map(|r| r.entry.id.clone())
+            .collect();
+        assert!(ids.contains(&"a".to_string()));
+        assert!(ids.contains(&"c".to_string()));
+        assert!(!ids.contains(&"b".to_string()));
+    }
+
+    #[test]
+    fn skill_filter_empty_is_noop() {
+        let mut search = HistorySearch::new();
+
+        let mut a = make_entry("a", "translate body");
+        a.skill_id = Some("translate".into());
+
+        let b = make_entry("b", "no skill");
+
+        let entries = vec![a, b];
+
+        let q = empty_query();
+
+        let response = search.run(&entries, &q);
+        assert_eq!(response.total, 2);
+    }
+
+    #[test]
     fn type_filter_speech_returns_only_transcriptions() {
         let mut search = HistorySearch::new();
 
@@ -440,5 +547,74 @@ mod tests {
         let response = search.run(&entries, &q);
         assert_eq!(response.total, 1);
         assert_eq!(response.results[0].entry.id, "trans");
+    }
+
+    #[test]
+    fn date_from_filter_keeps_only_recent_entries() {
+        let mut search = HistorySearch::new();
+
+        let now = Local::now();
+        let recent_ts = local_format(now - chrono::Duration::hours(1));
+        let old_ts = local_format(now - chrono::Duration::days(30));
+
+        let mut recent = make_entry("recent", "recent body");
+        recent.created_at = Some(recent_ts.clone());
+        recent.timestamp = recent_ts;
+
+        let mut old = make_entry("old", "old body");
+        old.created_at = Some(old_ts.clone());
+        old.timestamp = old_ts;
+
+        let entries = vec![recent, old];
+
+        let mut q = empty_query();
+        q.date_from = Some((now - chrono::Duration::hours(24)).timestamp());
+
+        let response = search.run(&entries, &q);
+        assert_eq!(response.total, 1);
+        assert_eq!(response.results[0].entry.id, "recent");
+    }
+
+    #[test]
+    fn date_from_none_returns_all_entries() {
+        let mut search = HistorySearch::new();
+
+        let mut a = make_entry("a", "a body");
+        a.created_at = Some("2020-01-01 00:00:00".into());
+        let mut b = make_entry("b", "b body");
+        b.created_at = Some("2026-01-01 00:00:00".into());
+
+        let entries = vec![a, b];
+
+        let q = empty_query();
+
+        let response = search.run(&entries, &q);
+        assert_eq!(response.total, 2);
+    }
+
+    #[test]
+    fn date_from_skips_entries_with_unparseable_timestamp() {
+        let mut search = HistorySearch::new();
+
+        let now = Local::now();
+        let recent_ts = local_format(now - chrono::Duration::minutes(5));
+
+        let mut good = make_entry("good", "good body");
+        good.created_at = Some(recent_ts.clone());
+        good.timestamp = recent_ts;
+
+        let mut corrupt = make_entry("corrupt", "corrupt body");
+        corrupt.created_at = Some("not-a-real-timestamp".into());
+        corrupt.timestamp = "garbage".into();
+        corrupt.updated_at = None;
+
+        let entries = vec![good, corrupt];
+
+        let mut q = empty_query();
+        q.date_from = Some((now - chrono::Duration::hours(1)).timestamp());
+
+        let response = search.run(&entries, &q);
+        assert_eq!(response.total, 1);
+        assert_eq!(response.results[0].entry.id, "good");
     }
 }

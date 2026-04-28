@@ -34,7 +34,11 @@
     if (searchStore.results.length > 0) return null;
     if (store.entries.length === 0) return "no-history";
     if (searchStore.query.trim() !== "") return "no-query-match";
-    if (searchStore.typeFilter !== "all" || searchStore.statusFilter !== "all") {
+    if (
+      searchStore.typeFilter !== "all" ||
+      searchStore.statusFilter !== "all" ||
+      searchStore.skillFilter.size > 0
+    ) {
       return "no-filter-match";
     }
     return "no-history";
@@ -50,12 +54,14 @@
     searchStore.query;
     searchStore.typeFilter;
     searchStore.statusFilter;
+    searchStore.skillFilter;
     currentPage = 0;
   });
 
   $effect(() => {
     store.entries.length;
     searchStore.refresh();
+    searchStore.refreshSkills();
   });
 
   function handleWindowKeydown(e: KeyboardEvent) {
@@ -93,6 +99,12 @@
 
 <div class="dialog-shell">
   <HistoryToolbar {searchStore} bind:searchInput />
+
+  <span aria-live="polite" aria-atomic="true" class="sr-only">
+    {searchStore.loading
+      ? "Searching"
+      : `${searchStore.total} ${searchStore.total === 1 ? "result" : "results"}`}
+  </span>
 
   <div class="entries-list" class:loading={searchStore.loading && pageResults.length === 0}>
     {#each pageResults as result (result.entry.id)}
@@ -238,5 +250,23 @@
   .nav-btn:disabled {
     color: rgba(255, 255, 255, 0.15);
     cursor: default;
+  }
+
+  .nav-btn:focus-visible,
+  .page-size-btn:focus-visible {
+    outline: 2px solid rgba(100, 160, 255, 0.6);
+    outline-offset: 1px;
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 </style>

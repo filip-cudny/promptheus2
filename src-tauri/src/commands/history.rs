@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
@@ -8,6 +10,13 @@ use crate::models::history::{
 use crate::services::history_search::{SearchQuery, SearchResponse};
 
 use super::settings::AppState;
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SkillCount {
+    pub skill_id: String,
+    pub skill_name: String,
+    pub count: usize,
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct LastInteractionData {
@@ -231,14 +240,49 @@ pub async fn search_history(
     let response = state.history_search.run(&entries, &query);
     log::debug!(
         target: "app_lib::history_search",
-        "search_history: query='{}' type={:?} status={:?} total={} returned={}",
+        "search_history: query='{}' type={:?} status={:?} skills={} date_from={:?} total={} returned={}",
         query.query,
         query.type_filter,
         query.status_filter,
+        query.skill_ids.len(),
+        query.date_from,
         response.total,
         response.results.len(),
     );
     Ok(response)
+}
+
+fn collect_skill_counts(entries: &[HistoryEntry]) -> Vec<SkillCount> {
+    let mut map: HashMap<String, SkillCount> = HashMap::new();
+    for e in entries.iter() {
+        if let (Some(id), Some(name)) = (&e.skill_id, &e.skill_name) {
+            map.entry(id.clone())
+                .and_modify(|c| c.count += 1)
+                .or_insert(SkillCount {
+                    skill_id: id.clone(),
+                    skill_name: name.clone(),
+                    count: 1,
+                });
+        }
+    }
+    let mut list: Vec<SkillCount> = map.into_values().collect();
+    list.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.skill_name.cmp(&b.skill_name)));
+    list
+}
+
+#[tauri::command]
+pub async fn list_history_skills(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<SkillCount>, String> {
+    let state = state.lock().await;
+    let entries = state.history.get_history();
+    let list = collect_skill_counts(&entries);
+    log::debug!(
+        target: "app_lib::history_search",
+        "list_history_skills: returned {} unique skills",
+        list.len(),
+    );
+    Ok(list)
 }
 
 #[tauri::command]
@@ -251,4 +295,65 @@ pub async fn copy_history_content(
         .clipboard
         .set_text(&content)
         .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::history::HistoryEntryType;
+
+    fn make_entry(id: &str, skill_id: Option<&str>, skill_name: Option<&str>) -> HistoryEntry {
+        HistoryEntry {
+            id: id.into(),
+            timestamp: "2026-01-01 00:00:00".into(),
+            input_content: "input".into(),
+            entry_type: HistoryEntryType::Text,
+            output_content: None,
+            skill_id: skill_id.map(|s| s.to_string()),
+            success: true,
+            error: None,
+            is_multi_turn: false,
+            skill_name: skill_name.map(|s| s.to_string()),
+            conversation_data: None,
+            created_at: Some("2026-01-01 00:00:00".into()),
+            updated_at: None,
+            quick_action: false,
+            title: None,
+            input_content_rendered: None,
+            output_content_rendered: None,
+        }
+    }
+
+    #[test]
+    fn collect_skill_counts_aggregates_and_sorts_by_count_desc_then_name_asc() {
+        let entries = vec![
+            make_entry("a", Some("translate"), Some("Translate")),
+            make_entry("b", Some("translate"), Some("Translate")),
+            make_entry("c", Some("translate"), Some("Translate")),
+            make_entry("d", Some("rewrite"), Some("Rewrite")),
+            make_entry("e", Some("rewrite"), Some("Rewrite")),
+            make_entry("f", Some("summarize"), Some("Summarize")),
+            make_entry("g", Some("expand"), Some("Expand")),
+            make_entry("h", None, None),
+            make_entry("i", Some("partial"), None),
+            make_entry("j", None, Some("orphan")),
+        ];
+
+        let counts = collect_skill_counts(&entries);
+        assert_eq!(counts.len(), 4);
+        assert_eq!(counts[0].skill_id, "translate");
+        assert_eq!(counts[0].count, 3);
+        assert_eq!(counts[1].skill_id, "rewrite");
+        assert_eq!(counts[1].count, 2);
+        assert_eq!(counts[2].skill_name, "Expand");
+        assert_eq!(counts[2].count, 1);
+        assert_eq!(counts[3].skill_name, "Summarize");
+        assert_eq!(counts[3].count, 1);
+    }
+
+    #[test]
+    fn collect_skill_counts_empty_input_returns_empty_list() {
+        let counts = collect_skill_counts(&[]);
+        assert!(counts.is_empty());
+    }
 }

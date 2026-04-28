@@ -3,13 +3,22 @@ import type { HistoryEntry } from "$lib/types/history";
 export type HistoryTypeFilter = "all" | "chat" | "quick_action" | "speech";
 export type HistoryStatusFilter = "all" | "success" | "error";
 export type SearchField = "title" | "skill_name" | "input_content" | "output_content";
+export type TimeRangePreset = "all" | "today" | "7d" | "30d";
 
 export interface SearchQuery {
   query: string;
   type_filter: HistoryTypeFilter;
   status_filter: HistoryStatusFilter;
+  skill_ids?: string[];
+  date_from?: number | null;
   limit: number;
   offset: number;
+}
+
+export interface SkillCount {
+  skill_id: string;
+  skill_name: string;
+  count: number;
 }
 
 export interface FieldMatch {
