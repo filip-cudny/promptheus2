@@ -2,6 +2,7 @@
   import { Mic, MessageSquare, MessagesSquare, CircleAlert, SquareArrowOutUpRight, Copy, Check } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { extractSkillDisplayText } from "$lib/utils/skillDisplay";
+  import { highlightFor, truncateAroundMatch } from "$lib/utils/highlightMatches";
   import type { HistoryEntry } from "$lib/types";
   import type { FieldMatch } from "$lib/types/historySearch";
 
@@ -40,7 +41,16 @@
     ),
   );
 
-  let inputPreview = $derived(truncate(extractSkillDisplayText(entry.input_content), 120));
+  let inputForDisplay = $derived(entry.input_content_rendered ?? entry.input_content);
+
+  let inputPreview = $derived(
+    truncateAroundMatch(
+      extractSkillDisplayText(inputForDisplay),
+      matches,
+      "input_content",
+      120,
+    ),
+  );
 
   let totalDuration = $derived.by(() => {
     const nodes = entry.conversation_data?.nodes;
@@ -61,11 +71,6 @@
     const m = Math.floor(seconds / 60);
     const s = Math.round(seconds % 60);
     return s > 0 ? `${m}m ${s}s` : `${m}m`;
-  }
-
-  function truncate(text: string, max: number): string {
-    if (!text || text.length <= max) return text ?? "";
-    return text.slice(0, max) + "…";
   }
 
   function formatTimestamp(entry: HistoryEntry): string {
@@ -106,7 +111,7 @@
 
   <div class="entry-body">
     <div class="entry-header">
-      <span class="prompt-name">{displayName}</span>
+      <span class="prompt-name">{@html highlightFor(displayName, matches, ["title", "skill_name"])}</span>
       {#if turnCount}
         <span class="turn-count">({turnCount} turns)</span>
       {/if}
@@ -128,8 +133,8 @@
         </span>
       {/if}
     </div>
-    {#if inputPreview}
-      <div class="input-preview">{inputPreview}</div>
+    {#if inputPreview.text}
+      <div class="input-preview">{@html highlightFor(inputPreview.text, inputPreview.matches, ["input_content"])}</div>
     {/if}
   </div>
 </button>
@@ -267,5 +272,12 @@
 
   .copy-btn.copied {
     color: rgba(80, 200, 120, 0.9);
+  }
+
+  :global(.entry-row mark) {
+    background: rgba(255, 220, 100, 0.25);
+    color: inherit;
+    padding: 0 1px;
+    border-radius: 2px;
   }
 </style>

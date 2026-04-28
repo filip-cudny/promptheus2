@@ -8,7 +8,9 @@
   import { getUiState, setUiState } from "$lib/services/uiState";
   import type { HistoryEntry } from "$lib/types";
   import HistoryEntryRow from "$lib/components/history/HistoryEntryRow.svelte";
+  import HistoryEmptyState from "$lib/components/history/HistoryEmptyState.svelte";
   import HistoryToolbar from "$lib/components/history/HistoryToolbar.svelte";
+  import { formatActiveFilters } from "$lib/utils/historyFilters";
 
   const PAGE_SIZES = [10, 25, 50] as const;
   const PAGE_SIZE_KEY = "history-dialog.page_size";
@@ -27,6 +29,16 @@
 
   let totalPages = $derived(Math.max(1, Math.ceil(searchStore.total / pageSize)));
   let pageResults = $derived(searchStore.results);
+
+  let emptyVariant = $derived.by<"no-history" | "no-query-match" | "no-filter-match" | null>(() => {
+    if (searchStore.results.length > 0) return null;
+    if (store.entries.length === 0) return "no-history";
+    if (searchStore.query.trim() !== "") return "no-query-match";
+    if (searchStore.typeFilter !== "all" || searchStore.statusFilter !== "all") {
+      return "no-filter-match";
+    }
+    return "no-history";
+  });
 
   $effect(() => {
     if (currentPage >= totalPages) {
@@ -85,11 +97,15 @@
   <div class="entries-list" class:loading={searchStore.loading && pageResults.length === 0}>
     {#each pageResults as result (result.entry.id)}
       <HistoryEntryRow entry={result.entry} matches={result.matches} onOpen={handleOpen} />
-    {:else}
-      <div class="empty-state">
-        {searchStore.hasActiveFilters ? "No matches" : "No history yet"}
-      </div>
     {/each}
+    {#if emptyVariant}
+      <HistoryEmptyState
+        variant={emptyVariant}
+        query={searchStore.query}
+        activeFiltersLabel={formatActiveFilters(searchStore)}
+        onClearFilters={() => searchStore.clear()}
+      />
+    {/if}
   </div>
 
   {#if searchStore.total > 0}
@@ -154,15 +170,6 @@
 
   .entries-list.loading {
     opacity: 0.5;
-  }
-
-  .empty-state {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: rgba(255, 255, 255, 0.35);
-    font-size: 14px;
   }
 
   .pagination-bar {
