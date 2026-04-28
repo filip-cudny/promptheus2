@@ -23,6 +23,7 @@ pub mod execution;
 pub mod skill;
 pub mod skill_message;
 pub mod speech;
+pub mod history_search;
 pub mod sqlite_history;
 pub mod tokenizer;
 pub mod tool_confirmation;

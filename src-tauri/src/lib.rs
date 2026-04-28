@@ -184,6 +184,7 @@ use services::clipboard::ClipboardService;
 use services::config::ConfigService;
 use services::context::{ContextManagerService, ContextMenuProvider};
 use services::database::Database;
+use services::history_search::HistorySearch;
 use services::sqlite_history::SqliteHistoryService;
 use services::image_storage::ImageStorage;
 use services::mcp::McpRegistry;
@@ -683,6 +684,7 @@ pub fn run() {
                 placeholder: placeholder_service,
                 ai: ai_service,
                 history: history_service,
+                history_search: HistorySearch::new(),
                 image_storage,
                 mcp: std::sync::Arc::new(McpRegistry::empty()),
                 prompt_execution: PromptExecutionService::new(),
@@ -818,6 +820,7 @@ pub fn run() {
             commands::history::copy_history_content,
             commands::history::update_history_entry_title,
             commands::history::update_history_rendered,
+            commands::history::search_history,
             commands::execution::execute_skill,
             commands::execution::resolve_environment_section,
             commands::execution::release_conversation_context,

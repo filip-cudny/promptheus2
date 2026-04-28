@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 use crate::models::history::{
     HistoryEntry, HistoryEntryType, ImagePayload, SerializedConversationNode,
 };
+use crate::services::history_search::{SearchQuery, SearchResponse};
 
 use super::settings::AppState;
 
@@ -218,6 +219,26 @@ pub async fn clear_history(
     let state = state.lock().await;
     state.history.clear();
     emit_history_changed(&app)
+}
+
+#[tauri::command]
+pub async fn search_history(
+    state: State<'_, Mutex<AppState>>,
+    query: SearchQuery,
+) -> Result<SearchResponse, String> {
+    let mut state = state.lock().await;
+    let entries = state.history.get_history();
+    let response = state.history_search.run(&entries, &query);
+    log::debug!(
+        target: "app_lib::history_search",
+        "search_history: query='{}' type={:?} status={:?} total={} returned={}",
+        query.query,
+        query.type_filter,
+        query.status_filter,
+        response.total,
+        response.results.len(),
+    );
+    Ok(response)
 }
 
 #[tauri::command]

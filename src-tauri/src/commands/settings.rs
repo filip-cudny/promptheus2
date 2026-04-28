@@ -11,6 +11,7 @@ use crate::services::ai::AiService;
 use crate::services::clipboard::ClipboardService;
 use crate::services::config::{ConfigService, SurfaceKind};
 use crate::services::context::ContextManagerService;
+use crate::services::history_search::HistorySearch;
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::services::image_storage::ImageStorage;
 use crate::services::mcp::McpRegistry;
@@ -33,6 +34,7 @@ pub struct AppState {
     pub placeholder: PlaceholderService,
     pub ai: AiService,
     pub history: SqliteHistoryService,
+    pub history_search: HistorySearch,
     pub image_storage: ImageStorage,
     pub prompt_execution: PromptExecutionService,
     pub skill_service: SkillService,
