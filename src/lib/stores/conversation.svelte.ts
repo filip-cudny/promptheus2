@@ -25,7 +25,7 @@ import {
   updateSurfaceReasoningEffort,
   updateSurfaceEnabledTools,
 } from "$lib/services/settings";
-import { hasSkillReferences } from "$lib/utils/skillDisplay";
+import { extractSkillDisplayText, hasSkillReferences } from "$lib/utils/skillDisplay";
 import type {
   ConversationNode,
   ConversationImage,
@@ -220,6 +220,18 @@ function collectImages(tab: TabState): ImagePayload[] {
   }
 
   return images;
+}
+
+function renderNodesForHistory(nodes: SerializedConversationNode[]): {
+  inputRendered: string | null;
+  outputRendered: string | null;
+} {
+  const lastUser = [...nodes].reverse().find((n) => n.role === "user");
+  const lastAssistant = [...nodes].reverse().find((n) => n.role === "assistant");
+  return {
+    inputRendered: lastUser ? extractSkillDisplayText(lastUser.content) : null,
+    outputRendered: lastAssistant?.content ?? null,
+  };
 }
 
 function serializePathNodes(tab: TabState): ConversationNodeForExecution[] {
@@ -1118,6 +1130,7 @@ export function createConversationStore(
 
     const nodes = serializeNodes(tab.tree);
     const images = collectImages(tab);
+    const { inputRendered, outputRendered } = renderNodesForHistory(nodes);
 
     try {
       if (tab.history_entry_id) {
@@ -1130,6 +1143,8 @@ export function createConversationStore(
           images,
           modelId: tab.model_id,
           reasoningEffort: tab.reasoning_effort,
+          inputContentRendered: inputRendered,
+          outputContentRendered: outputRendered,
         });
       } else {
         const entryId = await addConversationEntry({
@@ -1145,6 +1160,8 @@ export function createConversationStore(
           images,
           modelId: tab.model_id,
           reasoningEffort: tab.reasoning_effort,
+          inputContentRendered: inputRendered,
+          outputContentRendered: outputRendered,
         });
         tab.history_entry_id = entryId;
         if (tab.tab_name !== null) {

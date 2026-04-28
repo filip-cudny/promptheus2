@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Mic, MessageSquare, MessagesSquare, CircleAlert, SquareArrowOutUpRight, Copy, Check } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import { extractSkillDisplayText } from "$lib/utils/skillDisplay";
   import type { HistoryEntry } from "$lib/types";
 
   let { entry, onOpen }: {
@@ -32,10 +33,12 @@
   );
 
   let displayName = $derived(
-    entry.title ?? entry.skill_name ?? (entry.entry_type === "speech" ? "Transcription" : "Chat"),
+    extractSkillDisplayText(
+      entry.title ?? entry.skill_name ?? (entry.entry_type === "speech" ? "Transcription" : "Chat"),
+    ),
   );
 
-  let inputPreview = $derived(truncate(entry.input_content, 120));
+  let inputPreview = $derived(truncate(extractSkillDisplayText(entry.input_content), 120));
 
   let totalDuration = $derived.by(() => {
     const nodes = entry.conversation_data?.nodes;

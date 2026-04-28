@@ -62,4 +62,6 @@ export interface HistoryEntry {
   updated_at: string | null;
   quick_action: boolean;
   title: string | null;
+  input_content_rendered: string | null;
+  output_content_rendered: string | null;
 }

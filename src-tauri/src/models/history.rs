@@ -98,6 +98,11 @@ pub struct HistoryEntry {
 
     #[serde(default)]
     pub title: Option<String>,
+
+    #[serde(default)]
+    pub input_content_rendered: Option<String>,
+    #[serde(default)]
+    pub output_content_rendered: Option<String>,
 }
 
 #[cfg(test)]
@@ -123,6 +128,8 @@ mod tests {
             updated_at: None,
             quick_action: false,
             title: None,
+            input_content_rendered: None,
+            output_content_rendered: None,
         };
 
         let json = serde_json::to_string(&entry).unwrap();
@@ -200,6 +207,8 @@ mod tests {
             updated_at: Some("2026-01-01T12:00:01Z".into()),
             quick_action: false,
             title: None,
+            input_content_rendered: None,
+            output_content_rendered: None,
         };
 
         let json = serde_json::to_string(&entry).unwrap();

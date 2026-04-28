@@ -817,6 +817,7 @@ pub fn run() {
             commands::history::clear_history,
             commands::history::copy_history_content,
             commands::history::update_history_entry_title,
+            commands::history::update_history_rendered,
             commands::execution::execute_skill,
             commands::execution::resolve_environment_section,
             commands::execution::release_conversation_context,

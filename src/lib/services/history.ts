@@ -33,6 +33,8 @@ export async function addHistoryEntry(params: {
   error: string | null;
   isMultiTurn: boolean;
   skillName: string | null;
+  inputContentRendered: string | null;
+  outputContentRendered: string | null;
 }): Promise<void> {
   return invoke("add_history_entry", params);
 }
@@ -50,6 +52,8 @@ export async function addConversationEntry(params: {
   images: ImagePayload[];
   modelId: string | null;
   reasoningEffort: string | null;
+  inputContentRendered: string | null;
+  outputContentRendered: string | null;
 }): Promise<string> {
   return invoke("add_conversation_entry", params);
 }
@@ -63,8 +67,22 @@ export async function updateConversationEntry(params: {
   images: ImagePayload[];
   modelId: string | null;
   reasoningEffort: string | null;
+  inputContentRendered: string | null;
+  outputContentRendered: string | null;
 }): Promise<void> {
   return invoke("update_conversation_entry", params);
+}
+
+export async function updateHistoryRendered(
+  entryId: string,
+  inputRendered: string | null,
+  outputRendered: string | null,
+): Promise<void> {
+  return invoke("update_history_rendered", {
+    entryId,
+    inputRendered,
+    outputRendered,
+  });
 }
 
 export async function getLastInteraction(): Promise<LastInteractionData> {

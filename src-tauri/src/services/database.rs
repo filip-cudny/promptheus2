@@ -68,6 +68,10 @@ fn run_migrations(conn: &Connection) -> Result<(), DatabaseError> {
         migrate_to_v1(conn)?;
     }
 
+    if version < 2 {
+        migrate_to_v2(conn)?;
+    }
+
     Ok(())
 }
 
@@ -109,6 +113,20 @@ fn migrate_to_v1(conn: &Connection) -> Result<(), DatabaseError> {
     Ok(())
 }
 
+fn migrate_to_v2(conn: &Connection) -> Result<(), DatabaseError> {
+    conn.execute(
+        "ALTER TABLE conversations ADD COLUMN input_content_rendered TEXT",
+        [],
+    )?;
+    conn.execute(
+        "ALTER TABLE conversations ADD COLUMN output_content_rendered TEXT",
+        [],
+    )?;
+    set_schema_version(conn, 2)?;
+    log::info!("database migrated to schema version 2");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,7 +149,7 @@ mod tests {
     fn schema_version_is_set() {
         let db = Database::open_in_memory().unwrap();
         let version = get_schema_version(db.conn());
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
     }
 
     #[test]
@@ -139,7 +157,7 @@ mod tests {
         let db = Database::open_in_memory().unwrap();
         run_migrations(db.conn()).unwrap();
         let version = get_schema_version(db.conn());
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
     }
 
     #[test]

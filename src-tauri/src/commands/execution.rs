@@ -545,6 +545,8 @@ pub async fn execute_skill(
                 vec![],
                 None,
                 None,
+                None,
+                None,
             );
             let _ = app.emit("history-changed", ());
 
