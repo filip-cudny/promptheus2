@@ -427,7 +427,11 @@
             onmouseenter={() => (paletteIndex = i)}
             onclick={() => selectEntry(entry)}
           >
-            <span class="palette-item-icon" aria-hidden="true">
+            <span
+              class="palette-item-icon"
+              class:muted={entry.kind === "action"}
+              aria-hidden="true"
+            >
               {#if entry.kind === "provider"}
                 {@const iconSvg = providerIconSvg(entry)}
                 {#if iconSvg}
@@ -621,6 +625,14 @@
     height: 100%;
     display: block;
     object-fit: contain;
+  }
+
+  .palette-item-icon.muted {
+    opacity: 0.45;
+  }
+
+  .palette-item.highlight .palette-item-icon.muted {
+    opacity: 0.75;
   }
 
   .palette-item-name {

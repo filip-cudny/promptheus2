@@ -255,12 +255,14 @@ pub async fn search_history(
 fn collect_skill_counts(entries: &[HistoryEntry]) -> Vec<SkillCount> {
     let mut map: HashMap<String, SkillCount> = HashMap::new();
     for e in entries.iter() {
-        if let (Some(id), Some(name)) = (&e.skill_id, &e.skill_name) {
-            map.entry(id.clone())
+        let id = e.skill_id.as_deref().filter(|s| !s.is_empty());
+        let name = e.skill_name.as_deref().filter(|s| !s.is_empty());
+        if let (Some(id), Some(name)) = (id, name) {
+            map.entry(id.to_string())
                 .and_modify(|c| c.count += 1)
                 .or_insert(SkillCount {
-                    skill_id: id.clone(),
-                    skill_name: name.clone(),
+                    skill_id: id.to_string(),
+                    skill_name: name.to_string(),
                     count: 1,
                 });
         }
@@ -355,5 +357,21 @@ mod tests {
     fn collect_skill_counts_empty_input_returns_empty_list() {
         let counts = collect_skill_counts(&[]);
         assert!(counts.is_empty());
+    }
+
+    #[test]
+    fn collect_skill_counts_skips_entries_with_empty_skill_id_or_name() {
+        let entries = vec![
+            make_entry("legacy-chat", Some(""), Some("Chat")),
+            make_entry("legacy-empty-name", Some("translate"), Some("")),
+            make_entry("legacy-both-empty", Some(""), Some("")),
+            make_entry("real", Some("translate"), Some("Translate")),
+        ];
+
+        let counts = collect_skill_counts(&entries);
+        assert_eq!(counts.len(), 1);
+        assert_eq!(counts[0].skill_id, "translate");
+        assert_eq!(counts[0].skill_name, "Translate");
+        assert_eq!(counts[0].count, 1);
     }
 }
