@@ -20,6 +20,10 @@ export async function newChatInHost(hostLabel: string): Promise<void> {
   await invoke("new_chat_in_host", { hostLabel });
 }
 
+export async function reloadActiveInHost(hostLabel: string): Promise<void> {
+  await invoke("reload_active_in_host", { hostLabel });
+}
+
 export async function closePalette(
   hostLabel: string,
   selectedProviderId: string | null,

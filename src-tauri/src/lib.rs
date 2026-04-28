@@ -849,6 +849,7 @@ pub fn run() {
             commands::ai_webview::get_active_provider,
             commands::ai_webview::take_pending_provider,
             commands::ai_webview::new_chat_in_host,
+            commands::ai_webview::reload_active_in_host,
             commands::ai_webview::open_palette,
             commands::ai_webview::close_palette,
             commands::provider_menu::show_provider_menu,

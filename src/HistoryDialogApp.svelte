@@ -3,10 +3,12 @@
   import { ChevronLeft, ChevronRight } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { getHistoryStore } from "$lib/stores/history.svelte";
+  import { getHistorySearchStore } from "$lib/stores/historySearch.svelte";
   import { openConversationDialog } from "$lib/services/conversationDialog";
   import { getUiState, setUiState } from "$lib/services/uiState";
   import type { HistoryEntry } from "$lib/types";
   import HistoryEntryRow from "$lib/components/history/HistoryEntryRow.svelte";
+  import HistoryToolbar from "$lib/components/history/HistoryToolbar.svelte";
 
   const PAGE_SIZES = [10, 25, 50] as const;
   const PAGE_SIZE_KEY = "history-dialog.page_size";
@@ -16,10 +18,15 @@
   let pageSize = $state(10);
   let currentPage = $state(0);
 
-  let totalPages = $derived(Math.max(1, Math.ceil(store.entries.length / pageSize)));
-  let pageEntries = $derived(
-    store.entries.slice(currentPage * pageSize, (currentPage + 1) * pageSize),
-  );
+  const searchStore = getHistorySearchStore({
+    pageSize: () => pageSize,
+    currentPage: () => currentPage,
+  });
+
+  let searchInput = $state<HTMLInputElement | null>(null);
+
+  let totalPages = $derived(Math.max(1, Math.ceil(searchStore.total / pageSize)));
+  let pageResults = $derived(searchStore.results);
 
   $effect(() => {
     if (currentPage >= totalPages) {
@@ -27,15 +34,37 @@
     }
   });
 
+  $effect(() => {
+    searchStore.query;
+    searchStore.typeFilter;
+    searchStore.statusFilter;
+    currentPage = 0;
+  });
+
+  $effect(() => {
+    store.entries.length;
+    searchStore.refresh();
+  });
+
+  function handleWindowKeydown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
+      e.preventDefault();
+      searchInput?.focus();
+      searchInput?.select();
+    }
+  }
+
   onMount(async () => {
     await store.init();
     const saved = await getUiState<number>(PAGE_SIZE_KEY);
     if (saved && PAGE_SIZES.includes(saved as (typeof PAGE_SIZES)[number])) {
       pageSize = saved;
     }
+    window.addEventListener("keydown", handleWindowKeydown);
   });
 
   onDestroy(() => {
+    window.removeEventListener("keydown", handleWindowKeydown);
     store.destroy();
   });
 
@@ -51,15 +80,19 @@
 </script>
 
 <div class="dialog-shell">
-  <div class="entries-list">
-    {#each pageEntries as entry (entry.id)}
-      <HistoryEntryRow {entry} onOpen={handleOpen} />
+  <HistoryToolbar {searchStore} bind:searchInput />
+
+  <div class="entries-list" class:loading={searchStore.loading && pageResults.length === 0}>
+    {#each pageResults as result (result.entry.id)}
+      <HistoryEntryRow entry={result.entry} matches={result.matches} onOpen={handleOpen} />
     {:else}
-      <div class="empty-state">No history yet</div>
+      <div class="empty-state">
+        {searchStore.hasActiveFilters ? "No matches" : "No history yet"}
+      </div>
     {/each}
   </div>
 
-  {#if store.entries.length > 0}
+  {#if searchStore.total > 0}
     <div class="pagination-bar">
       <div class="page-size">
         {#each PAGE_SIZES as size}
@@ -116,6 +149,11 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+    transition: opacity 120ms ease;
+  }
+
+  .entries-list.loading {
+    opacity: 0.5;
   }
 
   .empty-state {

@@ -3,9 +3,11 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import { extractSkillDisplayText } from "$lib/utils/skillDisplay";
   import type { HistoryEntry } from "$lib/types";
+  import type { FieldMatch } from "$lib/types/historySearch";
 
-  let { entry, onOpen }: {
+  let { entry, matches = [], onOpen }: {
     entry: HistoryEntry;
+    matches?: FieldMatch[];
     onOpen: (entry: HistoryEntry) => void;
   } = $props();
 

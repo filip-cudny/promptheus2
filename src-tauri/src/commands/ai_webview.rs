@@ -151,6 +151,15 @@ pub fn new_chat_in_host(app: tauri::AppHandle, host_label: String) -> Result<(),
 }
 
 #[tauri::command]
+pub fn reload_active_in_host(app: tauri::AppHandle, host_label: String) -> Result<(), String> {
+    log::info!(
+        target: "app_lib::commands::ai_webview",
+        "reload_active_in_host host={host_label}",
+    );
+    ai_webview::reload_active_in_host(&app, &host_label)
+}
+
+#[tauri::command]
 pub async fn open_palette(app: tauri::AppHandle, host_label: String) -> Result<(), String> {
     log::info!(
         target: "app_lib::commands::ai_webview",

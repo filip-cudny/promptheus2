@@ -588,6 +588,25 @@ pub fn new_chat_in_host(app: &tauri::AppHandle, host_label: &str) -> Result<(), 
     webview.navigate(parsed).map_err(|e| e.to_string())
 }
 
+pub fn reload_active_in_host(app: &tauri::AppHandle, host_label: &str) -> Result<(), String> {
+    let state = app
+        .try_state::<AiWebviewState>()
+        .ok_or_else(|| "ai webview state missing".to_string())?;
+    let active_label = state
+        .get_active(host_label)
+        .unwrap_or_else(|| host_label.to_string());
+    let webview = app
+        .get_webview(&active_label)
+        .ok_or_else(|| format!("missing webview: {active_label}"))?;
+    log::info!(
+        target: "app_lib::services::ai_webview",
+        "reload_active_in_host: host={host_label} active={active_label}",
+    );
+    webview
+        .eval("window.location.reload()")
+        .map_err(|e| e.to_string())
+}
+
 pub async fn swap_to_provider(
     app: &tauri::AppHandle,
     provider: WebviewProvider,

@@ -18,6 +18,7 @@
     PROMPTHEUS_PROVIDER_ID,
     closePalette,
     openPalette,
+    reloadActiveInHost,
   } from "$lib/services/shellToolbar";
   import { getWebviewProviders, type WebviewProvider } from "$lib/services/aiWebview";
   import { onSettingsChanged } from "$lib/services/events";
@@ -33,7 +34,11 @@
     new_chat: boolean;
   }
 
-  type PaletteEntry = { id: string; name: string };
+  type ProviderEntry = { kind: "provider"; id: string; name: string };
+  type ActionEntry = { kind: "action"; id: string; name: string };
+  type PaletteEntry = ProviderEntry | ActionEntry;
+
+  const ACTION_RELOAD_ID = "action:reload-active";
 
   const skillsStore = getSkillsStore();
   const HOST_LABEL = getCurrentWindow().label;
@@ -57,15 +62,25 @@
   let paletteInputEl: HTMLInputElement | undefined = $state();
   let paletteActiveId = $state<string>(PROMPTHEUS_PROVIDER_ID);
 
-  let providers = $derived<PaletteEntry[]>([
-    { id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
-    ...webviewProviders.map((p) => ({ id: p.id, name: p.name })),
+  let providers = $derived<ProviderEntry[]>([
+    { kind: "provider", id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
+    ...webviewProviders.map<ProviderEntry>((p) => ({ kind: "provider", id: p.id, name: p.name })),
   ]);
+
+  let activeProviderName = $derived(
+    providers.find((p) => p.id === paletteActiveId)?.name ?? "active provider",
+  );
+
+  let actions = $derived<ActionEntry[]>([
+    { kind: "action", id: ACTION_RELOAD_ID, name: `Reload ${activeProviderName}` },
+  ]);
+
+  let entries = $derived<PaletteEntry[]>([...providers, ...actions]);
 
   let filtered = $derived.by<PaletteEntry[]>(() => {
     const q = paletteQuery.trim().toLowerCase();
-    if (!q) return providers;
-    return providers.filter((p) => p.name.toLowerCase().includes(q));
+    if (!q) return entries;
+    return entries.filter((e) => e.name.toLowerCase().includes(q));
   });
 
   let contextWindowSize = $derived.by(() => {
@@ -94,6 +109,16 @@
   }
 
   async function handleGlobalKeydown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "r") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (paletteOpen) {
+        await dismissPalette(null);
+      }
+      await reloadActiveProvider();
+      return;
+    }
+
     if (paletteOpen) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -106,7 +131,7 @@
         e.stopImmediatePropagation();
         const entry = filtered[paletteIndex];
         if (entry) {
-          await dismissPalette(entry.id);
+          await selectEntry(entry);
         }
         return;
       }
@@ -140,6 +165,25 @@
       e.preventDefault();
       store.abortExecution();
     }
+  }
+
+  async function reloadActiveProvider() {
+    try {
+      await reloadActiveInHost(HOST_LABEL);
+    } catch (err) {
+      console.error("reload_active_in_host failed", err);
+    }
+  }
+
+  async function selectEntry(entry: PaletteEntry) {
+    if (entry.kind === "action") {
+      await dismissPalette(null);
+      if (entry.id === ACTION_RELOAD_ID) {
+        await reloadActiveProvider();
+      }
+      return;
+    }
+    await dismissPalette(entry.id);
   }
 
   async function dismissPalette(selectedId: string | null) {
@@ -370,6 +414,9 @@
       />
       <div class="palette-list" role="listbox">
         {#each filtered as entry, i (entry.id)}
+          {#if entry.kind === "action" && i > 0 && filtered[i - 1].kind === "provider"}
+            <div class="palette-divider" role="separator"></div>
+          {/if}
           <button
             type="button"
             role="option"
@@ -377,10 +424,10 @@
             class="palette-item"
             class:highlight={i === paletteIndex}
             onmouseenter={() => (paletteIndex = i)}
-            onclick={() => dismissPalette(entry.id)}
+            onclick={() => selectEntry(entry)}
           >
             <span class="palette-item-name">{entry.name}</span>
-            {#if entry.id === paletteActiveId}
+            {#if entry.kind === "provider" && entry.id === paletteActiveId}
               <span class="palette-item-badge">active</span>
             {/if}
           </button>
@@ -391,6 +438,7 @@
       <div class="palette-footer">
         <span>↑↓ / ⌃jk navigate</span>
         <span>↵ select</span>
+        <span>⌘R reload</span>
         <span>esc close</span>
       </div>
     </div>
@@ -558,6 +606,12 @@
     color: rgba(255, 255, 255, 0.4);
     padding: 16px;
     text-align: center;
+  }
+
+  .palette-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.06);
+    margin: 4px 0;
   }
 
   .palette-footer {
