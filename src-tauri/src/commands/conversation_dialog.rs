@@ -143,11 +143,14 @@ pub async fn open_conversation_dialog_new_window(
     app: tauri::AppHandle,
     source_label: Option<String>,
     provider_id: Option<String>,
+    skill_id: Option<String>,
+    skill_name: Option<String>,
+    skill_model: Option<String>,
 ) -> Result<(), String> {
     let label = next_conversation_dialog_label(&app);
     log::info!(
         target: "app_lib::commands::conversation_dialog",
-        "open_conversation_dialog_new_window label={label} source={source_label:?} provider={provider_id:?}",
+        "open_conversation_dialog_new_window label={label} source={source_label:?} provider={provider_id:?} skill={skill_id:?}",
     );
 
     if let Some(src) = source_label.as_deref() {
@@ -172,6 +175,21 @@ pub async fn open_conversation_dialog_new_window(
                     "open_conversation_dialog_new_window: stored pending provider {pid} for {label}",
                 );
             }
+        }
+    }
+
+    if let Some(sid) = skill_id.as_deref() {
+        if !sid.is_empty() {
+            *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(PendingDialogParams {
+                skill_id: sid.to_string(),
+                skill_name: skill_name.unwrap_or_default(),
+                skill_model,
+                history_entry_id: None,
+                last_interaction_only: false,
+                initial_input: None,
+                auto_send_input: false,
+                new_chat: false,
+            });
         }
     }
 

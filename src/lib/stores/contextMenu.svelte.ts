@@ -4,7 +4,7 @@ import { error } from "@tauri-apps/plugin-log";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { MenuItem } from "$lib/types/menu";
 import { startExecution, isExecuting, getExecutingSkillId, cancelExecution } from "$lib/stores/execution.svelte";
-import { openConversationDialog } from "$lib/services/conversationDialog";
+import { openConversationDialogNewWindow } from "$lib/services/conversationDialog";
 
 interface WorkArea {
   cursorX: number;
@@ -519,7 +519,7 @@ async function openDialogForItem(index: number) {
     error(`get_skill failed for ${skillId}: ${e}`);
   }
   await closeMenu();
-  await openConversationDialog(skillId, skillName, undefined, undefined, undefined, undefined, undefined, skillModel);
+  await openConversationDialogNewWindow(undefined, undefined, skillId, skillName, skillModel);
 }
 
 export {

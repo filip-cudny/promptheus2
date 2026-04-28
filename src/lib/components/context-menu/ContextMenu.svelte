@@ -363,7 +363,6 @@
     closePanels();
     activeActionMenuId = item.id;
     activeActionAnchorEl = e.currentTarget as HTMLElement;
-    suppressClose();
     const skillId = (item.data as { skill_id?: string } | null)?.skill_id;
     if (skillId) void fetchSkillMetadata(skillId);
   }
@@ -548,7 +547,6 @@
                 closePanels();
                 logDebug("[ctx-menu] opening settings panel");
                 settingsOpen = true;
-                suppressClose();
               }
             }}
           >
