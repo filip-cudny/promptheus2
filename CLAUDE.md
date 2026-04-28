@@ -68,16 +68,22 @@ Run from `promptheus-tauri/src-tauri/`:
 | `pnpm tauri dev` | Run the full Tauri app in dev mode (frontend + backend) |
 | `pnpm tauri build` | Production bundle |
 
-### Common mistakes to avoid
+### Workflow rules
 
 - `pnpm check` does **not** exist — use `npx svelte-check`.
 - `cargo` commands must run from `src-tauri/`, not the project root.
 - `pnpm` commands run from the project root (`promptheus-tauri/`).
-- Every HTML window **must** be listed in `vite.config.ts` → `rollupOptions.input`. Dev mode serves files from disk so missing entries still work, but production builds only include listed inputs — an unlisted window loads as an empty white rectangle.
-- Every new window **must** be added to `src-tauri/capabilities/default.json` → `"windows"` array. Without this, the window cannot invoke any Tauri commands — `invoke()` calls fail silently. This is the Tauri 2 security capability system.
-- **`invoke()` naming convention — command names vs parameter names are different!** Command names use **snake_case** matching the Rust function name (e.g., `invoke("get_context_menu_items", ...)`). Parameter names use **camelCase** (e.g., `{ itemId, shiftPressed }`). Getting this wrong causes silent failures — the invoke throws but errors are easy to miss in async code. This has caused hard-to-debug issues multiple times.
-- **Linux/GTK focus: use `present_with_time()` with a real X11 timestamp.** Tauri's `set_focus()` calls `present_with_time(GDK_CURRENT_TIME)` which passes timestamp 0 — GNOME WM rejects this as a focus-steal attempt. Use `gdkx11::functions::x11_get_server_time()` to get a valid timestamp (see `focus_context_menu` in `commands/menu.rs`).
-- **CSS opacity does not work on transparent WebKitGTK windows on Linux.** Neither `opacity`, `rgba()` backgrounds, `filter: opacity()`, `will-change: opacity`, nor `@keyframes` animations produce visible transparency on elements inside a `.transparent(true)` window. Only the fade-out CSS transition briefly shows transparency (WebKitGTK uses a GPU composite path during transitions but reverts to an opaque CPU paint path for static renders). The **only working approach** is GTK-level window opacity via `gtk_window().set_opacity()` in Rust (see `notification.rs`). This sets `_NET_WM_WINDOW_OPACITY` at the compositor level, bypassing WebKitGTK entirely.
+- Every HTML window must be listed in `vite.config.ts` → `rollupOptions.input` and added to `src-tauri/capabilities/default.json` → `"windows"`. Missing the first → empty white window in production. Missing the second → all `invoke()` calls fail silently.
+- `invoke()` naming: command names are **snake_case** (matches Rust fn name), parameter names are **camelCase** (e.g. `invoke("get_context_menu_items", { itemId, shiftPressed })`). Recurring source of silent failures.
+
+### Platform & architecture gotchas
+
+These are recurring traps — each lives in its own file with full background, symptom, and fix pattern. Load the file when working in the listed area; otherwise leave it.
+
+- [`docs/gotchas/tauri-command-threading.md`](docs/gotchas/tauri-command-threading.md) — sync `#[tauri::command]` runs on the GTK main thread on Linux; blocking calls freeze the whole app. **Load when:** writing or modifying any `#[tauri::command]` that touches clipboard, filesystem, subprocess, network, or X11/GTK APIs.
+- [`docs/gotchas/paste-handler.md`](docs/gotchas/paste-handler.md) — `Shift+Cmd/Ctrl+V` raw-text paste needs a Mac vs Linux/Windows split; has regressed multiple times. **Load when:** touching `InputArea.svelte → handleKeydown`, `src/lib/utils/paste.ts`, or any clipboard Tauri command, or investigating paste freezes / paste-does-nothing reports.
+- [`docs/gotchas/linux-gtk-focus.md`](docs/gotchas/linux-gtk-focus.md) — `set_focus()` is rejected by GNOME/KWin as a focus-steal; need `present_with_time` with a real `x11_get_server_time` timestamp. **Load when:** adding a window that grabs focus, or investigating "window appears but no keyboard focus" on Linux.
+- [`docs/gotchas/linux-webkit-opacity.md`](docs/gotchas/linux-webkit-opacity.md) — CSS `opacity` / `rgba` does nothing on `.transparent(true)` windows on Linux; use GTK `set_opacity()` instead. **Load when:** styling or animating any transparent-window UI, or investigating "looks opaque on Linux, transparent on Mac".
 
 ## References
 

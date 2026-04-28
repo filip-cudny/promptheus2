@@ -3,7 +3,7 @@ use tokio::sync::Mutex;
 
 use super::settings::AppState;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_clipboard_text() -> Result<String, String> {
     let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
     let text = clipboard.get_text().map_err(|e| e.to_string())?;
@@ -35,7 +35,7 @@ pub fn clipboard_has_image(state: State<'_, Mutex<AppState>>) -> Result<bool, St
     Ok(state.clipboard.has_image())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_clipboard_image(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<(String, String), String> {

@@ -90,6 +90,8 @@
     store.toggleTool(id, enabled);
   }
 
+  const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
+
   let localText = $state("");
   let localImages = $state<ConversationImage[]>([]);
   let localTextAttachments = $state<string[]>([]);
@@ -211,7 +213,7 @@
   }
 
   async function handleKeydown(e: KeyboardEvent) {
-    if (e.key.toLowerCase() === "v" && e.shiftKey && (e.metaKey || e.ctrlKey)) {
+    if (isMac && e.key.toLowerCase() === "v" && e.shiftKey && e.metaKey) {
       e.preventDefault();
       try {
         const text = await invoke<string>("get_clipboard_text");

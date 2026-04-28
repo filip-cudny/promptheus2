@@ -16,3 +16,7 @@ Top-level index of all `DOCS.md` files in the project. Updated incrementally as 
 - [docs/logging-levels.docs.md](docs/logging-levels.docs.md) — Log levels: when to use each with examples
 - [docs/logging-sensitivity.docs.md](docs/logging-sensitivity.docs.md) — Data sensitivity tiers and per-module redaction rules
 - [docs/logging-config.docs.md](docs/logging-config.docs.md) — Environment config, targets, rotation, performance
+- [docs/gotchas/tauri-command-threading.md](docs/gotchas/tauri-command-threading.md) — Sync Tauri commands run on GTK main thread; use `(async)` for blocking work
+- [docs/gotchas/paste-handler.md](docs/gotchas/paste-handler.md) — Shift+Cmd/Ctrl+V raw paste: Mac uses arboard invoke, Linux uses native paste event
+- [docs/gotchas/linux-gtk-focus.md](docs/gotchas/linux-gtk-focus.md) — `present_with_time` with real X11 timestamp from `x11_get_server_time`
+- [docs/gotchas/linux-webkit-opacity.md](docs/gotchas/linux-webkit-opacity.md) — CSS opacity ignored on transparent WebKitGTK; use GTK `set_opacity()` instead
