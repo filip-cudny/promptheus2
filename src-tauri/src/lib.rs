@@ -306,13 +306,13 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     .build()?;
 
     #[cfg(target_os = "linux")]
-    configure_palette_windows_linux(app);
+    configure_overlay_windows_linux(app);
 
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
-fn configure_palette_windows_linux(app: &tauri::App) {
+fn configure_overlay_windows_linux(app: &tauri::App) {
     use gtk::gdk::WindowTypeHint;
     use gtk::prelude::GtkWindowExt;
     use tauri::Manager;
@@ -328,6 +328,14 @@ fn configure_palette_windows_linux(app: &tauri::App) {
 
     if let Some(palette) = app.get_webview_window("palette") {
         if let Ok(gtk_win) = palette.gtk_window() {
+            gtk_win.set_type_hint(WindowTypeHint::Utility);
+            gtk_win.set_skip_pager_hint(true);
+            gtk_win.set_skip_taskbar_hint(true);
+        }
+    }
+
+    if let Some(ctx) = app.get_webview_window("context-menu") {
+        if let Ok(gtk_win) = ctx.gtk_window() {
             gtk_win.set_type_hint(WindowTypeHint::Utility);
             gtk_win.set_skip_pager_hint(true);
             gtk_win.set_skip_taskbar_hint(true);

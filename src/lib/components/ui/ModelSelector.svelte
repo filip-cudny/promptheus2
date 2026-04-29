@@ -31,6 +31,16 @@
   let reasoningDropdownOpen = $state(false);
   let capabilitiesCache = $state<Record<string, ModelCapabilities>>({});
 
+  let modelChipEl: HTMLButtonElement | undefined = $state();
+  let reasoningChipEl: HTMLButtonElement | undefined = $state();
+  let modelDropdownEl: HTMLDivElement | undefined = $state();
+  let reasoningDropdownEl: HTMLDivElement | undefined = $state();
+  let modelDropdownStyle = $state("");
+  let reasoningDropdownStyle = $state("");
+
+  const DROPDOWN_GAP = 4;
+  const VIEWPORT_PADDING = 4;
+
   let selectedModel = $derived(
     models.find((m) => m.id === selectedModelId) ?? models[0] ?? null,
   );
@@ -82,6 +92,48 @@
 
   let showGroupHeaders = $derived(groupedModels.size > 1);
 
+  function positionDropdown(
+    chipEl: HTMLElement | undefined,
+    dropdownEl: HTMLDivElement | undefined,
+  ): string {
+    if (!chipEl || !dropdownEl) return "";
+    const chipRect = chipEl.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    const dropdownWidth = dropdownEl.offsetWidth;
+    const naturalHeight = dropdownEl.scrollHeight;
+
+    const spaceAbove = chipRect.top - VIEWPORT_PADDING - DROPDOWN_GAP;
+    const spaceBelow = viewportHeight - chipRect.bottom - VIEWPORT_PADDING - DROPDOWN_GAP;
+    const openUp = spaceAbove >= naturalHeight || spaceAbove >= spaceBelow;
+
+    const available = Math.max(80, openUp ? spaceAbove : spaceBelow);
+    const height = Math.min(naturalHeight, available);
+
+    let top: number;
+    if (openUp) {
+      top = chipRect.top - DROPDOWN_GAP - height;
+    } else {
+      top = chipRect.bottom + DROPDOWN_GAP;
+    }
+    top = Math.max(VIEWPORT_PADDING, top);
+
+    let left = chipRect.right - dropdownWidth;
+    left = Math.max(VIEWPORT_PADDING, Math.min(left, viewportWidth - dropdownWidth - VIEWPORT_PADDING));
+
+    return `top: ${top}px; left: ${left}px; max-height: ${height}px;`;
+  }
+
+  function refreshDropdownPositions() {
+    if (modelDropdownOpen) {
+      modelDropdownStyle = positionDropdown(modelChipEl, modelDropdownEl);
+    }
+    if (reasoningDropdownOpen) {
+      reasoningDropdownStyle = positionDropdown(reasoningChipEl, reasoningDropdownEl);
+    }
+  }
+
   function toggleModelDropdown(e: MouseEvent) {
     e.stopPropagation();
     if (modelDropdownOpen) {
@@ -90,7 +142,10 @@
       reasoningDropdownOpen = false;
       modelDropdownOpen = true;
       preventDismiss?.suppress();
-      tick().then(() => onDropdownToggle?.());
+      tick().then(() => {
+        modelDropdownStyle = positionDropdown(modelChipEl, modelDropdownEl);
+        onDropdownToggle?.();
+      });
     }
   }
 
@@ -102,7 +157,10 @@
       modelDropdownOpen = false;
       reasoningDropdownOpen = true;
       preventDismiss?.suppress();
-      tick().then(() => onDropdownToggle?.());
+      tick().then(() => {
+        reasoningDropdownStyle = positionDropdown(reasoningChipEl, reasoningDropdownEl);
+        onDropdownToggle?.();
+      });
     }
   }
 
@@ -134,23 +192,41 @@
   }
 </script>
 
-<svelte:window onclick={handleClickOutside} />
+<svelte:window
+  onclick={handleClickOutside}
+  onresize={refreshDropdownPositions}
+  onscroll={refreshDropdownPositions}
+/>
 
 <div class="model-selector">
-  <button class="selector-chip" onclick={toggleModelDropdown} title={selectedModel?.display_name ?? "Select model"}>
+  <button
+    class="selector-chip"
+    bind:this={modelChipEl}
+    onclick={toggleModelDropdown}
+    title={selectedModel?.display_name ?? "Select model"}
+  >
     <span class="chip-label">{selectedModel?.display_name ?? "No model"}</span>
     <ChevronDown size={ICON_SIZE.sm} />
   </button>
 
   {#if showReasoning}
     <div class="reasoning-wrapper">
-      <button class="selector-chip reasoning-chip" onclick={toggleReasoningDropdown} title="Reasoning level">
+      <button
+        class="selector-chip reasoning-chip"
+        bind:this={reasoningChipEl}
+        onclick={toggleReasoningDropdown}
+        title="Reasoning level"
+      >
         <Brain size={ICON_SIZE.sm} />
         <span class="chip-label">{REASONING_LEVEL_LABELS[currentLevel]}</span>
         <ChevronDown size={ICON_SIZE.sm} />
       </button>
       {#if reasoningDropdownOpen}
-        <div class="dropdown reasoning-dropdown">
+        <div
+          class="dropdown reasoning-dropdown"
+          bind:this={reasoningDropdownEl}
+          style={reasoningDropdownStyle}
+        >
           {#each availableLevels as level}
             <button
               class="dropdown-item"
@@ -166,7 +242,11 @@
   {/if}
 
   {#if modelDropdownOpen}
-    <div class="dropdown model-dropdown">
+    <div
+      class="dropdown model-dropdown"
+      bind:this={modelDropdownEl}
+      style={modelDropdownStyle}
+    >
       {#each [...groupedModels] as [groupName, groupModels]}
         {#if showGroupHeaders}
           <div class="dropdown-group-label">{groupName}</div>
@@ -234,9 +314,7 @@
   }
 
   .dropdown {
-    position: absolute;
-    bottom: calc(100% + 4px);
-    right: 0;
+    position: fixed;
     z-index: 1000;
     width: 220px;
     background: #252525;
@@ -244,10 +322,11 @@
     border-radius: 6px;
     padding: 4px 0;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .reasoning-dropdown {
-    right: 0;
     width: 160px;
   }
 

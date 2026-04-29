@@ -110,10 +110,10 @@
   }
 
   interface ModelsMenuData {
-    models: { id: string; display_name: string; model: string; provider: Provider }[];
+    models: { id: string; display_name: string; model: string; provider: Provider; group: string | null }[];
     default_model_id: string | null;
     default_reasoning_effort: string | null;
-    stt_models: { id: string; display_name: string; model: string; provider: Provider }[];
+    stt_models: { id: string; display_name: string; model: string; provider: Provider; group: string | null }[];
     speech_to_text_model_id: string | null;
   }
 
@@ -567,7 +567,7 @@
                   model: m.model,
                   display_name: m.display_name,
                   provider: m.provider,
-                  group: null,
+                  group: m.group,
                   api_key: null,
                   base_url: null,
                   parameters: null,
@@ -599,7 +599,7 @@
                   model: m.model,
                   display_name: m.display_name,
                   provider: m.provider,
-                  group: null,
+                  group: m.group,
                   api_key: null,
                   base_url: null,
                   parameters: null,

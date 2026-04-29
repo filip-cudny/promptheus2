@@ -164,6 +164,7 @@ impl MenuCoordinator {
                     "display_name": m.display_name,
                     "model": m.model,
                     "provider": m.provider,
+                    "group": m.group,
                 })
             })
             .collect();
@@ -178,6 +179,7 @@ impl MenuCoordinator {
                     "display_name": m.display_name,
                     "model": m.model,
                     "provider": m.provider,
+                    "group": m.group,
                 })
             })
             .collect();
