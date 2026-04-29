@@ -7,6 +7,7 @@
     HistoryTypeFilter,
     TimeRangePreset,
   } from "$lib/types/historySearch";
+  import SelectDropdown from "$lib/components/ui/SelectDropdown.svelte";
   import SkillFilterPicker from "./SkillFilterPicker.svelte";
 
   let {
@@ -91,26 +92,21 @@
       <SkillFilterPicker {searchStore} />
     {/if}
 
-    <select
-      class="time-select"
-      class:active={searchStore.timeRange !== "all"}
-      aria-label="Filter by time range"
+    <SelectDropdown
+      options={TIME_RANGE_OPTIONS}
       bind:value={searchStore.timeRange}
-    >
-      {#each TIME_RANGE_OPTIONS as option (option.value)}
-        <option value={option.value}>{option.label}</option>
-      {/each}
-    </select>
+      ariaLabel="Filter by time range"
+      activeWhenNot="all"
+    />
 
-    <select
-      class="status-select"
-      aria-label="Filter by status"
-      bind:value={searchStore.statusFilter}
-    >
-      {#each STATUS_OPTIONS as option (option.value)}
-        <option value={option.value}>{option.label}</option>
-      {/each}
-    </select>
+    <div class="status-wrap">
+      <SelectDropdown
+        options={STATUS_OPTIONS}
+        bind:value={searchStore.statusFilter}
+        ariaLabel="Filter by status"
+        activeWhenNot="all"
+      />
+    </div>
 
     {#if searchStore.activeFilterCount >= 2}
       <button
@@ -231,43 +227,8 @@
     color: rgba(100, 160, 255, 0.95);
   }
 
-  .status-select {
+  .status-wrap {
     margin-left: auto;
-    padding: 3px 8px;
-    background: #2a2a2a;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.75);
-    font: inherit;
-    font-size: 11px;
-    cursor: pointer;
-    outline: none;
-  }
-
-  .status-select:focus {
-    border-color: rgba(100, 160, 255, 0.4);
-  }
-
-  .time-select {
-    padding: 3px 8px;
-    background: #2a2a2a;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.75);
-    font: inherit;
-    font-size: 11px;
-    cursor: pointer;
-    outline: none;
-  }
-
-  .time-select:focus {
-    border-color: rgba(100, 160, 255, 0.4);
-  }
-
-  .time-select.active {
-    background: rgba(100, 160, 255, 0.15);
-    border-color: rgba(100, 160, 255, 0.4);
-    color: rgba(100, 160, 255, 0.95);
   }
 
   .clear-all-btn {
@@ -291,9 +252,7 @@
 
   .segment-btn:focus-visible,
   .clear-btn:focus-visible,
-  .clear-all-btn:focus-visible,
-  .status-select:focus-visible,
-  .time-select:focus-visible {
+  .clear-all-btn:focus-visible {
     outline: 2px solid rgba(100, 160, 255, 0.6);
     outline-offset: 1px;
   }

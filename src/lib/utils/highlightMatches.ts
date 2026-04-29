@@ -72,11 +72,22 @@ function interleave(text: string, indices: readonly number[]): string {
   const chars = Array.from(text);
   const result: string[] = [];
   let cursor = 0;
-  for (const idx of sorted) {
-    if (idx < cursor || idx >= chars.length) continue;
-    if (idx > cursor) result.push(escapeHtml(chars.slice(cursor, idx).join("")));
-    result.push(`<mark>${escapeHtml(chars[idx])}</mark>`);
-    cursor = idx + 1;
+  let i = 0;
+  while (i < sorted.length) {
+    const start = sorted[i];
+    if (start < cursor || start >= chars.length) {
+      i++;
+      continue;
+    }
+    let end = start + 1;
+    while (i + 1 < sorted.length && sorted[i + 1] === end && end < chars.length) {
+      end++;
+      i++;
+    }
+    if (start > cursor) result.push(escapeHtml(chars.slice(cursor, start).join("")));
+    result.push(`<mark>${escapeHtml(chars.slice(start, end).join(""))}</mark>`);
+    cursor = end;
+    i++;
   }
   if (cursor < chars.length) result.push(escapeHtml(chars.slice(cursor).join("")));
   return result.join("");

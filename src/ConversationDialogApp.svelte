@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -9,20 +9,13 @@
   import { getSettings } from "$lib/services/settings";
   import { getContextWindowSize } from "$lib/utils/contextWindow";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import { PanelLeft, RefreshCw, SquarePen } from "lucide-svelte";
-  import { providerIconSvg } from "$lib/icons/providerIcons";
+  import { PanelLeft, SquarePen } from "lucide-svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
+  import ChatPalette from "$lib/components/prompt/ChatPalette.svelte";
   import ConversationArea from "$lib/components/prompt/ConversationArea.svelte";
   import InputArea from "$lib/components/prompt/InputArea.svelte";
   import TabSidebar from "$lib/components/prompt/TabSidebar.svelte";
-  import {
-    PROMPTHEUS_PROVIDER_ID,
-    closePalette,
-    openPalette,
-    reloadActiveInHost,
-  } from "$lib/services/shellToolbar";
-  import { getWebviewProviders, type WebviewProvider } from "$lib/services/aiWebview";
-  import { onSettingsChanged } from "$lib/services/events";
+  import { openPalette, reloadActiveInHost } from "$lib/services/shellToolbar";
 
   interface DialogInitParams {
     skill_id: string;
@@ -34,12 +27,6 @@
     auto_send_input: boolean;
     new_chat: boolean;
   }
-
-  type ProviderEntry = { kind: "provider"; id: string; name: string; url?: string };
-  type ActionEntry = { kind: "action"; id: string; name: string };
-  type PaletteEntry = ProviderEntry | ActionEntry;
-
-  const ACTION_RELOAD_ID = "action:reload-active";
 
   const skillsStore = getSkillsStore();
   const HOST_LABEL = getCurrentWindow().label;
@@ -56,33 +43,7 @@
   let models = $state<ModelConfig[]>([]);
   let defaultModelId = $state<string | null>(null);
 
-  let webviewProviders = $state<WebviewProvider[]>([]);
-  let paletteOpen = $state(false);
-  let paletteQuery = $state("");
-  let paletteIndex = $state(0);
-  let paletteInputEl: HTMLInputElement | undefined = $state();
-  let paletteActiveId = $state<string>(PROMPTHEUS_PROVIDER_ID);
-
-  let providers = $derived<ProviderEntry[]>([
-    { kind: "provider", id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
-    ...webviewProviders.map<ProviderEntry>((p) => ({ kind: "provider", id: p.id, name: p.name, url: p.url })),
-  ]);
-
-  let activeProviderName = $derived(
-    providers.find((p) => p.id === paletteActiveId)?.name ?? "active provider",
-  );
-
-  let actions = $derived<ActionEntry[]>([
-    { kind: "action", id: ACTION_RELOAD_ID, name: `Reload ${activeProviderName}` },
-  ]);
-
-  let entries = $derived<PaletteEntry[]>([...providers, ...actions]);
-
-  let filtered = $derived.by<PaletteEntry[]>(() => {
-    const q = paletteQuery.trim().toLowerCase();
-    if (!q) return entries;
-    return entries.filter((e) => e.name.toLowerCase().includes(q));
-  });
+  let chatPaletteOpen = $state(false);
 
   let contextWindowSize = $derived.by(() => {
     const activeModelId = store.modelId ?? defaultModelId;
@@ -96,58 +57,19 @@
   let unlistenVoiceInput: UnlistenFn | undefined;
   let unlistenOpenForSkill: UnlistenFn | undefined;
   let unlistenNewConversation: UnlistenFn | undefined;
-  let unlistenPaletteOpened: UnlistenFn | undefined;
-  let unlistenPaletteClosed: UnlistenFn | undefined;
-  let unlistenActive: UnlistenFn | undefined;
-  let unlistenSettingsChanged: UnlistenFn | undefined;
-
-  async function refreshWebviewProviders() {
-    try {
-      webviewProviders = await getWebviewProviders();
-    } catch (e) {
-      console.error("getWebviewProviders failed", e);
-    }
-  }
 
   async function handleGlobalKeydown(e: KeyboardEvent) {
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "r") {
       e.preventDefault();
       e.stopImmediatePropagation();
-      if (paletteOpen) {
-        await dismissPalette(null);
+      if (chatPaletteOpen) {
+        chatPaletteOpen = false;
       }
       await reloadActiveProvider();
       return;
     }
 
-    if (paletteOpen) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        await dismissPalette(null);
-        return;
-      }
-      if (e.key === "Enter") {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        const entry = filtered[paletteIndex];
-        if (entry) {
-          await selectEntry(entry);
-        }
-        return;
-      }
-      if (e.key === "ArrowDown" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "j")) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        paletteIndex = Math.min(filtered.length - 1, paletteIndex + 1);
-        return;
-      }
-      if (e.key === "ArrowUp" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k")) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        paletteIndex = Math.max(0, paletteIndex - 1);
-        return;
-      }
+    if (chatPaletteOpen) {
       return;
     }
 
@@ -162,10 +84,27 @@
       return;
     }
 
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      e.stopPropagation();
+      chatPaletteOpen = true;
+      return;
+    }
+
     if (e.key === "Escape" && store.isExecuting) {
       e.preventDefault();
       store.abortExecution();
     }
+  }
+
+  function handleChatPaletteNewChat() {
+    chatPaletteOpen = false;
+    store.addTab();
+  }
+
+  async function handleChatPaletteOpenConversation(entryId: string) {
+    chatPaletteOpen = false;
+    await store.restoreFromHistory(entryId);
   }
 
   async function reloadActiveProvider() {
@@ -173,25 +112,6 @@
       await reloadActiveInHost(HOST_LABEL);
     } catch (err) {
       console.error("reload_active_in_host failed", err);
-    }
-  }
-
-  async function selectEntry(entry: PaletteEntry) {
-    if (entry.kind === "action") {
-      await dismissPalette(null);
-      if (entry.id === ACTION_RELOAD_ID) {
-        await reloadActiveProvider();
-      }
-      return;
-    }
-    await dismissPalette(entry.id);
-  }
-
-  async function dismissPalette(selectedId: string | null) {
-    try {
-      await closePalette(HOST_LABEL, selectedId);
-    } catch (e) {
-      console.error("close_palette failed", e);
     }
   }
 
@@ -230,26 +150,16 @@
   async function loadModelInfo() {
     try {
       const settings = await getSettings();
-      models = settings.models;
+      models = settings.models.filter((m) => m.type === "text");
       defaultModelId = settings.surfaces.chat.generation.model_id ?? null;
     } catch {}
   }
-
-  $effect(() => {
-    const _ = filtered.length;
-    if (paletteIndex >= filtered.length) {
-      paletteIndex = Math.max(0, filtered.length - 1);
-    }
-  });
 
   onMount(async () => {
     window.addEventListener("keydown", handleGlobalKeydown, true);
     skillsStore.init();
     await store.initFromSettings();
     loadModelInfo();
-
-    await refreshWebviewProviders();
-    unlistenSettingsChanged = await onSettingsChanged(refreshWebviewProviders);
 
     const reconnected = await store.tryReconnect();
 
@@ -286,35 +196,6 @@
       "new-conversation",
       () => {
         store.addTab();
-      },
-      { target: SELF_TARGET },
-    );
-
-    unlistenActive = await listen<{ provider_id: string | null }>(
-      "shell:active-changed",
-      (ev) => {
-        paletteActiveId = ev.payload.provider_id ?? PROMPTHEUS_PROVIDER_ID;
-      },
-      { target: SELF_TARGET },
-    );
-
-    unlistenPaletteOpened = await listen(
-      "shell:palette-opened",
-      async () => {
-        paletteOpen = true;
-        paletteQuery = "";
-        paletteIndex = 0;
-        await tick();
-        paletteInputEl?.focus();
-      },
-      { target: SELF_TARGET },
-    );
-
-    unlistenPaletteClosed = await listen(
-      "shell:palette-closed",
-      () => {
-        paletteOpen = false;
-        paletteQuery = "";
       },
       { target: SELF_TARGET },
     );
@@ -363,10 +244,6 @@
     unlistenVoiceInput?.();
     unlistenOpenForSkill?.();
     unlistenNewConversation?.();
-    unlistenPaletteOpened?.();
-    unlistenPaletteClosed?.();
-    unlistenActive?.();
-    unlistenSettingsChanged?.();
     store.destroy();
   });
 </script>
@@ -394,71 +271,12 @@
   <TabSidebar {store} open={sidebarOpen} onClose={() => sidebarOpen = false} />
 </div>
 
-{#if paletteOpen}
-  <div class="palette-root">
-    <button
-      type="button"
-      aria-label="Close palette"
-      class="palette-scrim"
-      onclick={() => dismissPalette(null)}
-    ></button>
-    <div class="palette-modal" role="dialog" aria-modal="true">
-      <input
-        bind:this={paletteInputEl}
-        bind:value={paletteQuery}
-        oninput={() => (paletteIndex = 0)}
-        class="palette-input"
-        type="text"
-        placeholder="Search providers and actions..."
-        autocomplete="off"
-        spellcheck="false"
-      />
-      <div class="palette-list" role="listbox">
-        {#each filtered as entry, i (entry.id)}
-          {#if entry.kind === "action" && i > 0 && filtered[i - 1].kind === "provider"}
-            <div class="palette-divider" role="separator"></div>
-          {/if}
-          <button
-            type="button"
-            role="option"
-            aria-selected={i === paletteIndex}
-            class="palette-item"
-            class:highlight={i === paletteIndex}
-            onmouseenter={() => (paletteIndex = i)}
-            onclick={() => selectEntry(entry)}
-          >
-            <span
-              class="palette-item-icon"
-              class:muted={entry.kind === "action"}
-              aria-hidden="true"
-            >
-              {#if entry.kind === "provider"}
-                {@const iconSvg = providerIconSvg(entry)}
-                {#if iconSvg}
-                  {@html iconSvg}
-                {/if}
-              {:else}
-                <RefreshCw size={14} />
-              {/if}
-            </span>
-            <span class="palette-item-name">{entry.name}</span>
-            {#if entry.kind === "provider" && entry.id === paletteActiveId}
-              <span class="palette-item-badge">active</span>
-            {/if}
-          </button>
-        {:else}
-          <div class="palette-empty">no matches</div>
-        {/each}
-      </div>
-      <div class="palette-footer">
-        <span>↑↓ / ⌃jk navigate</span>
-        <span>↵ select</span>
-        <span>⌘R reload</span>
-        <span>esc close</span>
-      </div>
-    </div>
-  </div>
-{/if}
+<ChatPalette
+  open={chatPaletteOpen}
+  onClose={() => (chatPaletteOpen = false)}
+  onNewChat={handleChatPaletteNewChat}
+  onOpenConversation={handleChatPaletteOpenConversation}
+/>
 
 <style>
   :global(html),
@@ -531,142 +349,5 @@
   .top-btn:hover {
     color: rgba(255, 255, 255, 0.8);
     background: rgba(255, 255, 255, 0.1);
-  }
-
-  .palette-root {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    padding-top: 80px;
-    z-index: 1000;
-  }
-
-  .palette-scrim {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    border: 0;
-    padding: 0;
-    cursor: default;
-  }
-
-  .palette-modal {
-    position: relative;
-    width: min(520px, 80%);
-    background: #252525;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    color: #e0e0e0;
-  }
-
-  .palette-input {
-    appearance: none;
-    border: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    background: transparent;
-    color: #fff;
-    font: inherit;
-    font-size: 14px;
-    padding: 12px 14px;
-    outline: none;
-  }
-
-  .palette-list {
-    display: flex;
-    flex-direction: column;
-    max-height: 320px;
-    overflow-y: auto;
-  }
-
-  .palette-item {
-    appearance: none;
-    border: 0;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.85);
-    font: inherit;
-    text-align: left;
-    padding: 8px 14px;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .palette-item.highlight {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .palette-item-icon {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: rgba(255, 255, 255, 0.85);
-  }
-
-  .palette-item-icon :global(svg) {
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
-
-  .palette-item-icon :global(img) {
-    width: 100%;
-    height: 100%;
-    display: block;
-    object-fit: contain;
-  }
-
-  .palette-item-icon.muted {
-    opacity: 0.45;
-  }
-
-  .palette-item.highlight .palette-item-icon.muted {
-    opacity: 0.75;
-  }
-
-  .palette-item-name {
-    flex: 1;
-    font-size: 13px;
-  }
-
-  .palette-item-badge {
-    font-size: 10px;
-    text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.45);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 3px;
-    padding: 1px 5px;
-  }
-
-  .palette-empty {
-    color: rgba(255, 255, 255, 0.4);
-    padding: 16px;
-    text-align: center;
-  }
-
-  .palette-divider {
-    height: 1px;
-    background: rgba(255, 255, 255, 0.06);
-    margin: 4px 0;
-  }
-
-  .palette-footer {
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 6px 14px;
-    display: flex;
-    gap: 12px;
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 11px;
   }
 </style>

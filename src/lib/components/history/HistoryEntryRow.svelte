@@ -277,7 +277,7 @@
   :global(.entry-row mark) {
     background: rgba(255, 220, 100, 0.25);
     color: inherit;
-    padding: 0 1px;
+    padding: 0;
     border-radius: 2px;
   }
 </style>

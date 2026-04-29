@@ -29,6 +29,8 @@ export default defineConfig({
         "conversation-dialog": path.resolve("./conversation-dialog.html"),
         "shell-toolbar": path.resolve("./shell-toolbar.html"),
         "provider-menu": path.resolve("./provider-menu.html"),
+        palette: path.resolve("./palette.html"),
+        "palette-backdrop": path.resolve("./palette-backdrop.html"),
         "context-editor": path.resolve("./context-editor.html"),
         "history-dialog": path.resolve("./history-dialog.html"),
         "settings-dialog": path.resolve("./settings-dialog.html"),

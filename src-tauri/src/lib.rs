@@ -124,9 +124,9 @@ fn install_webkit_memory_pressure() {
 
     let mut settings = MemoryPressureSettings::new();
     settings.set_memory_limit(2048);
-    settings.set_conservative_threshold(0.50);
-    settings.set_strict_threshold(0.75);
     settings.set_kill_threshold(0.95);
+    settings.set_strict_threshold(0.75);
+    settings.set_conservative_threshold(0.50);
     settings.set_poll_interval(30.0);
     WebsiteDataManager::set_memory_pressure_settings(&mut settings);
     log::info!(
@@ -273,7 +273,66 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     .visible(false)
     .build()?;
 
+    WebviewWindowBuilder::new(
+        app,
+        "palette-backdrop",
+        tauri::WebviewUrl::App("palette-backdrop.html".into()),
+    )
+    .title("")
+    .inner_size(800.0, 600.0)
+    .resizable(false)
+    .decorations(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .focusable(false)
+    .shadow(false)
+    .visible(false)
+    .build()?;
+
+    WebviewWindowBuilder::new(
+        app,
+        "palette",
+        tauri::WebviewUrl::App("palette.html".into()),
+    )
+    .title("")
+    .inner_size(520.0, 400.0)
+    .resizable(false)
+    .decorations(false)
+    .transparent(true)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .shadow(false)
+    .visible(false)
+    .build()?;
+
+    #[cfg(target_os = "linux")]
+    configure_palette_windows_linux(app);
+
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn configure_palette_windows_linux(app: &tauri::App) {
+    use gtk::gdk::WindowTypeHint;
+    use gtk::prelude::GtkWindowExt;
+    use tauri::Manager;
+
+    if let Some(backdrop) = app.get_webview_window("palette-backdrop") {
+        if let Ok(gtk_win) = backdrop.gtk_window() {
+            gtk_win.set_type_hint(WindowTypeHint::Utility);
+            gtk_win.set_skip_pager_hint(true);
+            gtk_win.set_skip_taskbar_hint(true);
+            gtk_win.set_accept_focus(false);
+        }
+    }
+
+    if let Some(palette) = app.get_webview_window("palette") {
+        if let Ok(gtk_win) = palette.gtk_window() {
+            gtk_win.set_type_hint(WindowTypeHint::Utility);
+            gtk_win.set_skip_pager_hint(true);
+            gtk_win.set_skip_taskbar_hint(true);
+        }
+    }
 }
 
 fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
