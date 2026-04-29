@@ -55,7 +55,10 @@
   let outputForDisplay = $derived(entry.output_content_rendered ?? entry.output_content ?? "");
 
   let outputMatch = $derived(matches.find((m) => m.field === "output_content"));
-  let hasOutputMatch = $derived(!!outputMatch && outputMatch.indices.length > 0);
+  let outputDuplicatesInput = $derived(outputForDisplay === inputForDisplay);
+  let hasOutputMatch = $derived(
+    !!outputMatch && outputMatch.indices.length > 0 && !outputDuplicatesInput,
+  );
 
   let outputPreview = $derived(
     hasOutputMatch

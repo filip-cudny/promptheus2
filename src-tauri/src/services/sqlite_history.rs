@@ -9,6 +9,7 @@ use crate::models::history::{
 };
 use crate::models::message::ImageData;
 use crate::services::database::Database;
+use crate::services::history_search::{HistoryStatusFilter, HistoryTypeFilter};
 
 #[derive(Debug, thiserror::Error)]
 pub enum HistoryError {
@@ -468,6 +469,10 @@ impl SqliteHistoryService {
             .execute("DELETE FROM conversations", []);
     }
 
+    pub fn conn(&self) -> &rusqlite::Connection {
+        self.db.conn()
+    }
+
     pub fn entry_count(&self) -> usize {
         self.db
             .conn()
@@ -475,6 +480,88 @@ impl SqliteHistoryService {
                 row.get::<_, i64>(0)
             })
             .unwrap_or(0) as usize
+    }
+
+    pub fn search_fts(
+        &self,
+        fts_query: &str,
+        type_filter: HistoryTypeFilter,
+        status_filter: HistoryStatusFilter,
+        skill_ids: &[String],
+        limit: usize,
+    ) -> Result<Vec<(HistoryEntry, f64)>, HistoryError> {
+        let mut sql = String::from(
+            "SELECT c.id, c.title, c.skill_id, c.skill_name, c.entry_type, c.input_content, c.output_content,
+                    c.success, c.error, c.is_multi_turn, c.quick_action, c.created_at, c.updated_at,
+                    c.input_content_rendered, c.output_content_rendered,
+                    bm25(conversations_fts, 10.0, 5.0, 2.0, 1.0) AS rank
+             FROM conversations_fts
+             JOIN conversations c ON c.rowid = conversations_fts.rowid
+             WHERE conversations_fts MATCH ?1",
+        );
+
+        match type_filter {
+            HistoryTypeFilter::All => {}
+            HistoryTypeFilter::Chat => sql.push_str(" AND c.quick_action = 0"),
+            HistoryTypeFilter::Speech => sql.push_str(
+                " AND c.quick_action = 1 AND c.entry_type = 'speech' AND c.skill_name IS NULL",
+            ),
+            HistoryTypeFilter::QuickAction => sql.push_str(
+                " AND c.quick_action = 1 AND NOT (c.entry_type = 'speech' AND c.skill_name IS NULL)",
+            ),
+        }
+
+        match status_filter {
+            HistoryStatusFilter::All => {}
+            HistoryStatusFilter::Success => sql.push_str(" AND c.success = 1"),
+            HistoryStatusFilter::Error => sql.push_str(" AND c.success = 0"),
+        }
+
+        if !skill_ids.is_empty() {
+            sql.push_str(" AND c.skill_id IN (");
+            for i in 0..skill_ids.len() {
+                if i > 0 {
+                    sql.push(',');
+                }
+                sql.push_str(&format!("?{}", i + 2));
+            }
+            sql.push(')');
+        }
+
+        sql.push_str(&format!(" ORDER BY rank LIMIT {}", limit));
+
+        let conn = self.db.conn();
+        let mut stmt = conn.prepare(&sql)?;
+        let mut params: Vec<&dyn rusqlite::ToSql> = vec![&fts_query];
+        for s in skill_ids {
+            params.push(s);
+        }
+
+        let rows = stmt.query_map(params.as_slice(), |row| {
+            let entry = HistoryEntry {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                skill_id: row.get(2)?,
+                skill_name: row.get(3)?,
+                entry_type: parse_entry_type(row.get::<_, String>(4)?.as_str()),
+                input_content: row.get(5)?,
+                output_content: row.get(6)?,
+                success: row.get(7)?,
+                error: row.get(8)?,
+                is_multi_turn: row.get(9)?,
+                quick_action: row.get(10)?,
+                created_at: row.get(11)?,
+                updated_at: row.get(12)?,
+                timestamp: row.get::<_, Option<String>>(11)?.unwrap_or_default(),
+                conversation_data: None,
+                input_content_rendered: row.get(13)?,
+                output_content_rendered: row.get(14)?,
+            };
+            let rank: f64 = row.get(15)?;
+            Ok((entry, rank))
+        })?;
+
+        Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
     fn insert_images(

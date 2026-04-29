@@ -236,8 +236,8 @@ pub async fn search_history(
     query: SearchQuery,
 ) -> Result<SearchResponse, String> {
     let mut state = state.lock().await;
-    let entries = state.history.get_history();
-    let response = state.history_search.run(&entries, &query);
+    let state = &mut *state;
+    let response = state.history_search.run(&state.history, &query);
     log::debug!(
         target: "app_lib::history_search",
         "search_history: query='{}' type={:?} status={:?} skills={} date_from={:?} total={} returned={}",
