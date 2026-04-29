@@ -5,8 +5,8 @@
   import { ChevronRight, MessagesSquare, Plus, X } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { extractSkillDisplayText } from "$lib/utils/skillDisplay";
-  import { highlightFor } from "$lib/utils/highlightMatches";
-  import type { SearchResponse, SearchResult } from "$lib/types/historySearch";
+  import { highlightFor, truncateAroundMatch } from "$lib/utils/highlightMatches";
+  import type { FieldMatch, SearchField, SearchResult, SearchResponse } from "$lib/types/historySearch";
 
   let { open, onClose, onNewChat, onOpenConversation }: {
     open: boolean;
@@ -23,6 +23,13 @@
   let loading = $state(false);
   let highlightedIndex = $state(0);
   let inputEl = $state<HTMLInputElement | undefined>();
+  let itemEls: (HTMLElement | null)[] = $state([]);
+
+  $effect(() => {
+    if (!open) return;
+    const el = itemEls[highlightedIndex];
+    if (el) el.scrollIntoView({ block: "nearest" });
+  });
 
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let inflight: AbortController | null = null;
@@ -157,6 +164,27 @@
     return extractSkillDisplayText(e.title ?? e.skill_name ?? "Chat");
   }
 
+  function snippetSourceFor(matches: readonly FieldMatch[]): SearchField | null {
+    const input = matches.find((m) => m.field === "input_content" && m.indices.length > 0);
+    if (input) return "input_content";
+    const output = matches.find((m) => m.field === "output_content" && m.indices.length > 0);
+    if (output) return "output_content";
+    return null;
+  }
+
+  function snippetFor(r: SearchResult): { field: SearchField; text: string; matches: FieldMatch[] } | null {
+    const source = snippetSourceFor(r.matches);
+    if (!source) return null;
+    const e = r.entry;
+    const raw = source === "input_content"
+      ? (e.input_content_rendered ?? e.input_content ?? "")
+      : (e.output_content_rendered ?? e.output_content ?? "");
+    if (!raw) return null;
+    const truncated = truncateAroundMatch(extractSkillDisplayText(raw), r.matches, source, 80);
+    if (!truncated.text) return null;
+    return { field: source, text: truncated.text, matches: truncated.matches };
+  }
+
   function formatTimestamp(r: SearchResult): string {
     const e = r.entry;
     const raw = e.updated_at ?? e.created_at ?? e.timestamp;
@@ -211,6 +239,7 @@
         {#each items as item, i (item.kind === "new-chat" ? "new-chat" : item.result.entry.id)}
           {#if item.kind === "new-chat"}
             <button
+              bind:this={itemEls[i]}
               type="button"
               role="option"
               aria-selected={i === highlightedIndex}
@@ -230,7 +259,9 @@
                 <span>Recents</span>
               </div>
             {/if}
+            {@const snippet = snippetFor(item.result)}
             <button
+              bind:this={itemEls[i]}
               type="button"
               role="option"
               aria-selected={i === highlightedIndex}
@@ -240,8 +271,13 @@
               onclick={() => activate(item)}
             >
               <span class="palette-item-icon"><MessagesSquare size={ICON_SIZE.md} /></span>
-              <span class="palette-item-name">
-                {@html highlightFor(displayName(item.result), item.result.matches, ["title", "skill_name"])}
+              <span class="palette-item-main">
+                <span class="palette-item-name">
+                  {@html highlightFor(displayName(item.result), item.result.matches, ["title", "skill_name"])}
+                </span>
+                {#if snippet}
+                  <span class="palette-item-snippet">{@html highlightFor(snippet.text, snippet.matches, [snippet.field])}</span>
+                {/if}
               </span>
               <span class="palette-item-hint">{formatTimestamp(item.result)}</span>
             </button>
@@ -402,9 +438,24 @@
     color: rgba(255, 255, 255, 0.7);
   }
 
-  .palette-item-name {
+  .palette-item-main {
     flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .palette-item-name {
     font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .palette-item-snippet {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 11px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -433,17 +484,23 @@
   }
 
   .palette-footer kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 3px;
-    padding: 1px 4px;
+    padding: 1px 5px;
     font-family: inherit;
     font-size: 10px;
+    line-height: 1;
     color: rgba(255, 255, 255, 0.7);
     margin-right: 4px;
+    vertical-align: middle;
   }
 
-  :global(.palette-item-name mark) {
+  :global(.palette-item-name mark),
+  :global(.palette-item-snippet mark) {
     background: rgba(255, 220, 100, 0.25);
     color: inherit;
     padding: 0;

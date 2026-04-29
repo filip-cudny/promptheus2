@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Mic, MessageSquare, MessagesSquare, CircleAlert, SquareArrowOutUpRight, Copy, Check } from "lucide-svelte";
+  import { Mic, MessageSquare, MessagesSquare, CircleAlert, SquareArrowOutUpRight, Copy, Check, CornerDownRight } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { extractSkillDisplayText } from "$lib/utils/skillDisplay";
   import { highlightFor, truncateAroundMatch } from "$lib/utils/highlightMatches";
@@ -52,6 +52,42 @@
     ),
   );
 
+  let outputForDisplay = $derived(entry.output_content_rendered ?? entry.output_content ?? "");
+
+  let outputMatch = $derived(matches.find((m) => m.field === "output_content"));
+  let hasOutputMatch = $derived(!!outputMatch && outputMatch.indices.length > 0);
+
+  let outputPreview = $derived(
+    hasOutputMatch
+      ? truncateAroundMatch(
+          extractSkillDisplayText(outputForDisplay),
+          matches,
+          "output_content",
+          120,
+        )
+      : { text: "", matches: [] },
+  );
+
+  let matchedFieldLabels = $derived.by(() => {
+    const labels: string[] = [];
+    for (const m of matches) {
+      if (!m.indices.length) continue;
+      switch (m.field) {
+        case "title": labels.push("title"); break;
+        case "skill_name": labels.push("skill"); break;
+        case "input_content": labels.push("prompt"); break;
+        case "output_content": labels.push("response"); break;
+      }
+    }
+    return labels;
+  });
+
+  let ariaLabel = $derived(
+    matchedFieldLabels.length
+      ? `History entry: ${displayName}, matched in ${matchedFieldLabels.join(", ")}`
+      : `History entry: ${displayName}`,
+  );
+
   let totalDuration = $derived.by(() => {
     const nodes = entry.conversation_data?.nodes;
     if (!nodes) return null;
@@ -91,6 +127,7 @@
 <button
   class="entry-row"
   class:error={!entry.success}
+  aria-label={ariaLabel}
   onclick={() => { if (!isTranscription) onOpen(entry); }}
   title={!entry.success && entry.error ? `Error: ${entry.error}` : isTranscription ? "" : "Open conversation"}
 >
@@ -135,6 +172,12 @@
     </div>
     {#if inputPreview.text}
       <div class="input-preview">{@html highlightFor(inputPreview.text, inputPreview.matches, ["input_content"])}</div>
+    {/if}
+    {#if hasOutputMatch && outputPreview.text}
+      <div class="output-preview">
+        <span class="output-preview-icon"><CornerDownRight size={ICON_SIZE.sm} /></span>
+        <span class="output-preview-text">{@html highlightFor(outputPreview.text, outputPreview.matches, ["output_content"])}</span>
+      </div>
     {/if}
   </div>
 </button>
@@ -231,6 +274,29 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .output-preview {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 11px;
+    min-width: 0;
+  }
+
+  .output-preview-icon {
+    display: inline-flex;
+    align-items: center;
+    color: rgba(255, 255, 255, 0.3);
+    flex-shrink: 0;
+  }
+
+  .output-preview-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 
   .timestamp {

@@ -26,6 +26,13 @@
   let index = $state(0);
   let inputEl: HTMLInputElement | undefined = $state();
   let visible = $state(false);
+  let itemEls: (HTMLElement | null)[] = $state([]);
+
+  $effect(() => {
+    if (!visible) return;
+    const el = itemEls[index];
+    if (el) el.scrollIntoView({ block: "nearest" });
+  });
 
   let providers = $derived<ProviderEntry[]>([
     { kind: "provider", id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
@@ -178,6 +185,7 @@
         <div class="divider" role="separator"></div>
       {/if}
       <button
+        bind:this={itemEls[i]}
         type="button"
         role="option"
         aria-selected={i === index}
@@ -206,10 +214,10 @@
     {/each}
   </div>
   <div class="footer">
-    <span>↑↓ / ⌃jk navigate</span>
-    <span>↵ select</span>
-    <span>⌘R reload</span>
-    <span>esc close</span>
+    <span><kbd>↑↓</kbd> / <kbd>⌃JK</kbd> Navigate</span>
+    <span><kbd>↵</kbd> Select</span>
+    <span><kbd>⌘R</kbd> Reload</span>
+    <span><kbd>esc</kbd> Close</span>
   </div>
 </div>
 {/if}
@@ -359,5 +367,21 @@
     gap: 12px;
     color: rgba(255, 255, 255, 0.4);
     font-size: 11px;
+  }
+
+  .footer kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: inherit;
+    font-size: 10px;
+    line-height: 1;
+    color: rgba(255, 255, 255, 0.7);
+    margin-right: 4px;
+    vertical-align: middle;
   }
 </style>

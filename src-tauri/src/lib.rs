@@ -282,6 +282,7 @@ fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     .inner_size(800.0, 600.0)
     .resizable(false)
     .decorations(false)
+    .transparent(true)
     .always_on_top(true)
     .skip_taskbar(true)
     .focusable(false)

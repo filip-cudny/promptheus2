@@ -184,6 +184,8 @@
   let chatRowEl: HTMLElement | undefined = $state();
   let webviewProviders = $state<WebviewProvider[]>([]);
   let unlistenSettings: (() => void) | undefined;
+  let suppressedBlurCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  const SUPPRESSED_BLUR_RECHECK_MS = 150;
 
   let providerEntries = $derived<{ id: string; name: string; url?: string | null }[]>([
     { id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
@@ -457,19 +459,37 @@
 
     const win = getCurrentWebviewWindow();
     win.onFocusChanged(({ payload: focused }) => {
-      if (!focused) {
-        if (isSuppressed()) {
-          resumeClose();
-          return;
+      if (focused) {
+        if (suppressedBlurCheckTimer) {
+          clearTimeout(suppressedBlurCheckTimer);
+          suppressedBlurCheckTimer = null;
         }
-        if (isInBlurGrace()) return;
-        closeMenu();
+        return;
       }
+      if (isInBlurGrace()) return;
+      if (isSuppressed()) {
+        resumeClose();
+        if (suppressedBlurCheckTimer) clearTimeout(suppressedBlurCheckTimer);
+        suppressedBlurCheckTimer = setTimeout(() => {
+          suppressedBlurCheckTimer = null;
+          win.isFocused()
+            .then((stillFocused) => {
+              if (!stillFocused) closeMenu();
+            })
+            .catch(() => {});
+        }, SUPPRESSED_BLUR_RECHECK_MS);
+        return;
+      }
+      closeMenu();
     });
 
   });
 
   onDestroy(() => {
+    if (suppressedBlurCheckTimer) {
+      clearTimeout(suppressedBlurCheckTimer);
+      suppressedBlurCheckTimer = null;
+    }
     destroy();
     unlistenSettings?.();
   });

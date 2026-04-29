@@ -5,6 +5,35 @@ export interface TruncateResult {
   matches: FieldMatch[];
 }
 
+const WORD_BOUNDARY_MAX_SHIFT = 20;
+
+function isWordChar(c: string): boolean {
+  return /\S/.test(c);
+}
+
+function snapToWordBoundary(
+  chars: readonly string[],
+  idx: number,
+  direction: "right" | "left",
+  maxShift: number,
+): number {
+  if (idx <= 0 || idx >= chars.length) return idx;
+  if (!isWordChar(chars[idx - 1]) || !isWordChar(chars[idx])) return idx;
+  if (direction === "right") {
+    const limit = Math.min(chars.length, idx + maxShift);
+    let i = idx;
+    while (i < limit && isWordChar(chars[i])) i++;
+    while (i < limit && !isWordChar(chars[i])) i++;
+    return i;
+  } else {
+    const limit = Math.max(0, idx - maxShift);
+    let i = idx;
+    while (i > limit && isWordChar(chars[i - 1])) i--;
+    while (i > limit && !isWordChar(chars[i - 1])) i--;
+    return i;
+  }
+}
+
 export function truncateAroundMatch(
   text: string,
   matches: readonly FieldMatch[],
@@ -19,13 +48,26 @@ export function truncateAroundMatch(
   const firstIdx = target?.indices.length ? Math.min(...target.indices) : -1;
   const threshold = Math.floor(max / 2);
 
+  let start: number;
+  let end: number;
   if (firstIdx < 0 || firstIdx <= threshold) {
-    return { text: chars.slice(0, max).join("") + "…", matches: [...matches] };
+    start = 0;
+    end = Math.min(chars.length, max);
+  } else {
+    const headSlack = Math.floor(max / 4);
+    start = Math.max(0, firstIdx - headSlack);
+    end = Math.min(chars.length, start + max);
   }
 
-  const headSlack = Math.floor(max / 4);
-  const start = Math.max(0, firstIdx - headSlack);
-  const end = Math.min(chars.length, start + max);
+  if (start > 0) {
+    const snapped = snapToWordBoundary(chars, start, "right", WORD_BOUNDARY_MAX_SHIFT);
+    if (firstIdx < 0 || snapped <= firstIdx) start = snapped;
+  }
+  if (end < chars.length) {
+    const snapped = snapToWordBoundary(chars, end, "left", WORD_BOUNDARY_MAX_SHIFT);
+    if (snapped > firstIdx) end = snapped;
+  }
+
   const sliced = chars.slice(start, end);
   const prefix = start > 0 ? "…" : "";
   const suffix = end < chars.length ? "…" : "";
