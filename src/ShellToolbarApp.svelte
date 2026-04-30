@@ -21,6 +21,7 @@
     showProviderMenu,
   } from "$lib/services/shellToolbar";
   import { providerIconSvg } from "$lib/icons/providerIcons";
+  import { SHORTCUTS, matches } from "$lib/shortcuts";
 
   const HOST_LABEL = getCurrentWindow().label;
   const SELF_TARGET = getCurrentWebview().label;
@@ -147,7 +148,7 @@
   }
 
   async function handleGlobalKeydown(e: KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
+    if (matches(e, SHORTCUTS.openPalette)) {
       e.preventDefault();
       e.stopPropagation();
       try {
@@ -159,7 +160,7 @@
   }
 
   onMount(async () => {
-    window.addEventListener("keydown", handleGlobalKeydown, true);
+    window.addEventListener("keydown", handleGlobalKeydown);
 
     unlistenActive = await listen<{ provider_id: string | null }>(
       "shell:active-changed",
@@ -205,7 +206,7 @@
   });
 
   onDestroy(() => {
-    window.removeEventListener("keydown", handleGlobalKeydown, true);
+    window.removeEventListener("keydown", handleGlobalKeydown);
     unlistenActive?.();
     unlistenSelect?.();
     unlistenClosed?.();

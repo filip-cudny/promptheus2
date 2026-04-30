@@ -16,6 +16,7 @@
   import InputArea from "$lib/components/prompt/InputArea.svelte";
   import TabSidebar from "$lib/components/prompt/TabSidebar.svelte";
   import { openPalette, reloadActiveInHost } from "$lib/services/shellToolbar";
+  import { SHORTCUTS, matches } from "$lib/shortcuts";
 
   interface DialogInitParams {
     skill_id: string;
@@ -59,7 +60,7 @@
   let unlistenNewConversation: UnlistenFn | undefined;
 
   async function handleGlobalKeydown(e: KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "r") {
+    if (matches(e, SHORTCUTS.reloadActive)) {
       e.preventDefault();
       e.stopImmediatePropagation();
       if (chatPaletteOpen) {
@@ -73,7 +74,7 @@
       return;
     }
 
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
+    if (matches(e, SHORTCUTS.openPalette)) {
       e.preventDefault();
       e.stopPropagation();
       try {
@@ -84,7 +85,7 @@
       return;
     }
 
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
+    if (matches(e, SHORTCUTS.openChatPalette)) {
       e.preventDefault();
       e.stopPropagation();
       chatPaletteOpen = true;
@@ -156,7 +157,7 @@
   }
 
   onMount(async () => {
-    window.addEventListener("keydown", handleGlobalKeydown, true);
+    window.addEventListener("keydown", handleGlobalKeydown);
     skillsStore.init();
     await store.initFromSettings();
     loadModelInfo();
@@ -238,7 +239,7 @@
   }
 
   onDestroy(() => {
-    window.removeEventListener("keydown", handleGlobalKeydown, true);
+    window.removeEventListener("keydown", handleGlobalKeydown);
     unlistenRestore?.();
     unlistenContextChanged?.();
     unlistenVoiceInput?.();

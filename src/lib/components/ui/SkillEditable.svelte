@@ -241,11 +241,13 @@
       const next = handleListNavKey(e, autocompleteIndex, autocompleteItems.length, { wrap: true });
       if (next !== null) {
         e.preventDefault();
+        e.stopPropagation();
         autocompleteIndex = next;
         return;
       }
       if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey)) {
         e.preventDefault();
+        e.stopPropagation();
         if (autocompleteItems.length > 0) {
           insertSkill(autocompleteItems[autocompleteIndex]);
         }

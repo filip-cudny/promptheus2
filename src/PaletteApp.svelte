@@ -7,6 +7,7 @@
   import { PROMPTHEUS_PROVIDER_ID, closePalette, reloadActiveInHost } from "$lib/services/shellToolbar";
   import CommandPalette from "$lib/components/ui/CommandPalette.svelte";
   import { handleListNavKey } from "$lib/utils/listNavigation";
+  import { SHORTCUTS, matches } from "$lib/shortcuts";
 
   type ProviderEntry = { kind: "provider"; id: string; name: string; url?: string };
   type ActionEntry = { kind: "action"; id: string; name: string };
@@ -100,7 +101,7 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "r") {
+    if (matches(e, SHORTCUTS.reloadActive)) {
       e.preventDefault();
       reloadActive();
       return;
@@ -122,7 +123,7 @@
       index = nav;
       return;
     }
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
+    if (matches(e, SHORTCUTS.openPalette)) {
       e.preventDefault();
       dismiss(null);
       return;

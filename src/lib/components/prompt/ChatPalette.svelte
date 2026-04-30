@@ -147,11 +147,11 @@
   }
 
   onMount(() => {
-    window.addEventListener("keydown", handleKeydown, true);
+    window.addEventListener("keydown", handleKeydown);
   });
 
   onDestroy(() => {
-    window.removeEventListener("keydown", handleKeydown, true);
+    window.removeEventListener("keydown", handleKeydown);
     cancelInflight();
   });
 
