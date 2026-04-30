@@ -393,7 +393,7 @@ pub async fn execute_skill(
 ) -> Result<(), String> {
     let start_time = Instant::now();
 
-    let (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, skill_body_snapshot, input_content, messages, ai, param_overrides) = {
+    let (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, skill_version_id, input_content, messages, ai, param_overrides) = {
         let mut state = state.lock().await;
 
         let (execution_id, cancel_rx) = state
@@ -407,7 +407,10 @@ pub async fn execute_skill(
                 e.to_string()
             })?;
         let skill_display_name = skill.display_name.clone();
-        let skill_body_snapshot = skill.body.clone();
+        let skill_version_id = skill.skill_version_id.ok_or_else(|| {
+            state.prompt_execution.finish_skill_execution();
+            format!("Skill '{}' is missing a registered version", skill_name)
+        })?;
 
         let model_id = PromptExecutionService::resolve_quick_action_model(&state.config, skill.model.as_deref())
             .map_err(|e| {
@@ -452,7 +455,7 @@ pub async fn execute_skill(
         let skill_params = skill.parameters.as_ref().map(ModelParameters::from_map);
         let param_overrides = merge_optional_parameters(Some(surface_params), skill_params);
 
-        (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, skill_body_snapshot, input_content, messages, ai, param_overrides)
+        (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, skill_version_id, input_content, messages, ai, param_overrides)
     };
 
     let user_display_text = format!("/{skill_name} {input_content}");
@@ -513,7 +516,7 @@ pub async fn execute_skill(
                 text_attachments: vec![],
                 applied_skills: vec![AppliedSkill {
                     name: skill_name.clone(),
-                    body_snapshot: skill_body_snapshot,
+                    skill_version_id,
                     input: input_content.clone(),
                 }],
             };
@@ -859,8 +862,12 @@ pub async fn execute_conversation_from_tree(
             tool_call_id: None,
         };
 
+        let version_ids = skill_message::collect_skill_version_ids(&nodes);
+        let skill_bodies =
+            skill_message::load_skill_version_bodies(state.history.conn(), &version_ids)
+                .map_err(|e| e.to_string())?;
         let tree_messages =
-            skill_message::build_messages_from_tree(&nodes, &context_images);
+            skill_message::build_messages_from_tree(&nodes, &context_images, &skill_bodies);
 
         let mut all_messages = vec![system_message];
         all_messages.extend(tree_messages);

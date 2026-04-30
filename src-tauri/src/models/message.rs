@@ -72,7 +72,7 @@ pub struct ToolCallMessage {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AppliedSkill {
     pub name: String,
-    pub body_snapshot: String,
+    pub skill_version_id: i64,
     pub input: String,
 }
 

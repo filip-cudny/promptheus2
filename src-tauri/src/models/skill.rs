@@ -23,6 +23,8 @@ pub struct Skill {
     pub body: String,
     #[serde(skip)]
     pub file_path: PathBuf,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub skill_version_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]

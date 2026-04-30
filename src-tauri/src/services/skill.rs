@@ -1,8 +1,10 @@
 use std::path::{Path, PathBuf};
 
 use log::{info, warn};
+use rusqlite::{Connection, OptionalExtension};
 
 use crate::models::skill::{Skill, SkillFrontmatter};
+use crate::services::database::sha256_hex;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SkillError {
@@ -17,6 +19,9 @@ pub enum SkillError {
 
     #[error("YAML parse error in '{0}': {1}")]
     YamlParse(String, String),
+
+    #[error("SQLite error: {0}")]
+    Sqlite(#[from] rusqlite::Error),
 }
 
 pub struct SkillService {
@@ -121,6 +126,93 @@ impl SkillService {
     pub fn skills_dir(&self) -> &Path {
         &self.skills_dir
     }
+
+    pub fn sync_versions(&mut self, conn: &Connection) -> Result<(), SkillError> {
+        let now = chrono::Local::now()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+
+        for skill in self.skills.iter_mut() {
+            let skill_id: i64 = match conn
+                .query_row(
+                    "SELECT id FROM skills WHERE name = ?1",
+                    [&skill.name],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()?
+            {
+                Some(id) => {
+                    conn.execute(
+                        "UPDATE skills SET display_name = ?1, deleted_at = NULL WHERE id = ?2",
+                        rusqlite::params![skill.display_name, id],
+                    )?;
+                    id
+                }
+                None => {
+                    conn.execute(
+                        "INSERT INTO skills (name, display_name, created_at) VALUES (?1, ?2, ?3)",
+                        rusqlite::params![skill.name, skill.display_name, now],
+                    )?;
+                    conn.last_insert_rowid()
+                }
+            };
+
+            let body_hash = sha256_hex(&skill.body);
+            let version_id: i64 = match conn
+                .query_row(
+                    "SELECT id FROM skill_versions WHERE skill_id = ?1 AND body_hash = ?2",
+                    rusqlite::params![skill_id, body_hash],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()?
+            {
+                Some(id) => id,
+                None => {
+                    conn.execute(
+                        "INSERT INTO skill_versions (skill_id, body, body_hash, created_at) VALUES (?1, ?2, ?3, ?4)",
+                        rusqlite::params![skill_id, skill.body, body_hash, now],
+                    )?;
+                    info!(
+                        "registered new version of skill '{}' (id={})",
+                        skill.name,
+                        conn.last_insert_rowid()
+                    );
+                    conn.last_insert_rowid()
+                }
+            };
+
+            skill.skill_version_id = Some(version_id);
+        }
+
+        let active_names: Vec<String> = self.skills.iter().map(|s| s.name.clone()).collect();
+        if !active_names.is_empty() {
+            let placeholders: Vec<String> =
+                (1..=active_names.len()).map(|i| format!("?{i}")).collect();
+            let sql = format!(
+                "UPDATE skills SET deleted_at = ?{} WHERE deleted_at IS NULL AND name NOT IN ({})",
+                active_names.len() + 1,
+                placeholders.join(",")
+            );
+            let mut params: Vec<&dyn rusqlite::ToSql> =
+                active_names.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+            params.push(&now);
+            conn.execute(&sql, params.as_slice())?;
+        }
+
+        Ok(())
+    }
+
+    pub fn lookup_version_body(
+        conn: &Connection,
+        skill_version_id: i64,
+    ) -> Result<Option<String>, rusqlite::Error> {
+        conn.query_row(
+            "SELECT body FROM skill_versions WHERE id = ?1",
+            [skill_version_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+    }
 }
 
 fn display_name_from_slug(slug: &str) -> String {
@@ -159,6 +251,7 @@ fn parse_skill_file(path: &Path, dir_name: &str) -> Result<Skill, SkillError> {
         parameters: fm.parameters,
         body: body.trim().to_string(),
         file_path: path.to_path_buf(),
+        skill_version_id: None,
     })
 }
 

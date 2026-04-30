@@ -64,7 +64,7 @@ export interface ImageData {
 
 export interface AppliedSkill {
   name: string;
-  body_snapshot: string;
+  skill_version_id: number;
   input: string;
 }
 

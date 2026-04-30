@@ -980,7 +980,7 @@ export function createConversationStore(
     if (!tab) return;
 
     const node = tab.tree.nodes.get(nodeId);
-    if (node) node.content = content;
+    if (node) tab.tree.nodes.set(nodeId, { ...node, content });
   }
 
   function addNodeTextAttachment(nodeId: string, text: string): void {

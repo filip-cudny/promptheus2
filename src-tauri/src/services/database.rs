@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::path::Path;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
+use sha2::{Digest, Sha256};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseError {
@@ -80,7 +82,17 @@ fn run_migrations(conn: &Connection) -> Result<(), DatabaseError> {
         migrate_to_v4(conn)?;
     }
 
+    if version < 5 {
+        migrate_to_v5(conn)?;
+    }
+
     Ok(())
+}
+
+pub fn sha256_hex(input: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(input.as_bytes());
+    hex::encode(hasher.finalize())
 }
 
 fn migrate_to_v1(conn: &Connection) -> Result<(), DatabaseError> {
@@ -428,6 +440,178 @@ fn migrate_to_v4(conn: &Connection) -> Result<(), DatabaseError> {
     Ok(())
 }
 
+fn migrate_to_v5(conn: &Connection) -> Result<(), DatabaseError> {
+    conn.execute_batch(
+        "CREATE TABLE skills (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            display_name TEXT,
+            deleted_at TEXT,
+            created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE skill_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            skill_id INTEGER NOT NULL REFERENCES skills(id),
+            body TEXT NOT NULL,
+            body_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(skill_id, body_hash)
+        );
+
+        CREATE INDEX idx_skill_versions_skill_id ON skill_versions(skill_id);",
+    )?;
+
+    let now = chrono::Local::now()
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+
+    let rows: Vec<(String, Option<String>)> = {
+        let mut stmt =
+            conn.prepare("SELECT id, tree_json FROM conversations WHERE tree_json IS NOT NULL")?;
+        let iter = stmt.query_map([], |row| {
+            let id: String = row.get(0)?;
+            let tree: Option<String> = row.get(1)?;
+            Ok((id, tree))
+        })?;
+        iter.filter_map(|r| r.ok()).collect()
+    };
+
+    let mut version_cache: HashMap<(String, String), i64> = HashMap::new();
+    let mut skill_id_cache: HashMap<String, i64> = HashMap::new();
+    let mut migrated_count = 0usize;
+
+    for (entry_id, tree_opt) in rows {
+        let Some(tree) = tree_opt else { continue };
+        let mut value: serde_json::Value = match serde_json::from_str(&tree) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        let nodes = match value.get_mut("nodes").and_then(|v| v.as_array_mut()) {
+            Some(n) => n,
+            None => continue,
+        };
+
+        let mut changed = false;
+
+        for node in nodes.iter_mut() {
+            let applied = match node
+                .get_mut("applied_skills")
+                .and_then(|v| v.as_array_mut())
+            {
+                Some(a) => a,
+                None => continue,
+            };
+
+            for skill_entry in applied.iter_mut() {
+                let body = skill_entry
+                    .get("body_snapshot")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let name = skill_entry
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let already_versioned = skill_entry
+                    .get("skill_version_id")
+                    .and_then(|v| v.as_i64())
+                    .is_some();
+
+                if already_versioned {
+                    if let Some(map) = skill_entry.as_object_mut() {
+                        map.remove("body_snapshot");
+                    }
+                    continue;
+                }
+
+                let (Some(name), Some(body)) = (name, body) else {
+                    continue;
+                };
+
+                let hash = sha256_hex(&body);
+                let cache_key = (name.clone(), hash.clone());
+                let version_id = if let Some(id) = version_cache.get(&cache_key) {
+                    *id
+                } else {
+                    let skill_id = if let Some(id) = skill_id_cache.get(&name) {
+                        *id
+                    } else {
+                        let existing: Option<i64> = conn
+                            .query_row(
+                                "SELECT id FROM skills WHERE name = ?1",
+                                [&name],
+                                |row| row.get(0),
+                            )
+                            .optional()?;
+                        let id = match existing {
+                            Some(id) => id,
+                            None => {
+                                conn.execute(
+                                    "INSERT INTO skills (name, display_name, created_at) VALUES (?1, NULL, ?2)",
+                                    rusqlite::params![name, now],
+                                )?;
+                                conn.last_insert_rowid()
+                            }
+                        };
+                        skill_id_cache.insert(name.clone(), id);
+                        id
+                    };
+
+                    let existing_version: Option<i64> = conn
+                        .query_row(
+                            "SELECT id FROM skill_versions WHERE skill_id = ?1 AND body_hash = ?2",
+                            rusqlite::params![skill_id, hash],
+                            |row| row.get(0),
+                        )
+                        .optional()?;
+                    let id = match existing_version {
+                        Some(id) => id,
+                        None => {
+                            conn.execute(
+                                "INSERT INTO skill_versions (skill_id, body, body_hash, created_at) VALUES (?1, ?2, ?3, ?4)",
+                                rusqlite::params![skill_id, body, hash, now],
+                            )?;
+                            conn.last_insert_rowid()
+                        }
+                    };
+                    version_cache.insert(cache_key, id);
+                    id
+                };
+
+                if let Some(map) = skill_entry.as_object_mut() {
+                    map.remove("body_snapshot");
+                    map.insert(
+                        "skill_version_id".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(version_id)),
+                    );
+                }
+                changed = true;
+            }
+        }
+
+        if changed {
+            let new_json = serde_json::to_string(&value).unwrap_or_default();
+            conn.execute(
+                "UPDATE conversations SET tree_json = ?1 WHERE id = ?2",
+                rusqlite::params![new_json, entry_id],
+            )?;
+            migrated_count += 1;
+        }
+    }
+
+    if migrated_count > 0 {
+        log::info!(
+            "v5 migration: rewrote {} entries with skill_version_id",
+            migrated_count
+        );
+    }
+
+    set_schema_version(conn, 5)?;
+    log::info!("database migrated to schema version 5 (skills + skill_versions)");
+    Ok(())
+}
+
 fn migrate_to_v3(conn: &Connection) -> Result<(), DatabaseError> {
     conn.execute_batch(
         "CREATE VIRTUAL TABLE conversations_fts USING fts5(
@@ -493,7 +677,7 @@ mod tests {
     fn schema_version_is_set() {
         let db = Database::open_in_memory().unwrap();
         let version = get_schema_version(db.conn());
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
     }
 
     #[test]
@@ -501,7 +685,7 @@ mod tests {
         let db = Database::open_in_memory().unwrap();
         run_migrations(db.conn()).unwrap();
         let version = get_schema_version(db.conn());
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
     }
 
     #[test]

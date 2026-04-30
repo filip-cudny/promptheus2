@@ -734,6 +734,9 @@ pub fn run() {
             let app_data_dir = app.path().app_data_dir()?;
             let database = Database::open(&app_data_dir)
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+            skill_service
+                .sync_versions(database.conn())
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
             let history_service = SqliteHistoryService::new(database, 1000);
             let image_storage = ImageStorage::new(&app_data_dir);
             image_storage

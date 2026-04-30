@@ -4,7 +4,7 @@
   import TextChipBar from "$lib/components/ui/TextChipBar.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import SkillEditable from "$lib/components/ui/SkillEditable.svelte";
-  import { Trash2, Pencil, Copy, Check } from "lucide-svelte";
+  import { Trash2, Pencil, Copy, Check, SendHorizonal } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { handleEditablePaste } from "$lib/utils/paste";
   import { highlightSkills } from "$lib/utils/skillHighlight";
@@ -60,16 +60,17 @@
     }
   }
 
-  function handleEditInput() {
-    onContentChange(editText);
-  }
-
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      editMode = false;
-      onRegenerate();
+      submitEdit();
     }
+  }
+
+  function submitEdit() {
+    onContentChange(editText);
+    editMode = false;
+    onRegenerate();
   }
 
   async function handlePaste(e: ClipboardEvent) {
@@ -99,7 +100,6 @@
             bind:this={skillEditable}
             bind:text={editText}
             editableClass="bubble-editable"
-            oninput={handleEditInput}
             onkeydown={handleKeydown}
             onpaste={handlePaste}
           />
@@ -125,6 +125,13 @@
     <button class="icon-btn" class:active={editMode} onclick={toggleEditMode} title={editMode ? "View" : "Edit"}>
       <Pencil size={ICON_SIZE.md} />
     </button>
+    {#if editMode}
+      <ActionIconButton
+        icon={SendHorizonal}
+        onclick={submitEdit}
+        title="Send (Enter)"
+      />
+    {/if}
     {#if showDelete}
       <button class="icon-btn delete-btn" onclick={() => onDelete(node.node_id)} title="Delete">
         <Trash2 size={ICON_SIZE.md} />

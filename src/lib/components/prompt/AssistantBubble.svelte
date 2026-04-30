@@ -6,7 +6,7 @@
   import ThinkingBlock from "$lib/components/ui/ThinkingBlock.svelte";
   import ToolCallGroup from "./ToolCallGroup.svelte";
   import { resizeTextarea } from "$lib/utils/autoResize";
-  import { Copy, Check, RefreshCw, Trash2, ChevronLeft, ChevronRight, Pencil, AlertCircle } from "lucide-svelte";
+  import { Copy, Check, RefreshCw, Trash2, ChevronLeft, ChevronRight, Pencil, AlertCircle, Wrench, Save } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
@@ -118,26 +118,76 @@
     return blocks;
   });
 
+  type EditSegment =
+    | { type: "text"; leadingWs: string; text: string; trailingWs: string }
+    | { type: "tool_call"; tool_call_id: string };
+
   let editMode = $state(false);
-  let textarea: HTMLTextAreaElement | undefined = $state();
+  let editSegments = $state<EditSegment[]>([]);
+  let textareaRefs: Array<HTMLTextAreaElement | undefined> = $state([]);
 
-  $effect(() => {
-    if (editMode && textarea) {
-      displayContent;
-      requestAnimationFrame(() => resizeTextarea(textarea!));
+  function splitTextSegment(text: string): { leadingWs: string; text: string; trailingWs: string } {
+    const leadingWs = text.match(/^\s*/)?.[0] ?? "";
+    const rest = text.slice(leadingWs.length);
+    const trailingWs = rest.match(/\s*$/)?.[0] ?? "";
+    const mid = rest.slice(0, rest.length - trailingWs.length);
+    return { leadingWs, text: mid, trailingWs };
+  }
+
+  function buildEditSegments(content: string): EditSegment[] {
+    const parsed = parseContentSegments(content);
+    if (parsed.length === 0) {
+      const split = splitTextSegment(content);
+      return [{ type: "text", ...split }];
     }
-  });
+    return parsed.map((s) =>
+      s.type === "text"
+        ? { type: "text" as const, ...splitTextSegment(s.text) }
+        : { type: "tool_call" as const, tool_call_id: s.tool_call_id }
+    );
+  }
 
-  function handleInput(e: Event) {
+  function rebuildContentFromEditSegments(): string {
+    return editSegments
+      .map((s) =>
+        s.type === "text"
+          ? s.leadingWs + s.text + s.trailingWs
+          : `{{tool_call:${s.tool_call_id}}}`
+      )
+      .join("");
+  }
+
+  function handleSegmentInput(idx: number, e: Event) {
     const target = e.target as HTMLTextAreaElement;
-    onContentChange(target.value);
+    const seg = editSegments[idx];
+    if (seg.type !== "text") return;
+    editSegments[idx] = { ...seg, text: target.value };
     resizeTextarea(target);
   }
 
   function toggleEditMode() {
+    if (!editMode) {
+      editSegments = buildEditSegments(displayContent);
+    }
     editMode = !editMode;
-    if (editMode && textarea) {
-      requestAnimationFrame(() => resizeTextarea(textarea!));
+    if (editMode) {
+      requestAnimationFrame(() => {
+        for (const ta of textareaRefs) {
+          if (ta) resizeTextarea(ta);
+        }
+      });
+    }
+  }
+
+  function submitEdit() {
+    onContentChange(rebuildContentFromEditSegments());
+    editMode = false;
+  }
+
+  function handleEditKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      submitEdit();
     }
   }
 
@@ -162,13 +212,24 @@
 
       {#if editMode}
         <div class="bubble-edit-field">
-          <textarea
-            bind:this={textarea}
-            value={displayContent}
-            oninput={handleInput}
-            class="bubble-textarea"
-            rows="1"
-          ></textarea>
+          {#each editSegments as seg, i (i)}
+            {#if seg.type === "text" && seg.text.trim() !== ""}
+              <textarea
+                bind:this={textareaRefs[i]}
+                value={seg.text}
+                oninput={(e) => handleSegmentInput(i, e)}
+                onkeydown={handleEditKeydown}
+                class="bubble-textarea"
+                rows="1"
+              ></textarea>
+            {:else if seg.type === "tool_call"}
+              {@const tc = allToolCalls.get(seg.tool_call_id)}
+              <div class="tool-call-chip" title="Tool call (read-only)">
+                <Wrench size={ICON_SIZE.sm} />
+                <span>{tc?.tool_name ?? "tool call"}</span>
+              </div>
+            {/if}
+          {/each}
         </div>
       {:else if hasMarkers}
         {#each renderBlocks as block}
@@ -249,6 +310,13 @@
       <button class="icon-btn" class:active={editMode} onclick={toggleEditMode} title={editMode ? "View" : "Edit"}>
         <Pencil size={ICON_SIZE.md} />
       </button>
+      {#if editMode}
+        <ActionIconButton
+          icon={Save}
+          onclick={submitEdit}
+          title="Save (Ctrl+Enter)"
+        />
+      {/if}
 
       {#if showDelete}
         <button class="icon-btn delete-btn" onclick={() => onDelete(node.node_id)} title="Delete">
@@ -347,8 +415,8 @@
   }
 
   .icon-btn.active {
-    background: rgba(155, 109, 204, 0.2);
-    color: #c9a5f0;
+    background: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.9);
   }
 
   .delete-btn:hover {
@@ -368,7 +436,7 @@
   }
 
   .bubble-edit-field:focus-within {
-    border-color: rgba(155, 109, 204, 0.4);
+    border-color: rgba(255, 255, 255, 0.25);
   }
 
   .bubble-textarea {
@@ -387,6 +455,21 @@
 
   .bubble-textarea:focus {
     outline: none;
+  }
+
+  .tool-call-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    margin: 2px 0;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 12px;
+    width: fit-content;
+    user-select: none;
   }
 
   .error-banner {

@@ -47,10 +47,13 @@ pub async fn get_skill_body(
 pub async fn reload_skills(
     state: State<'_, Mutex<AppState>>,
 ) -> Result<(), String> {
-    let mut state = state.lock().await;
-    let order = state.config.settings().skills_order.clone();
-    state
-        .skill_service
+    let mut guard = state.lock().await;
+    let s = &mut *guard;
+    let order = s.config.settings().skills_order.clone();
+    s.skill_service
         .reload(&order)
+        .map_err(|e| e.to_string())?;
+    s.skill_service
+        .sync_versions(s.history.conn())
         .map_err(|e| e.to_string())
 }

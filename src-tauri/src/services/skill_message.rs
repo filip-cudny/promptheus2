@@ -1,4 +1,5 @@
 use regex::Regex;
+use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use crate::models::context::ContextItem;
@@ -17,13 +18,18 @@ pub fn compose_skill_user_message(skill: &Skill, input: &str) -> String {
     )
 }
 
-pub fn compose_from_snapshot(skills: &[AppliedSkill]) -> String {
+pub fn compose_from_snapshot(
+    skills: &[AppliedSkill],
+    bodies: &HashMap<i64, String>,
+) -> String {
     let mut parts = Vec::new();
 
     for (i, applied) in skills.iter().enumerate() {
+        let empty = String::new();
+        let body = bodies.get(&applied.skill_version_id).unwrap_or(&empty);
         parts.push(format!(
             "<skill name=\"{}\">\n{}\n</skill>\n\n<input>\n{}\n</input>",
-            applied.name, applied.body_snapshot, applied.input
+            applied.name, body, applied.input
         ));
 
         if i < skills.len() - 1 {
@@ -32,6 +38,44 @@ pub fn compose_from_snapshot(skills: &[AppliedSkill]) -> String {
     }
 
     parts.join("")
+}
+
+pub fn collect_skill_version_ids(nodes: &[ConversationNodeForExecution]) -> Vec<i64> {
+    let mut ids = Vec::new();
+    for node in nodes {
+        for applied in &node.applied_skills {
+            ids.push(applied.skill_version_id);
+        }
+    }
+    ids.sort_unstable();
+    ids.dedup();
+    ids
+}
+
+pub fn load_skill_version_bodies(
+    conn: &rusqlite::Connection,
+    ids: &[i64],
+) -> Result<HashMap<i64, String>, rusqlite::Error> {
+    let mut bodies = HashMap::new();
+    if ids.is_empty() {
+        return Ok(bodies);
+    }
+    let placeholders: Vec<String> = (1..=ids.len()).map(|i| format!("?{i}")).collect();
+    let sql = format!(
+        "SELECT id, body FROM skill_versions WHERE id IN ({})",
+        placeholders.join(",")
+    );
+    let mut stmt = conn.prepare(&sql)?;
+    let params: Vec<&dyn rusqlite::ToSql> =
+        ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
+    let rows = stmt.query_map(params.as_slice(), |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+    })?;
+    for row in rows {
+        let (id, body) = row?;
+        bodies.insert(id, body);
+    }
+    Ok(bodies)
 }
 
 pub fn prepare_skill_messages(
@@ -187,9 +231,10 @@ pub fn resolve_skill_input(
         .filter_map(|seg| {
             let skill_name = seg.skill_name.as_deref()?;
             let skill = skill_service.get_skill(skill_name)?;
+            let skill_version_id = skill.skill_version_id?;
             Some(AppliedSkill {
                 name: skill.name.clone(),
-                body_snapshot: skill.body.clone(),
+                skill_version_id,
                 input: seg.input.clone(),
             })
         })
@@ -244,6 +289,7 @@ fn build_user_text_with_updates(content: &str, updates: &[NodeUpdate]) -> String
 pub fn build_messages_from_tree(
     nodes: &[ConversationNodeForExecution],
     context_images: &[ImageData],
+    skill_bodies: &HashMap<i64, String>,
 ) -> Vec<ProcessedMessage> {
     let mut messages = Vec::new();
     let mut is_first_user = true;
@@ -255,7 +301,7 @@ pub fn build_messages_from_tree(
             is_first_user = false;
 
             let composed_content = if !node.applied_skills.is_empty() {
-                compose_from_snapshot(&node.applied_skills)
+                compose_from_snapshot(&node.applied_skills, skill_bodies)
             } else {
                 node.content.clone()
             };
@@ -360,7 +406,12 @@ mod tests {
             parameters: None,
             body: body.to_string(),
             file_path: PathBuf::new(),
+            skill_version_id: Some(1),
         }
+    }
+
+    fn snapshot_bodies(items: &[(i64, &str)]) -> HashMap<i64, String> {
+        items.iter().map(|(id, body)| (*id, (*body).to_string())).collect()
     }
 
     #[test]
@@ -380,16 +431,17 @@ mod tests {
         let skills = vec![
             AppliedSkill {
                 name: "translate".into(),
-                body_snapshot: "Translate.".into(),
+                skill_version_id: 1,
                 input: "hello".into(),
             },
             AppliedSkill {
                 name: "formal".into(),
-                body_snapshot: "Make formal.".into(),
+                skill_version_id: 2,
                 input: "world".into(),
             },
         ];
-        let result = compose_from_snapshot(&skills);
+        let bodies = snapshot_bodies(&[(1, "Translate."), (2, "Make formal.")]);
+        let result = compose_from_snapshot(&skills, &bodies);
 
         assert!(result.contains("<skill name=\"translate\">"));
         assert!(result.contains("<skill-end name=\"translate\" />"));
@@ -403,10 +455,11 @@ mod tests {
     fn compose_from_snapshot_single_no_skill_end() {
         let skills = vec![AppliedSkill {
             name: "only".into(),
-            body_snapshot: "Body.".into(),
+            skill_version_id: 1,
             input: "text".into(),
         }];
-        let result = compose_from_snapshot(&skills);
+        let bodies = snapshot_bodies(&[(1, "Body.")]);
+        let result = compose_from_snapshot(&skills, &bodies);
         assert!(!result.contains("<skill-end"));
     }
 
@@ -553,7 +606,7 @@ mod tests {
                 applied_skills: vec![],
             },
         ];
-        let messages = build_messages_from_tree(&nodes, &[]);
+        let messages = build_messages_from_tree(&nodes, &[], &HashMap::new());
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, "user");
         assert_eq!(messages[1].role, "assistant");
@@ -575,7 +628,7 @@ mod tests {
             updates: vec![],
             applied_skills: vec![],
         }];
-        let messages = build_messages_from_tree(&nodes, &[]);
+        let messages = build_messages_from_tree(&nodes, &[], &HashMap::new());
         if let MessageContent::Text(ref t) = messages[0].content {
             assert!(t.contains("<pasted-text name=\"Text #1\">"));
             assert!(t.contains("some code"));
@@ -600,7 +653,7 @@ mod tests {
             data: "abc123".into(),
             media_type: "image/png".into(),
         }];
-        let messages = build_messages_from_tree(&nodes, &ctx_images);
+        let messages = build_messages_from_tree(&nodes, &ctx_images, &HashMap::new());
         match &messages[0].content {
             MessageContent::Parts(parts) => {
                 assert!(parts.len() >= 2);
@@ -646,7 +699,7 @@ mod tests {
             data: "abc".into(),
             media_type: "image/png".into(),
         }];
-        let messages = build_messages_from_tree(&nodes, &ctx_images);
+        let messages = build_messages_from_tree(&nodes, &ctx_images, &HashMap::new());
         assert!(matches!(&messages[0].content, MessageContent::Parts(_)));
         assert!(matches!(&messages[2].content, MessageContent::Text(_)));
     }

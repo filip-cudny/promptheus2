@@ -194,7 +194,12 @@ pub async fn count_conversation_tokens(
             tool_call_id: None,
         };
 
-        let tree_messages = skill_message::build_messages_from_tree(&nodes, &context_images);
+        let version_ids = skill_message::collect_skill_version_ids(&nodes);
+        let skill_bodies =
+            skill_message::load_skill_version_bodies(state.history.conn(), &version_ids)
+                .map_err(|e| e.to_string())?;
+        let tree_messages =
+            skill_message::build_messages_from_tree(&nodes, &context_images, &skill_bodies);
 
         let mut all_messages = vec![system_message];
         all_messages.extend(tree_messages);
