@@ -3,6 +3,7 @@
   import { highlightSkills, fuzzyMatch } from "$lib/utils/skillHighlight";
   import { resizeTextarea } from "$lib/utils/autoResize";
   import { UndoStack } from "$lib/utils/undoStack";
+  import { handleListNavKey } from "$lib/utils/listNavigation";
   import type { SkillSummary } from "$lib/types";
 
   let {
@@ -237,16 +238,10 @@
     }
 
     if (showAutocomplete) {
-      if (e.key === "ArrowDown") {
+      const next = handleListNavKey(e, autocompleteIndex, autocompleteItems.length, { wrap: true });
+      if (next !== null) {
         e.preventDefault();
-        autocompleteIndex = (autocompleteIndex + 1) % autocompleteItems.length;
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        autocompleteIndex =
-          (autocompleteIndex - 1 + autocompleteItems.length) %
-          autocompleteItems.length;
+        autocompleteIndex = next;
         return;
       }
       if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey)) {

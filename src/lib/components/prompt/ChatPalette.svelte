@@ -5,6 +5,7 @@
   import { ChevronRight, MessagesSquare, Plus, X } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { highlightFor, truncateAroundMatch } from "$lib/utils/highlightMatches";
+  import { handleListNavKey } from "$lib/utils/listNavigation";
   import type { FieldMatch, SearchField, SearchResult, SearchResponse } from "$lib/types/historySearch";
   import CommandPalette from "$lib/components/ui/CommandPalette.svelte";
 
@@ -137,16 +138,11 @@
       if (item) activate(item);
       return;
     }
-    if (e.key === "ArrowDown" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "j")) {
+    const nav = handleListNavKey(e, highlightedIndex, items.length);
+    if (nav !== null) {
       e.preventDefault();
       e.stopPropagation();
-      highlightedIndex = Math.min(items.length - 1, highlightedIndex + 1);
-      return;
-    }
-    if (e.key === "ArrowUp" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k")) {
-      e.preventDefault();
-      e.stopPropagation();
-      highlightedIndex = Math.max(0, highlightedIndex - 1);
+      highlightedIndex = nav;
     }
   }
 

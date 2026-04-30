@@ -6,6 +6,7 @@
   import { providerIconSvg } from "$lib/icons/providerIcons";
   import { PROMPTHEUS_PROVIDER_ID, closePalette, reloadActiveInHost } from "$lib/services/shellToolbar";
   import CommandPalette from "$lib/components/ui/CommandPalette.svelte";
+  import { handleListNavKey } from "$lib/utils/listNavigation";
 
   type ProviderEntry = { kind: "provider"; id: string; name: string; url?: string };
   type ActionEntry = { kind: "action"; id: string; name: string };
@@ -115,14 +116,10 @@
       if (entry) selectEntry(entry);
       return;
     }
-    if (e.key === "ArrowDown" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "j")) {
+    const nav = handleListNavKey(e, index, filtered.length);
+    if (nav !== null) {
       e.preventDefault();
-      index = Math.min(filtered.length - 1, index + 1);
-      return;
-    }
-    if (e.key === "ArrowUp" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k")) {
-      e.preventDefault();
-      index = Math.max(0, index - 1);
+      index = nav;
       return;
     }
     if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
