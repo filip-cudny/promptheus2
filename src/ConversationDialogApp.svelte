@@ -45,6 +45,16 @@
   let defaultModelId = $state<string | null>(null);
 
   let chatPaletteOpen = $state(false);
+  let inputArea = $state<ReturnType<typeof InputArea> | undefined>();
+  let prevChatPaletteOpen = false;
+
+  $effect(() => {
+    const isOpen = chatPaletteOpen;
+    if (prevChatPaletteOpen && !isOpen) {
+      requestAnimationFrame(() => inputArea?.focusInput());
+    }
+    prevChatPaletteOpen = isOpen;
+  });
 
   let contextWindowSize = $derived.by(() => {
     const activeModelId = store.modelId ?? defaultModelId;
@@ -58,6 +68,7 @@
   let unlistenVoiceInput: UnlistenFn | undefined;
   let unlistenOpenForSkill: UnlistenFn | undefined;
   let unlistenNewConversation: UnlistenFn | undefined;
+  let unlistenActiveChanged: UnlistenFn | undefined;
 
   async function handleGlobalKeydown(e: KeyboardEvent) {
     if (matches(e, SHORTCUTS.reloadActive)) {
@@ -201,6 +212,16 @@
       { target: SELF_TARGET },
     );
 
+    unlistenActiveChanged = await listen<{ provider_id: string | null }>(
+      "shell:active-changed",
+      (event) => {
+        if (event.payload.provider_id === null) {
+          requestAnimationFrame(() => inputArea?.focusInput());
+        }
+      },
+      { target: SELF_TARGET },
+    );
+
     await autoShowContextIfNeeded();
 
     unlistenContextChanged = await listen("context-changed", () => {
@@ -245,6 +266,7 @@
     unlistenVoiceInput?.();
     unlistenOpenForSkill?.();
     unlistenNewConversation?.();
+    unlistenActiveChanged?.();
     store.destroy();
   });
 </script>
@@ -268,7 +290,7 @@
     </button>
   </div>
   <ConversationArea {store} />
-  <InputArea {store} {models} {contextVisible} {contextDisabled} {contextInitialCollapsed} {contextWindowSize} {defaultModelId} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
+  <InputArea bind:this={inputArea} {store} {models} {contextVisible} {contextDisabled} {contextInitialCollapsed} {contextWindowSize} {defaultModelId} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
   <TabSidebar {store} open={sidebarOpen} onClose={() => sidebarOpen = false} />
 </div>
 

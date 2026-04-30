@@ -156,6 +156,10 @@
   function onKeyDown(e: KeyboardEvent) { shiftHeld = e.shiftKey; }
   function onKeyUp(e: KeyboardEvent) { shiftHeld = e.shiftKey; }
 
+  export function focusInput() {
+    skillEditable?.focus();
+  }
+
   onMount(async () => {
     skillEditable?.focus();
     window.addEventListener("keydown", onKeyDown);
