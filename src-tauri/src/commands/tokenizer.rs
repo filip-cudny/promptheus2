@@ -118,10 +118,14 @@ pub async fn count_conversation_tokens(
         let nodes: Vec<ConversationNodeForExecution> = nodes
             .into_iter()
             .map(|mut node| {
-                if node.role == "user" {
+                if node.role == "user" && node.applied_skills.is_empty()
+                    && skill_message::has_skill_references(&node.content)
+                {
                     let result =
                         skill_message::resolve_skill_input(&state.skill_service, &node.content);
-                    node.content = result.resolved_text;
+                    if result.had_skills {
+                        node.applied_skills = result.applied_skills;
+                    }
                 }
                 node
             })

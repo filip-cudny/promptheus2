@@ -887,7 +887,6 @@ pub fn run() {
             commands::history::clear_history,
             commands::history::copy_history_content,
             commands::history::update_history_entry_title,
-            commands::history::update_history_rendered,
             commands::history::search_history,
             commands::history::list_history_skills,
             commands::execution::execute_skill,

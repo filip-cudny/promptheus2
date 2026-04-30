@@ -8,7 +8,6 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import { handleEditablePaste } from "$lib/utils/paste";
   import { highlightSkills } from "$lib/utils/skillHighlight";
-  import { isSkillXml, extractSkillDisplayText } from "$lib/utils/skillDisplay";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
 
   let {
@@ -40,10 +39,7 @@
   }
 
   function formatUserContent(content: string): string {
-    const displayContent = isSkillXml(content)
-      ? extractSkillDisplayText(content)
-      : content;
-    return highlightSkills(displayContent, classifySkillToken, "\n");
+    return highlightSkills(content, classifySkillToken, "\n");
   }
 
   let editMode = $state(false);
@@ -53,9 +49,7 @@
   function toggleEditMode() {
     editMode = !editMode;
     if (editMode) {
-      editText = isSkillXml(node.content)
-        ? extractSkillDisplayText(node.content)
-        : node.content;
+      editText = node.content;
       requestAnimationFrame(() => {
         if (skillEditable) {
           skillEditable.setTextAndHighlight(editText);
@@ -86,10 +80,7 @@
   }
 
   async function copyContent() {
-    const displayText = isSkillXml(node.content)
-      ? extractSkillDisplayText(node.content)
-      : node.content;
-    await navigator.clipboard.writeText(displayText);
+    await navigator.clipboard.writeText(node.content);
   }
 </script>
 

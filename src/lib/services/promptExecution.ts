@@ -1,5 +1,6 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type {
+  AppliedSkill,
   StreamEvent,
   ConversationNodeForExecution,
   ImageData,
@@ -92,8 +93,8 @@ export async function generateConversationTitle(
 }
 
 export interface ResolveSkillInputResult {
-  resolved_text: string;
   had_skills: boolean;
+  applied_skills: AppliedSkill[];
 }
 
 export async function resolveSkillInput(

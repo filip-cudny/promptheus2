@@ -65,8 +65,6 @@ pub async fn add_history_entry(
     error: Option<String>,
     is_multi_turn: bool,
     skill_name: Option<String>,
-    input_content_rendered: Option<String>,
-    output_content_rendered: Option<String>,
 ) -> Result<(), String> {
     let state = state.lock().await;
     state.history.add_entry(
@@ -79,8 +77,6 @@ pub async fn add_history_entry(
         is_multi_turn,
         skill_name,
         false,
-        input_content_rendered,
-        output_content_rendered,
     );
     emit_history_changed(&app)
 }
@@ -101,8 +97,6 @@ pub async fn add_conversation_entry(
     #[allow(unused_variables)] images: Vec<ImagePayload>,
     model_id: Option<String>,
     reasoning_effort: Option<String>,
-    input_content_rendered: Option<String>,
-    output_content_rendered: Option<String>,
 ) -> Result<String, String> {
     let state = state.lock().await;
     let resolved_environment_section = tab_id
@@ -123,8 +117,6 @@ pub async fn add_conversation_entry(
         images,
         model_id,
         reasoning_effort,
-        input_content_rendered,
-        output_content_rendered,
     );
     emit_history_changed(&app)?;
     Ok(id)
@@ -142,8 +134,6 @@ pub async fn update_conversation_entry(
     #[allow(unused_variables)] images: Vec<ImagePayload>,
     model_id: Option<String>,
     reasoning_effort: Option<String>,
-    input_content_rendered: Option<String>,
-    output_content_rendered: Option<String>,
 ) -> Result<(), String> {
     let state = state.lock().await;
     state
@@ -157,25 +147,9 @@ pub async fn update_conversation_entry(
             images,
             model_id,
             reasoning_effort,
-            input_content_rendered,
-            output_content_rendered,
         )
         .map_err(|e| e.to_string())?;
     emit_history_changed(&app)
-}
-
-#[tauri::command]
-pub async fn update_history_rendered(
-    state: State<'_, Mutex<AppState>>,
-    entry_id: String,
-    input_rendered: Option<String>,
-    output_rendered: Option<String>,
-) -> Result<(), String> {
-    let state = state.lock().await;
-    state
-        .history
-        .update_rendered(&entry_id, input_rendered, output_rendered)
-        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -321,8 +295,6 @@ mod tests {
             updated_at: None,
             quick_action: false,
             title: None,
-            input_content_rendered: None,
-            output_content_rendered: None,
         }
     }
 

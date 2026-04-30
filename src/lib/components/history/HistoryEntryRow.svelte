@@ -1,7 +1,6 @@
 <script lang="ts">
   import { Mic, MessageSquare, MessagesSquare, CircleAlert, SquareArrowOutUpRight, Copy, Check, CornerDownRight } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import { extractSkillDisplayText } from "$lib/utils/skillDisplay";
   import { highlightFor, truncateAroundMatch } from "$lib/utils/highlightMatches";
   import type { HistoryEntry } from "$lib/types";
   import type { FieldMatch } from "$lib/types/historySearch";
@@ -36,23 +35,16 @@
   );
 
   let displayName = $derived(
-    extractSkillDisplayText(
-      entry.title ?? entry.skill_name ?? (entry.entry_type === "speech" ? "Transcription" : "Chat"),
-    ),
+    entry.title ?? entry.skill_name ?? (entry.entry_type === "speech" ? "Transcription" : "Chat"),
   );
 
-  let inputForDisplay = $derived(entry.input_content_rendered ?? entry.input_content);
+  let inputForDisplay = $derived(entry.input_content);
 
   let inputPreview = $derived(
-    truncateAroundMatch(
-      extractSkillDisplayText(inputForDisplay),
-      matches,
-      "input_content",
-      120,
-    ),
+    truncateAroundMatch(inputForDisplay, matches, "input_content", 120),
   );
 
-  let outputForDisplay = $derived(entry.output_content_rendered ?? entry.output_content ?? "");
+  let outputForDisplay = $derived(entry.output_content ?? "");
 
   let outputMatch = $derived(matches.find((m) => m.field === "output_content"));
   let outputDuplicatesInput = $derived(outputForDisplay === inputForDisplay);
@@ -62,12 +54,7 @@
 
   let outputPreview = $derived(
     hasOutputMatch
-      ? truncateAroundMatch(
-          extractSkillDisplayText(outputForDisplay),
-          matches,
-          "output_content",
-          120,
-        )
+      ? truncateAroundMatch(outputForDisplay, matches, "output_content", 120)
       : { text: "", matches: [] },
   );
 

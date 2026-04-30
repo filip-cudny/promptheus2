@@ -52,8 +52,6 @@ impl SqliteHistoryService {
         is_multi_turn: bool,
         skill_name: Option<String>,
         quick_action: bool,
-        input_content_rendered: Option<String>,
-        output_content_rendered: Option<String>,
     ) {
         let id = Self::generate_id();
         let now = Self::now_timestamp();
@@ -63,8 +61,8 @@ impl SqliteHistoryService {
         };
 
         let result = self.db.conn().execute(
-            "INSERT INTO conversations (id, entry_type, input_content, output_content, skill_id, skill_name, success, error, is_multi_turn, quick_action, created_at, input_content_rendered, output_content_rendered)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            "INSERT INTO conversations (id, entry_type, input_content, output_content, skill_id, skill_name, success, error, is_multi_turn, quick_action, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             rusqlite::params![
                 id,
                 entry_type_str,
@@ -77,8 +75,6 @@ impl SqliteHistoryService {
                 is_multi_turn,
                 quick_action,
                 now,
-                input_content_rendered,
-                output_content_rendered,
             ],
         );
 
@@ -105,14 +101,13 @@ impl SqliteHistoryService {
         images: Vec<ImagePayload>,
         model_id: Option<String>,
         reasoning_effort: Option<String>,
-        input_content_rendered: Option<String>,
-        output_content_rendered: Option<String>,
     ) -> String {
         let id = Self::generate_id();
         let now = Self::now_timestamp();
 
         let input_summary = Self::build_input_summary(&nodes);
         let output_summary = Self::build_output_summary(&nodes);
+        let applied_skill_names = Self::build_applied_skill_names(&nodes);
 
         let tree_json = serde_json::to_string(&TreeJson {
             nodes,
@@ -128,8 +123,8 @@ impl SqliteHistoryService {
         let tx = conn.unchecked_transaction().unwrap();
 
         tx.execute(
-            "INSERT INTO conversations (id, entry_type, input_content, output_content, skill_id, skill_name, success, error, is_multi_turn, quick_action, context_text, tree_json, created_at, input_content_rendered, output_content_rendered)
-             VALUES (?1, 'text', ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?9, ?10, ?11, ?12, ?13)",
+            "INSERT INTO conversations (id, entry_type, input_content, output_content, skill_id, skill_name, success, error, is_multi_turn, quick_action, context_text, tree_json, created_at, applied_skill_names)
+             VALUES (?1, 'text', ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?9, ?10, ?11, ?12)",
             rusqlite::params![
                 id,
                 input_summary,
@@ -142,8 +137,7 @@ impl SqliteHistoryService {
                 context_text,
                 tree_json,
                 now,
-                input_content_rendered,
-                output_content_rendered,
+                applied_skill_names,
             ],
         )
         .unwrap();
@@ -165,13 +159,12 @@ impl SqliteHistoryService {
         images: Vec<ImagePayload>,
         model_id: Option<String>,
         reasoning_effort: Option<String>,
-        input_content_rendered: Option<String>,
-        output_content_rendered: Option<String>,
     ) -> Result<(), HistoryError> {
         let now = Self::now_timestamp();
 
         let input_summary = Self::build_input_summary(&nodes);
         let output_summary = Self::build_output_summary(&nodes);
+        let applied_skill_names = Self::build_applied_skill_names(&nodes);
 
         let tree_json = serde_json::to_string(&TreeJson {
             nodes,
@@ -187,8 +180,8 @@ impl SqliteHistoryService {
         let tx = conn.unchecked_transaction()?;
 
         let updated = tx.execute(
-            "UPDATE conversations SET input_content = ?1, output_content = ?2, context_text = ?3, tree_json = ?4, updated_at = ?5, input_content_rendered = ?6, output_content_rendered = ?7 WHERE id = ?8",
-            rusqlite::params![input_summary, output_summary, context_text, tree_json, now, input_content_rendered, output_content_rendered, entry_id],
+            "UPDATE conversations SET input_content = ?1, output_content = ?2, context_text = ?3, tree_json = ?4, updated_at = ?5, applied_skill_names = ?6 WHERE id = ?7",
+            rusqlite::params![input_summary, output_summary, context_text, tree_json, now, applied_skill_names, entry_id],
         )?;
 
         if updated == 0 {
@@ -211,8 +204,7 @@ impl SqliteHistoryService {
         let mut stmt = conn
             .prepare(
                 "SELECT id, title, skill_id, skill_name, entry_type, input_content, output_content,
-                        success, error, is_multi_turn, quick_action, created_at, updated_at,
-                        input_content_rendered, output_content_rendered
+                        success, error, is_multi_turn, quick_action, created_at, updated_at
                  FROM conversations
                  WHERE quick_action = 0
                  ORDER BY COALESCE(updated_at, created_at) DESC, rowid DESC
@@ -237,8 +229,6 @@ impl SqliteHistoryService {
                 updated_at: row.get(12)?,
                 timestamp: row.get::<_, Option<String>>(11)?.unwrap_or_default(),
                 conversation_data: None,
-                input_content_rendered: row.get(13)?,
-                output_content_rendered: row.get(14)?,
             })
         })
         .unwrap()
@@ -251,8 +241,7 @@ impl SqliteHistoryService {
         let mut stmt = conn
             .prepare(
                 "SELECT id, title, skill_id, skill_name, entry_type, input_content, output_content,
-                        success, error, is_multi_turn, quick_action, created_at, updated_at,
-                        input_content_rendered, output_content_rendered
+                        success, error, is_multi_turn, quick_action, created_at, updated_at
                  FROM conversations
                  ORDER BY COALESCE(updated_at, created_at) DESC, rowid DESC",
             )
@@ -275,8 +264,6 @@ impl SqliteHistoryService {
                 updated_at: row.get(12)?,
                 timestamp: row.get::<_, Option<String>>(11)?.unwrap_or_default(),
                 conversation_data: None,
-                input_content_rendered: row.get(13)?,
-                output_content_rendered: row.get(14)?,
             })
         })
         .unwrap()
@@ -290,7 +277,7 @@ impl SqliteHistoryService {
             .prepare(
                 "SELECT id, title, skill_id, skill_name, entry_type, input_content, output_content,
                         success, error, is_multi_turn, quick_action, context_text, tree_json,
-                        created_at, updated_at, input_content_rendered, output_content_rendered
+                        created_at, updated_at
                  FROM conversations WHERE id = ?1",
             )
             .ok()?;
@@ -331,8 +318,6 @@ impl SqliteHistoryService {
                         updated_at: row.get(14)?,
                         timestamp: row.get::<_, Option<String>>(13)?.unwrap_or_default(),
                         conversation_data: None,
-                        input_content_rendered: row.get(15)?,
-                        output_content_rendered: row.get(16)?,
                     },
                     conversation_data,
                 ))
@@ -385,8 +370,7 @@ impl SqliteHistoryService {
         };
         self.query_single_entry(
             "SELECT id, title, skill_id, skill_name, entry_type, input_content, output_content,
-                    success, error, is_multi_turn, quick_action, created_at, updated_at,
-                    input_content_rendered, output_content_rendered
+                    success, error, is_multi_turn, quick_action, created_at, updated_at
              FROM conversations WHERE entry_type = ?1
              ORDER BY COALESCE(updated_at, created_at) DESC, rowid DESC LIMIT 1",
             [type_str],
@@ -400,8 +384,7 @@ impl SqliteHistoryService {
         };
         self.query_single_entry(
             "SELECT id, title, skill_id, skill_name, entry_type, input_content, output_content,
-                    success, error, is_multi_turn, quick_action, created_at, updated_at,
-                    input_content_rendered, output_content_rendered
+                    success, error, is_multi_turn, quick_action, created_at, updated_at
              FROM conversations WHERE entry_type = ?1 AND quick_action = 1
              ORDER BY COALESCE(updated_at, created_at) DESC, rowid DESC LIMIT 1",
             [type_str],
@@ -422,22 +405,6 @@ impl SqliteHistoryService {
         let updated = self.db.conn().execute(
             "UPDATE conversations SET title = ?1, updated_at = ?2 WHERE id = ?3",
             rusqlite::params![title, now, entry_id],
-        )?;
-        if updated == 0 {
-            return Err(HistoryError::EntryNotFound(entry_id.to_string()));
-        }
-        Ok(())
-    }
-
-    pub fn update_rendered(
-        &self,
-        entry_id: &str,
-        input_rendered: Option<String>,
-        output_rendered: Option<String>,
-    ) -> Result<(), HistoryError> {
-        let updated = self.db.conn().execute(
-            "UPDATE conversations SET input_content_rendered = ?1, output_content_rendered = ?2 WHERE id = ?3",
-            rusqlite::params![input_rendered, output_rendered, entry_id],
         )?;
         if updated == 0 {
             return Err(HistoryError::EntryNotFound(entry_id.to_string()));
@@ -493,7 +460,6 @@ impl SqliteHistoryService {
         let mut sql = String::from(
             "SELECT c.id, c.title, c.skill_id, c.skill_name, c.entry_type, c.input_content, c.output_content,
                     c.success, c.error, c.is_multi_turn, c.quick_action, c.created_at, c.updated_at,
-                    c.input_content_rendered, c.output_content_rendered,
                     bm25(conversations_fts, 10.0, 5.0, 2.0, 1.0) AS rank
              FROM conversations_fts
              JOIN conversations c ON c.rowid = conversations_fts.rowid
@@ -554,10 +520,8 @@ impl SqliteHistoryService {
                 updated_at: row.get(12)?,
                 timestamp: row.get::<_, Option<String>>(11)?.unwrap_or_default(),
                 conversation_data: None,
-                input_content_rendered: row.get(13)?,
-                output_content_rendered: row.get(14)?,
             };
-            let rank: f64 = row.get(15)?;
+            let rank: f64 = row.get(13)?;
             Ok((entry, rank))
         })?;
 
@@ -615,8 +579,6 @@ impl SqliteHistoryService {
                     updated_at: row.get(12)?,
                     timestamp: row.get::<_, Option<String>>(11)?.unwrap_or_default(),
                     conversation_data: None,
-                    input_content_rendered: row.get(13)?,
-                    output_content_rendered: row.get(14)?,
                 })
             })
             .ok()
@@ -660,6 +622,21 @@ impl SqliteHistoryService {
                     text.to_string()
                 }
             }
+        }
+    }
+
+    fn build_applied_skill_names(nodes: &[SerializedConversationNode]) -> Option<String> {
+        use std::collections::BTreeSet;
+        let mut names: BTreeSet<String> = BTreeSet::new();
+        for node in nodes {
+            for applied in &node.applied_skills {
+                names.insert(applied.name.clone());
+            }
+        }
+        if names.is_empty() {
+            None
+        } else {
+            Some(names.into_iter().collect::<Vec<_>>().join(","))
         }
     }
 
@@ -725,6 +702,7 @@ mod tests {
                 cancelled: false,
                 tool_calls: vec![],
                 text_attachments: vec![],
+                applied_skills: vec![],
             },
             SerializedConversationNode {
                 node_id: "a1".into(),
@@ -743,6 +721,7 @@ mod tests {
                 cancelled: false,
                 tool_calls: vec![],
                 text_attachments: vec![],
+                applied_skills: vec![],
             },
         ]
     }
@@ -760,8 +739,6 @@ mod tests {
             false,
             None,
             false,
-            None,
-            None,
         );
         let history = svc.get_history();
         assert_eq!(history.len(), 1);
@@ -784,8 +761,6 @@ mod tests {
             false,
             None,
             vec![],
-            None,
-            None,
             None,
             None,
         );
@@ -817,8 +792,6 @@ mod tests {
             vec![],
             None,
             None,
-            None,
-            None,
         );
 
         let new_nodes = make_nodes("hi updated", "hello updated");
@@ -829,8 +802,6 @@ mod tests {
             Some("u1".into()),
             vec!["u1".into(), "a1".into()],
             vec![],
-            None,
-            None,
             None,
             None,
         )
@@ -855,8 +826,6 @@ mod tests {
             vec![],
             None,
             None,
-            None,
-            None,
         );
         assert!(result.is_err());
     }
@@ -875,8 +844,6 @@ mod tests {
                 false,
                 None,
                 false,
-                None,
-                None,
             );
         }
         assert_eq!(svc.entry_count(), 3);
@@ -895,8 +862,6 @@ mod tests {
             false,
             None,
             false,
-            None,
-            None,
         );
         let entry = svc.get_history().into_iter().next().unwrap();
         assert!(svc.get_entry_by_id(&entry.id).is_some());
@@ -906,9 +871,9 @@ mod tests {
     #[test]
     fn get_last_item_by_type() {
         let svc = make_svc();
-        svc.add_entry("t1".into(), HistoryEntryType::Text, None, None, true, None, false, None, false, None, None);
-        svc.add_entry("s1".into(), HistoryEntryType::Speech, None, None, true, None, false, None, false, None, None);
-        svc.add_entry("t2".into(), HistoryEntryType::Text, None, None, true, None, false, None, false, None, None);
+        svc.add_entry("t1".into(), HistoryEntryType::Text, None, None, true, None, false, None, false);
+        svc.add_entry("s1".into(), HistoryEntryType::Speech, None, None, true, None, false, None, false);
+        svc.add_entry("t2".into(), HistoryEntryType::Text, None, None, true, None, false, None, false);
 
         let last_text = svc.get_last_item_by_type(HistoryEntryType::Text).unwrap();
         assert_eq!(last_text.input_content, "t2");
@@ -920,7 +885,7 @@ mod tests {
     #[test]
     fn update_title() {
         let svc = make_svc();
-        svc.add_entry("test".into(), HistoryEntryType::Text, None, None, true, None, false, None, false, None, None);
+        svc.add_entry("test".into(), HistoryEntryType::Text, None, None, true, None, false, None, false);
         let entry = svc.get_history().into_iter().next().unwrap();
 
         svc.update_entry_title(&entry.id, "My Title".into()).unwrap();
@@ -931,7 +896,7 @@ mod tests {
     #[test]
     fn clear_removes_all() {
         let svc = make_svc();
-        svc.add_entry("test".into(), HistoryEntryType::Text, None, None, true, None, false, None, false, None, None);
+        svc.add_entry("test".into(), HistoryEntryType::Text, None, None, true, None, false, None, false);
         assert_eq!(svc.entry_count(), 1);
         svc.clear();
         assert_eq!(svc.entry_count(), 0);
@@ -968,8 +933,6 @@ mod tests {
                     media_type: "image/jpeg".into(),
                 },
             ],
-            None,
-            None,
             None,
             None,
         );
@@ -1010,8 +973,6 @@ mod tests {
                 data: image_data,
                 media_type: "image/png".into(),
             }],
-            None,
-            None,
             None,
             None,
         );
@@ -1057,6 +1018,7 @@ mod tests {
             cancelled: false,
             tool_calls: vec![],
             text_attachments: vec![],
+            applied_skills: vec![],
         });
         let summary = SqliteHistoryService::build_input_summary(&nodes);
         assert!(summary.contains("second"));
@@ -1090,6 +1052,7 @@ mod tests {
             cancelled: false,
             tool_calls: vec![],
             text_attachments: vec![],
+            applied_skills: vec![],
         }];
         assert!(SqliteHistoryService::build_output_summary(&nodes).is_none());
     }
@@ -1097,8 +1060,8 @@ mod tests {
     #[test]
     fn quick_action_query() {
         let svc = make_svc();
-        svc.add_entry("normal".into(), HistoryEntryType::Text, None, None, true, None, false, None, false, None, None);
-        svc.add_entry("quick".into(), HistoryEntryType::Text, None, None, true, None, false, None, true, None, None);
+        svc.add_entry("normal".into(), HistoryEntryType::Text, None, None, true, None, false, None, false);
+        svc.add_entry("quick".into(), HistoryEntryType::Text, None, None, true, None, false, None, true);
 
         let last_quick = svc.get_last_quick_action(HistoryEntryType::Text).unwrap();
         assert_eq!(last_quick.input_content, "quick");

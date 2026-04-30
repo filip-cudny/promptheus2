@@ -112,17 +112,11 @@ fn matches_status_filter(entry: &HistoryEntry, filter: HistoryStatusFilter) -> b
 }
 
 fn field_value<'a>(entry: &'a HistoryEntry, field: SearchField) -> Option<&'a str> {
-    let value = match field {
+    let value: Option<&'a str> = match field {
         SearchField::Title => entry.title.as_deref(),
         SearchField::SkillName => entry.skill_name.as_deref(),
-        SearchField::InputContent => entry
-            .input_content_rendered
-            .as_deref()
-            .or(Some(entry.input_content.as_str())),
-        SearchField::OutputContent => entry
-            .output_content_rendered
-            .as_deref()
-            .or(entry.output_content.as_deref()),
+        SearchField::InputContent => Some(entry.input_content.as_str()),
+        SearchField::OutputContent => entry.output_content.as_deref(),
     };
     value.filter(|s| !s.is_empty())
 }
@@ -564,8 +558,6 @@ mod tests {
             updated_at: None,
             quick_action: false,
             title: None,
-            input_content_rendered: None,
-            output_content_rendered: None,
         }
     }
 
@@ -601,14 +593,12 @@ mod tests {
         };
         svc.conn().execute(
             "INSERT INTO conversations (id, title, skill_id, skill_name, entry_type, input_content, output_content,
-                success, error, is_multi_turn, quick_action, created_at, updated_at,
-                input_content_rendered, output_content_rendered)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                success, error, is_multi_turn, quick_action, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             rusqlite::params![
                 e.id, e.title, e.skill_id, e.skill_name, entry_type_str,
                 e.input_content, e.output_content, e.success, e.error,
                 e.is_multi_turn, e.quick_action, e.created_at, e.updated_at,
-                e.input_content_rendered, e.output_content_rendered,
             ],
         ).unwrap();
     }
@@ -796,9 +786,8 @@ mod tests {
     }
 
     #[test]
-    fn fallback_to_raw_input_content_when_rendered_is_none() {
-        let mut entry = make_entry("e", "raw input contains banana");
-        entry.input_content_rendered = None;
+    fn search_matches_input_content() {
+        let entry = make_entry("e", "raw input contains banana");
 
         let history = make_history(vec![entry]);
         let mut search = HistorySearch::new();

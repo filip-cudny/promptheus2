@@ -3,8 +3,8 @@ use std::sync::LazyLock;
 
 use crate::models::context::ContextItem;
 use crate::models::message::{
-    ContentPart, ConversationNodeForExecution, ImageData, ImageUrlData, MessageContent,
-    NodeUpdate, ProcessedMessage,
+    AppliedSkill, ContentPart, ConversationNodeForExecution, ImageData, ImageUrlData,
+    MessageContent, NodeUpdate, ProcessedMessage,
 };
 use crate::models::skill::Skill;
 use crate::services::context::ContextManagerService;
@@ -17,17 +17,17 @@ pub fn compose_skill_user_message(skill: &Skill, input: &str) -> String {
     )
 }
 
-pub fn compose_multi_skill_user_message(segments: &[(&Skill, &str)]) -> String {
+pub fn compose_from_snapshot(skills: &[AppliedSkill]) -> String {
     let mut parts = Vec::new();
 
-    for (i, (skill, input)) in segments.iter().enumerate() {
+    for (i, applied) in skills.iter().enumerate() {
         parts.push(format!(
             "<skill name=\"{}\">\n{}\n</skill>\n\n<input>\n{}\n</input>",
-            skill.name, skill.body, input
+            applied.name, applied.body_snapshot, applied.input
         ));
 
-        if i < segments.len() - 1 {
-            parts.push(format!("\n\n<skill-end name=\"{}\" />\n", skill.name));
+        if i < skills.len() - 1 {
+            parts.push(format!("\n\n<skill-end name=\"{}\" />\n", applied.name));
         }
     }
 
@@ -166,8 +166,8 @@ pub fn has_skill_references(text: &str) -> bool {
 }
 
 pub struct ResolveSkillResult {
-    pub resolved_text: String,
     pub had_skills: bool,
+    pub applied_skills: Vec<AppliedSkill>,
 }
 
 pub fn resolve_skill_input(
@@ -176,42 +176,35 @@ pub fn resolve_skill_input(
 ) -> ResolveSkillResult {
     if !has_skill_references(text) {
         return ResolveSkillResult {
-            resolved_text: text.to_string(),
             had_skills: false,
+            applied_skills: vec![],
         };
     }
 
     let segments = parse_input_for_skills(text, |name| skill_service.get_skill(name).is_some());
-    let has_any_skill = segments.iter().any(|s| s.skill_name.is_some());
-    if !has_any_skill {
-        return ResolveSkillResult {
-            resolved_text: text.to_string(),
-            had_skills: false,
-        };
-    }
-
-    let resolved: Vec<(Skill, String)> = segments
+    let applied_skills: Vec<AppliedSkill> = segments
         .iter()
         .filter_map(|seg| {
             let skill_name = seg.skill_name.as_deref()?;
-            let skill = skill_service.get_skill(skill_name)?.clone();
-            Some((skill, seg.input.clone()))
+            let skill = skill_service.get_skill(skill_name)?;
+            Some(AppliedSkill {
+                name: skill.name.clone(),
+                body_snapshot: skill.body.clone(),
+                input: seg.input.clone(),
+            })
         })
         .collect();
 
-    if resolved.is_empty() {
+    if applied_skills.is_empty() {
         return ResolveSkillResult {
-            resolved_text: text.to_string(),
             had_skills: false,
+            applied_skills: vec![],
         };
     }
 
-    let pairs: Vec<(&Skill, &str)> = resolved.iter().map(|(s, i)| (s, i.as_str())).collect();
-    let composed = compose_multi_skill_user_message(&pairs);
-
     ResolveSkillResult {
-        resolved_text: composed,
         had_skills: true,
+        applied_skills,
     }
 }
 
@@ -261,7 +254,13 @@ pub fn build_messages_from_tree(
             let has_node_images = !node.images.is_empty();
             is_first_user = false;
 
-            let mut text_content = build_user_text_with_updates(&node.content, &node.updates);
+            let composed_content = if !node.applied_skills.is_empty() {
+                compose_from_snapshot(&node.applied_skills)
+            } else {
+                node.content.clone()
+            };
+
+            let mut text_content = build_user_text_with_updates(&composed_content, &node.updates);
             if !node.text_attachments.is_empty() {
                 let wrapped: Vec<String> = node
                     .text_attachments
@@ -377,12 +376,20 @@ mod tests {
     }
 
     #[test]
-    fn compose_multi_skill_message() {
-        let skill1 = test_skill("translate", "Translate.");
-        let skill2 = test_skill("formal", "Make formal.");
-
-        let segments: Vec<(&Skill, &str)> = vec![(&skill1, "hello"), (&skill2, "world")];
-        let result = compose_multi_skill_user_message(&segments);
+    fn compose_multi_skill_from_snapshot() {
+        let skills = vec![
+            AppliedSkill {
+                name: "translate".into(),
+                body_snapshot: "Translate.".into(),
+                input: "hello".into(),
+            },
+            AppliedSkill {
+                name: "formal".into(),
+                body_snapshot: "Make formal.".into(),
+                input: "world".into(),
+            },
+        ];
+        let result = compose_from_snapshot(&skills);
 
         assert!(result.contains("<skill name=\"translate\">"));
         assert!(result.contains("<skill-end name=\"translate\" />"));
@@ -390,6 +397,17 @@ mod tests {
         assert!(result.contains("hello"));
         assert!(result.contains("world"));
         assert!(!result.contains("<skill-end name=\"formal\" />"));
+    }
+
+    #[test]
+    fn compose_from_snapshot_single_no_skill_end() {
+        let skills = vec![AppliedSkill {
+            name: "only".into(),
+            body_snapshot: "Body.".into(),
+            input: "text".into(),
+        }];
+        let result = compose_from_snapshot(&skills);
+        assert!(!result.contains("<skill-end"));
     }
 
     #[test]
@@ -449,14 +467,6 @@ mod tests {
             }
             _ => panic!("expected parts content for user message with images"),
         }
-    }
-
-    #[test]
-    fn single_segment_no_skill_end() {
-        let skill = test_skill("only", "Body.");
-        let segments: Vec<(&Skill, &str)> = vec![(&skill, "text")];
-        let result = compose_multi_skill_user_message(&segments);
-        assert!(!result.contains("<skill-end"));
     }
 
     #[test]
@@ -531,6 +541,7 @@ mod tests {
                 images: vec![],
                 text_attachments: vec![],
                 updates: vec![],
+                applied_skills: vec![],
             },
             ConversationNodeForExecution {
                 node_id: "2".into(),
@@ -539,6 +550,7 @@ mod tests {
                 images: vec![],
                 text_attachments: vec![],
                 updates: vec![],
+                applied_skills: vec![],
             },
         ];
         let messages = build_messages_from_tree(&nodes, &[]);
@@ -561,6 +573,7 @@ mod tests {
             images: vec![],
             text_attachments: vec!["some code".into()],
             updates: vec![],
+            applied_skills: vec![],
         }];
         let messages = build_messages_from_tree(&nodes, &[]);
         if let MessageContent::Text(ref t) = messages[0].content {
@@ -581,6 +594,7 @@ mod tests {
             images: vec![],
             text_attachments: vec![],
             updates: vec![],
+            applied_skills: vec![],
         }];
         let ctx_images = vec![ImageData {
             data: "abc123".into(),
@@ -607,6 +621,7 @@ mod tests {
                 images: vec![],
                 text_attachments: vec![],
                 updates: vec![],
+                applied_skills: vec![],
             },
             ConversationNodeForExecution {
                 node_id: "2".into(),
@@ -615,6 +630,7 @@ mod tests {
                 images: vec![],
                 text_attachments: vec![],
                 updates: vec![],
+                applied_skills: vec![],
             },
             ConversationNodeForExecution {
                 node_id: "3".into(),
@@ -623,6 +639,7 @@ mod tests {
                 images: vec![],
                 text_attachments: vec![],
                 updates: vec![],
+                applied_skills: vec![],
             },
         ];
         let ctx_images = vec![ImageData {

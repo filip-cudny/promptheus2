@@ -25,7 +25,6 @@ import {
   updateSurfaceReasoningEffort,
   updateSurfaceEnabledTools,
 } from "$lib/services/settings";
-import { buildUserNodeDisplay, hasSkillReferences } from "$lib/utils/skillDisplay";
 import type {
   ConversationNode,
   ConversationImage,
@@ -72,6 +71,7 @@ export function createNode(
     error: null,
     cancelled: false,
     tool_calls: [],
+    applied_skills: [],
   };
 }
 
@@ -193,6 +193,7 @@ function serializeNodes(
     error: node.error,
     cancelled: node.cancelled,
     tool_calls: node.tool_calls,
+    applied_skills: node.applied_skills,
   }));
 }
 
@@ -222,20 +223,6 @@ function collectImages(tab: TabState): ImagePayload[] {
   return images;
 }
 
-function renderNodesForHistory(nodes: SerializedConversationNode[]): {
-  inputRendered: string | null;
-  outputRendered: string | null;
-} {
-  const lastUser = [...nodes].reverse().find((n) => n.role === "user");
-  const lastAssistant = [...nodes].reverse().find((n) => n.role === "assistant");
-  return {
-    inputRendered: lastUser
-      ? buildUserNodeDisplay(lastUser.content, lastUser.text_attachments)
-      : null,
-    outputRendered: lastAssistant?.content ?? null,
-  };
-}
-
 function serializePathNodes(tab: TabState): ConversationNodeForExecution[] {
   return tab.tree.current_path
     .map((nodeId) => tab.tree.nodes.get(nodeId))
@@ -250,6 +237,7 @@ function serializePathNodes(tab: TabState): ConversationNodeForExecution[] {
       })),
       text_attachments: node.text_attachments,
       updates: node.updates,
+      applied_skills: node.applied_skills,
     }));
 }
 
@@ -338,6 +326,7 @@ export function createConversationStore(
         images: inputImages.map((img) => ({ data: img.data, media_type: img.media_type })),
         text_attachments: [...inputAttachments],
         updates: [],
+        applied_skills: [],
       });
     }
 
@@ -726,17 +715,18 @@ export function createConversationStore(
     if (!hasUserContent({ content: tab.input_text, images, text_attachments: textAttachments }))
       return { success: false, result: "" };
 
-    const { resolved_text: storedContent } = await resolveSkillInput(text);
+    const { applied_skills } = await resolveSkillInput(text);
 
     const userNode = createNode(
       "user",
-      storedContent,
+      text,
       tab.tree.current_path.length > 0
         ? tab.tree.current_path[tab.tree.current_path.length - 1]
         : null,
       images,
       textAttachments,
     );
+    userNode.applied_skills = applied_skills;
     tab.tree.nodes.set(userNode.node_id, userNode);
 
     if (userNode.parent_id) {
@@ -813,7 +803,9 @@ export function createConversationStore(
 
     const parentUser = tab.tree.nodes.get(node.parent_id);
     if (parentUser && parentUser.role === "user") {
+      const { applied_skills } = await resolveSkillInput(newText);
       parentUser.content = newText;
+      parentUser.applied_skills = applied_skills;
       parentUser.images = tab.input_images.map((img) => ({ ...img }));
       parentUser.text_attachments = [...tab.input_text_attachments];
       tab.tree.nodes.set(parentUser.node_id, parentUser);
@@ -831,17 +823,6 @@ export function createConversationStore(
 
     const node = tab.tree.nodes.get(nodeId);
     if (!node || node.role !== "assistant" || !node.parent_id) return;
-
-    const parentUser = tab.tree.nodes.get(node.parent_id);
-    if (parentUser?.role === "user" && hasSkillReferences(parentUser.content)) {
-      const { resolved_text, had_skills } = await resolveSkillInput(
-        parentUser.content,
-      );
-      if (had_skills) {
-        parentUser.content = resolved_text;
-        tab.tree.nodes.set(parentUser.node_id, parentUser);
-      }
-    }
 
     const newAssistant = createNode("assistant", "", node.parent_id);
     tab.tree.nodes.set(newAssistant.node_id, newAssistant);
@@ -1132,7 +1113,6 @@ export function createConversationStore(
 
     const nodes = serializeNodes(tab.tree);
     const images = collectImages(tab);
-    const { inputRendered, outputRendered } = renderNodesForHistory(nodes);
 
     try {
       if (tab.history_entry_id) {
@@ -1145,8 +1125,6 @@ export function createConversationStore(
           images,
           modelId: tab.model_id,
           reasoningEffort: tab.reasoning_effort,
-          inputContentRendered: inputRendered,
-          outputContentRendered: outputRendered,
         });
       } else {
         const entryId = await addConversationEntry({
@@ -1162,8 +1140,6 @@ export function createConversationStore(
           images,
           modelId: tab.model_id,
           reasoningEffort: tab.reasoning_effort,
-          inputContentRendered: inputRendered,
-          outputContentRendered: outputRendered,
         });
         tab.history_entry_id = entryId;
         if (tab.tab_name !== null) {
@@ -1227,6 +1203,7 @@ export function createConversationStore(
             error: serialized.error ?? null,
             cancelled: serialized.cancelled ?? false,
             tool_calls: serialized.tool_calls ?? [],
+            applied_skills: serialized.applied_skills ?? [],
           });
         }
       } else if (entry.input_content) {
@@ -1255,6 +1232,7 @@ export function createConversationStore(
           error: null,
           cancelled: false,
           tool_calls: [],
+          applied_skills: [],
         });
 
         if (entry.output_content) {
@@ -1277,6 +1255,7 @@ export function createConversationStore(
             error: null,
             cancelled: false,
             tool_calls: [],
+            applied_skills: [],
           });
         }
       }

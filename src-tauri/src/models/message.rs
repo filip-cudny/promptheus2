@@ -70,6 +70,13 @@ pub struct ToolCallMessage {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AppliedSkill {
+    pub name: String,
+    pub body_snapshot: String,
+    pub input: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ConversationNodeForExecution {
     pub node_id: String,
     pub role: String,
@@ -78,6 +85,8 @@ pub struct ConversationNodeForExecution {
     pub text_attachments: Vec<String>,
     #[serde(default)]
     pub updates: Vec<NodeUpdate>,
+    #[serde(default)]
+    pub applied_skills: Vec<AppliedSkill>,
 }
 
 #[cfg(test)]

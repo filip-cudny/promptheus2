@@ -4,7 +4,6 @@
   import { error as logError } from "@tauri-apps/plugin-log";
   import { ChevronRight, MessagesSquare, Plus, X } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import { extractSkillDisplayText } from "$lib/utils/skillDisplay";
   import { highlightFor, truncateAroundMatch } from "$lib/utils/highlightMatches";
   import type { FieldMatch, SearchField, SearchResult, SearchResponse } from "$lib/types/historySearch";
   import CommandPalette from "$lib/components/ui/CommandPalette.svelte";
@@ -162,7 +161,7 @@
 
   function displayName(r: SearchResult): string {
     const e = r.entry;
-    return extractSkillDisplayText(e.title ?? e.skill_name ?? "Chat");
+    return e.title ?? e.skill_name ?? "Chat";
   }
 
   function snippetSourceFor(matches: readonly FieldMatch[]): SearchField | null {
@@ -178,10 +177,10 @@
     if (!source) return null;
     const e = r.entry;
     const raw = source === "input_content"
-      ? (e.input_content_rendered ?? e.input_content ?? "")
-      : (e.output_content_rendered ?? e.output_content ?? "");
+      ? (e.input_content ?? "")
+      : (e.output_content ?? "");
     if (!raw) return null;
-    const truncated = truncateAroundMatch(extractSkillDisplayText(raw), r.matches, source, 80);
+    const truncated = truncateAroundMatch(raw, r.matches, source, 80);
     if (!truncated.text) return null;
     return { field: source, text: truncated.text, matches: truncated.matches };
   }

@@ -1,4 +1,4 @@
-import type { NodeUpdate, ToolCall } from "$lib/types/ai";
+import type { AppliedSkill, NodeUpdate, ToolCall } from "$lib/types/ai";
 
 export interface ConversationNode {
   node_id: string;
@@ -18,6 +18,7 @@ export interface ConversationNode {
   error: string | null;
   cancelled: boolean;
   tool_calls: ToolCall[];
+  applied_skills: AppliedSkill[];
 }
 
 export interface ConversationImage {

@@ -18,7 +18,7 @@ use crate::services::ai::AiError;
 use crate::services::ai::provider::{StreamChunk, ToolCallEvent};
 use crate::models::history::SerializedConversationNode;
 use crate::models::message::{
-    ConversationNodeForExecution, ImageData, MessageContent,
+    AppliedSkill, ConversationNodeForExecution, ImageData, MessageContent,
     NodeUpdate, ProcessedMessage, ToolCallFunction, ToolCallPayload,
 };
 use crate::services::notification::NotificationLevel;
@@ -393,7 +393,7 @@ pub async fn execute_skill(
 ) -> Result<(), String> {
     let start_time = Instant::now();
 
-    let (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, input_content, messages, ai, param_overrides) = {
+    let (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, skill_body_snapshot, input_content, messages, ai, param_overrides) = {
         let mut state = state.lock().await;
 
         let (execution_id, cancel_rx) = state
@@ -407,6 +407,7 @@ pub async fn execute_skill(
                 e.to_string()
             })?;
         let skill_display_name = skill.display_name.clone();
+        let skill_body_snapshot = skill.body.clone();
 
         let model_id = PromptExecutionService::resolve_quick_action_model(&state.config, skill.model.as_deref())
             .map_err(|e| {
@@ -451,7 +452,7 @@ pub async fn execute_skill(
         let skill_params = skill.parameters.as_ref().map(ModelParameters::from_map);
         let param_overrides = merge_optional_parameters(Some(surface_params), skill_params);
 
-        (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, input_content, messages, ai, param_overrides)
+        (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, skill_body_snapshot, input_content, messages, ai, param_overrides)
     };
 
     let user_display_text = format!("/{skill_name} {input_content}");
@@ -510,6 +511,11 @@ pub async fn execute_skill(
                 cancelled: false,
                 tool_calls: vec![],
                 text_attachments: vec![],
+                applied_skills: vec![AppliedSkill {
+                    name: skill_name.clone(),
+                    body_snapshot: skill_body_snapshot,
+                    input: input_content.clone(),
+                }],
             };
 
             let assistant_node = SerializedConversationNode {
@@ -529,6 +535,7 @@ pub async fn execute_skill(
                 cancelled: false,
                 tool_calls: vec![],
                 text_attachments: vec![],
+                applied_skills: vec![],
             };
 
             state.history.add_conversation_entry(
@@ -543,8 +550,6 @@ pub async fn execute_skill(
                 true,
                 None,
                 vec![],
-                None,
-                None,
                 None,
                 None,
             );
@@ -716,8 +721,8 @@ pub async fn seed_conversation_context(
 
 #[derive(Clone, Serialize)]
 pub struct ResolveSkillInputResult {
-    pub resolved_text: String,
     pub had_skills: bool,
+    pub applied_skills: Vec<AppliedSkill>,
 }
 
 #[tauri::command]
@@ -728,8 +733,8 @@ pub async fn resolve_skill_input(
     let state = state.lock().await;
     let result = skill_message::resolve_skill_input(&state.skill_service, &text);
     Ok(ResolveSkillInputResult {
-        resolved_text: result.resolved_text,
         had_skills: result.had_skills,
+        applied_skills: result.applied_skills,
     })
 }
 

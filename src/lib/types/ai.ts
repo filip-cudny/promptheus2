@@ -62,6 +62,12 @@ export interface ImageData {
   media_type: string;
 }
 
+export interface AppliedSkill {
+  name: string;
+  body_snapshot: string;
+  input: string;
+}
+
 export interface ConversationNodeForExecution {
   node_id: string;
   role: string;
@@ -69,4 +75,5 @@ export interface ConversationNodeForExecution {
   images: ImageData[];
   text_attachments: string[];
   updates: NodeUpdate[];
+  applied_skills: AppliedSkill[];
 }

@@ -1,6 +1,6 @@
 export type HistoryEntryType = "speech" | "text";
 
-import type { NodeUpdate, ToolCall } from "$lib/types/ai";
+import type { AppliedSkill, NodeUpdate, ToolCall } from "$lib/types/ai";
 import type { ConversationImage } from "$lib/types/conversation";
 
 export interface SerializedConversationNode {
@@ -20,6 +20,7 @@ export interface SerializedConversationNode {
   error?: string | null;
   cancelled?: boolean;
   tool_calls?: ToolCall[];
+  applied_skills?: AppliedSkill[];
 }
 
 export interface ConversationHistoryData {
@@ -62,6 +63,4 @@ export interface HistoryEntry {
   updated_at: string | null;
   quick_action: boolean;
   title: string | null;
-  input_content_rendered: string | null;
-  output_content_rendered: string | null;
 }
