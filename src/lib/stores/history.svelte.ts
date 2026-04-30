@@ -6,7 +6,7 @@ import {
   getLastInteraction,
   updateHistoryRendered,
 } from "$lib/services/history";
-import { extractSkillDisplayText } from "$lib/utils/skillDisplay";
+import { buildUserNodeDisplay, isSkillXml } from "$lib/utils/skillDisplay";
 import type { HistoryEntry, LastInteractionData } from "$lib/types";
 
 const BACKFILL_BATCH_LIMIT = 50;
@@ -42,9 +42,15 @@ async function init() {
   void backfillRenderedContent();
 }
 
+const BARE_SLASH_COMMAND_RE = /^\/[a-z0-9-]+\s*$/;
+
 async function backfillRenderedContent(): Promise<void> {
   const candidates = entries.filter(
-    (e) => e.input_content_rendered === null && e.skill_id !== null,
+    (e) =>
+      e.skill_id !== null &&
+      (e.input_content_rendered === null ||
+        isSkillXml(e.input_content_rendered) ||
+        BARE_SLASH_COMMAND_RE.test(e.input_content_rendered)),
   );
   if (candidates.length === 0) return;
 
@@ -71,7 +77,7 @@ async function renderForEntry(
 ): Promise<{ inputRendered: string | null; outputRendered: string | null }> {
   if (!entry.is_multi_turn) {
     return {
-      inputRendered: extractSkillDisplayText(entry.input_content),
+      inputRendered: buildUserNodeDisplay(entry.input_content, []),
       outputRendered: entry.output_content,
     };
   }
@@ -82,8 +88,8 @@ async function renderForEntry(
   const lastAssistant = [...nodes].reverse().find((n) => n.role === "assistant");
   return {
     inputRendered: lastUser
-      ? extractSkillDisplayText(lastUser.content)
-      : extractSkillDisplayText(entry.input_content),
+      ? buildUserNodeDisplay(lastUser.content, lastUser.text_attachments)
+      : buildUserNodeDisplay(entry.input_content, []),
     outputRendered: lastAssistant?.content ?? entry.output_content,
   };
 }

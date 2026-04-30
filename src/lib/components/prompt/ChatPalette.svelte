@@ -7,6 +7,7 @@
   import { extractSkillDisplayText } from "$lib/utils/skillDisplay";
   import { highlightFor, truncateAroundMatch } from "$lib/utils/highlightMatches";
   import type { FieldMatch, SearchField, SearchResult, SearchResponse } from "$lib/types/historySearch";
+  import CommandPalette from "$lib/components/ui/CommandPalette.svelte";
 
   let { open, onClose, onNewChat, onOpenConversation }: {
     open: boolean;
@@ -201,174 +202,90 @@
   }
 </script>
 
-{#if open}
-  <div class="palette-root">
+<CommandPalette
+  {open}
+  {onClose}
+  bind:query
+  bind:inputRef={inputEl}
+  placeholder="Search or start a chat"
+  variant="overlay"
+>
+  {#snippet headerExtras()}
     <button
       type="button"
-      aria-label="Close palette"
-      class="palette-scrim"
+      class="palette-close"
+      aria-label="Close"
       onclick={onClose}
-    ></button>
-    <div class="palette-modal palette-modal-enter" role="dialog" aria-modal="true">
-      <div class="palette-header">
-        <input
-          bind:this={inputEl}
-          bind:value={query}
-          oninput={() => (highlightedIndex = 0)}
-          class="palette-input"
-          type="text"
-          placeholder="Search or start a chat"
-          autocomplete="off"
-          spellcheck="false"
-        />
+    >
+      <X size={ICON_SIZE.md} />
+    </button>
+  {/snippet}
+  {#snippet body()}
+    <div class="palette-section-header">
+      <span class="palette-section-icon"><ChevronRight size={ICON_SIZE.sm} /></span>
+      <span>Quick actions</span>
+    </div>
+    {#each items as item, i (item.kind === "new-chat" ? "new-chat" : item.result.entry.id)}
+      {#if item.kind === "new-chat"}
         <button
+          bind:this={itemEls[i]}
           type="button"
-          class="palette-close"
-          aria-label="Close"
-          onclick={onClose}
+          role="option"
+          aria-selected={i === highlightedIndex}
+          class="palette-item"
+          class:highlight={i === highlightedIndex}
+          onmouseenter={() => (highlightedIndex = i)}
+          onclick={() => activate(item)}
         >
-          <X size={ICON_SIZE.md} />
+          <span class="palette-item-icon"><Plus size={ICON_SIZE.md} /></span>
+          <span class="palette-item-name">New chat</span>
+          <span class="palette-item-hint">Enter</span>
         </button>
-      </div>
-
-      <div class="palette-body" role="listbox">
-        <div class="palette-section-header">
-          <span class="palette-section-icon"><ChevronRight size={ICON_SIZE.sm} /></span>
-          <span>Quick actions</span>
-        </div>
-        {#each items as item, i (item.kind === "new-chat" ? "new-chat" : item.result.entry.id)}
-          {#if item.kind === "new-chat"}
-            <button
-              bind:this={itemEls[i]}
-              type="button"
-              role="option"
-              aria-selected={i === highlightedIndex}
-              class="palette-item"
-              class:highlight={i === highlightedIndex}
-              onmouseenter={() => (highlightedIndex = i)}
-              onclick={() => activate(item)}
-            >
-              <span class="palette-item-icon"><Plus size={ICON_SIZE.md} /></span>
-              <span class="palette-item-name">New chat</span>
-              <span class="palette-item-hint">Enter</span>
-            </button>
-          {:else}
-            {#if i === 1}
-              <div class="palette-section-header">
-                <span class="palette-section-icon"><ChevronRight size={ICON_SIZE.sm} /></span>
-                <span>Recents</span>
-              </div>
-            {/if}
-            {@const snippet = snippetFor(item.result)}
-            <button
-              bind:this={itemEls[i]}
-              type="button"
-              role="option"
-              aria-selected={i === highlightedIndex}
-              class="palette-item"
-              class:highlight={i === highlightedIndex}
-              onmouseenter={() => (highlightedIndex = i)}
-              onclick={() => activate(item)}
-            >
-              <span class="palette-item-icon"><MessagesSquare size={ICON_SIZE.md} /></span>
-              <span class="palette-item-main">
-                <span class="palette-item-name">
-                  {@html highlightFor(displayName(item.result), item.result.matches, ["title", "skill_name"])}
-                </span>
-                {#if snippet}
-                  <span class="palette-item-snippet">{@html highlightFor(snippet.text, snippet.matches, [snippet.field])}</span>
-                {/if}
-              </span>
-              <span class="palette-item-hint">{formatTimestamp(item.result)}</span>
-            </button>
-          {/if}
-        {/each}
-        {#if items.length === 1 && !loading}
-          <div class="palette-empty">
-            {query.trim() ? "No matching conversations" : "No recent conversations"}
+      {:else}
+        {#if i === 1}
+          <div class="palette-section-header">
+            <span class="palette-section-icon"><ChevronRight size={ICON_SIZE.sm} /></span>
+            <span>Recents</span>
           </div>
         {/if}
+        {@const snippet = snippetFor(item.result)}
+        <button
+          bind:this={itemEls[i]}
+          type="button"
+          role="option"
+          aria-selected={i === highlightedIndex}
+          class="palette-item"
+          class:highlight={i === highlightedIndex}
+          onmouseenter={() => (highlightedIndex = i)}
+          onclick={() => activate(item)}
+        >
+          <span class="palette-item-icon"><MessagesSquare size={ICON_SIZE.md} /></span>
+          <span class="palette-item-main">
+            <span class="palette-item-name">
+              {@html highlightFor(displayName(item.result), item.result.matches, ["title", "skill_name"])}
+            </span>
+            {#if snippet}
+              <span class="palette-item-snippet">{@html highlightFor(snippet.text, snippet.matches, [snippet.field])}</span>
+            {/if}
+          </span>
+          <span class="palette-item-hint">{formatTimestamp(item.result)}</span>
+        </button>
+      {/if}
+    {/each}
+    {#if items.length === 1 && !loading}
+      <div class="palette-empty">
+        {query.trim() ? "No matching conversations" : "No recent conversations"}
       </div>
-
-      <div class="palette-footer">
-        <span><kbd>↑↓</kbd> / <kbd>⌃JK</kbd> Navigate</span>
-        <span><kbd>↵</kbd> Open</span>
-        <span><kbd>esc</kbd> Close</span>
-      </div>
-    </div>
-  </div>
-{/if}
+    {/if}
+  {/snippet}
+  {#snippet footer()}
+    <span><kbd>↑↓</kbd> / <kbd>⌃JK</kbd> Navigate</span>
+    <span><kbd>↵</kbd> Open</span>
+    <span><kbd>esc</kbd> Close</span>
+  {/snippet}
+</CommandPalette>
 
 <style>
-  .palette-root {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    justify-content: center;
-    align-items: flex-start;
-    padding-top: 80px;
-    z-index: 1000;
-  }
-
-  .palette-scrim {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    border: 0;
-    padding: 0;
-    cursor: default;
-    animation: palette-scrim-enter 140ms ease-out both;
-  }
-
-  .palette-modal {
-    position: relative;
-    width: min(640px, 86%);
-    background: #252525;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    color: #e0e0e0;
-  }
-
-  .palette-modal-enter {
-    animation: palette-modal-enter 140ms ease-out both;
-  }
-
-  @keyframes palette-scrim-enter {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  @keyframes palette-modal-enter {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-
-  .palette-header {
-    display: flex;
-    align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .palette-input {
-    flex: 1;
-    appearance: none;
-    border: 0;
-    background: transparent;
-    color: #fff;
-    font: inherit;
-    font-size: 14px;
-    padding: 12px 14px;
-    outline: none;
-  }
-
-  .palette-input::placeholder {
-    color: rgba(255, 255, 255, 0.35);
-  }
-
   .palette-close {
     appearance: none;
     border: 0;
@@ -384,14 +301,6 @@
 
   .palette-close:hover {
     color: rgba(255, 255, 255, 0.85);
-  }
-
-  .palette-body {
-    display: flex;
-    flex-direction: column;
-    max-height: 360px;
-    overflow-y: auto;
-    padding: 4px 0;
   }
 
   .palette-section-header {
@@ -410,35 +319,7 @@
     color: rgba(255, 255, 255, 0.35);
   }
 
-  .palette-item {
-    appearance: none;
-    border: 0;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.85);
-    font: inherit;
-    text-align: left;
-    padding: 8px 14px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .palette-item.highlight {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .palette-item-icon {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: rgba(255, 255, 255, 0.7);
-  }
-
-  .palette-item-main {
+  :global(.palette-item-main) {
     flex: 1;
     min-width: 0;
     display: flex;
@@ -446,14 +327,13 @@
     gap: 1px;
   }
 
-  .palette-item-name {
-    font-size: 13px;
+  :global(.palette-item-main .palette-item-name) {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .palette-item-snippet {
+  :global(.palette-item-snippet) {
     color: rgba(255, 255, 255, 0.4);
     font-size: 11px;
     overflow: hidden;
@@ -461,42 +341,10 @@
     white-space: nowrap;
   }
 
-  .palette-item-hint {
+  :global(.palette-item-hint) {
     color: rgba(255, 255, 255, 0.4);
     font-size: 11px;
     flex-shrink: 0;
-  }
-
-  .palette-empty {
-    color: rgba(255, 255, 255, 0.4);
-    padding: 16px;
-    text-align: center;
-    font-size: 12px;
-  }
-
-  .palette-footer {
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 6px 14px;
-    display: flex;
-    gap: 12px;
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 11px;
-  }
-
-  .palette-footer kbd {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
-    padding: 1px 5px;
-    font-family: inherit;
-    font-size: 10px;
-    line-height: 1;
-    color: rgba(255, 255, 255, 0.7);
-    margin-right: 4px;
-    vertical-align: middle;
   }
 
   :global(.palette-item-name mark),

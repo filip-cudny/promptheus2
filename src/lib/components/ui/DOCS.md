@@ -8,6 +8,7 @@ Reusable UI primitives shared across features. See [src/DOCS.md](../../../DOCS.m
 ui/
 ├── ActionIconButton.svelte     # Icon-only button with optional confirm feedback
 ├── CollapsibleSection.svelte   # Expandable/collapsible content container
+├── CommandPalette.svelte       # Shared palette shell (scrim + modal + input + body + footer)
 ├── ContextEditor.svelte        # Textarea + image chips for editing context
 ├── ImageChipBar.svelte         # Horizontal row of image thumbnails with delete
 └── MarkdownRenderer.svelte     # Renders markdown to HTML with syntax highlighting
@@ -61,6 +62,14 @@ For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconPro
 - Pure presentational component — no IPC calls or save logic. Parents control persistence.
 - Renders `ImageChipBar` above a textarea. Used in both the conversation dialog's context section and the context menu's inline edit mode.
 - Import `ConversationImage` from `$lib/types/conversation`.
+
+### CommandPalette
+
+- Props: `open: boolean`, `onClose: () => void`, `query: string` (bindable), `placeholder: string`, `variant: "overlay" | "window"`, optional `bodyMaxHeight` (default `"360px"`), optional `inputRef: HTMLInputElement | undefined` (bindable, lets the consumer call `.focus()`), optional `headerExtras` snippet, required `body` snippet, optional `footer` snippet.
+- Pure visual shell: shared frame (`#252525`, 1px white-08 border, 8px radius), input row, scrollable body, footer. Consumers render the list and footer keys via snippets.
+- `variant="overlay"` is for in-window overlays (e.g. Cmd+K inside ConversationDialog) — adds a dark `rgba(0,0,0,0.5)` scrim with fade-in.
+- `variant="window"` is for separate Tauri windows with transparent body (e.g. Cmd+P provider switcher) — keeps the scrim transparent so the host window itself acts as the backdrop. On Linux this variant uses a lighter shadow (`0 6px 18px / 0.22`) because GTK/X11 transparent windows render heavy shadows poorly; the overlay variant keeps the heavy `0 20px 60px / 0.5` shadow on every platform.
+- Provides utility classes for consumers: `.palette-item`, `.palette-item.highlight`, `.palette-item-icon`, `.palette-item-name`, `.palette-empty`, `.palette-divider`, plus `.palette-footer kbd` styling.
 
 ### MarkdownRenderer
 

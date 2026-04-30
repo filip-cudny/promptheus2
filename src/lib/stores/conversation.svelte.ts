@@ -25,7 +25,7 @@ import {
   updateSurfaceReasoningEffort,
   updateSurfaceEnabledTools,
 } from "$lib/services/settings";
-import { extractSkillDisplayText, hasSkillReferences } from "$lib/utils/skillDisplay";
+import { buildUserNodeDisplay, hasSkillReferences } from "$lib/utils/skillDisplay";
 import type {
   ConversationNode,
   ConversationImage,
@@ -229,7 +229,9 @@ function renderNodesForHistory(nodes: SerializedConversationNode[]): {
   const lastUser = [...nodes].reverse().find((n) => n.role === "user");
   const lastAssistant = [...nodes].reverse().find((n) => n.role === "assistant");
   return {
-    inputRendered: lastUser ? extractSkillDisplayText(lastUser.content) : null,
+    inputRendered: lastUser
+      ? buildUserNodeDisplay(lastUser.content, lastUser.text_attachments)
+      : null,
     outputRendered: lastAssistant?.content ?? null,
   };
 }
