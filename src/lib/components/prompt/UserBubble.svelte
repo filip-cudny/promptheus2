@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
-  import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import type { ConversationNode, ConversationImage } from "$lib/types/conversation";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import SkillEditable from "$lib/components/ui/SkillEditable.svelte";
@@ -11,6 +9,7 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import { handleEditablePaste } from "$lib/utils/paste";
   import { highlightSkills } from "$lib/utils/skillHighlight";
+  import { openImagePreview, openTextPreview } from "$lib/services/windowPreviews";
 
   let {
     node,
@@ -82,15 +81,8 @@
     await navigator.clipboard.writeText(node.content);
   }
 
-  function openTextPreview(text: string, index: number) {
-    const sourceWindow = getCurrentWebviewWindow().label;
-    invoke("open_text_preview", { text, index, sourceWindow }).catch((e) =>
-      console.error("open_text_preview failed:", e),
-    );
-  }
-
-  function openImagePreview(image: ConversationImage) {
-    invoke("open_image_preview", { data: image.data, mediaType: image.media_type });
+  function handleOpenImage(image: ConversationImage) {
+    openImagePreview(image.data, image.media_type);
   }
 </script>
 
@@ -105,7 +97,7 @@
             onRemoveText={onRemoveTextAttachment}
             onRemoveImage={onRemoveImage}
             onOpenText={openTextPreview}
-            onOpenImage={openImagePreview}
+            onOpenImage={handleOpenImage}
           />
           <SkillEditable
             bind:this={skillEditable}
@@ -121,7 +113,7 @@
           images={node.images}
           readonly={true}
           onOpenText={openTextPreview}
-          onOpenImage={openImagePreview}
+          onOpenImage={handleOpenImage}
         />
         <div class="bubble-text">{@html formatUserContent(node.content)}</div>
       {/if}

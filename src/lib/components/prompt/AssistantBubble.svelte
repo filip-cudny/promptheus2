@@ -1,7 +1,6 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { save } from "@tauri-apps/plugin-dialog";
+  import { saveSvg } from "$lib/services/fileSave";
   import type { ConversationNode, ContentSegment } from "$lib/types/conversation";
   import type { ToolCall } from "$lib/types/ai";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
@@ -153,14 +152,6 @@
     }
   }
 
-  async function handleSaveSvg(svg: string) {
-    const path = await save({
-      defaultPath: "mermaid-diagram.svg",
-      filters: [{ name: "SVG", extensions: ["svg"] }],
-    });
-    if (path) await invoke("write_text_file", { path, content: svg });
-  }
-
   async function copyContent() {
     await navigator.clipboard.writeText(displayContent);
   }
@@ -201,7 +192,7 @@
       {:else if hasMarkers}
         {#each renderBlocks as block}
           {#if block.kind === "text"}
-            <MarkdownRenderer content={block.text} {isStreaming} onopen={openUrl} onsavesvg={handleSaveSvg} />
+            <MarkdownRenderer content={block.text} {isStreaming} onopen={openUrl} onsavesvg={saveSvg} />
           {:else if block.kind === "tool_group"}
             {@const groupToolCalls = block.toolCallIds
               .map((id) => allToolCalls.get(id))
@@ -218,7 +209,7 @@
           {/if}
         {/each}
       {:else if displayContent}
-        <MarkdownRenderer content={displayContent} {isStreaming} onopen={openUrl} onsavesvg={handleSaveSvg} />
+        <MarkdownRenderer content={displayContent} {isStreaming} onopen={openUrl} onsavesvg={saveSvg} />
       {/if}
 
       {#if showGenerating}

@@ -2,12 +2,13 @@
   import { onDestroy, onMount, tick } from "svelte";
   import { ChevronRight, MessagesSquare, Plus, X } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import { highlightFor, truncateAroundMatch } from "$lib/utils/highlightMatches";
+  import { highlightFor } from "$lib/utils/highlightMatches";
   import { handleListNavKey } from "$lib/utils/listNavigation";
-  import type { FieldMatch, SearchField, SearchResult } from "$lib/types/historySearch";
+  import type { SearchResult } from "$lib/types/historySearch";
   import { useHistorySearch } from "$lib/stores/useHistorySearch.svelte";
   import CommandPalette from "$lib/components/ui/CommandPalette.svelte";
   import KbdHint from "$lib/components/ui/KbdHint.svelte";
+  import { displayName, snippetFor, formatTimestamp } from "$lib/utils/historySearchSnippet";
 
   let { open, onClose, onNewChat, onOpenConversation }: {
     open: boolean;
@@ -102,46 +103,6 @@
     historySearch.cancel();
   });
 
-  function displayName(r: SearchResult): string {
-    const e = r.entry;
-    return e.title ?? e.skill_name ?? "Chat";
-  }
-
-  function snippetSourceFor(matches: readonly FieldMatch[]): SearchField | null {
-    const input = matches.find((m) => m.field === "input_content" && m.indices.length > 0);
-    if (input) return "input_content";
-    const output = matches.find((m) => m.field === "output_content" && m.indices.length > 0);
-    if (output) return "output_content";
-    return null;
-  }
-
-  function snippetFor(r: SearchResult): { field: SearchField; text: string; matches: FieldMatch[] } | null {
-    const source = snippetSourceFor(r.matches);
-    if (!source) return null;
-    const e = r.entry;
-    const raw = source === "input_content"
-      ? (e.input_content ?? "")
-      : (e.output_content ?? "");
-    if (!raw) return null;
-    const truncated = truncateAroundMatch(raw, r.matches, source, 80);
-    if (!truncated.text) return null;
-    return { field: source, text: truncated.text, matches: truncated.matches };
-  }
-
-  function formatTimestamp(r: SearchResult): string {
-    const e = r.entry;
-    const raw = e.updated_at ?? e.created_at ?? e.timestamp;
-    const date = new Date(raw);
-    if (isNaN(date.getTime())) return raw;
-    const now = new Date();
-    const startOfToday = new Date(now);
-    startOfToday.setHours(0, 0, 0, 0);
-    if (date.getTime() >= startOfToday.getTime()) return "Today";
-    const diffDays = Math.floor((startOfToday.getTime() - date.getTime()) / 86400000);
-    if (diffDays < 1) return "Yesterday";
-    if (diffDays < 7) return `${diffDays + 1}d ago`;
-    return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  }
 </script>
 
 <CommandPalette

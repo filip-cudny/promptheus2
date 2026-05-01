@@ -1,7 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy, untrack } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { onMount, onDestroy } from "svelte";
   import ContextSection from "./ContextSection.svelte";
   import AttachMenu from "./AttachMenu.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
@@ -19,10 +17,14 @@
   import { formatTokenCount } from "$lib/utils/contextWindow";
   import { focusConversationInput, setConversationInputFocus } from "$lib/utils/conversationFocus";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
   import type { ModelConfig } from "$lib/types";
+  import { openImagePreview, openTextPreview } from "$lib/services/windowPreviews";
+  import { readClipboardForEditable } from "$lib/services/clipboardPaste";
+  import { useInputSync } from "./drivers/useInputSync.svelte";
+  import { useMcpTools } from "./drivers/useMcpTools.svelte";
+  import { useTextAttachmentBridge } from "./drivers/useTextAttachmentBridge.svelte";
 
   let {
     store,
@@ -50,7 +52,20 @@
     defaultModelId?: string | null;
   } = $props();
 
-  let mcpWebSearchQualifiedId = $state<string | null>(null);
+  let skillEditable: ReturnType<typeof SkillEditable> | undefined = $state();
+
+  const sync = useInputSync({ store, getSkillEditable: () => skillEditable });
+  const mcp = useMcpTools();
+  const attachmentBridge = useTextAttachmentBridge({
+    getAttachments: () => sync.localTextAttachments,
+    setAttachments: (next) => {
+      sync.localTextAttachments = next;
+    },
+  });
+
+  let unlistenMcp: (() => void) | undefined;
+  let unlistenAttachmentBridge: (() => void) | undefined;
+  let shiftHeld = $state(false);
 
   const activeModel = $derived.by(() => {
     const activeModelId = store.modelId ?? defaultModelId;
@@ -61,14 +76,8 @@
   $effect(() => { prefetchCapabilities(activeModel); });
   const activeModelCapabilities = $derived(getCachedCapabilities(activeModel));
 
-  const builtinWebSearchAvailable = $derived(
-    activeModel?.provider === "openai",
-  );
-
-  const mcpWebSearchAvailable = $derived(
-    !!mcpWebSearchQualifiedId && !!activeModel,
-  );
-
+  const builtinWebSearchAvailable = $derived(activeModel?.provider === "openai");
+  const mcpWebSearchAvailable = $derived(!!mcp.webSearchQualifiedId && !!activeModel);
   const webSearchAvailable = $derived(builtinWebSearchAvailable || mcpWebSearchAvailable);
   const bothWebSearchAvailable = $derived(builtinWebSearchAvailable && mcpWebSearchAvailable);
 
@@ -76,9 +85,9 @@
     const tools: { id: string; label: string; icon: LucideIcon; active: boolean }[] = [];
     if (bothWebSearchAvailable) {
       tools.push({ id: "web_search", label: "Web Search (Built-in)", icon: Globe, active: store.selectedTools.includes("web_search") });
-      tools.push({ id: mcpWebSearchQualifiedId!, label: "Web Search (MCP)", icon: Globe, active: store.selectedTools.includes(mcpWebSearchQualifiedId!) });
+      tools.push({ id: mcp.webSearchQualifiedId!, label: "Web Search (MCP)", icon: Globe, active: store.selectedTools.includes(mcp.webSearchQualifiedId!) });
     } else if (webSearchAvailable) {
-      const toolId = mcpWebSearchAvailable && mcpWebSearchQualifiedId ? mcpWebSearchQualifiedId : "web_search";
+      const toolId = mcpWebSearchAvailable && mcp.webSearchQualifiedId ? mcp.webSearchQualifiedId : "web_search";
       tools.push({ id: toolId, label: "Web Search", icon: Globe, active: store.selectedTools.includes(toolId) });
     }
     return tools;
@@ -86,7 +95,7 @@
 
   function handleToggleTool(id: string, enabled: boolean) {
     if (enabled && bothWebSearchAvailable) {
-      const otherId = id === "web_search" ? mcpWebSearchQualifiedId : "web_search";
+      const otherId = id === "web_search" ? mcp.webSearchQualifiedId : "web_search";
       if (otherId && store.selectedTools.includes(otherId)) {
         store.toggleTool(otherId, false);
       }
@@ -106,12 +115,12 @@
   }
 
   function handleRemoveTextAttachment(idx: number) {
-    localTextAttachments = localTextAttachments.filter((_, i) => i !== idx);
+    sync.localTextAttachments = sync.localTextAttachments.filter((_, i) => i !== idx);
     focusConversationInput();
   }
 
   function handleRemoveImage(idx: number) {
-    localImages = localImages.filter((_, i) => i !== idx);
+    sync.localImages = sync.localImages.filter((_, i) => i !== idx);
     focusConversationInput();
   }
 
@@ -122,67 +131,6 @@
 
   const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
 
-  let localText = $state("");
-  let localImages = $state<ConversationImage[]>([]);
-  let localTextAttachments = $state<string[]>([]);
-  let shiftHeld = $state(false);
-  let skillEditable: ReturnType<typeof SkillEditable> | undefined = $state();
-  let syncedTabId = $state("");
-  let unlistenMcpReady: (() => void) | undefined;
-  let lastDomText = $state("");
-
-  $effect(() => {
-    if (store.activeTabId === syncedTabId) {
-      store.updateInputText(localText);
-      lastDomText = localText;
-    }
-  });
-
-  $effect(() => {
-    if (store.activeTabId === syncedTabId) {
-      store.updateInputImages(localImages);
-    }
-  });
-
-  $effect(() => {
-    if (store.activeTabId === syncedTabId) {
-      store.updateInputTextAttachments(localTextAttachments);
-    }
-  });
-
-  $effect(() => {
-    const tabId = store.activeTabId;
-    const storeText = store.inputText;
-    const storeImages = store.inputImages;
-    const storeAttachments = store.inputTextAttachments;
-
-    const tabChanged = tabId !== untrack(() => syncedTabId);
-    const textChangedExternally = storeText !== untrack(() => lastDomText);
-
-    localText = storeText;
-    localImages = storeImages;
-    localTextAttachments = storeAttachments;
-    syncedTabId = tabId;
-
-    if (skillEditable) {
-      if (storeText === "") {
-        skillEditable.setTextAndHighlight("");
-        skillEditable.resetUndoStack("");
-        lastDomText = "";
-      } else if (tabChanged || textChangedExternally) {
-        skillEditable.setTextAndHighlight(storeText);
-        skillEditable.resetUndoStack(storeText);
-        lastDomText = storeText;
-        requestAnimationFrame(() => {
-          skillEditable?.focus();
-          skillEditable?.restoreCursor(storeText.length);
-        });
-      }
-    }
-  });
-
-  let unlistenTextUpdate: (() => void) | null = null;
-
   function onKeyDown(e: KeyboardEvent) { shiftHeld = e.shiftKey; }
   function onKeyUp(e: KeyboardEvent) { shiftHeld = e.shiftKey; }
 
@@ -192,38 +140,14 @@
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
 
-    function fetchMcpTools() {
-      invoke<{ name: string; server: string }[]>("list_mcp_tools")
-        .then((tools) => {
-          const ws = tools.find((t) => t.name === "web_search");
-          mcpWebSearchQualifiedId = ws ? `${ws.server}.${ws.name}` : null;
-        })
-        .catch(() => {});
-    }
-
-    fetchMcpTools();
-
-    const win = getCurrentWebviewWindow();
-    win.listen("mcp-ready", () => fetchMcpTools()).then((unlisten) => {
-      unlistenMcpReady = unlisten;
-    });
-    unlistenTextUpdate = await win.listen<{ text: string; index: number }>(
-      "text-attachment-updated",
-      (event) => {
-        const { text, index } = event.payload;
-        if (index >= 0 && index < localTextAttachments.length) {
-          localTextAttachments = localTextAttachments.map((t, i) =>
-            i === index ? text : t,
-          );
-        }
-      },
-    );
+    unlistenMcp = await mcp.init();
+    unlistenAttachmentBridge = await attachmentBridge.init();
   });
 
   onDestroy(() => {
     setConversationInputFocus(null);
-    unlistenTextUpdate?.();
-    unlistenMcpReady?.();
+    unlistenAttachmentBridge?.();
+    unlistenMcp?.();
     window.removeEventListener("keydown", onKeyDown);
     window.removeEventListener("keyup", onKeyUp);
   });
@@ -231,14 +155,12 @@
   function sendOrRegenerate() {
     const abortNodeId = store.abortRegenerateNodeId;
     if (abortNodeId) {
-      store.editAndRegenerate(abortNodeId, localText.trim());
+      store.editAndRegenerate(abortNodeId, sync.localText.trim());
       return;
     }
     if (store.isRegenerateMode) {
       const path = store.tree.current_path;
-      if (path.length > 0) {
-        store.regenerate(path[path.length - 1]);
-      }
+      if (path.length > 0) store.regenerate(path[path.length - 1]);
     } else if (store.canSend) {
       store.sendMessage();
     }
@@ -247,19 +169,12 @@
   async function handleKeydown(e: KeyboardEvent) {
     if (isMac && e.key.toLowerCase() === "v" && e.shiftKey && e.metaKey) {
       e.preventDefault();
-      try {
-        const text = await invoke<string>("get_clipboard_text");
-        if (text) {
-          document.execCommand("insertText", false, text);
-          return;
-        }
-      } catch {}
-      try {
-        const [data, mediaType] = await invoke<[string, string]>("get_clipboard_image");
-        if (data) {
-          localImages = [...localImages, { data, media_type: mediaType }];
-        }
-      } catch {}
+      const result = await readClipboardForEditable();
+      if (result?.kind === "text") {
+        document.execCommand("insertText", false, result.text);
+      } else if (result?.kind === "image") {
+        sync.localImages = [...sync.localImages, { data: result.data, media_type: result.mediaType }];
+      }
       return;
     }
 
@@ -271,9 +186,7 @@
 
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
-      if (store.canSend) {
-        onSendAndCopy();
-      }
+      if (store.canSend) onSendAndCopy();
       return;
     }
   }
@@ -281,8 +194,8 @@
   async function handlePaste(e: ClipboardEvent) {
     await handleEditablePaste(e, {
       skipTextAttachment: shiftHeld,
-      onTextAttachment: (text) => { localTextAttachments = [...localTextAttachments, text]; },
-      onImage: (image) => { localImages = [...localImages, image]; },
+      onTextAttachment: (text) => { sync.localTextAttachments = [...sync.localTextAttachments, text]; },
+      onImage: (image) => { sync.localImages = [...sync.localImages, image]; },
     });
   }
 
@@ -292,15 +205,8 @@
     skillEditable?.focus();
   }
 
-  function openTextPreview(text: string, index: number) {
-    const sourceWindow = getCurrentWebviewWindow().label;
-    invoke("open_text_preview", { text, index, sourceWindow }).catch((e) =>
-      console.error("open_text_preview failed:", e),
-    );
-  }
-
-  function openImagePreview(image: ConversationImage) {
-    invoke("open_image_preview", { data: image.data, mediaType: image.media_type });
+  function handleOpenImage(image: ConversationImage) {
+    openImagePreview(image.data, image.media_type);
   }
 </script>
 
@@ -311,17 +217,17 @@
 
   <div class="input-field">
     <AttachmentRow
-      textAttachments={localTextAttachments}
-      images={localImages}
+      textAttachments={sync.localTextAttachments}
+      images={sync.localImages}
       variant="small"
       onRemoveText={handleRemoveTextAttachment}
       onRemoveImage={handleRemoveImage}
       onOpenText={openTextPreview}
-      onOpenImage={openImagePreview}
+      onOpenImage={handleOpenImage}
     />
     <SkillEditable
       bind:this={skillEditable}
-      bind:text={localText}
+      bind:text={sync.localText}
       placeholder="Type a message… (use /skill-name for skills)"
       editableClass="input-editable"
       onkeydown={handleKeydown}
@@ -457,5 +363,4 @@
     align-items: center;
     gap: var(--space-3);
   }
-
 </style>

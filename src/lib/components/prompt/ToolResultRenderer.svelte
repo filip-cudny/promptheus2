@@ -1,21 +1,12 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { save } from "@tauri-apps/plugin-dialog";
   import { parseToolResult } from "$lib/utils/toolResultParser";
   import { isXmlLike } from "$lib/utils/xmlParser";
   import type { HintStatus } from "$lib/types/toolResult";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
   import SearchResultsRenderer from "./SearchResultsRenderer.svelte";
   import JsonNode from "./JsonNode.svelte";
-
-  async function handleSaveSvg(svg: string) {
-    const path = await save({
-      defaultPath: "mermaid-diagram.svg",
-      filters: [{ name: "SVG", extensions: ["svg"] }],
-    });
-    if (path) await invoke("write_text_file", { path, content: svg });
-  }
+  import { saveSvg } from "$lib/services/fileSave";
 
   let {
     result,
@@ -148,7 +139,7 @@
     </div>
   {:else if parsed.kind === "text"}
     {#if isMarkdownLike(parsed.text)}
-      <MarkdownRenderer content={parsed.text} isStreaming={false} onopen={openUrl} onsavesvg={handleSaveSvg} />
+      <MarkdownRenderer content={parsed.text} isStreaming={false} onopen={openUrl} onsavesvg={saveSvg} />
     {:else}
       <pre class="plain-text">{parsed.text}</pre>
     {/if}
