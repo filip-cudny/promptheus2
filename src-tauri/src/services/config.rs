@@ -174,6 +174,11 @@ impl ConfigService {
                     self.settings.code_theme = v.to_string();
                 }
             }
+            "theme" => {
+                if let Some(v) = value.as_str() {
+                    self.settings.theme = v.to_string();
+                }
+            }
             "number_input_debounce_ms" => {
                 if let Some(v) = value.as_u64() {
                     self.settings.number_input_debounce_ms = v as u32;

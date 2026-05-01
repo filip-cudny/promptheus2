@@ -94,7 +94,8 @@
     const openUp = spaceAbove >= naturalHeight || spaceAbove >= spaceBelow;
 
     const available = Math.max(80, openUp ? spaceAbove : spaceBelow);
-    const height = Math.min(naturalHeight, available);
+    const fits = naturalHeight <= available;
+    const height = fits ? naturalHeight : available;
 
     let top: number;
     if (openUp) {
@@ -107,7 +108,10 @@
     let left = chipRect.right - dropdownWidth;
     left = Math.max(VIEWPORT_PADDING, Math.min(left, viewportWidth - dropdownWidth - VIEWPORT_PADDING));
 
-    return `top: ${top}px; left: ${left}px; max-height: ${height}px;`;
+    if (fits) {
+      return `top: ${top}px; left: ${left}px;`;
+    }
+    return `top: ${top}px; left: ${left}px; max-height: ${height}px; overflow-y: auto;`;
   }
 
   function refreshDropdownPositions() {
@@ -307,7 +311,6 @@
     border-radius: var(--radius-lg);
     padding: var(--space-2) var(--space-0);
     box-shadow: var(--shadow-md);
-    overflow-y: auto;
     overscroll-behavior: contain;
   }
 

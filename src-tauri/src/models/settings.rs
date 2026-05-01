@@ -51,6 +51,9 @@ pub struct Settings {
     #[serde(default = "default_code_theme")]
     pub code_theme: String,
 
+    #[serde(default = "default_theme")]
+    pub theme: String,
+
     #[serde(default = "default_menu_section_order")]
     pub menu_section_order: Vec<String>,
 
@@ -426,6 +429,10 @@ fn default_code_theme() -> String {
     "paraiso-dark".to_string()
 }
 
+fn default_theme() -> String {
+    "dark".to_string()
+}
+
 fn default_menu_section_order() -> Vec<String> {
     vec![
         "chat".to_string(),
@@ -464,6 +471,7 @@ impl Default for Settings {
             launch_at_startup: false,
             debug_mode: false,
             code_theme: default_code_theme(),
+            theme: default_theme(),
             menu_section_order: default_menu_section_order(),
             description_generator: DescriptionGenerator::default(),
             notifications: NotificationSettings::default(),

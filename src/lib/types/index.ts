@@ -11,6 +11,7 @@ export interface Settings {
   show_tray_icon: boolean;
   debug_mode: boolean;
   code_theme: string;
+  theme: string;
   menu_section_order: string[];
   description_generator: DescriptionGenerator;
   notifications: NotificationSettings;
