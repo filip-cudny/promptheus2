@@ -6,15 +6,50 @@ Borderless popup window that renders menu items fetched from the Rust `MenuCoord
 
 The context menu runs in a **separate Tauri window** (`context-menu` label) with its own HTML entry point (`context-menu.html` → `ContextMenuApp.svelte`). This window is borderless, transparent, always-on-top, and hidden by default.
 
+`ContextMenu.svelte` is split into three layers:
+
+- **Dumb UI primitives** in `components/` — pure presentation, own `<style>`, no IPC/stores/services.
+- **Logic drivers** in `drivers/` (`*.svelte.ts`) — runes-based state machines for window/keyboard/blur/panel concerns. No JSX, no CSS.
+- **Data adapters** in `$lib/services` and `$lib/stores` — fetching, caching, and derived data.
+
+`ContextMenu.svelte` is the orchestrator: instantiates drivers, wires adapters, lays out the template.
+
 ### Files
 
 | File | Role |
 |------|------|
-| `ContextMenu.svelte` | Root UI — renders sections, handles keyboard/mouse interaction |
-| `$lib/stores/contextMenu.svelte.ts` | Reactive state — items, selection, open/close lifecycle |
+| `ContextMenu.svelte` | Orchestrator — wires drivers/adapters, renders sections via dumb children |
+| `MenuShell.svelte` | Outer chrome (border, padding, shell layout) |
+| `ContextSection.svelte` | Renders `context` items (chips, edit mode, action buttons) |
+| `LastInteractionSection.svelte` | Renders `last_interaction` items (input/output/transcription chips + history) |
+| `itemExtractors.ts` | `groupBySection`, `extractContextItems`, `extractLastInteractionData`, last-interaction types |
+| `components/MenuEmptyState.svelte` | "No items available" fallback |
+| `components/MenuSeparator.svelte` | 1px section divider |
+| `components/MenuItemRow.svelte` | Generic row (icon + prompt-number + label + executing/recording state) |
+| `components/ChatRow.svelte` | Chat row (icon + label + recording toggle) |
+| `components/SettingsToggleRow.svelte` | Chevron + "Settings" toggle row |
+| `components/FooterHint.svelte` | Bottom hint (`⇧ voice input · right-click for actions`) |
+| `components/SkillActionMenu.svelte` | Floating panel content for skill RMB action menu (open in dialog / mic / metadata) |
+| `components/SettingsPanel.svelte` | Floating panel content for Settings (quick action model + STT model selectors) |
+| `drivers/useFloatingPanelMutex.svelte.ts` | Mutually exclusive 3-panel state (settings / action menu / chat providers) + anchors |
+| `drivers/useMenuKeyboard.svelte.ts` | `keydown`/`keyup` handler, shifted digits, `shiftHeld` flag |
+| `drivers/useMenuBlurClose.svelte.ts` | Window blur listener, suppressed-blur recheck timer, blur-grace passthrough |
+| `drivers/useMenuPositioning.svelte.ts` | Resize/position window at cursor anchored to skills section, hover-enable gate |
+| `$lib/services/skillMetadata.svelte.ts` | Singleton cache for `get_skill` metadata + `buildSkillMetaEntries` |
+| `$lib/stores/webviewProviders.svelte.ts` | Webview providers list + `onSettingsChanged` listener + Promptheus prepend |
+| `$lib/stores/modelsMenuData.svelte.ts` | Derived `modelsData`/`modelNames`/`quickActionModel` + capability prefetch + setters |
+| `$lib/stores/contextMenu.svelte.ts` | Reactive state — items, selection, open/close lifecycle, IPC listeners |
+| `$lib/stores/useContextMenu.svelte.ts` | Getter wrapper around `contextMenu.svelte.ts` |
 | `context-menu.html` (project root) | HTML entry point for the context-menu window |
 | `src/ContextMenuApp.svelte` | Minimal root that mounts `ContextMenu` |
 | `src/context-menu-main.ts` | JS entry point for the context-menu window |
+
+### Layer contracts
+
+- `components/*` and other UI primitives **must not** import `services/`, `stores/`, or `invoke()`. They take props and emit callbacks.
+- `drivers/*.svelte.ts` are pure runes — no JSX, no CSS. They may call `invoke()` (positioning calls `show_context_menu_panel` / `focus_context_menu`) or attach window listeners (blur).
+- Mutex `open*` methods atomically close the other two panels, removing the previous bug-prone `closePanels(); settingsOpen = true;` pattern.
+- `skillMetadata` cache is a module-level singleton (`$state`) so it survives menu close/reopen — fewer redundant `get_skill` IPC calls.
 
 ### Window configuration
 
@@ -35,8 +70,23 @@ Defined in `src-tauri/tauri.conf.json` under `app.windows` with label `context-m
 |-----|--------|
 | Arrow Up/Down | Move selection highlight |
 | Enter | Execute selected item (Shift+Enter for alternative execution) |
-| Escape | Close menu |
+| Escape | Close menu (closes any open floating panel first) |
 | 1-9 | Quick-select item by position (multi-digit debounced at 300ms) |
+| Shift+1-9 | Same as above with alternative execution flag |
+
+All keyboard handling lives in `drivers/useMenuKeyboard.svelte.ts`.
+
+## Floating panels
+
+Three mutually exclusive panels (`drivers/useFloatingPanelMutex.svelte.ts`):
+
+| Panel | Trigger | Contents |
+|-------|---------|----------|
+| Settings | LMB on Settings toggle row | `SettingsPanel` — quick action model + STT model |
+| Skill action menu | RMB on a skill row | `SkillActionMenu` — open in dialog / run with transcription / metadata |
+| Chat providers | RMB on Chat row | `ProviderMenuList` — Promptheus + webview providers |
+
+Closing the Settings or Skill action menu triggers `menu.resumeClose()` to release the suppression any inner control (e.g. ModelSelector) may have set.
 
 ## Rich item types
 
@@ -90,4 +140,4 @@ History button is a placeholder — the history dialog window is not yet impleme
 
 ### Other types
 
-Speech, settings, and other item types are rendered as simple label + icon buttons and use the generic `execute_menu_item` backend command. Future tasks will add specialized renderers as needed.
+Speech, settings, and other item types are rendered as `MenuItemRow` (label + icon + optional prompt number) and use the generic `execute_menu_item` backend command. Future tasks will add specialized renderers as needed.
