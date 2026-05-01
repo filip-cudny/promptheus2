@@ -6,7 +6,7 @@
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
   import ThinkingBlock from "$lib/components/ui/ThinkingBlock.svelte";
-  import ToolCallGroup from "./ToolCallGroup.svelte";
+  import ToolCallGroup from "./tool-call/ToolCallGroup.svelte";
   import ProcessingIndicator from "./components/ProcessingIndicator.svelte";
   import ErrorBanner from "./components/ErrorBanner.svelte";
   import BranchNav from "./components/BranchNav.svelte";

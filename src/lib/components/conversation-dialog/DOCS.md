@@ -1,14 +1,15 @@
-# Prompt Components
+# Conversation Dialog
 
-Conversation dialog UI: input area, message bubbles, sidebar tabs, palette, tool calls.
+Renders the chat window mounted by `windows/conversation-dialog/App.svelte`: composer, message bubbles, sidebar tabs, palette, tool calls.
 
-Each entrypoint is a thin orchestrator. IPC, listeners, timers, and pagination live in drivers (`*.svelte.ts`) or services. Repeated visual fragments live in dumb primitives in `components/`.
+Each entrypoint is a thin orchestrator. IPC, listeners, timers, and pagination live in drivers (`*.svelte.ts`) or services. Repeated visual fragments live in dumb primitives in `components/`. Tool-call rendering is its own subsystem under `tool-call/`.
 
 ## Layers
 
 - **Orchestrators** (top-level files in this dir) — wire props to drivers and primitives. May call services.
 - **Dumb primitives** (`components/`) — pure presentation, own `<style>`, take props + callbacks. **No** `invoke()`, `services/`, or `stores/` imports.
 - **Drivers** (`drivers/*.svelte.ts`) — runes-based logic (state machines, IPC, listeners, timers). **No** JSX or CSS.
+- **Tool-call subsystem** (`tool-call/`) — self-contained renderers for tool invocation UI. Only `AssistantBubble` reaches into it (via `ToolCallGroup`); the rest is internal.
 - **Services** (`$lib/services/`) — IPC adapters and external-system wrappers.
 
 ## Files
@@ -21,17 +22,24 @@ Each entrypoint is a thin orchestrator. IPC, listeners, timers, and pagination l
 | `ContextSection.svelte` | Inline context bar (text/image chips + clear/edit) |
 | `ConversationArea.svelte` | Scroll container + auto-scroll via `useAutoScroll` |
 | `InputArea.svelte` | Orchestrator — composer, attachments, tools, model select |
-| `JsonNode.svelte` | Recursive JSON renderer |
-| `SearchResultsRenderer.svelte` | Web search XML envelope renderer |
 | `TabSidebar.svelte` | Orchestrator — list + rename + delete via mutex driver |
-| `ToolCallGroup.svelte` | Header (`Running tools` shimmer / `Used N tools` summary) + items |
-| `ToolCallItem.svelte` | Single tool call — header, status, expand, retry |
 | `ToolChip.svelte` | Active tool dismissable chip |
-| `ToolResultRenderer.svelte` | Tool output (envelope / json / text/markdown) |
 | `UserBubble.svelte` | Orchestrator — read/edit user message + attachments |
-| `XmlNodeRenderer.svelte` | Recursive XML renderer |
 | `sidebarItems.ts` | Pure helpers building `SidebarItem[]` from tabs + history |
 | `$lib/utils/historySearchSnippet.ts` | `displayName`, `snippetFor`, `formatTimestamp` for `ChatPalette` |
+
+### `tool-call/`
+
+Self-contained tool-invocation renderer. External entrypoint: `ToolCallGroup` (used by `AssistantBubble`).
+
+| File | Role |
+|------|------|
+| `ToolCallGroup.svelte` | Header (`Running tools` shimmer / `Used N tools` summary) + items |
+| `ToolCallItem.svelte` | Single tool call — header, status, expand, retry |
+| `ToolResultRenderer.svelte` | Tool output (envelope / json / text/markdown) |
+| `SearchResultsRenderer.svelte` | Web search XML envelope renderer |
+| `JsonNode.svelte` | Recursive JSON renderer |
+| `XmlNodeRenderer.svelte` | Recursive XML renderer |
 
 ### `components/`
 
@@ -43,13 +51,13 @@ Each entrypoint is a thin orchestrator. IPC, listeners, timers, and pagination l
 | `BubbleEditField.svelte` | `AssistantBubble`, `UserBubble` |
 | `ErrorBanner.svelte` | `AssistantBubble` |
 | `InlineRenameInput.svelte` | `TabSidebar` |
-| `ProcessingIndicator.svelte` | `AssistantBubble`, `ToolCallGroup` |
+| `ProcessingIndicator.svelte` | `AssistantBubble`, `tool-call/ToolCallGroup` |
 | `SidebarItemRow.svelte` | `TabSidebar` |
 | `SidebarMoreMenu.svelte` | `TabSidebar` |
 | `TabSidebarHeader.svelte` | `TabSidebar` |
-| `ToolCallApprovalActions.svelte` | `ToolCallItem` (pending state) |
-| `ToolCallDetails.svelte` | `ToolCallItem` (expanded view) |
-| `ToolCallHeader.svelte` | `ToolCallItem` |
+| `ToolCallApprovalActions.svelte` | `tool-call/ToolCallItem` (pending state) |
+| `ToolCallDetails.svelte` | `tool-call/ToolCallItem` (expanded view) |
+| `ToolCallHeader.svelte` | `tool-call/ToolCallItem` |
 | `ToolCallReadOnlyChip.svelte` | `AssistantBubble` (edit mode) |
 
 ### `drivers/`
@@ -70,7 +78,7 @@ Each entrypoint is a thin orchestrator. IPC, listeners, timers, and pagination l
 | Service | Used by |
 |---------|---------|
 | `$lib/services/clipboardPaste.ts` | `InputArea` (Mac `Shift+Cmd+V` raw-text/image branch) |
-| `$lib/services/fileSave.ts` | `AssistantBubble`, `ToolResultRenderer` (Mermaid SVG export) |
+| `$lib/services/fileSave.ts` | `AssistantBubble`, `tool-call/ToolResultRenderer` (Mermaid SVG export) |
 | `$lib/services/windowPreviews.ts` | `InputArea`, `UserBubble` (open text/image preview windows) |
 | `$lib/services/history.ts` | `TabSidebar` (`updateHistoryEntryTitle`, `deleteHistoryEntry`) |
 
@@ -78,6 +86,7 @@ Each entrypoint is a thin orchestrator. IPC, listeners, timers, and pagination l
 
 - `components/*` and `$lib/components/ui/*` **must not** import `services/`, `stores/`, or `invoke()`. Take props, emit callbacks.
 - `drivers/*.svelte.ts` are pure runes — **no JSX, no CSS**. May call `invoke()`, attach window listeners, run timers, use `$effect`.
+- `tool-call/*` is internal beyond `ToolCallGroup`; outside the dir, only import `tool-call/ToolCallGroup.svelte`.
 - Orchestrators wire it all up: instantiate drivers, pass adapters as callbacks, render primitives.
 - Mutex `open*` methods atomically clear other states (no `closeMenu(); editingId = …` two-step that desyncs).
 

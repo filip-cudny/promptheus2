@@ -1,10 +1,10 @@
 <script lang="ts">
   import type { ToolCall } from "$lib/types/ai";
   import ToolResultRenderer from "./ToolResultRenderer.svelte";
-  import ToolCallHeader from "./components/ToolCallHeader.svelte";
-  import ToolCallDetails from "./components/ToolCallDetails.svelte";
-  import ToolCallApprovalActions from "./components/ToolCallApprovalActions.svelte";
-  import { useElapsedTimer } from "./drivers/useElapsedTimer.svelte";
+  import ToolCallHeader from "../components/ToolCallHeader.svelte";
+  import ToolCallDetails from "../components/ToolCallDetails.svelte";
+  import ToolCallApprovalActions from "../components/ToolCallApprovalActions.svelte";
+  import { useElapsedTimer } from "../drivers/useElapsedTimer.svelte";
 
   let {
     toolCall,

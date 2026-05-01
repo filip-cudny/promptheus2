@@ -3,7 +3,7 @@
   import { RefreshCw } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import type { ToolCall } from "$lib/types/ai";
-  import ToolResultRenderer from "../ToolResultRenderer.svelte";
+  import ToolResultRenderer from "../tool-call/ToolResultRenderer.svelte";
 
   let {
     toolCall,

@@ -4,7 +4,7 @@
   import { ChevronRight, ChevronDown, Wrench } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import ToolCallItem from "./ToolCallItem.svelte";
-  import ProcessingIndicator from "./components/ProcessingIndicator.svelte";
+  import ProcessingIndicator from "../components/ProcessingIndicator.svelte";
 
   let {
     toolCalls,
