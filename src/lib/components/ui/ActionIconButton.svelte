@@ -43,21 +43,21 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4px;
+    padding: var(--space-2);
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     background: transparent;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
     cursor: pointer;
   }
 
   .action-icon-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.8);
+    background: var(--surface-overlay);
+    color: var(--text-secondary);
   }
 
   .action-icon-btn:disabled {
-    opacity: 0.4;
+    opacity: var(--opacity-disabled);
     cursor: default;
   }
 </style>

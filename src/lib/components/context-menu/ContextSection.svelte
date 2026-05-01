@@ -1,13 +1,5 @@
 <script lang="ts">
   import type { ContextItem } from "$lib/types/context";
-  import {
-    clearContext,
-    getContextText,
-    setContextFromClipboard,
-    appendContextFromClipboard,
-    removeContextItem,
-  } from "$lib/services/context";
-  import { openContextEditor } from "$lib/services/contextEditor";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import Chip from "$lib/components/ui/Chip.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
@@ -18,12 +10,29 @@
     Copy,
     Trash2,
     Check,
-    FileText,
     X,
   } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
-  let { items }: { items: ContextItem[] } = $props();
+  let {
+    items,
+    onReplaceFromClipboard,
+    onAppendFromClipboard,
+    onOpenEditor,
+    onCopyAll,
+    onClear,
+    onRemoveItem,
+    onOpenImagePreview,
+  }: {
+    items: ContextItem[];
+    onReplaceFromClipboard: () => Promise<void>;
+    onAppendFromClipboard: () => Promise<void>;
+    onOpenEditor: () => Promise<void>;
+    onCopyAll: () => Promise<void>;
+    onClear: () => Promise<void>;
+    onRemoveItem: (index: number) => Promise<boolean | void>;
+    onOpenImagePreview: (data: string, mediaType: string) => void;
+  } = $props();
 
   let hasTextItems = $derived(items.some((i) => i.item_type === "text"));
   let isEmpty = $derived(items.length === 0);
@@ -34,21 +43,10 @@
     return text.slice(0, maxLength) + "\u2026";
   }
 
-  async function handleCopy() {
-    const text = await getContextText();
-    if (text) {
-      await navigator.clipboard.writeText(text);
-    }
-  }
-
   async function handleChipCopy(idx: number, content: string) {
     await navigator.clipboard.writeText(content);
     copyConfirm = idx;
     setTimeout(() => (copyConfirm = null), 1200);
-  }
-
-  async function handleClear() {
-    await clearContext();
   }
 </script>
 
@@ -64,31 +62,31 @@
       <ActionIconButton
         icon={FileSymlink}
         confirmIcon={Check}
-        onclick={setContextFromClipboard}
+        onclick={onReplaceFromClipboard}
         title="Replace context with clipboard"
       />
       <ActionIconButton
         icon={FilePlus}
         confirmIcon={Check}
-        onclick={appendContextFromClipboard}
+        onclick={onAppendFromClipboard}
         title="Append clipboard to context"
       />
       <ActionIconButton
         icon={Pencil}
-        onclick={openContextEditor}
+        onclick={onOpenEditor}
         title="Edit context"
       />
       <ActionIconButton
         icon={Copy}
         confirmIcon={Check}
-        onclick={handleCopy}
+        onclick={onCopyAll}
         title="Copy context text"
         disabled={!hasTextItems}
       />
       <ActionIconButton
         icon={Trash2}
         confirmIcon={Check}
-        onclick={handleClear}
+        onclick={onClear}
         title="Clear all context"
         disabled={isEmpty}
       />
@@ -108,7 +106,7 @@
               {/if}
             </span>
             <span class="chip-text">{truncateText(item.content)}</span>
-            <button class="chip-remove" onclick={(e) => { e.stopPropagation(); removeContextItem(idx); }}>
+            <button class="chip-remove" onclick={(e) => { e.stopPropagation(); onRemoveItem(idx); }}>
               <X size={11} strokeWidth={2.5} />
             </button>
           </Chip>
@@ -116,7 +114,8 @@
           <ImageChipBar
             images={[{ data: item.data, media_type: item.media_type }]}
             variant="small"
-            onremove={() => removeContextItem(idx)}
+            onremove={() => onRemoveItem(idx)}
+            onopen={(image) => onOpenImagePreview(image.data, image.media_type)}
           />
         {/if}
       {/each}
@@ -126,7 +125,7 @@
 
 <style>
   .context-section {
-    padding: 2px 0;
+    padding: var(--space-1) var(--space-0);
   }
 
   .section-header {
@@ -134,42 +133,42 @@
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    padding: 4px 12px;
+    padding: var(--space-2) var(--space-6);
     border: none;
     background: transparent;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-muted);
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     text-transform: capitalize;
-    letter-spacing: 0.5px;
+    letter-spacing: var(--tracking-label);
     box-sizing: border-box;
   }
 
   .header-label {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-3);
   }
 
   .badge {
     background: rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    padding: 0 6px;
-    font-size: 10px;
+    border-radius: var(--radius-xl);
+    padding: var(--space-0) var(--space-3);
+    font-size: var(--font-size-xs);
     line-height: 16px;
   }
 
   .header-actions {
     display: flex;
-    gap: 2px;
+    gap: var(--space-1);
   }
 
   .chips {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 4px;
-    padding: 4px 12px 2px;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-6) var(--space-1);
     overflow: hidden;
   }
 
@@ -195,17 +194,17 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    padding: 2px;
+    padding: var(--space-1);
     border: none;
     border-radius: 50%;
     background: transparent;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-disabled);
     cursor: pointer;
   }
 
   .chip-remove:hover {
     background: rgba(255, 255, 255, 0.15);
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--text-secondary);
   }
 
 </style>

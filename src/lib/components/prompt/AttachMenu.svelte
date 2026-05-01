@@ -3,6 +3,9 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import type { ComponentType, SvelteComponent } from "svelte";
   import type { IconProps } from "lucide-svelte";
+  import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
+  import MenuList from "$lib/components/ui/MenuList.svelte";
+  import MenuItem from "$lib/components/ui/MenuItem.svelte";
 
   type LucideIcon = ComponentType<SvelteComponent<IconProps>>;
 
@@ -37,40 +40,45 @@
 <svelte:window onpointerdown={handleWindowPointerDown} />
 
 <div class="attach-menu" bind:this={containerEl}>
-  <button
-    class="attach-btn"
-    onclick={() => (menuOpen = !menuOpen)}
-    title="Add attachment"
-  >
-    <Plus size={ICON_SIZE.md} />
-  </button>
+  <span class="attach-btn-wrap">
+    <ActionIconButton
+      icon={Plus}
+      size={ICON_SIZE.md}
+      onclick={() => (menuOpen = !menuOpen)}
+      title="Add attachment"
+    />
+  </span>
 
   {#if menuOpen}
     <div class="menu-dropdown">
-      <button
-        class="menu-item"
-        class:disabled={contextDisabled}
-        onclick={handleContextClick}
-      >
-        <FileText size={ICON_SIZE.md} />
-        <span>Context</span>
-      </button>
-      {#if availableTools.length > 0}
-        <div class="menu-separator"></div>
-        {#each availableTools as tool (tool.id)}
-          <button
-            class="menu-item"
-            class:active={tool.active}
-            onclick={() => { onToggleTool?.(tool.id, !tool.active); menuOpen = false; }}
-          >
-            {#if tool.icon}
-              {@const Icon = tool.icon}
-              <Icon size={ICON_SIZE.md} />
-            {/if}
-            <span>{tool.label}</span>
-          </button>
-        {/each}
-      {/if}
+      <MenuList role="menu">
+        <MenuItem
+          label="Context"
+          disabled={contextDisabled}
+          onclick={handleContextClick}
+        >
+          {#snippet icon()}
+            <FileText size={ICON_SIZE.md} />
+          {/snippet}
+        </MenuItem>
+        {#if availableTools.length > 0}
+          <div class="menu-list-separator"></div>
+          {#each availableTools as tool (tool.id)}
+            <MenuItem
+              label={tool.label}
+              active={tool.active}
+              onclick={() => { onToggleTool?.(tool.id, !tool.active); menuOpen = false; }}
+            >
+              {#snippet icon()}
+                {#if tool.icon}
+                  {@const Icon = tool.icon}
+                  <Icon size={ICON_SIZE.md} />
+                {/if}
+              {/snippet}
+            </MenuItem>
+          {/each}
+        {/if}
+      </MenuList>
     </div>
   {/if}
 </div>
@@ -82,23 +90,16 @@
     align-self: flex-end;
   }
 
-  .attach-btn {
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    border: none;
-    background: transparent;
-    color: #aaa;
-    cursor: pointer;
+  .attach-btn-wrap {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
   }
 
-  .attach-btn:hover {
-    color: #e0e0e0;
-    background: rgba(255, 255, 255, 0.08);
+  .attach-btn-wrap :global(.action-icon-btn) {
+    width: 24px;
+    height: 24px;
+    padding: var(--space-0);
+    border-radius: var(--radius-lg);
+    color: var(--text-muted);
   }
 
   .menu-dropdown {
@@ -106,47 +107,11 @@
     bottom: calc(100% + 4px);
     left: 0;
     min-width: 160px;
-    background: #2a2a2a;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 6px;
-    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
-    padding: 4px 0;
-    z-index: 100;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    padding: var(--space-2) var(--space-0);
+    z-index: var(--z-dropdown);
   }
-
-  .menu-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: 8px 12px;
-    background: none;
-    border: none;
-    color: #e0e0e0;
-    font: inherit;
-    font-size: 13px;
-    cursor: pointer;
-    text-align: left;
-    white-space: nowrap;
-  }
-
-  .menu-item:hover:not(.disabled) {
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .menu-item.disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .menu-separator {
-    height: 1px;
-    background: rgba(255, 255, 255, 0.1);
-    margin: 4px 0;
-  }
-
-  .menu-item.active {
-    color: #5b8dd9;
-  }
-
 </style>

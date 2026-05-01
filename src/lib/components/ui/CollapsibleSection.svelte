@@ -54,29 +54,29 @@
 
 <style>
   .collapsible-section {
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
     overflow: hidden;
   }
 
   .collapsible-header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     width: 100%;
-    padding: 5px 12px;
-    background: rgba(255, 255, 255, 0.04);
+    padding: 5px var(--space-6);
+    background: var(--surface-overlay-faint);
     border: none;
-    color: #e0e0e0;
+    color: var(--text-primary);
     font: inherit;
-    font-size: 13px;
-    font-weight: 600;
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
     cursor: pointer;
     text-align: left;
   }
 
   .collapsible-header:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--surface-overlay);
   }
 
   .collapse-arrow {
@@ -95,13 +95,13 @@
 
   .collapsible-actions {
     display: flex;
-    gap: 4px;
+    gap: var(--space-2);
     flex-shrink: 0;
   }
 
   .collapsible-actions.hover-actions {
     opacity: 0;
-    transition: opacity 120ms ease;
+    transition: opacity var(--motion-fast) var(--ease-default);
   }
 
   .collapsible-header:hover .collapsible-actions.hover-actions,
@@ -110,6 +110,6 @@
   }
 
   .collapsible-content {
-    padding: 10px 14px;
+    padding: var(--space-5) var(--space-7);
   }
 </style>

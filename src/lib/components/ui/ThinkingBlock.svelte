@@ -1,6 +1,9 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { slide } from "svelte/transition";
+  import { invoke } from "@tauri-apps/api/core";
+  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { save } from "@tauri-apps/plugin-dialog";
   import { ChevronRight, ChevronDown, Brain } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import MarkdownRenderer from "./MarkdownRenderer.svelte";
@@ -56,6 +59,14 @@
     if (intervalId) clearInterval(intervalId);
   });
 
+  async function handleSaveSvg(svg: string) {
+    const path = await save({
+      defaultPath: "mermaid-diagram.svg",
+      filters: [{ name: "SVG", extensions: ["svg"] }],
+    });
+    if (path) await invoke("write_text_file", { path, content: svg });
+  }
+
   function formatElapsed(seconds: number): string {
     if (seconds < 60) return `${seconds}s`;
     const m = Math.floor(seconds / 60);
@@ -78,7 +89,7 @@
     </div>
     {#if hasContent}
       <div class="thinking-content thinking-content--live" bind:this={liveThinkingEl}>
-        <MarkdownRenderer content={thinkingContent} isStreaming={true} />
+        <MarkdownRenderer content={thinkingContent} isStreaming={true} onopen={openUrl} onsavesvg={handleSaveSvg} />
       </div>
     {/if}
   </div>
@@ -101,7 +112,7 @@
     </button>
     {#if expanded}
       <div class="thinking-content" transition:slide={{ duration: 150 }}>
-        <MarkdownRenderer content={thinkingContent} isStreaming={false} />
+        <MarkdownRenderer content={thinkingContent} isStreaming={false} onopen={openUrl} onsavesvg={handleSaveSvg} />
       </div>
     {/if}
   </div>
@@ -109,24 +120,24 @@
 
 <style>
   .thinking-block {
-    margin: 4px 0;
-    border-left: 3px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
+    margin: var(--space-2) var(--space-0);
+    border-left: 3px solid var(--border-strong);
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.03);
     overflow: hidden;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--text-secondary);
   }
 
   .thinking-active {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 10px;
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-5);
   }
 
   .thinking-label {
-    font-size: 13px;
-    font-weight: 600;
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
     background: linear-gradient(
       90deg,
       rgba(155, 109, 204, 0.6) 0%,
@@ -140,11 +151,6 @@
     animation: shimmer 2s linear infinite;
   }
 
-  @keyframes shimmer {
-    0% { background-position: -200% center; }
-    100% { background-position: 200% center; }
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .thinking-label {
       animation: none;
@@ -154,40 +160,40 @@
   }
 
   .thinking-timer {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.35);
+    font-size: var(--font-size-md);
+    color: var(--text-disabled);
   }
 
   .thinking-toggle {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     width: 100%;
-    padding: 6px 10px;
+    padding: var(--space-3) var(--space-5);
     border: none;
     background: none;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--text-secondary);
     font: inherit;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     text-align: left;
     cursor: pointer;
   }
 
   .thinking-toggle:hover {
-    background: rgba(255, 255, 255, 0.04);
-    color: rgba(255, 255, 255, 0.9);
+    background: var(--surface-overlay-faint);
+    color: var(--text-primary);
   }
 
   .thinking-summary {
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
   }
 
   .thinking-content {
     max-height: 400px;
     overflow-y: auto;
-    padding: 4px 10px 10px 10px;
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.6);
+    padding: var(--space-2) var(--space-5) var(--space-5) var(--space-5);
+    font-size: var(--font-size-base);
+    color: var(--text-muted);
   }
 
   .thinking-content--live {

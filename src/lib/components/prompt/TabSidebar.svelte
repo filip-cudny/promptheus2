@@ -383,12 +383,12 @@
     background: rgba(5, 5, 5, 0.3);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
-    border-right: 1px solid rgba(255, 255, 255, 0.15);
-    z-index: 200;
+    border-right: 1px solid var(--border-strong);
+    z-index: var(--z-drawer);
     display: flex;
     flex-direction: column;
     transform: translateX(-100%);
-    transition: transform 0.2s ease;
+    transition: transform var(--motion-slow) var(--ease-default);
     will-change: transform;
   }
 
@@ -406,34 +406,34 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 12px 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding: var(--space-6) var(--space-6) var(--space-4);
+    border-bottom: 1px solid var(--border-default);
   }
 
   .close-btn {
     width: 28px;
     height: 28px;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     border: none;
     background: transparent;
-    color: #aaa;
+    color: var(--text-muted);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
+    padding: var(--space-0);
   }
 
   .close-btn:hover {
-    color: #e0e0e0;
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    background: var(--surface-overlay);
   }
 
   .sidebar-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.45);
-    letter-spacing: 0.5px;
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-muted);
+    letter-spacing: var(--tracking-label);
     text-transform: uppercase;
   }
 
@@ -441,33 +441,33 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 8px;
+    padding: var(--space-4);
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-1);
   }
 
   .tab-item {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: 6px;
-    color: #aaa;
-    font-size: 13px;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-5);
+    border-radius: var(--radius-lg);
+    color: var(--text-muted);
+    font-size: var(--font-size-base);
     cursor: pointer;
     flex-shrink: 0;
   }
 
   .tab-item:hover {
-    background: rgba(255, 255, 255, 0.06);
-    color: #d0d0d0;
+    background: var(--surface-overlay-faint);
+    color: var(--text-secondary);
   }
 
   .tab-item.active {
-    background: rgba(255, 255, 255, 0.1);
-    color: #e0e0e0;
-    font-weight: 600;
+    background: var(--surface-overlay);
+    color: var(--text-primary);
+    font-weight: var(--font-weight-semibold);
   }
 
   .tab-body {
@@ -486,25 +486,25 @@
 
   .tab-name-input {
     width: 100%;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     font-family: inherit;
-    color: #e0e0e0;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 3px;
-    padding: 0 4px;
+    color: var(--text-primary);
+    background: var(--surface-overlay);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    padding: var(--space-0) var(--space-2);
     outline: none;
     line-height: inherit;
   }
 
   .tab-name-input:focus {
-    border-color: rgba(255, 255, 255, 0.35);
+    border-color: var(--border-strong);
   }
 
   .tab-meta {
-    font-size: 11px;
-    font-weight: 400;
-    color: rgba(255, 255, 255, 0.3);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-regular);
+    color: var(--text-disabled);
   }
 
   .more-menu {
@@ -515,15 +515,15 @@
   .more-btn {
     width: 20px;
     height: 20px;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     border: none;
     background: transparent;
-    color: rgba(255, 255, 255, 0.2);
+    color: var(--text-faint);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
+    padding: var(--space-0);
     opacity: 0;
   }
 
@@ -533,20 +533,20 @@
   }
 
   .more-btn:hover {
-    color: #e0e0e0;
-    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    background: var(--surface-overlay);
   }
 
   .menu-dropdown {
     position: absolute;
     top: 100%;
     right: 0;
-    margin-top: 2px;
+    margin-top: var(--space-1);
     min-width: 120px;
     background: rgba(30, 30, 32, 0.98);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
-    padding: 4px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2);
     z-index: 300;
     display: flex;
     flex-direction: column;
@@ -556,31 +556,31 @@
   .menu-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-4);
     border: none;
     background: transparent;
-    color: #ccc;
-    font-size: 12px;
+    color: var(--text-secondary);
+    font-size: var(--font-size-md);
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     white-space: nowrap;
   }
 
   .menu-item:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: #e0e0e0;
+    background: var(--surface-overlay);
+    color: var(--text-primary);
   }
 
   .menu-item.destructive:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: #e0e0e0;
+    background: var(--surface-overlay);
+    color: var(--text-primary);
   }
 
   .confirm-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--surface-scrim);
     z-index: 400;
     display: flex;
     align-items: center;
@@ -588,39 +588,39 @@
   }
 
   .confirm-dialog {
-    background: #1e1e20;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 8px;
-    padding: 16px 20px;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-xl);
+    padding: var(--space-8) var(--space-10);
     min-width: 240px;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--space-7);
   }
 
   .confirm-text {
-    margin: 0;
-    font-size: 13px;
-    color: #e0e0e0;
+    margin: var(--space-0);
+    font-size: var(--font-size-base);
+    color: var(--text-primary);
   }
 
   .confirm-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    gap: var(--space-4);
   }
 
   .confirm-btn {
-    padding: 5px 14px;
+    padding: 5px var(--space-7);
     border-radius: 5px;
     border: none;
-    font-size: 12px;
+    font-size: var(--font-size-md);
     cursor: pointer;
   }
 
   .confirm-btn.cancel {
-    background: rgba(255, 255, 255, 0.08);
-    color: #ccc;
+    background: var(--surface-overlay);
+    color: var(--text-secondary);
   }
 
   .confirm-btn.cancel:hover {
@@ -628,22 +628,22 @@
   }
 
   .confirm-btn.delete {
-    background: rgba(255, 255, 255, 0.12);
-    color: #e0e0e0;
+    background: var(--surface-overlay-strong);
+    color: var(--text-primary);
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 10px;
+    gap: var(--space-3);
+    padding: 5px var(--space-5);
   }
 
   .confirm-btn.delete:hover {
     background: rgba(255, 255, 255, 0.14);
-    color: #e0e0e0;
+    color: var(--text-primary);
   }
 
   :global(.draft-dot) {
-    color: #d97706;
+    color: var(--warning);
     flex-shrink: 0;
-    margin-top: 4px;
+    margin-top: var(--space-2);
   }
 </style>

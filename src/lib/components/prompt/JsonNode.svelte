@@ -107,18 +107,18 @@
   .json-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
+    gap: var(--space-1);
     background: none;
     border: none;
-    padding: 0;
-    margin: 0;
+    padding: var(--space-0);
+    margin: var(--space-0);
     color: inherit;
     font: inherit;
     cursor: pointer;
   }
 
   .json-toggle:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--surface-overlay-faint);
     border-radius: 2px;
   }
 
@@ -128,7 +128,7 @@
   }
 
   .json-indent {
-    padding-left: 16px;
+    padding-left: var(--space-8);
   }
 
   .json-line {
@@ -140,7 +140,7 @@
   }
 
   .json-string {
-    color: rgba(140, 200, 140, 0.8);
+    color: var(--success);
     word-break: break-word;
   }
 
@@ -149,25 +149,25 @@
   }
 
   .json-bool {
-    color: rgba(212, 168, 67, 0.9);
+    color: var(--warning);
   }
 
   .json-null {
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--text-disabled);
     font-style: italic;
   }
 
   .json-bracket {
-    color: rgba(255, 255, 255, 0.35);
+    color: var(--text-disabled);
   }
 
   .json-ellipsis {
-    color: rgba(255, 255, 255, 0.25);
+    color: var(--text-faint);
   }
 
   .json-collapsed-hint {
-    color: rgba(255, 255, 255, 0.25);
-    font-size: 10px;
-    margin: 0 4px;
+    color: var(--text-faint);
+    font-size: var(--font-size-xs);
+    margin: var(--space-0) var(--space-2);
   }
 </style>

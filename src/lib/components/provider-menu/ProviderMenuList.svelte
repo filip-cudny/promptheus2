@@ -1,5 +1,6 @@
 <script lang="ts">
   import MenuList from "$lib/components/ui/MenuList.svelte";
+  import MenuItem from "$lib/components/ui/MenuItem.svelte";
   import { providerIconSvg } from "$lib/icons/providerIcons";
 
   type Provider = { id: string; name: string; url?: string | null };
@@ -20,20 +21,42 @@
 <MenuList {expand}>
   {#each providers as p (p.id)}
     {@const iconSvg = providerIconSvg(p)}
-    <button
-      type="button"
-      role="option"
-      aria-selected={activeId === p.id}
-      class="menu-list-item"
-      class:is-active={activeId === p.id}
-      onclick={() => onSelect(p.id)}
-    >
+    {#snippet providerIcon()}
       {#if iconSvg}
-        <span class="menu-list-icon" aria-hidden="true">{@html iconSvg}</span>
+        <span class="provider-icon" aria-hidden="true">{@html iconSvg}</span>
       {:else}
-        <span class="menu-list-icon" aria-hidden="true"></span>
+        <span class="provider-icon" aria-hidden="true"></span>
       {/if}
-      <span class="menu-list-label">{p.name}</span>
-    </button>
+    {/snippet}
+    <MenuItem
+      label={p.name}
+      icon={providerIcon}
+      active={activeId === p.id}
+      onclick={() => onSelect(p.id)}
+    />
   {/each}
 </MenuList>
+
+<style>
+  .provider-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .provider-icon :global(svg) {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .provider-icon :global(img) {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+  }
+</style>

@@ -49,7 +49,7 @@
   }
 
   .small .chip {
-    border-radius: 6px;
+    border-radius: var(--radius-lg);
   }
 
   .small .chip-badge {
@@ -67,14 +67,14 @@
   .chip {
     width: 100%;
     height: 100%;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border-strong);
     background: rgba(255, 255, 255, 0.05);
     overflow: hidden;
   }
 
   .chip-btn {
-    padding: 0;
+    padding: var(--space-0);
     border: none;
     background: none;
     cursor: pointer;
@@ -90,14 +90,14 @@
     bottom: 6px;
     left: 6px;
     font-size: 9px;
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
     letter-spacing: 0.8px;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--text-primary);
     background: rgba(0, 0, 0, 0.65);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    border-radius: 3px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
     padding: 1px 4px;
   }
 
@@ -108,16 +108,16 @@
     width: 19px;
     height: 19px;
     border-radius: 50%;
-    border: 1px solid #555;
-    background: #333;
-    color: #fff;
+    border: 1px solid var(--border-hard);
+    background: var(--surface-elevated);
+    color: var(--text-primary);
     cursor: pointer;
     display: grid;
     place-items: center;
-    padding: 0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    padding: var(--space-0);
+    box-shadow: var(--shadow-sm);
     opacity: 0;
-    transition: opacity 0.15s ease;
+    transition: opacity var(--motion-default) var(--ease-default);
   }
 
   .chip-wrapper:hover .chip-delete {
@@ -125,6 +125,6 @@
   }
 
   .chip-delete:hover {
-    background: #444;
+    background: var(--surface-elevated);
   }
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import { getImageFromPasteEvent } from "$lib/utils/paste";
   import { autoResize, resizeTextarea } from "$lib/utils/autoResize";
@@ -37,7 +38,7 @@
 <div class="context-editor">
   {#if images.length > 0}
     <div class="chip-row">
-      <ImageChipBar bind:images readonly={readonly || disabled} />
+      <ImageChipBar bind:images readonly={readonly || disabled} onopen={(image) => invoke("open_image_preview", { data: image.data, mediaType: image.media_type })} />
     </div>
   {/if}
   <textarea
@@ -56,31 +57,31 @@
   .context-editor {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-2);
     background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    padding: 8px 8px 0;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: var(--space-4) var(--space-4) var(--space-0);
   }
 
   .chip-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: var(--space-3);
   }
 
   .context-editor:focus-within {
-    border-color: rgba(100, 160, 255, 0.5);
+    border-color: var(--accent-border);
   }
 
   .context-textarea {
     width: 100%;
     background: transparent;
     border: none;
-    color: #e0e0e0;
+    color: var(--text-primary);
     font: inherit;
-    font-size: 13px;
-    padding: 4px 0 8px;
+    font-size: var(--font-size-base);
+    padding: var(--space-2) var(--space-0) var(--space-4);
     box-sizing: border-box;
     overflow: hidden;
   }

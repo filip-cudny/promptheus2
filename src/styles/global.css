@@ -1,3 +1,5 @@
+@import "./theme.css";
+
 *,
 *::before,
 *::after {
@@ -11,11 +13,45 @@ body {
   height: 100%;
   width: 100%;
   overflow: hidden;
-  background: #1e1e1e;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--surface-base);
+  font-family: var(--font-sans);
+  color: var(--text-primary);
 }
 
 #app {
   height: 100%;
   width: 100%;
+}
+
+:where(button, a, input, textarea, select, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--accent-ring);
+  outline-offset: 2px;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
 }

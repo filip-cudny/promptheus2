@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import { getImageFromPasteEvent } from "$lib/utils/paste";
   import { autoResize, resizeTextarea } from "$lib/utils/autoResize";
@@ -82,7 +83,7 @@
 </script>
 
 <div class="message-input">
-  <ImageChipBar bind:images={localImages} readonly={false} />
+  <ImageChipBar bind:images={localImages} readonly={false} onopen={(image) => invoke("open_image_preview", { data: image.data, mediaType: image.media_type })} />
   <textarea
     bind:this={textarea}
     class="input-textarea"
@@ -99,32 +100,32 @@
 <style>
   .message-input {
     flex-shrink: 0;
-    padding: 0 16px;
+    padding: var(--space-0) var(--space-8);
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-2);
   }
 
   .input-textarea {
     width: 100%;
     min-height: 0;
     background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 6px;
-    color: #e0e0e0;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    color: var(--text-primary);
     font: inherit;
-    font-size: 13px;
-    padding: 10px;
+    font-size: var(--font-size-base);
+    padding: var(--space-5);
     box-sizing: border-box;
   }
 
   .input-textarea:focus {
     outline: none;
-    border-color: rgba(100, 160, 255, 0.5);
+    border-color: var(--accent-border);
   }
 
   .input-textarea:disabled {
-    opacity: 0.5;
+    opacity: var(--opacity-disabled);
     cursor: not-allowed;
   }
 </style>

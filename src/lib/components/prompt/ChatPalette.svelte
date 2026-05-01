@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
-  import { error as logError } from "@tauri-apps/plugin-log";
   import { ChevronRight, MessagesSquare, Plus, X } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { highlightFor, truncateAroundMatch } from "$lib/utils/highlightMatches";
   import { handleListNavKey } from "$lib/utils/listNavigation";
-  import type { FieldMatch, SearchField, SearchResult, SearchResponse } from "$lib/types/historySearch";
+  import type { FieldMatch, SearchField, SearchResult } from "$lib/types/historySearch";
+  import { useHistorySearch } from "$lib/stores/useHistorySearch.svelte";
   import CommandPalette from "$lib/components/ui/CommandPalette.svelte";
+  import KbdHint from "$lib/components/ui/KbdHint.svelte";
 
   let { open, onClose, onNewChat, onOpenConversation }: {
     open: boolean;
@@ -16,12 +16,9 @@
     onOpenConversation: (entryId: string) => void;
   } = $props();
 
-  const RESULT_LIMIT = 30;
-  const DEBOUNCE_MS = 120;
+  const historySearch = useHistorySearch();
 
   let query = $state("");
-  let results = $state<SearchResult[]>([]);
-  let loading = $state(false);
   let highlightedIndex = $state(0);
   let inputEl = $state<HTMLInputElement | undefined>();
   let itemEls: (HTMLElement | null)[] = $state([]);
@@ -32,16 +29,13 @@
     if (el) el.scrollIntoView({ block: "nearest" });
   });
 
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  let inflight: AbortController | null = null;
-
   type Item =
     | { kind: "new-chat" }
     | { kind: "recent"; result: SearchResult };
 
   let items = $derived<Item[]>([
     { kind: "new-chat" },
-    ...results.map<Item>((r) => ({ kind: "recent", result: r })),
+    ...historySearch.results.map<Item>((r) => ({ kind: "recent", result: r })),
   ]);
 
   $effect(() => {
@@ -55,65 +49,18 @@
     if (open) {
       query = "";
       highlightedIndex = 0;
-      results = [];
-      runSearchSoon(0);
+      historySearch.clear();
+      historySearch.search("");
       tick().then(() => inputEl?.focus());
     } else {
-      cancelInflight();
+      historySearch.cancel();
     }
   });
 
   $effect(() => {
     if (!open) return;
-    query;
-    runSearchSoon(query.trim() === "" ? 0 : DEBOUNCE_MS);
+    historySearch.search(query);
   });
-
-  function cancelInflight() {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-      debounceTimer = null;
-    }
-    if (inflight) {
-      inflight.abort();
-      inflight = null;
-    }
-  }
-
-  function runSearchSoon(wait: number) {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(runSearch, wait);
-  }
-
-  async function runSearch() {
-    if (inflight) inflight.abort();
-    const ac = new AbortController();
-    inflight = ac;
-    loading = true;
-    try {
-      const response = await invoke<SearchResponse>("search_history", {
-        query: {
-          query: query.trim(),
-          type_filter: "chat",
-          status_filter: "all",
-          skill_ids: [],
-          date_from: null,
-          limit: RESULT_LIMIT,
-          offset: 0,
-        },
-      });
-      if (!ac.signal.aborted) {
-        results = response.results;
-      }
-    } catch (e) {
-      if (!ac.signal.aborted) {
-        logError(`search_history (chat-palette) failed: ${e}`);
-      }
-    } finally {
-      if (inflight === ac) inflight = null;
-      if (!ac.signal.aborted) loading = false;
-    }
-  }
 
   function activate(item: Item) {
     if (item.kind === "new-chat") {
@@ -152,7 +99,7 @@
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleKeydown);
-    cancelInflight();
+    historySearch.cancel();
   });
 
   function displayName(r: SearchResult): string {
@@ -267,16 +214,16 @@
         </button>
       {/if}
     {/each}
-    {#if items.length === 1 && !loading}
+    {#if items.length === 1 && !historySearch.isLoading}
       <div class="palette-empty">
         {query.trim() ? "No matching conversations" : "No recent conversations"}
       </div>
     {/if}
   {/snippet}
   {#snippet footer()}
-    <span><kbd>↑↓</kbd> / <kbd>⌃JK</kbd> Navigate</span>
-    <span><kbd>↵</kbd> Open</span>
-    <span><kbd>esc</kbd> Close</span>
+    <span><KbdHint keys={["↑↓"]} /> / <KbdHint keys={["⌃JK"]} /> Navigate</span>
+    <span><KbdHint keys={["↵"]} /> Open</span>
+    <span><KbdHint keys={["esc"]} /> Close</span>
   {/snippet}
 </CommandPalette>
 
@@ -285,9 +232,9 @@
     appearance: none;
     border: 0;
     background: transparent;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-disabled);
     cursor: pointer;
-    padding: 0 12px;
+    padding: var(--space-0) var(--space-6);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -295,23 +242,23 @@
   }
 
   .palette-close:hover {
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--text-primary);
   }
 
   .palette-section-header {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 8px 14px 4px;
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 11px;
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-7) var(--space-2);
+    color: var(--text-disabled);
+    font-size: var(--font-size-sm);
     text-transform: none;
   }
 
   .palette-section-icon {
     display: inline-flex;
     align-items: center;
-    color: rgba(255, 255, 255, 0.35);
+    color: var(--text-disabled);
   }
 
   :global(.palette-item-main) {
@@ -322,6 +269,7 @@
     gap: 1px;
   }
 
+
   :global(.palette-item-main .palette-item-name) {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -329,16 +277,16 @@
   }
 
   :global(.palette-item-snippet) {
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 11px;
+    color: var(--text-disabled);
+    font-size: var(--font-size-sm);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   :global(.palette-item-hint) {
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 11px;
+    color: var(--text-disabled);
+    font-size: var(--font-size-sm);
     flex-shrink: 0;
   }
 
@@ -346,7 +294,7 @@
   :global(.palette-item-snippet mark) {
     background: rgba(255, 220, 100, 0.25);
     color: inherit;
-    padding: 0;
+    padding: var(--space-0);
     border-radius: 2px;
   }
 </style>

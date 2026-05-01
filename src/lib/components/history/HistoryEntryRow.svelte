@@ -5,10 +5,11 @@
   import type { HistoryEntry } from "$lib/types";
   import type { FieldMatch } from "$lib/types/historySearch";
 
-  let { entry, matches = [], onOpen }: {
+  let { entry, matches = [], onOpen, oncopy }: {
     entry: HistoryEntry;
     matches?: FieldMatch[];
     onOpen: (entry: HistoryEntry) => void;
+    oncopy: (content: string) => void;
   } = $props();
 
   let isChat = $derived(!entry.quick_action);
@@ -22,7 +23,7 @@
   function copyToClipboard(e: MouseEvent) {
     e.stopPropagation();
     const text = entry.output_content ?? entry.input_content;
-    navigator.clipboard.writeText(text);
+    oncopy(text);
     copied = true;
     if (copyTimeout) clearTimeout(copyTimeout);
     copyTimeout = setTimeout(() => { copied = false; }, 1500);
@@ -176,12 +177,12 @@
   .entry-row {
     display: flex;
     align-items: flex-start;
-    gap: 8px;
-    padding: 8px 12px;
-    background: #2a2a2a;
-    border: 1px solid #3a3a3a;
-    border-radius: 8px;
-    color: #e0e0e0;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-6);
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-hard);
+    border-radius: var(--radius-xl);
+    color: var(--text-primary);
     cursor: pointer;
     width: 100%;
     text-align: left;
@@ -189,37 +190,37 @@
   }
 
   .entry-row:hover {
-    background: #333;
-    border-color: #4a4a4a;
+    background: var(--surface-elevated);
+    border-color: var(--border-default);
   }
 
   .entry-row.error {
-    background: rgba(255, 80, 80, 0.08);
-    border-color: rgba(255, 80, 80, 0.25);
+    background: var(--danger-bg-soft);
+    border-color: var(--danger-border);
   }
 
   .entry-row.error:hover {
-    background: rgba(255, 80, 80, 0.14);
+    background: var(--danger-bg-soft);
   }
 
   .entry-icon {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-2);
     flex-shrink: 0;
-    margin-top: 2px;
+    margin-top: var(--space-1);
   }
 
   .icon-chat {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-disabled);
   }
 
   .icon-quick {
-    color: rgba(100, 160, 255, 0.85);
+    color: var(--accent);
   }
 
   .error-badge {
-    color: #ff6b6b;
+    color: var(--danger);
     display: flex;
     align-items: center;
   }
@@ -229,38 +230,38 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-1);
   }
 
   .entry-header {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-3);
   }
 
   .prompt-name {
-    font-weight: 600;
-    color: #fff;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .turn-count {
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 11px;
+    color: var(--text-disabled);
+    font-size: var(--font-size-sm);
     flex-shrink: 0;
   }
 
   .duration {
-    color: rgba(255, 255, 255, 0.35);
-    font-size: 11px;
+    color: var(--text-disabled);
+    font-size: var(--font-size-sm);
     flex-shrink: 0;
   }
 
   .input-preview {
-    color: rgba(255, 255, 255, 0.35);
-    font-size: 11px;
+    color: var(--text-disabled);
+    font-size: var(--font-size-sm);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -269,16 +270,16 @@
   .output-preview {
     display: flex;
     align-items: center;
-    gap: 4px;
-    color: rgba(255, 255, 255, 0.3);
-    font-size: 11px;
+    gap: var(--space-2);
+    color: var(--text-disabled);
+    font-size: var(--font-size-sm);
     min-width: 0;
   }
 
   .output-preview-icon {
     display: inline-flex;
     align-items: center;
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--text-disabled);
     flex-shrink: 0;
   }
 
@@ -290,8 +291,8 @@
   }
 
   .timestamp {
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 11px;
+    color: var(--text-disabled);
+    font-size: var(--font-size-sm);
     flex-shrink: 0;
     white-space: nowrap;
     margin-left: auto;
@@ -300,12 +301,12 @@
   .open-icon {
     display: flex;
     align-items: center;
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--text-disabled);
     flex-shrink: 0;
   }
 
   .entry-row:hover .open-icon {
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--text-secondary);
   }
 
   .copy-btn {
@@ -313,27 +314,27 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    padding: 2px;
+    padding: var(--space-1);
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     background: transparent;
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--text-disabled);
     cursor: pointer;
   }
 
   .copy-btn:hover {
-    color: rgba(255, 255, 255, 0.7);
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    background: var(--surface-overlay);
   }
 
   .copy-btn.copied {
-    color: rgba(80, 200, 120, 0.9);
+    color: var(--success);
   }
 
   :global(.entry-row mark) {
     background: rgba(255, 220, 100, 0.25);
     color: inherit;
-    padding: 0;
+    padding: var(--space-0);
     border-radius: 2px;
   }
 </style>

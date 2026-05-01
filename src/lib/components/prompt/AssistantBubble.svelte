@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
+  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { save } from "@tauri-apps/plugin-dialog";
   import type { ConversationNode, ContentSegment } from "$lib/types/conversation";
   import type { ToolCall } from "$lib/types/ai";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
@@ -191,6 +194,14 @@
     }
   }
 
+  async function handleSaveSvg(svg: string) {
+    const path = await save({
+      defaultPath: "mermaid-diagram.svg",
+      filters: [{ name: "SVG", extensions: ["svg"] }],
+    });
+    if (path) await invoke("write_text_file", { path, content: svg });
+  }
+
   async function copyContent() {
     await navigator.clipboard.writeText(displayContent);
   }
@@ -234,7 +245,7 @@
       {:else if hasMarkers}
         {#each renderBlocks as block}
           {#if block.kind === "text"}
-            <MarkdownRenderer content={block.text} {isStreaming} />
+            <MarkdownRenderer content={block.text} {isStreaming} onopen={openUrl} onsavesvg={handleSaveSvg} />
           {:else if block.kind === "tool_group"}
             {@const groupToolCalls = block.toolCallIds
               .map((id) => allToolCalls.get(id))
@@ -251,7 +262,7 @@
           {/if}
         {/each}
       {:else if displayContent}
-        <MarkdownRenderer content={displayContent} {isStreaming} />
+        <MarkdownRenderer content={displayContent} {isStreaming} onopen={openUrl} onsavesvg={handleSaveSvg} />
       {/if}
 
       {#if showGenerating}
@@ -329,8 +340,8 @@
 
 <style>
   .assistant-bubble {
-    padding: 14px 20px;
-    border-radius: 6px;
+    padding: var(--space-7) var(--space-10);
+    border-radius: var(--radius-lg);
     user-select: none;
     -webkit-user-select: none;
   }
@@ -339,10 +350,10 @@
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    gap: 8px;
-    padding: 4px 0;
+    gap: var(--space-4);
+    padding: var(--space-2) var(--space-0);
     opacity: 0;
-    transition: opacity 120ms ease;
+    transition: opacity var(--motion-fast) var(--ease-default);
   }
 
   .assistant-message-wrapper:hover .bubble-footer,
@@ -351,21 +362,21 @@
   }
 
   .query-time {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.35);
-    font-weight: 400;
+    font-size: var(--font-size-sm);
+    color: var(--text-disabled);
+    font-weight: var(--font-weight-regular);
   }
 
   .bubble-actions {
     display: flex;
-    gap: 4px;
+    gap: var(--space-2);
     align-items: center;
   }
 
   .branch-nav {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
+    gap: var(--space-1);
   }
 
   .branch-btn {
@@ -374,25 +385,25 @@
     justify-content: center;
     background: transparent;
     border: none;
-    color: rgba(255, 255, 255, 0.5);
-    border-radius: 4px;
-    padding: 2px;
+    color: var(--text-muted);
+    border-radius: var(--radius-md);
+    padding: var(--space-1);
     cursor: pointer;
   }
 
   .branch-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.8);
+    background: var(--surface-overlay);
+    color: var(--text-secondary);
   }
 
   .branch-btn:disabled {
-    opacity: 0.3;
+    opacity: var(--opacity-disabled);
     cursor: default;
   }
 
   .branch-counter {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.5);
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
     min-width: 24px;
     text-align: center;
   }
@@ -401,53 +412,53 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4px;
+    padding: var(--space-2);
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     background: transparent;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
     cursor: pointer;
   }
 
   .icon-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.8);
+    background: var(--surface-overlay);
+    color: var(--text-secondary);
   }
 
   .icon-btn.active {
-    background: rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.9);
+    background: var(--surface-overlay-strong);
+    color: var(--text-primary);
   }
 
   .delete-btn:hover {
-    background: rgba(200, 60, 60, 0.3);
-    border-color: rgba(200, 60, 60, 0.5);
-    color: #ff8a8a;
+    background: var(--danger-border);
+    border-color: var(--danger-border);
+    color: var(--danger);
   }
 
   .bubble-edit-field {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-2);
     background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    padding: 8px 8px 0;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: var(--space-4) var(--space-4) var(--space-0);
   }
 
   .bubble-edit-field:focus-within {
-    border-color: rgba(255, 255, 255, 0.25);
+    border-color: var(--border-strong);
   }
 
   .bubble-textarea {
     width: 100%;
     background: transparent;
     border: none;
-    color: #e0e0e0;
-    font-family: "Fira Code", "Cascadia Code", monospace;
-    font-size: 14px;
-    line-height: 1.5;
-    padding: 4px 0 8px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-lg);
+    line-height: var(--line-height-normal);
+    padding: var(--space-2) var(--space-0) var(--space-4);
     resize: none;
     overflow: hidden;
     box-sizing: border-box;
@@ -460,14 +471,14 @@
   .tool-call-chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
-    margin: 2px 0;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-4);
+    margin: var(--space-1) var(--space-0);
     background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 12px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    font-size: var(--font-size-md);
     width: fit-content;
     user-select: none;
   }
@@ -475,13 +486,13 @@
   .error-banner {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 6px;
-    padding: 8px 10px;
-    background: rgba(220, 60, 60, 0.08);
-    border-radius: 4px;
-    color: #e55;
-    font-size: 12px;
+    gap: var(--space-4);
+    margin-top: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+    background: var(--danger-bg-soft);
+    border-radius: var(--radius-md);
+    color: var(--danger);
+    font-size: var(--font-size-md);
   }
 
   .error-banner :global(svg:first-child) {
@@ -501,44 +512,44 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     background: transparent;
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 11px;
-    font-weight: 600;
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
     cursor: pointer;
   }
 
   .retry-btn:hover {
-    background: rgba(220, 60, 60, 0.15);
-    color: #e55;
+    background: var(--danger-bg-soft);
+    color: var(--danger);
   }
 
   .cancelled-hint {
     display: block;
-    margin-top: 6px;
-    font-size: 11px;
+    margin-top: var(--space-3);
+    font-size: var(--font-size-sm);
     font-style: italic;
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--text-disabled);
   }
 
   .processing-indicator {
     display: flex;
     align-items: center;
-    padding: 6px 0;
+    padding: var(--space-3) var(--space-0);
   }
 
   .processing-label {
-    font-size: 13px;
-    font-weight: 600;
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-semibold);
     background: linear-gradient(
       90deg,
-      rgba(91, 141, 217, 0.6) 0%,
-      rgba(150, 190, 240, 0.9) 50%,
-      rgba(91, 141, 217, 0.6) 100%
+      var(--accent-ring) 0%,
+      var(--accent) 50%,
+      var(--accent-ring) 100%
     );
     background-size: 200% auto;
     -webkit-background-clip: text;
@@ -556,7 +567,7 @@
     .processing-label {
       animation: none;
       background: none;
-      -webkit-text-fill-color: #96bef0;
+      -webkit-text-fill-color: var(--accent);
     }
   }
 </style>

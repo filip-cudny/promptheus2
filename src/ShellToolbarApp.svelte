@@ -4,6 +4,7 @@
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { ChevronDown, Minus, Square, SquareArrowOutUpRight, X } from "lucide-svelte";
+  import Button from "$lib/components/ui/Button.svelte";
   import {
     getWebviewProviders,
     swapAiWebview,
@@ -234,14 +235,9 @@
     </button>
   </div>
 
-  <button
-    type="button"
-    class="icon-btn"
-    title="Open in new window"
-    onclick={handleOpenInNewWindow}
-  >
+  <Button variant="chrome" title="Open in new window" onclick={handleOpenInNewWindow}>
     <SquareArrowOutUpRight size={14} />
-  </button>
+  </Button>
 
   <div class="drag-fill" data-tauri-drag-region></div>
 
@@ -263,7 +259,7 @@
 <style>
   :global(html),
   :global(body) {
-    background: #1e1e1e;
+    background: var(--surface-base);
   }
 
   .titlebar {
@@ -271,13 +267,13 @@
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 0 4px 0 8px;
-    background: #1e1e1e;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    color: #e0e0e0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 12px;
+    gap: var(--space-4);
+    padding: var(--space-0) var(--space-2) var(--space-0) var(--space-4);
+    background: var(--surface-base);
+    border-bottom: 1px solid var(--border-faint);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-md);
     user-select: none;
     -webkit-user-select: none;
     box-sizing: border-box;
@@ -294,17 +290,17 @@
 
   .trigger {
     appearance: none;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.04);
-    color: rgba(255, 255, 255, 0.90);
-    padding: 7px 6px 7px 8px;
-    border-radius: 6px;
+    border: 1px solid var(--border-default);
+    background: var(--surface-overlay-faint);
+    color: var(--text-primary);
+    padding: 7px var(--space-3) 7px var(--space-4);
+    border-radius: var(--radius-lg);
     font: inherit;
     cursor: pointer;
     line-height: 1;
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-5);
     min-width: 110px;
   }
 
@@ -315,7 +311,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
+    color: var(--text-primary);
   }
 
   .trigger-icon :global(svg) {
@@ -336,7 +332,7 @@
   }
 
   .trigger:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--surface-overlay);
   }
 
   .trigger-label {
@@ -348,7 +344,7 @@
   }
 
   .trigger :global(svg) {
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--text-muted);
     flex-shrink: 0;
   }
 
@@ -360,74 +356,45 @@
   .actions {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-2);
   }
 
   .hint {
-    color: rgba(255, 255, 255, 0.35);
-    font-size: 11px;
-    padding: 2px 6px;
-    border-radius: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .icon-btn {
-    appearance: none;
-    border: 0;
-    padding: 0;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.5);
-    width: 26px;
-    height: 26px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-
-  .icon-btn :global(svg) {
-    display: block;
-  }
-
-  .icon-btn:hover:not(:disabled) {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .icon-btn:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
+    color: var(--text-disabled);
+    font-size: var(--font-size-sm);
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-default);
   }
 
   .sep {
     width: 1px;
     height: 20px;
-    background: rgba(255, 255, 255, 0.08);
-    margin: 0 4px;
+    background: var(--surface-overlay);
+    margin: var(--space-0) var(--space-2);
   }
 
   .win-btn {
     appearance: none;
     border: 0;
     background: transparent;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--text-muted);
     width: 32px;
     height: 32px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     cursor: pointer;
   }
 
   .win-btn:hover {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    background: var(--surface-overlay);
   }
 
   .win-btn.close:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: #fff;
+    background: var(--surface-overlay-strong);
+    color: var(--text-primary);
   }
 </style>

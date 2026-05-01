@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
+  import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import type { ConversationNode } from "$lib/types/conversation";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import TextChipBar from "$lib/components/ui/TextChipBar.svelte";
@@ -8,11 +10,11 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import { handleEditablePaste } from "$lib/utils/paste";
   import { highlightSkills } from "$lib/utils/skillHighlight";
-  import { getSkillsStore } from "$lib/stores/skills.svelte";
 
   let {
     node,
     showDelete = false,
+    classifyToken,
     onContentChange,
     onDelete,
     onRegenerate,
@@ -23,6 +25,7 @@
   }: {
     node: ConversationNode;
     showDelete: boolean;
+    classifyToken: (token: string, finished: boolean) => string | null;
     onContentChange: (content: string) => void;
     onDelete: (nodeId: string) => void;
     onRegenerate: () => void;
@@ -32,14 +35,8 @@
     onAddImage: (data: string, mediaType: string) => void;
   } = $props();
 
-  const skillsStore = getSkillsStore();
-
-  function classifySkillToken(token: string, _finished: boolean): string | null {
-    return skillsStore.nameSet.has(token.slice(1)) ? "skill-badge" : null;
-  }
-
   function formatUserContent(content: string): string {
-    return highlightSkills(content, classifySkillToken, "\n");
+    return highlightSkills(content, classifyToken, "\n");
   }
 
   let editMode = $state(false);
@@ -92,8 +89,8 @@
         <div class="bubble-edit-field">
           {#if node.text_attachments.length > 0 || node.images.length > 0}
             <div class="attachment-row">
-              <TextChipBar textAttachments={node.text_attachments} onremove={onRemoveTextAttachment} />
-              <ImageChipBar images={node.images} onremove={onRemoveImage} />
+              <TextChipBar textAttachments={node.text_attachments} onremove={onRemoveTextAttachment} onopen={(text, index) => { const sourceWindow = getCurrentWebviewWindow().label; invoke("open_text_preview", { text, index, sourceWindow }).catch((e) => console.error("open_text_preview failed:", e)); }} />
+              <ImageChipBar images={node.images} onremove={onRemoveImage} onopen={(image) => invoke("open_image_preview", { data: image.data, mediaType: image.media_type })} />
             </div>
           {/if}
           <SkillEditable
@@ -107,8 +104,8 @@
       {:else}
         {#if node.text_attachments.length > 0 || node.images.length > 0}
           <div class="attachment-row">
-            <TextChipBar textAttachments={node.text_attachments} readonly={true} />
-            <ImageChipBar images={node.images} readonly={true} />
+            <TextChipBar textAttachments={node.text_attachments} readonly={true} onopen={(text, index) => { const sourceWindow = getCurrentWebviewWindow().label; invoke("open_text_preview", { text, index, sourceWindow }).catch((e) => console.error("open_text_preview failed:", e)); }} />
+            <ImageChipBar images={node.images} readonly={true} onopen={(image) => invoke("open_image_preview", { data: image.data, mediaType: image.media_type })} />
           </div>
         {/if}
         <div class="bubble-text">{@html formatUserContent(node.content)}</div>
@@ -152,14 +149,14 @@
   .user-message-wrapper.editing {
     max-width: 100%;
     width: 100%;
-    margin-left: 0;
+    margin-left: var(--space-0);
     align-items: stretch;
   }
 
   .user-bubble {
-    padding: 14px 20px;
+    padding: var(--space-7) var(--space-10);
     background: rgba(74, 158, 187, 0.06);
-    border-radius: 12px;
+    border-radius: var(--radius-2xl);
     box-sizing: border-box;
     user-select: none;
     -webkit-user-select: none;
@@ -168,14 +165,14 @@
   .attachment-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
-    padding: 2px 0;
+    gap: var(--space-3);
+    padding: var(--space-1) var(--space-0);
   }
 
   .bubble-text {
-    font-size: 14px;
-    line-height: 1.5;
-    color: #e0e0e0;
+    font-size: var(--font-size-lg);
+    line-height: var(--line-height-normal);
+    color: var(--text-primary);
     white-space: pre-wrap;
     word-wrap: break-word;
     user-select: text;
@@ -184,16 +181,16 @@
 
   .bubble-text :global(.skill-badge) {
     display: inline;
-    color: rgba(100, 160, 255, 0.9);
+    color: var(--accent);
   }
 
   .bubble-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 4px;
-    padding: 4px 0;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-0);
     opacity: 0;
-    transition: opacity 120ms ease;
+    transition: opacity var(--motion-fast) var(--ease-default);
   }
 
   .user-message-wrapper:hover .bubble-actions,
@@ -205,38 +202,38 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4px;
+    padding: var(--space-2);
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     background: transparent;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
     cursor: pointer;
   }
 
   .icon-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.8);
+    background: var(--surface-overlay);
+    color: var(--text-secondary);
   }
 
   .icon-btn.active {
     background: rgba(74, 158, 187, 0.2);
-    color: #7dd3f0;
+    color: var(--info);
   }
 
   .delete-btn:hover {
-    background: rgba(200, 60, 60, 0.3);
-    border-color: rgba(200, 60, 60, 0.5);
-    color: #ff8a8a;
+    background: var(--danger-border);
+    border-color: var(--danger-border);
+    color: var(--danger);
   }
 
   .bubble-edit-field {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-2);
     background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    padding: 8px 8px 0;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: var(--space-4) var(--space-4) var(--space-0);
   }
 
   .bubble-edit-field:focus-within {
@@ -244,16 +241,16 @@
   }
 
   .user-bubble.editing :global(.bubble-editable) {
-    font-size: 14px;
-    line-height: 1.5;
+    font-size: var(--font-size-lg);
+    line-height: var(--line-height-normal);
     max-height: 40vh;
-    padding: 4px 0 8px;
+    padding: var(--space-2) var(--space-0) var(--space-4);
   }
 
   .user-bubble.editing :global(.autocomplete-dropdown) {
     bottom: auto;
     top: 100%;
-    margin-bottom: 0;
-    margin-top: 4px;
+    margin-bottom: var(--space-0);
+    margin-top: var(--space-2);
   }
 </style>

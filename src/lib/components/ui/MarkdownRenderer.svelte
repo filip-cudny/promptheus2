@@ -1,18 +1,19 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import morphdom from "morphdom";
-  import { invoke } from "@tauri-apps/api/core";
-  import { openUrl } from "@tauri-apps/plugin-opener";
-  import { save } from "@tauri-apps/plugin-dialog";
   import { renderMarkdown, extractCodeBlocks } from "$lib/utils/markdown";
   import { icon, icons } from "$lib/utils/icons";
 
   let {
     content,
     isStreaming = false,
+    onopen,
+    onsavesvg,
   }: {
     content: string;
     isStreaming: boolean;
+    onopen?: (url: string) => void;
+    onsavesvg?: (svg: string) => void;
   } = $props();
 
   const DRAIN_FRACTION = 0.15;
@@ -177,22 +178,13 @@
     }
   }
 
-  async function saveSvgToFile(content: string) {
-    const path = await save({
-      defaultPath: "mermaid-diagram.svg",
-      filters: [{ name: "SVG", extensions: ["svg"] }],
-    });
-    if (!path) return;
-    await invoke("write_text_file", { path, content });
-  }
-
   function handleClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
 
     const anchor = target.closest("a") as HTMLAnchorElement | null;
     if (anchor?.href) {
       e.preventDefault();
-      openUrl(anchor.href);
+      onopen?.(anchor.href);
       return;
     }
 
@@ -228,7 +220,7 @@
       const idx = saveSvgBtn.dataset.mermaidSaveSvg!;
       const svg = getMermaidSvg(idx);
       if (svg) {
-        saveSvgToFile(svg);
+        onsavesvg?.(svg);
       }
       closeAllMermaidMenus();
       return;
@@ -257,9 +249,9 @@
 
 <style>
   .markdown-renderer {
-    font-size: 14px;
-    line-height: 1.6;
-    color: #e0e0e0;
+    font-size: var(--font-size-lg);
+    line-height: var(--line-height-relaxed);
+    color: var(--text-primary);
     word-wrap: break-word;
     overflow-wrap: break-word;
     user-select: text;
@@ -269,8 +261,8 @@
   .markdown-renderer :global(h1),
   .markdown-renderer :global(h2),
   .markdown-renderer :global(h3) {
-    margin: 12px 0 6px;
-    color: #f0f0f0;
+    margin: var(--space-6) var(--space-0) var(--space-3);
+    color: var(--syntax-fg);
   }
 
   .markdown-renderer :global(h1) {
@@ -286,66 +278,66 @@
   }
 
   .markdown-renderer :global(p) {
-    margin: 6px 0;
+    margin: var(--space-3) var(--space-0);
   }
 
   .markdown-renderer :global(a) {
-    color: #6ba3d6;
+    color: var(--syntax-link);
   }
 
   .markdown-renderer :global(ul),
   .markdown-renderer :global(ol) {
-    padding-left: 20px;
-    margin: 6px 0;
+    padding-left: var(--space-10);
+    margin: var(--space-3) var(--space-0);
   }
 
   .markdown-renderer :global(blockquote) {
-    border-left: 3px solid rgba(255, 255, 255, 0.2);
+    border-left: 3px solid var(--border-strong);
     padding-left: 12px;
-    margin: 8px 0;
-    color: rgba(255, 255, 255, 0.7);
+    margin: var(--space-4) var(--space-0);
+    color: var(--text-secondary);
   }
 
   .markdown-renderer :global(code) {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--surface-overlay);
     padding: 2px 5px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     font-size: 0.9em;
-    font-family: "Fira Code", "Cascadia Code", monospace;
+    font-family: var(--font-mono);
   }
 
   .markdown-renderer :global(.code-block) {
-    margin: 8px 0;
-    border-radius: 6px;
+    margin: var(--space-4) var(--space-0);
+    border-radius: var(--radius-lg);
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--border-default);
   }
 
   .markdown-renderer :global(.code-block-header) {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 4px 12px;
-    background: rgba(255, 255, 255, 0.06);
-    font-size: 12px;
+    padding: var(--space-2) var(--space-6);
+    background: var(--surface-overlay-faint);
+    font-size: var(--font-size-md);
   }
 
   .markdown-renderer :global(.code-lang) {
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
   }
 
   .markdown-renderer :global(.copy-btn) {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4px;
+    padding: var(--space-2);
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     background: transparent;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
     cursor: pointer;
     opacity: 0;
-    transition: opacity 120ms ease;
+    transition: opacity var(--motion-fast) var(--ease-default);
   }
 
   .markdown-renderer :global(.code-block-header:hover .copy-btn) {
@@ -353,38 +345,38 @@
   }
 
   .markdown-renderer :global(.copy-btn:hover) {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.8);
+    background: var(--surface-overlay);
+    color: var(--text-secondary);
   }
 
   .markdown-renderer :global(pre) {
-    margin: 0;
-    padding: 12px;
+    margin: var(--space-0);
+    padding: var(--space-6);
     background: rgba(0, 0, 0, 0.3);
     overflow-x: auto;
   }
 
   .markdown-renderer :global(pre code) {
     background: none;
-    padding: 0;
+    padding: var(--space-0);
     border-radius: 0;
-    font-size: 13px;
+    font-size: var(--font-size-base);
   }
 
   .markdown-renderer :global(.mermaid-wrapper) {
-    margin: 8px 0;
-    border-radius: 6px;
+    margin: var(--space-4) var(--space-0);
+    border-radius: var(--radius-lg);
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--border-default);
   }
 
   .markdown-renderer :global(.mermaid-actions) {
     display: flex;
-    gap: 2px;
+    gap: var(--space-1);
   }
 
   .markdown-renderer :global(.mermaid-block) {
-    padding: 16px;
+    padding: var(--space-8);
     background: rgba(0, 0, 0, 0.3);
     overflow-x: auto;
     display: flex;
@@ -394,14 +386,14 @@
   .markdown-renderer :global(.mermaid-block:not(.mermaid-rendered)),
   .markdown-renderer :global(.mermaid-block.mermaid-raw) {
     white-space: pre;
-    font-family: "Fira Code", "Cascadia Code", monospace;
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.5);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-base);
+    color: var(--text-muted);
     justify-content: flex-start;
   }
 
   .markdown-renderer :global(.mermaid-block.mermaid-error) {
-    color: #e06c75;
+    color: var(--syntax-error);
   }
 
   .markdown-renderer :global(.mermaid-block svg) {
@@ -420,12 +412,12 @@
     right: 0;
     margin-top: 4px;
     min-width: 140px;
-    background: #2a2a2a;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
-    padding: 4px 0;
-    z-index: 10;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2) var(--space-0);
+    z-index: var(--z-sticky);
+    box-shadow: var(--shadow-md);
   }
 
   .markdown-renderer :global(.mermaid-menu.open) {
@@ -435,17 +427,17 @@
   .markdown-renderer :global(.mermaid-menu-item) {
     display: block;
     width: 100%;
-    padding: 6px 12px;
+    padding: var(--space-3) var(--space-6);
     border: none;
     background: none;
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 12px;
+    color: var(--text-secondary);
+    font-size: var(--font-size-md);
     text-align: left;
     cursor: pointer;
     white-space: nowrap;
   }
 
   .markdown-renderer :global(.mermaid-menu-item:hover) {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--surface-overlay);
   }
 </style>

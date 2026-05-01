@@ -163,62 +163,57 @@
   .known-params {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: var(--space-7);
   }
 
   .param {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--space-3);
   }
 
   .param-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--space-4);
   }
 
   label {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.85);
+    gap: var(--space-3);
+    font-size: var(--font-size-md);
+    color: var(--text-primary);
     cursor: pointer;
   }
 
-  input[type="checkbox"] {
-    accent-color: #5b8dd9;
-  }
-
   .value {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.55);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
   }
 
   input[type="range"] {
     width: 100%;
-    accent-color: #5b8dd9;
   }
 
   input[type="number"],
   input[list] {
     width: 100%;
-    padding: 5px 8px;
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.92);
+    padding: 5px var(--space-4);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-hard);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
     font: inherit;
-    font-size: 12px;
+    font-size: var(--font-size-md);
   }
 
   .range-meta {
     display: flex;
     justify-content: space-between;
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.35);
+    font-size: var(--font-size-xs);
+    color: var(--text-disabled);
   }
 </style>

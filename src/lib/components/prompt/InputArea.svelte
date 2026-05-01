@@ -10,6 +10,7 @@
   import SkillEditable from "$lib/components/ui/SkillEditable.svelte";
   import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
   import ToolChip from "./ToolChip.svelte";
+  import { prefetchCapabilities, getCachedCapabilities } from "$lib/stores/capabilities.svelte";
   import { SendHorizonal, RefreshCw, Square, CopyCheck, Globe } from "lucide-svelte";
   import type { ComponentType, SvelteComponent } from "svelte";
   import type { IconProps } from "lucide-svelte";
@@ -57,6 +58,9 @@
     if (!activeModelId) return null;
     return models.find((m) => m.id === activeModelId) ?? null;
   });
+
+  $effect(() => { prefetchCapabilities(activeModel); });
+  const activeModelCapabilities = $derived(getCachedCapabilities(activeModel));
 
   const builtinWebSearchAvailable = $derived(
     activeModel?.provider === "openai",
@@ -298,8 +302,8 @@
   <div class="input-field">
     {#if localTextAttachments.length > 0 || localImages.length > 0}
       <div class="attachment-row">
-        <TextChipBar textAttachments={localTextAttachments} readonly={false} variant="small" onremove={handleRemoveTextAttachment} />
-        <ImageChipBar images={localImages} readonly={false} variant="small" onremove={handleRemoveImage} />
+        <TextChipBar textAttachments={localTextAttachments} readonly={false} variant="small" onremove={handleRemoveTextAttachment} onopen={(text, index) => { const sourceWindow = getCurrentWebviewWindow().label; invoke("open_text_preview", { text, index, sourceWindow }).catch((e) => console.error("open_text_preview failed:", e)); }} />
+        <ImageChipBar images={localImages} readonly={false} variant="small" onremove={handleRemoveImage} onopen={(image) => invoke("open_image_preview", { data: image.data, mediaType: image.media_type })} />
       </div>
     {/if}
     <SkillEditable
@@ -336,6 +340,7 @@
           {models}
           selectedModelId={store.modelId}
           reasoningEffort={store.reasoningEffort}
+          capabilities={activeModelCapabilities}
           onModelSelect={handleSelectModel}
           onReasoningSelect={handleSelectReasoning}
         />
@@ -376,10 +381,10 @@
   .input-area {
     flex-shrink: 0;
     position: relative;
-    z-index: 10;
-    margin: -8px 16px 8px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
+    z-index: var(--z-sticky);
+    margin: -8px var(--space-8) var(--space-4);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-xl);
     background: rgba(30, 30, 30, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -395,31 +400,31 @@
   .input-field {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 8px 8px 0;
+    gap: var(--space-2);
+    padding: var(--space-4) var(--space-4) var(--space-0);
   }
 
   .attachment-row {
     display: flex;
     flex-wrap: nowrap;
-    gap: 6px;
-    padding: 6px 0 2px;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-0) var(--space-1);
     overflow-x: auto;
   }
 
   .input-field :global(.input-editable) {
-    font-size: 13px;
+    font-size: var(--font-size-base);
     max-height: 35vh;
     overflow-y: auto;
-    padding: 4px 2px;
+    padding: var(--space-2) var(--space-1);
   }
 
   .button-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    padding: 6px 8px;
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-4);
     position: relative;
     overflow: visible;
   }
@@ -427,25 +432,25 @@
   .bar-left {
     flex-shrink: 0;
     display: flex;
-    gap: 6px;
+    gap: var(--space-3);
     align-items: center;
     position: relative;
     overflow: visible;
   }
 
   .token-count {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.4);
+    font-size: var(--font-size-sm);
+    color: var(--text-disabled);
     user-select: none;
     white-space: nowrap;
-    margin-right: 2px;
+    margin-right: var(--space-1);
   }
 
   .bar-right {
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-3);
   }
 
 </style>

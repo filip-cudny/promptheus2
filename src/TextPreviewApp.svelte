@@ -2,6 +2,8 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { emitTo } from "@tauri-apps/api/event";
+  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { save } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
   import { resizeTextarea } from "$lib/utils/autoResize";
@@ -61,6 +63,14 @@
     text = (e.target as HTMLTextAreaElement).value;
   }
 
+  async function handleSaveSvg(svg: string) {
+    const path = await save({
+      defaultPath: "mermaid-diagram.svg",
+      filters: [{ name: "SVG", extensions: ["svg"] }],
+    });
+    if (path) await invoke("write_text_file", { path, content: svg });
+  }
+
   onMount(() => {
     loadText();
 
@@ -88,7 +98,7 @@
       ></textarea>
     {:else}
       <div class="markdown-view">
-        <MarkdownRenderer content={text} isStreaming={false} />
+        <MarkdownRenderer content={text} isStreaming={false} onopen={openUrl} onsavesvg={handleSaveSvg} />
       </div>
     {/if}
   </div>
@@ -99,19 +109,19 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background: #1e1e1e;
+    background: var(--surface-base);
   }
 
   .content {
     flex: 1;
     overflow-y: auto;
-    padding: 12px;
+    padding: var(--space-6);
   }
 
   .markdown-view {
-    font-size: 14px;
-    line-height: 1.6;
-    color: #e0e0e0;
+    font-size: var(--font-size-lg);
+    line-height: var(--line-height-relaxed);
+    color: var(--text-primary);
   }
 
   .content:has(.edit-textarea) {
@@ -123,13 +133,13 @@
     width: 100%;
     flex: 1;
     background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 4px;
-    color: #e0e0e0;
-    font-family: "Fira Code", "Cascadia Code", monospace;
-    font-size: 13px;
-    line-height: 1.5;
-    padding: 8px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-normal);
+    padding: var(--space-4);
     resize: none;
     box-sizing: border-box;
   }

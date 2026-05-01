@@ -128,13 +128,13 @@
 <style>
   :global(html),
   :global(body) {
-    margin: 0;
-    padding: 0;
+    margin: var(--space-0);
+    padding: var(--space-0);
     background: transparent;
     overflow: hidden;
     width: 100%;
     height: 100%;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: var(--font-sans);
   }
 
   :global([data-sonner-toaster]) {
@@ -150,10 +150,10 @@
 
   :global([data-sonner-toast]) {
     width: 300px !important;
-    background: #ffffff !important;
+    background: var(--notification-bg) !important;
     border: 1px solid rgba(200, 200, 200, 0.9) !important;
     box-shadow: none !important;
-    padding: 12px 16px !important;
+    padding: var(--space-6) var(--space-8) !important;
   }
 
   :global([data-sonner-toast][data-y-position="bottom"][data-x-position="right"]) {
@@ -169,14 +169,14 @@
   }
 
   :global([data-sonner-toast] [data-title]) {
-    color: #1a1a1a !important;
-    font-weight: 600 !important;
-    font-size: 14px !important;
+    color: var(--notification-fg) !important;
+    font-weight: var(--font-weight-semibold) !important;
+    font-size: var(--font-size-lg) !important;
   }
 
   :global([data-sonner-toast] [data-description]) {
-    color: #4a4a4a !important;
-    font-size: 13px !important;
+    color: var(--text-secondary) !important;
+    font-size: var(--font-size-base) !important;
   }
 
   :global([data-sonner-toast] [data-icon]) {
@@ -188,18 +188,18 @@
   }
 
   :global(.p-mono [data-icon]) {
-    color: #1a1a1a;
+    color: var(--notification-fg);
   }
   :global(.p-color-success [data-icon]) {
-    color: #43803e;
+    color: var(--success);
   }
   :global(.p-color-error [data-icon]) {
-    color: #c94a4a;
+    color: var(--danger);
   }
   :global(.p-color-info [data-icon]) {
     color: #6a7d93;
   }
   :global(.p-color-warning [data-icon]) {
-    color: #b8860b;
+    color: var(--warning);
   }
 </style>

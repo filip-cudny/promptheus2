@@ -6,6 +6,7 @@
   import { providerIconSvg } from "$lib/icons/providerIcons";
   import { PROMPTHEUS_PROVIDER_ID, closePalette, reloadActiveInHost } from "$lib/services/shellToolbar";
   import CommandPalette from "$lib/components/ui/CommandPalette.svelte";
+  import KbdHint from "$lib/components/ui/KbdHint.svelte";
   import { handleListNavKey } from "$lib/utils/listNavigation";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
 
@@ -202,10 +203,10 @@
     {/each}
   {/snippet}
   {#snippet footer()}
-    <span><kbd>↑↓</kbd> / <kbd>⌃JK</kbd> Navigate</span>
-    <span><kbd>↵</kbd> Select</span>
-    <span><kbd>⌘R</kbd> Reload</span>
-    <span><kbd>esc</kbd> Close</span>
+    <span><KbdHint keys={["↑↓"]} /> / <KbdHint keys={["⌃JK"]} /> Navigate</span>
+    <span><KbdHint keys={["↵"]} /> Select</span>
+    <span><KbdHint keys={["⌘R"]} /> Reload</span>
+    <span><KbdHint keys={["esc"]} /> Close</span>
   {/snippet}
 </CommandPalette>
 
@@ -213,7 +214,7 @@
   :global(html),
   :global(body) {
     background: transparent;
-    margin: 0;
+    margin: var(--space-0);
   }
 
   :global(.palette-item-icon.muted) {
@@ -225,11 +226,11 @@
   }
 
   .badge {
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.45);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 3px;
+    color: var(--text-muted);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
     padding: 1px 5px;
   }
 </style>

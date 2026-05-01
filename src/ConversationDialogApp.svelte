@@ -18,6 +18,7 @@
   import { openPalette, reloadActiveInHost } from "$lib/services/shellToolbar";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
   import { focusConversationInput } from "$lib/utils/conversationFocus";
+  import { initTheme } from "$lib/stores/theme.svelte";
 
   interface DialogInitParams {
     skill_id: string;
@@ -168,6 +169,7 @@
   }
 
   onMount(async () => {
+    initTheme();
     window.addEventListener("keydown", handleGlobalKeydown);
     skillsStore.init();
     await store.initFromSettings();
@@ -304,17 +306,17 @@
 <style>
   :global(html),
   :global(body) {
-    background: #1e1e1e;
+    background: var(--surface-base);
   }
 
   .dialog-shell {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background: #1e1e1e;
-    color: #e0e0e0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 13px;
+    background: var(--surface-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-base);
     overflow: hidden;
     position: relative;
   }
@@ -325,8 +327,8 @@
     left: 6px;
     z-index: 201;
     display: flex;
-    gap: 4px;
-    transition: transform 0.2s ease;
+    gap: var(--space-2);
+    transition: transform var(--motion-slow) var(--ease-default);
   }
 
   .top-buttons.sidebar-open {
@@ -336,7 +338,7 @@
   .sidebar-toggle {
     width: 28px;
     overflow: visible;
-    transition: width 0.2s ease, opacity 0.2s ease;
+    transition: width var(--motion-slow) var(--ease-default), opacity var(--motion-slow) var(--ease-default);
   }
 
   .sidebar-toggle.hidden {
@@ -349,28 +351,28 @@
   .top-btn {
     width: 28px;
     height: 28px;
-    border-radius: 6px;
+    border-radius: var(--radius-lg);
     border: none;
     background: rgba(255, 255, 255, 0.03);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
-    color: rgba(255, 255, 255, 0.35);
+    color: var(--text-disabled);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
+    padding: var(--space-0);
     position: relative;
   }
 
   :global([data-platform="linux"]) .top-btn {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--surface-overlay-faint);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
 
   .top-btn:hover {
-    color: rgba(255, 255, 255, 0.8);
-    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    background: var(--surface-overlay);
   }
 </style>

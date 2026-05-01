@@ -71,13 +71,13 @@
     inset: 0;
     background: transparent;
     border: 0;
-    padding: 0;
+    padding: var(--space-0);
     cursor: default;
-    z-index: 1000;
+    z-index: var(--z-overlay);
   }
 
   .palette-scrim.scrim-overlay {
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--surface-scrim);
     animation: palette-scrim-enter 140ms ease-out both;
   }
 
@@ -87,21 +87,21 @@
     left: 50%;
     transform: translateX(-50%);
     width: min(640px, 86%);
-    z-index: 1001;
-    background: #252525;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    z-index: var(--z-modal);
+    background: var(--surface-floating-modal);
+    border: 1px solid var(--surface-floating-modal-border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-lg);
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    color: #e0e0e0;
-    font-size: 13px;
+    color: var(--text-primary);
+    font-size: var(--font-size-base);
     animation: palette-modal-enter 140ms ease-out both;
   }
 
   :global([data-platform="linux"]) .palette-modal.window-variant {
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.22);
+    box-shadow: var(--shadow-lg-linux);
   }
 
   @keyframes palette-scrim-enter {
@@ -117,7 +117,7 @@
   .palette-header {
     display: flex;
     align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    border-bottom: 1px solid var(--border-faint);
   }
 
   .palette-input {
@@ -125,65 +125,49 @@
     appearance: none;
     border: 0;
     background: transparent;
-    color: #fff;
+    color: var(--text-primary);
     font: inherit;
-    font-size: 14px;
-    padding: 12px 14px;
+    font-size: var(--font-size-lg);
+    padding: var(--space-6) var(--space-7);
     outline: none;
   }
 
   .palette-input::placeholder {
-    color: rgba(255, 255, 255, 0.35);
+    color: var(--text-disabled);
   }
 
   .palette-body {
     display: flex;
     flex-direction: column;
     overflow-y: auto;
-    padding: 4px 0;
+    padding: var(--space-2) var(--space-0);
   }
 
   .palette-footer {
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 6px 14px;
+    border-top: 1px solid var(--border-faint);
+    padding: var(--space-3) var(--space-7);
     display: flex;
-    gap: 12px;
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 11px;
-  }
-
-  :global(.palette-footer kbd) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
-    padding: 1px 5px;
-    font-family: inherit;
-    font-size: 10px;
-    line-height: 1;
-    color: rgba(255, 255, 255, 0.7);
-    margin-right: 4px;
-    vertical-align: middle;
+    gap: var(--space-6);
+    color: var(--text-disabled);
+    font-size: var(--font-size-sm);
   }
 
   :global(.palette-item) {
     appearance: none;
     border: 0;
     background: transparent;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--text-primary);
     font: inherit;
     text-align: left;
-    padding: 8px 14px;
+    padding: var(--space-4) var(--space-7);
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-6);
   }
 
   :global(.palette-item.highlight) {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--surface-overlay);
   }
 
   :global(.palette-item-icon) {
@@ -193,7 +177,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--text-primary);
   }
 
   :global(.palette-item-icon svg) {
@@ -211,19 +195,19 @@
 
   :global(.palette-item-name) {
     flex: 1;
-    font-size: 13px;
+    font-size: var(--font-size-base);
   }
 
   :global(.palette-empty) {
-    color: rgba(255, 255, 255, 0.4);
-    padding: 16px;
+    color: var(--text-disabled);
+    padding: var(--space-8);
     text-align: center;
-    font-size: 12px;
+    font-size: var(--font-size-md);
   }
 
   :global(.palette-divider) {
     height: 1px;
-    background: rgba(255, 255, 255, 0.06);
-    margin: 4px 0;
+    background: var(--surface-overlay-faint);
+    margin: var(--space-2) var(--space-0);
   }
 </style>

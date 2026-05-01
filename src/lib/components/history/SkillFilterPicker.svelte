@@ -157,40 +157,40 @@
   .trigger-group {
     display: inline-flex;
     align-items: stretch;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
     overflow: hidden;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--text-muted);
     line-height: 1.4;
   }
 
   .trigger-group.active {
-    background: rgba(100, 160, 255, 0.15);
-    border-color: rgba(100, 160, 255, 0.4);
-    color: rgba(100, 160, 255, 0.95);
+    background: var(--accent-bg-soft);
+    border-color: var(--accent-bg);
+    color: var(--accent);
   }
 
   .trigger {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 3px 8px;
+    gap: var(--space-2);
+    padding: 3px var(--space-4);
     border: none;
     background: transparent;
     color: inherit;
     cursor: pointer;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
   }
 
   .trigger:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.85);
+    background: var(--surface-overlay);
+    color: var(--text-primary);
   }
 
   .trigger-group.active .trigger:hover {
-    background: rgba(100, 160, 255, 0.22);
-    color: rgba(100, 160, 255, 1);
+    background: var(--accent-bg-soft);
+    color: var(--accent);
   }
 
   .label {
@@ -201,9 +201,9 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0 4px;
+    padding: var(--space-0) var(--space-2);
     border: none;
-    border-left: 1px solid rgba(100, 160, 255, 0.25);
+    border-left: 1px solid var(--accent-bg);
     background: transparent;
     color: inherit;
     cursor: pointer;
@@ -218,15 +218,15 @@
     flex-direction: column;
     min-width: 220px;
     max-width: 320px;
-    color: #e0e0e0;
-    font-size: 12px;
+    color: var(--text-primary);
+    font-size: var(--font-size-md);
   }
 
   .local-search {
     position: relative;
     display: flex;
     align-items: center;
-    margin-bottom: 6px;
+    margin-bottom: var(--space-3);
   }
 
   .local-search-icon {
@@ -234,20 +234,20 @@
     left: 8px;
     display: flex;
     align-items: center;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-disabled);
     pointer-events: none;
   }
 
   .local-search-input {
     flex: 1;
     width: 100%;
-    padding: 4px 8px 4px 24px;
-    background: #2a2a2a;
-    border: 1px solid #3a3a3a;
-    border-radius: 4px;
-    color: #e0e0e0;
+    padding: var(--space-2) var(--space-4) var(--space-2) 24px;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-hard);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
     font: inherit;
-    font-size: 12px;
+    font-size: var(--font-size-md);
     outline: none;
   }
 
@@ -257,13 +257,13 @@
   }
 
   .local-search-input:focus {
-    border-color: rgba(100, 160, 255, 0.5);
+    border-color: var(--accent-border);
   }
 
   .skill-list {
     list-style: none;
-    margin: 0;
-    padding: 0;
+    margin: var(--space-0);
+    padding: var(--space-0);
     max-height: 280px;
     overflow-y: auto;
   }
@@ -271,23 +271,23 @@
   .skill-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 5px 8px;
-    border-radius: 4px;
+    gap: var(--space-4);
+    padding: 5px var(--space-4);
+    border-radius: var(--radius-md);
     cursor: pointer;
     user-select: none;
   }
 
   .skill-item:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--surface-overlay-faint);
   }
 
   .skill-item.selected {
-    background: rgba(100, 160, 255, 0.12);
+    background: var(--accent-bg-soft);
   }
 
   .skill-item:focus-visible {
-    outline: 1px solid rgba(100, 160, 255, 0.5);
+    outline: 1px solid var(--accent-border);
     outline-offset: -1px;
   }
 
@@ -298,25 +298,25 @@
     justify-content: center;
     width: 14px;
     height: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 3px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
     background: rgba(0, 0, 0, 0.2);
   }
 
   .skill-item.selected .checkbox {
-    background: rgba(100, 160, 255, 0.5);
-    border-color: rgba(100, 160, 255, 0.7);
+    background: var(--accent-border);
+    border-color: var(--accent-ring);
   }
 
   .check {
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     line-height: 1;
-    color: #fff;
+    color: var(--text-primary);
   }
 
   .skill-name {
     flex: 1;
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -324,13 +324,13 @@
 
   .skill-count {
     flex-shrink: 0;
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 11px;
+    color: var(--text-disabled);
+    font-size: var(--font-size-sm);
   }
 
   .empty {
-    padding: 8px;
-    color: rgba(255, 255, 255, 0.4);
+    padding: var(--space-4);
+    color: var(--text-disabled);
     text-align: center;
     font-style: italic;
   }
@@ -338,40 +338,40 @@
   .footer {
     display: flex;
     justify-content: space-between;
-    gap: 6px;
-    margin-top: 6px;
-    padding-top: 6px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--border-default);
   }
 
   .footer-btn {
-    padding: 3px 10px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
+    padding: 3px var(--space-5);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
     background: transparent;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--text-secondary);
     cursor: pointer;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
   }
 
   .footer-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.95);
+    background: var(--surface-overlay);
+    color: var(--text-primary);
   }
 
   .footer-btn:disabled {
-    opacity: 0.4;
+    opacity: var(--opacity-disabled);
     cursor: default;
   }
 
   .footer-btn.primary {
-    background: rgba(100, 160, 255, 0.18);
-    border-color: rgba(100, 160, 255, 0.4);
-    color: rgba(180, 210, 255, 0.95);
+    background: var(--accent-bg-soft);
+    border-color: var(--accent-bg);
+    color: var(--accent);
   }
 
   .footer-btn.primary:hover {
-    background: rgba(100, 160, 255, 0.28);
+    background: var(--accent-bg);
   }
 </style>

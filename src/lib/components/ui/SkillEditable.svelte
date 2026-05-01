@@ -304,14 +304,14 @@
     min-height: 1.5em;
     background: transparent;
     border: none;
-    color: #e0e0e0;
+    color: var(--text-primary);
     font: inherit;
     white-space: pre-wrap;
     word-wrap: break-word;
     overflow-y: auto;
     box-sizing: border-box;
-    margin: 0;
-    padding: 0;
+    margin: var(--space-0);
+    padding: var(--space-0);
     line-height: inherit;
     letter-spacing: inherit;
   }
@@ -320,7 +320,7 @@
     position: relative;
     z-index: 1;
     color: transparent;
-    caret-color: #e0e0e0;
+    caret-color: var(--text-primary);
     outline: none;
     resize: none;
   }
@@ -329,16 +329,16 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    z-index: 0;
+    z-index: var(--z-base);
     overflow: hidden;
   }
 
   .highlight-overlay :global(.hl-skill) {
-    color: rgba(100, 160, 255, 0.9);
+    color: var(--accent);
   }
 
   .highlight-overlay :global(.hl-skill-partial) {
-    color: rgba(100, 160, 255, 0.6);
+    color: var(--accent-ring);
   }
 
   .autocomplete-dropdown {
@@ -348,39 +348,39 @@
     right: 0;
     max-height: 180px;
     overflow-y: auto;
-    background: #2a2a2a;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 6px;
-    margin-bottom: 4px;
-    z-index: 100;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-2);
+    z-index: var(--z-dropdown);
   }
 
   .autocomplete-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     width: 100%;
-    padding: 6px 10px;
+    padding: var(--space-3) var(--space-5);
     border: none;
     background: transparent;
-    color: #e0e0e0;
+    color: var(--text-primary);
     font: inherit;
-    font-size: 12px;
+    font-size: var(--font-size-md);
     cursor: pointer;
     text-align: left;
   }
 
   .autocomplete-item.selected {
-    background: rgba(100, 160, 255, 0.2);
+    background: var(--accent-bg-soft);
   }
 
   .autocomplete-item:hover {
-    background: rgba(100, 160, 255, 0.15);
+    background: var(--accent-bg-soft);
   }
 
   .autocomplete-name {
-    color: rgba(100, 160, 255, 0.9);
-    font-family: monospace;
+    color: var(--accent);
+    font-family: var(--font-mono);
     flex-shrink: 0;
   }
 </style>

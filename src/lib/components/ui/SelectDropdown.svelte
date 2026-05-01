@@ -97,36 +97,36 @@
   .trigger {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-2);
     padding: 3px 8px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
-    background: #2a2a2a;
-    color: rgba(255, 255, 255, 0.75);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    background: var(--surface-elevated);
+    color: var(--text-secondary);
     cursor: pointer;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     line-height: 1.4;
   }
 
   .trigger:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.9);
+    background: var(--surface-overlay);
+    color: var(--text-primary);
   }
 
   .trigger.active {
-    background: rgba(100, 160, 255, 0.15);
-    border-color: rgba(100, 160, 255, 0.4);
-    color: rgba(100, 160, 255, 0.95);
+    background: var(--accent-bg-soft);
+    border-color: var(--accent-bg);
+    color: var(--accent);
   }
 
   .trigger.active:hover {
-    background: rgba(100, 160, 255, 0.22);
-    color: rgba(100, 160, 255, 1);
+    background: var(--accent-bg-soft);
+    color: var(--accent);
   }
 
   .trigger:focus-visible {
-    outline: 2px solid rgba(100, 160, 255, 0.6);
+    outline: 2px solid var(--accent-ring);
     outline-offset: 1px;
   }
 
@@ -136,31 +136,31 @@
 
   .option-list {
     list-style: none;
-    margin: 0;
-    padding: 0;
+    margin: var(--space-0);
+    padding: var(--space-0);
     min-width: 140px;
-    color: #e0e0e0;
-    font-size: 12px;
+    color: var(--text-primary);
+    font-size: var(--font-size-md);
   }
 
   .option {
     padding: 5px 12px;
     cursor: pointer;
     user-select: none;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--text-primary);
   }
 
   .option:hover {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--surface-overlay-faint);
   }
 
   .option.selected {
-    background: rgba(100, 160, 255, 0.12);
-    color: rgba(180, 210, 255, 0.95);
+    background: var(--accent-bg-soft);
+    color: var(--accent);
   }
 
   .option:focus-visible {
-    outline: 1px solid rgba(100, 160, 255, 0.5);
+    outline: 1px solid var(--accent-border);
     outline-offset: -1px;
   }
 </style>

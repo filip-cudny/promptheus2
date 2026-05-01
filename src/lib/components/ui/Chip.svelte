@@ -28,13 +28,13 @@
   .chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    background: #363636;
-    border: 1px solid #4e4e4e;
-    border-radius: 12px;
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.78);
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-4);
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-hard-2);
+    border-radius: var(--radius-2xl);
+    font-size: var(--font-size-md);
+    color: var(--text-secondary);
     white-space: nowrap;
     font-family: inherit;
   }
@@ -44,13 +44,13 @@
   }
 
   .clickable:hover {
-    background: #383838;
+    background: var(--surface-elevated);
   }
 
   .chip-disabled {
-    background: #2a2a2a;
-    border-color: #444;
-    color: #666;
+    background: var(--surface-elevated);
+    border-color: var(--border-hard);
+    color: var(--text-muted);
     cursor: default;
   }
 </style>

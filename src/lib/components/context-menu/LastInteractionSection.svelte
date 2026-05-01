@@ -2,10 +2,6 @@
   import { Copy, Check, History, SquareArrowOutUpRight } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import Chip from "$lib/components/ui/Chip.svelte";
-  import { copyHistoryContent } from "$lib/services/history";
-  import { openConversationDialog } from "$lib/services/conversationDialog";
-  import { closeMenu } from "$lib/stores/contextMenu.svelte";
-  import { openHistoryDialog } from "$lib/services/historyDialog";
 
   interface ChipData {
     content: string;
@@ -25,13 +21,23 @@
     last_text_entry: LastTextEntryRef | null;
   }
 
-  let { data }: { data: LastInteractionData | null } = $props();
+  let {
+    data,
+    onCopyContent,
+    onOpenLastInteraction,
+    onOpenHistory,
+  }: {
+    data: LastInteractionData | null;
+    onCopyContent: (content: string) => Promise<void>;
+    onOpenLastInteraction: (entry: LastTextEntryRef) => Promise<void>;
+    onOpenHistory: () => Promise<void>;
+  } = $props();
 
   let copyConfirm = $state<string | null>(null);
 
   async function handleCopy(chipType: string, content: string | undefined | null) {
     if (!content) return;
-    await copyHistoryContent(content);
+    await onCopyContent(content);
     copyConfirm = chipType;
     setTimeout(() => (copyConfirm = null), 1200);
   }
@@ -39,13 +45,7 @@
   async function handleOpenLastInteraction() {
     const entry = data?.last_text_entry;
     if (!entry) return;
-    await closeMenu();
-    await openConversationDialog(entry.skill_id ?? "", entry.skill_name ?? "", entry.id, true);
-  }
-
-  async function handleHistory() {
-    await closeMenu();
-    await openHistoryDialog();
+    await onOpenLastInteraction(entry);
   }
 
   type ChipEntry = { type: string; label: string; content: string | null; preview: string | null };
@@ -73,7 +73,7 @@
       </button>
       <button
         class="action-btn"
-        onclick={handleHistory}
+        onclick={onOpenHistory}
         title="View execution history"
       >
         <History size={ICON_SIZE.md} />
@@ -105,7 +105,7 @@
 
 <style>
   .last-interaction-section {
-    padding: 2px 0;
+    padding: var(--space-1) var(--space-0);
   }
 
   .section-header {
@@ -113,11 +113,11 @@
     align-items: center;
     justify-content: space-between;
     width: 100%;
-    padding: 4px 12px;
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 11px;
+    padding: var(--space-2) var(--space-6);
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
     text-transform: capitalize;
-    letter-spacing: 0.5px;
+    letter-spacing: var(--tracking-label);
     box-sizing: border-box;
   }
 
@@ -132,15 +132,15 @@
     justify-content: center;
     padding: 3px;
     border: none;
-    border-radius: 4px;
+    border-radius: var(--radius-md);
     background: transparent;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
     cursor: pointer;
   }
 
   .action-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.8);
+    background: var(--surface-overlay);
+    color: var(--text-secondary);
   }
 
   .action-btn:disabled {
@@ -151,14 +151,14 @@
   .header-actions {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: var(--space-1);
   }
 
   .chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
-    padding: 4px 12px 6px;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-6) var(--space-3);
   }
 
   .chip-copy {
@@ -168,6 +168,6 @@
   }
 
   .chip-label {
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
   }
 </style>

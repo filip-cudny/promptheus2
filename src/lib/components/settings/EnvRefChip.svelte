@@ -34,26 +34,26 @@
   .env-ref {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 11px;
-    background: #2a2a2a;
-    border: 1px solid #3a3a3a;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-hard);
   }
 
   .env-ref.ok {
-    color: #6dd49a;
-    border-color: rgba(109, 212, 154, 0.3);
+    color: var(--success);
+    border-color: var(--success-border);
   }
 
   .env-ref.missing {
-    color: #d97373;
-    border-color: rgba(217, 115, 115, 0.3);
+    color: var(--danger);
+    border-color: var(--danger-border);
   }
 
   code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-xs);
   }
 </style>

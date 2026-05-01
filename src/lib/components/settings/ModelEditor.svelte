@@ -9,6 +9,7 @@
     entriesToExtra,
     type CustomParamEntry,
   } from "./ParametersCustom.svelte";
+  import FormRow from "$lib/components/ui/FormRow.svelte";
   import {
     addModel,
     deleteModel,
@@ -259,8 +260,7 @@
   <section class="card">
     <h3>Basic</h3>
 
-    <div class="field">
-      <label for="display_name">Display name</label>
+    <FormRow label="Display name" error={validationErrors.display_name}>
       <input
         id="display_name"
         type="text"
@@ -271,13 +271,9 @@
           scheduleSave(false);
         }}
       />
-      {#if validationErrors.display_name}
-        <div class="field-error">{validationErrors.display_name}</div>
-      {/if}
-    </div>
+    </FormRow>
 
-    <div class="field">
-      <label for="model_id">Model</label>
+    <FormRow label="Model" error={validationErrors.model}>
       <input
         id="model_id"
         type="text"
@@ -289,10 +285,7 @@
           scheduleSave(false);
         }}
       />
-      {#if validationErrors.model}
-        <div class="field-error">{validationErrors.model}</div>
-      {/if}
-    </div>
+    </FormRow>
 
     <div class="field">
       <span class="field-label">Type</span>
@@ -329,8 +322,7 @@
       </select>
     </div>
 
-    <div class="field">
-      <label for="group">Group</label>
+    <FormRow label="Group">
       <input
         id="group"
         type="text"
@@ -342,7 +334,7 @@
           scheduleSave(false);
         }}
       />
-    </div>
+    </FormRow>
   </section>
 
   <section class="card">
@@ -379,8 +371,7 @@
       {/if}
     </div>
 
-    <div class="field">
-      <label for="base_url">Base URL</label>
+    <FormRow label="Base URL">
       <input
         id="base_url"
         type="text"
@@ -392,7 +383,7 @@
           scheduleSave(false);
         }}
       />
-    </div>
+    </FormRow>
 
     {#if showApiMode}
       <div class="field">
@@ -434,8 +425,7 @@
   {#if isText}
     <section class="card">
       <h3>Capabilities</h3>
-      <div class="field">
-        <label for="ctx_window">Context window size</label>
+      <FormRow label="Context window size">
         <input
           id="ctx_window"
           type="number"
@@ -450,7 +440,7 @@
             scheduleSave(false);
           }}
         />
-      </div>
+      </FormRow>
     </section>
 
     <section class="card">
@@ -508,85 +498,85 @@
 
 <style>
   .model-editor {
-    padding: 18px 24px 32px;
+    padding: 18px var(--space-12) var(--space-16);
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--space-8);
     max-width: 720px;
   }
 
   .editor-header {
     display: flex;
     align-items: baseline;
-    gap: 10px;
+    gap: var(--space-5);
   }
 
   .editor-header h1 {
-    font-size: 18px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.95);
-    margin: 0;
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    margin: var(--space-0);
   }
 
   .badge {
-    font-size: 10px;
-    padding: 2px 6px;
-    background: rgba(217, 179, 74, 0.15);
-    color: #d9b34a;
-    border: 1px solid rgba(217, 179, 74, 0.35);
-    border-radius: 8px;
+    font-size: var(--font-size-xs);
+    padding: var(--space-1) var(--space-3);
+    background: var(--warning-bg-soft);
+    color: var(--warning);
+    border: 1px solid var(--warning-border);
+    border-radius: var(--radius-xl);
     text-transform: uppercase;
     letter-spacing: 0.4px;
   }
 
   .card {
-    background: #232323;
-    border: 1px solid #2e2e2e;
-    border-radius: 6px;
-    padding: 14px 16px;
+    background: var(--surface-base);
+    border: 1px solid var(--border-hard);
+    border-radius: var(--radius-lg);
+    padding: var(--space-7) var(--space-8);
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--space-6);
   }
 
   .card.danger {
-    border-color: rgba(217, 115, 115, 0.3);
+    border-color: var(--danger-border);
   }
 
   h3 {
-    font-size: 11px;
-    font-weight: 600;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
     text-transform: uppercase;
     letter-spacing: 0.6px;
-    color: rgba(255, 255, 255, 0.45);
-    margin: 0;
+    color: var(--text-muted);
+    margin: var(--space-0);
   }
 
   h4 {
-    font-size: 11px;
-    font-weight: 600;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
     text-transform: uppercase;
     letter-spacing: 0.4px;
-    color: rgba(255, 255, 255, 0.4);
-    margin: 4px 0 0;
+    color: var(--text-disabled);
+    margin: var(--space-2) var(--space-0) var(--space-0);
   }
 
   h4.custom-heading {
-    margin-top: 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    padding-top: 12px;
+    margin-top: var(--space-6);
+    border-top: 1px solid var(--border-faint);
+    padding-top: var(--space-6);
   }
 
   .field {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-2);
   }
 
   .field > label,
   .field-label {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
+    font-size: var(--font-size-md);
+    color: var(--text-secondary);
   }
 
   input[type="text"],
@@ -594,96 +584,87 @@
   input[type="number"],
   select {
     width: 100%;
-    padding: 6px 8px;
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.92);
+    padding: var(--space-3) var(--space-4);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-hard);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
     font: inherit;
-    font-size: 12px;
+    font-size: var(--font-size-md);
   }
 
   input.error {
-    border-color: #d97373;
-  }
-
-  .field-error {
-    font-size: 11px;
-    color: #d97373;
+    border-color: var(--danger);
   }
 
   .segmented {
     display: inline-flex;
-    background: #1a1a1a;
-    border: 1px solid #3a3a3a;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-hard);
     border-radius: 5px;
-    padding: 2px;
+    padding: var(--space-1);
     width: fit-content;
   }
 
   .segmented button {
-    padding: 4px 12px;
+    padding: var(--space-2) var(--space-6);
     background: transparent;
     border: none;
-    color: rgba(255, 255, 255, 0.65);
+    color: var(--text-muted);
     font: inherit;
-    font-size: 12px;
+    font-size: var(--font-size-md);
     cursor: pointer;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
   }
 
   .segmented button.active {
-    background: rgba(91, 141, 217, 0.2);
-    color: #8db3ee;
+    background: var(--accent-bg-soft);
+    color: var(--accent);
   }
 
   .api-key-row {
     display: flex;
-    gap: 6px;
+    gap: var(--space-3);
     align-items: center;
   }
 
   .icon-btn {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 5px 8px;
+    gap: var(--space-2);
+    padding: 5px var(--space-4);
     background: transparent;
-    border: 1px solid #3a3a3a;
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.6);
+    border: 1px solid var(--border-hard);
+    border-radius: var(--radius-md);
+    color: var(--text-muted);
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     cursor: pointer;
   }
 
   .icon-btn:hover {
-    background: rgba(255, 255, 255, 0.04);
-    color: rgba(255, 255, 255, 0.85);
+    background: var(--surface-overlay-faint);
+    color: var(--text-primary);
   }
 
   .toggle-field label {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    color: rgba(255, 255, 255, 0.85);
+    gap: var(--space-3);
+    color: var(--text-primary);
     cursor: pointer;
   }
 
-  .toggle-field input[type="checkbox"] {
-    accent-color: #5b8dd9;
-  }
-
   .helper {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.4);
-    margin-top: 2px;
+    font-size: var(--font-size-sm);
+    color: var(--text-disabled);
+    margin-top: var(--space-1);
   }
 
   .danger-row {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-5);
   }
 
   .delete-btn,
@@ -691,14 +672,14 @@
     align-self: flex-start;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-6);
     background: transparent;
-    border: 1px solid #3a3a3a;
+    border: 1px solid var(--border-hard);
     border-radius: 5px;
-    color: rgba(255, 255, 255, 0.78);
+    color: var(--text-secondary);
     font: inherit;
-    font-size: 12px;
+    font-size: var(--font-size-md);
     cursor: pointer;
   }
 
@@ -707,59 +688,59 @@
   }
 
   .delete-btn {
-    color: #d97373;
-    border-color: rgba(217, 115, 115, 0.4);
+    color: var(--danger);
+    border-color: var(--danger-border);
   }
 
   .delete-btn:hover {
-    background: rgba(217, 115, 115, 0.08);
+    background: var(--danger-bg-soft);
   }
 
   .delete-confirm p {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.85);
-    margin: 0 0 8px;
+    font-size: var(--font-size-md);
+    color: var(--text-primary);
+    margin: var(--space-0) var(--space-0) var(--space-4);
   }
 
   .delete-confirm .warn {
-    color: #d9b34a;
-    font-size: 11px;
+    color: var(--warning);
+    font-size: var(--font-size-sm);
   }
 
   .confirm-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--space-4);
   }
 
   .confirm-actions button {
-    padding: 5px 10px;
-    background: #2a2a2a;
-    border: 1px solid #3e3e3e;
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.78);
+    padding: 5px var(--space-5);
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-hard-2);
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
     font: inherit;
-    font-size: 12px;
+    font-size: var(--font-size-md);
     cursor: pointer;
   }
 
   .confirm-actions .confirm {
-    background: rgba(217, 115, 115, 0.15);
-    color: #ffa3a3;
-    border-color: rgba(217, 115, 115, 0.5);
+    background: var(--danger-bg-soft);
+    color: var(--danger);
+    border-color: var(--danger-border);
   }
 
   .meta {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.4);
-    padding: 8px 0 0;
+    gap: var(--space-4);
+    font-size: var(--font-size-sm);
+    color: var(--text-disabled);
+    padding: var(--space-4) var(--space-0) var(--space-0);
   }
 
   .meta code {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.6);
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
   }
 </style>

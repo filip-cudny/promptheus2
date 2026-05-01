@@ -1,10 +1,21 @@
 <script lang="ts">
+  import { invoke } from "@tauri-apps/api/core";
+  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { save } from "@tauri-apps/plugin-dialog";
   import { parseToolResult } from "$lib/utils/toolResultParser";
   import { isXmlLike } from "$lib/utils/xmlParser";
   import type { HintStatus } from "$lib/types/toolResult";
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
   import SearchResultsRenderer from "./SearchResultsRenderer.svelte";
   import JsonNode from "./JsonNode.svelte";
+
+  async function handleSaveSvg(svg: string) {
+    const path = await save({
+      defaultPath: "mermaid-diagram.svg",
+      filters: [{ name: "SVG", extensions: ["svg"] }],
+    });
+    if (path) await invoke("write_text_file", { path, content: svg });
+  }
 
   let {
     result,
@@ -17,10 +28,10 @@
   let parsed = $derived(isPartial ? null : parseToolResult(result));
 
   const STATUS_COLORS: Record<HintStatus, { bg: string; fg: string }> = {
-    success: { bg: "rgba(92, 184, 92, 0.15)", fg: "#5cb85c" },
-    error: { bg: "rgba(238, 85, 85, 0.15)", fg: "#e55" },
-    empty: { bg: "rgba(212, 168, 67, 0.15)", fg: "#d4a843" },
-    partial: { bg: "rgba(91, 141, 217, 0.15)", fg: "#5b8dd9" },
+    success: { bg: "var(--success-bg-soft)", fg: "var(--success)" },
+    error: { bg: "var(--danger-bg-soft)", fg: "var(--danger)" },
+    empty: { bg: "var(--warning-bg-soft)", fg: "var(--warning)" },
+    partial: { bg: "var(--accent-bg-soft)", fg: "var(--accent)" },
   };
 
   const MARKDOWN_PATTERN = /(?:^#{1,6}\s|^\s*[-*]\s|\*\*|```|\[.+\]\()/m;
@@ -137,7 +148,7 @@
     </div>
   {:else if parsed.kind === "text"}
     {#if isMarkdownLike(parsed.text)}
-      <MarkdownRenderer content={parsed.text} isStreaming={false} />
+      <MarkdownRenderer content={parsed.text} isStreaming={false} onopen={openUrl} onsavesvg={handleSaveSvg} />
     {:else}
       <pre class="plain-text">{parsed.text}</pre>
     {/if}
@@ -146,46 +157,46 @@
 
 <style>
   .partial-text {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.4);
+    font-size: var(--font-size-md);
+    color: var(--text-disabled);
   }
 
   .envelope-result {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-4);
   }
 
   .envelope-header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
   }
 
   .status-pill {
     display: inline-flex;
     align-items: center;
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     font-weight: 700;
-    padding: 1px 6px;
-    border-radius: 3px;
+    padding: 1px var(--space-3);
+    border-radius: var(--radius-sm);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: var(--tracking-label);
     flex-shrink: 0;
   }
 
   .hint-summary {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
+    font-size: var(--font-size-md);
+    color: var(--text-secondary);
   }
 
   .formatted-context {
-    font-size: 11px;
-    line-height: 1.5;
-    color: rgba(255, 255, 255, 0.6);
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-normal);
+    color: var(--text-muted);
     white-space: pre-wrap;
     word-break: break-word;
-    margin: 0;
+    margin: var(--space-0);
     max-height: 250px;
     overflow-y: auto;
   }
@@ -193,72 +204,72 @@
   .metadata-grid {
     display: grid;
     grid-template-columns: auto 1fr;
-    gap: 2px 10px;
-    font-size: 11px;
+    gap: var(--space-1) var(--space-5);
+    font-size: var(--font-size-sm);
   }
 
   .meta-key {
-    color: rgba(255, 255, 255, 0.35);
+    color: var(--text-disabled);
   }
 
   .meta-value {
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
 
   .section-label {
     display: block;
-    font-size: 10px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.3);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-disabled);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 4px;
+    letter-spacing: var(--tracking-label);
+    margin-bottom: var(--space-2);
   }
 
   .diagnostics,
   .next-actions {
-    padding-top: 4px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--border-faint);
   }
 
   .action-item {
     display: flex;
-    gap: 6px;
-    font-size: 11px;
-    padding: 1px 0;
+    gap: var(--space-3);
+    font-size: var(--font-size-sm);
+    padding: 1px var(--space-0);
   }
 
   .action-tool {
-    color: rgba(91, 141, 217, 0.8);
-    font-weight: 500;
+    color: var(--accent);
+    font-weight: var(--font-weight-medium);
     flex-shrink: 0;
   }
 
   .action-why {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-disabled);
   }
 
   .envelope-data {
-    font-family: "Fira Code", "Cascadia Code", monospace;
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
     line-height: 1.4;
   }
 
   .json-viewer {
-    font-family: "Fira Code", "Cascadia Code", monospace;
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
     line-height: 1.4;
     max-height: 300px;
     overflow-y: auto;
   }
 
   .plain-text {
-    font-size: 12px;
-    line-height: 1.5;
-    color: rgba(255, 255, 255, 0.65);
+    font-size: var(--font-size-md);
+    line-height: var(--line-height-normal);
+    color: var(--text-muted);
     white-space: pre-wrap;
     word-break: break-word;
-    margin: 0;
+    margin: var(--space-0);
   }
 </style>

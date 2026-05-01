@@ -1,5 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { invoke } from "@tauri-apps/api/core";
+  import { openUrl } from "@tauri-apps/plugin-opener";
+  import { save as saveDialog } from "@tauri-apps/plugin-dialog";
   import ContextEditor from "$lib/components/ui/ContextEditor.svelte";
   import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
   import EditorToolbar from "$lib/components/ui/EditorToolbar.svelte";
@@ -58,6 +61,14 @@
     }
   }
 
+  async function handleSaveSvg(svg: string) {
+    const path = await saveDialog({
+      defaultPath: "mermaid-diagram.svg",
+      filters: [{ name: "SVG", extensions: ["svg"] }],
+    });
+    if (path) await invoke("write_text_file", { path, content: svg });
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
@@ -78,14 +89,14 @@
     {/if}
     {#if images.length > 0}
       <div class="image-row">
-        <ImageChipBar bind:images readonly={!editMode} />
+        <ImageChipBar bind:images readonly={!editMode} onopen={(image) => invoke("open_image_preview", { data: image.data, mediaType: image.media_type })} />
       </div>
     {/if}
     {#if editMode}
       <ContextEditor bind:text bind:images />
     {:else}
       <div class="markdown-view">
-        <MarkdownRenderer content={text} isStreaming={false} />
+        <MarkdownRenderer content={text} isStreaming={false} onopen={openUrl} onsavesvg={handleSaveSvg} />
       </div>
     {/if}
   </div>
@@ -96,11 +107,11 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background: #1e1e1e;
-    color: #e0e0e0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 13px;
-    padding: 12px;
+    background: var(--surface-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-base);
+    padding: var(--space-6);
     box-sizing: border-box;
   }
 
@@ -109,8 +120,8 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-xl);
     background: rgba(30, 30, 30, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -118,7 +129,7 @@
 
   .editor-content :global(.context-editor) {
     flex: 1;
-    padding: 8px;
+    padding: var(--space-4);
     border: none;
     border-radius: 0;
     background: transparent;
@@ -136,10 +147,10 @@
   .image-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
+    gap: var(--space-2);
     max-height: 35vh;
     overflow-y: auto;
-    padding: 8px 8px 0;
+    padding: var(--space-4) var(--space-4) var(--space-0);
   }
 
   .image-row :global(.chip-wrapper) {
@@ -159,16 +170,16 @@
   .markdown-view {
     flex: 1;
     overflow-y: auto;
-    padding: 12px;
-    font-size: 14px;
-    line-height: 1.6;
-    color: #e0e0e0;
+    padding: var(--space-6);
+    font-size: var(--font-size-lg);
+    line-height: var(--line-height-relaxed);
+    color: var(--text-primary);
   }
 
   .save-error {
-    font-size: 11px;
-    color: #e55;
-    padding: 4px 8px 0;
+    font-size: var(--font-size-sm);
+    color: var(--danger);
+    padding: var(--space-2) var(--space-4) var(--space-0);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

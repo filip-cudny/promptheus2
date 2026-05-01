@@ -99,6 +99,7 @@
 <script lang="ts">
   import { Plus, Trash2 } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
 
   let {
     entries = $bindable<CustomParamEntry[]>([]),
@@ -175,13 +176,14 @@
           <option value="boolean">boolean</option>
           <option value="json">json</option>
         </select>
-        <button
-          class="delete-btn"
-          title="Remove parameter"
-          onclick={() => removeEntry(entry.id)}
-        >
-          <Trash2 size={ICON_SIZE.md} />
-        </button>
+        <span class="delete-btn-wrap">
+          <ActionIconButton
+            icon={Trash2}
+            size={ICON_SIZE.md}
+            title="Remove parameter"
+            onclick={() => removeEntry(entry.id)}
+          />
+        </span>
       </div>
       <div class="value-row">
         {#if entry.type === "boolean"}
@@ -245,26 +247,26 @@
   .custom-params {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: var(--space-5);
   }
 
   .entry {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 8px;
-    background: #1a1a1a;
-    border: 1px solid #2e2e2e;
+    gap: var(--space-2);
+    padding: var(--space-4);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-hard);
     border-radius: 5px;
   }
 
   .entry.has-error {
-    border-color: rgba(217, 115, 115, 0.5);
+    border-color: var(--danger-border);
   }
 
   .entry-row {
     display: flex;
-    gap: 6px;
+    gap: var(--space-3);
     align-items: center;
   }
 
@@ -280,13 +282,13 @@
   input,
   select,
   textarea {
-    padding: 5px 8px;
-    background: #1f1f1f;
-    border: 1px solid #3a3a3a;
-    border-radius: 4px;
-    color: rgba(255, 255, 255, 0.92);
+    padding: 5px var(--space-4);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-hard);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
     font: inherit;
-    font-size: 12px;
+    font-size: var(--font-size-md);
   }
 
   .value-input {
@@ -294,47 +296,37 @@
   }
 
   .json-area {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 11px;
+    font-family: var(--font-mono);
+    font-size: var(--font-size-sm);
     resize: vertical;
   }
 
-  .delete-btn {
-    background: transparent;
-    border: 1px solid transparent;
-    color: rgba(255, 255, 255, 0.45);
-    padding: 4px;
-    border-radius: 4px;
-    cursor: pointer;
-    display: inline-flex;
-  }
-
-  .delete-btn:hover {
-    color: #d97373;
-    background: rgba(217, 115, 115, 0.08);
+  .delete-btn-wrap :global(.action-icon-btn:hover:not(:disabled)) {
+    color: var(--danger);
+    background: var(--danger-bg-soft);
   }
 
   .add-btn {
     align-self: flex-start;
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 5px 10px;
-    background: #2a2a2a;
-    border: 1px solid #3e3e3e;
+    gap: var(--space-2);
+    padding: 5px var(--space-5);
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-hard-2);
     border-radius: 5px;
-    color: rgba(255, 255, 255, 0.78);
+    color: var(--text-secondary);
     font: inherit;
-    font-size: 12px;
+    font-size: var(--font-size-md);
     cursor: pointer;
   }
 
   .add-btn:hover {
-    background: #333;
+    background: var(--surface-elevated);
   }
 
   .error {
-    font-size: 11px;
-    color: #d97373;
+    font-size: var(--font-size-sm);
+    color: var(--danger);
   }
 </style>

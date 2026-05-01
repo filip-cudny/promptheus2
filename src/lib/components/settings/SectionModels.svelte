@@ -90,7 +90,7 @@
     flex: 1;
     min-width: 0;
     overflow-y: auto;
-    background: #1e1e1e;
+    background: var(--surface-base);
   }
 
   .empty {
@@ -99,19 +99,19 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    color: rgba(255, 255, 255, 0.45);
-    padding: 32px;
+    color: var(--text-muted);
+    padding: var(--space-16);
     text-align: center;
   }
 
   .empty h2 {
-    font-size: 14px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 6px;
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-medium);
+    color: var(--text-secondary);
+    margin-bottom: var(--space-3);
   }
 
   .empty p {
-    font-size: 12px;
+    font-size: var(--font-size-md);
   }
 </style>

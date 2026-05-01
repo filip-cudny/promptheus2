@@ -112,13 +112,13 @@
     width: 100%;
     height: 100%;
     object-fit: contain;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border-strong);
     opacity: 0;
     transform: scale(0.92);
     transition:
-      opacity 150ms ease-out,
-      transform 150ms ease-out;
+      opacity var(--motion-default) ease-out,
+      transform var(--motion-default) ease-out;
   }
 
   .preview-image.visible {

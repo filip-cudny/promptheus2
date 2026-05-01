@@ -5,6 +5,13 @@
   import type { MessagePair } from "$lib/types/conversation";
   import UserBubble from "./UserBubble.svelte";
   import AssistantBubble from "./AssistantBubble.svelte";
+  import { getSkillsStore } from "$lib/stores/skills.svelte";
+
+  const skillsStore = getSkillsStore();
+
+  function classifyToken(token: string, _finished: boolean): string | null {
+    return skillsStore.nameSet.has(token.slice(1)) ? "skill-badge" : null;
+  }
 
   const PAGE_SIZE = 20;
 
@@ -88,6 +95,7 @@
       <UserBubble
         node={pair.user}
         showDelete={false}
+        {classifyToken}
         onContentChange={(content) => store.updateNodeContent(pair.user.node_id, content)}
         onDelete={() => {}}
         onRegenerate={() => { if (pair.assistant) store.regenerate(pair.assistant.node_id); }}
@@ -126,10 +134,10 @@
   .conversation-area {
     flex: 1;
     overflow-y: auto;
-    padding: 40px 16px 16px;
+    padding: 40px var(--space-8) var(--space-8);
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-1);
   }
 
   .empty-state {
@@ -137,26 +145,22 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: rgba(255, 255, 255, 0.3);
-    font-size: 14px;
+    color: var(--text-disabled);
+    font-size: var(--font-size-lg);
   }
 
   .load-more-zone {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding: 8px;
-    color: rgba(255, 255, 255, 0.3);
-    font-size: 11px;
+    gap: var(--space-3);
+    padding: var(--space-4);
+    color: var(--text-disabled);
+    font-size: var(--font-size-sm);
   }
 
   .load-more-zone :global(.spin) {
     animation: spin 1s linear infinite;
   }
 
-  @keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
 </style>

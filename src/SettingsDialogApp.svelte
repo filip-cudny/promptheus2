@@ -1,16 +1,19 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
+  import { initTheme } from "$lib/stores/theme.svelte";
   import SettingsSidebar, {
     type SettingsSection,
   } from "$lib/components/settings/SettingsSidebar.svelte";
   import SectionModels from "$lib/components/settings/SectionModels.svelte";
+  import SectionAppearance from "$lib/components/settings/SectionAppearance.svelte";
 
   const store = getSettingsStore();
 
   let activeSection = $state<SettingsSection>("models");
 
   onMount(async () => {
+    await initTheme();
     const initial = (window as unknown as { __settingsInitialSection?: string })
       .__settingsInitialSection;
     if (initial === "models") {
@@ -36,6 +39,8 @@
       {/if}
     {:else if activeSection === "models"}
       <SectionModels />
+    {:else if activeSection === "appearance"}
+      <SectionAppearance />
     {:else}
       <div class="placeholder">This section is not yet implemented.</div>
     {/if}
@@ -46,10 +51,10 @@
   .dialog-shell {
     display: flex;
     height: 100vh;
-    background: #1e1e1e;
-    color: #e0e0e0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 13px;
+    background: var(--surface-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-base);
     overflow: hidden;
   }
 
@@ -65,13 +70,13 @@
   .error,
   .placeholder {
     margin: auto;
-    color: rgba(255, 255, 255, 0.45);
-    font-size: 13px;
-    padding: 24px;
+    color: var(--text-muted);
+    font-size: var(--font-size-base);
+    padding: var(--space-12);
     text-align: center;
   }
 
   .error {
-    color: #d97373;
+    color: var(--danger);
   }
 </style>

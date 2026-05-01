@@ -2,6 +2,7 @@
   import { onDestroy, onMount } from "svelte";
   import { ChevronLeft, ChevronRight } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import { getHistoryStore } from "$lib/stores/history.svelte";
   import { getHistorySearchStore } from "$lib/stores/historySearch.svelte";
   import { openConversationDialog } from "$lib/services/conversationDialog";
@@ -108,7 +109,7 @@
 
   <div class="entries-list" class:loading={searchStore.loading && pageResults.length === 0}>
     {#each pageResults as result (result.entry.id)}
-      <HistoryEntryRow entry={result.entry} matches={result.matches} onOpen={handleOpen} />
+      <HistoryEntryRow entry={result.entry} matches={result.matches} onOpen={handleOpen} oncopy={(content) => navigator.clipboard.writeText(content)} />
     {/each}
     {#if emptyVariant}
       <HistoryEmptyState
@@ -137,22 +138,20 @@
       <span class="page-label">Page {currentPage + 1} of {totalPages}</span>
 
       <div class="page-nav">
-        <button
-          class="nav-btn"
+        <ActionIconButton
+          icon={ChevronLeft}
+          size={ICON_SIZE.md}
           disabled={currentPage === 0}
           onclick={() => currentPage--}
           title="Previous page"
-        >
-          <ChevronLeft size={ICON_SIZE.md} />
-        </button>
-        <button
-          class="nav-btn"
+        />
+        <ActionIconButton
+          icon={ChevronRight}
+          size={ICON_SIZE.md}
           disabled={currentPage >= totalPages - 1}
           onclick={() => currentPage++}
           title="Next page"
-        >
-          <ChevronRight size={ICON_SIZE.md} />
-        </button>
+        />
       </div>
     </div>
   {/if}
@@ -163,21 +162,21 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
-    background: #1e1e1e;
-    color: #e0e0e0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 13px;
+    background: var(--surface-base);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-size: var(--font-size-base);
     overflow: hidden;
   }
 
   .entries-list {
     flex: 1;
     overflow-y: auto;
-    padding: 12px;
+    padding: var(--space-6);
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    transition: opacity 120ms ease;
+    gap: var(--space-3);
+    transition: opacity var(--motion-fast) var(--ease-default);
   }
 
   .entries-list.loading {
@@ -188,73 +187,55 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding: var(--space-4) var(--space-6);
+    border-top: 1px solid var(--border-default);
     flex-shrink: 0;
   }
 
   .page-size {
     display: flex;
-    gap: 2px;
+    gap: var(--space-1);
   }
 
   .page-size-btn {
-    padding: 2px 8px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
+    padding: var(--space-1) var(--space-4);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
     background: transparent;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
     cursor: pointer;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
   }
 
   .page-size-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.8);
+    background: var(--surface-overlay);
+    color: var(--text-secondary);
   }
 
   .page-size-btn.active {
-    background: rgba(100, 160, 255, 0.15);
-    border-color: rgba(100, 160, 255, 0.4);
-    color: rgba(100, 160, 255, 0.9);
+    background: var(--accent-bg-soft);
+    border-color: var(--accent-bg);
+    color: var(--accent);
   }
 
   .page-label {
-    color: rgba(255, 255, 255, 0.4);
-    font-size: 11px;
+    color: var(--text-disabled);
+    font-size: var(--font-size-sm);
   }
 
   .page-nav {
     display: flex;
-    gap: 2px;
+    gap: var(--space-1);
   }
 
-  .nav-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.5);
-    cursor: pointer;
+  .page-nav :global(.action-icon-btn) {
+    border: 1px solid var(--border-strong);
+    padding: var(--space-1);
   }
 
-  .nav-btn:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.8);
-  }
-
-  .nav-btn:disabled {
-    color: rgba(255, 255, 255, 0.15);
-    cursor: default;
-  }
-
-  .nav-btn:focus-visible,
   .page-size-btn:focus-visible {
-    outline: 2px solid rgba(100, 160, 255, 0.6);
+    outline: 2px solid var(--accent-ring);
     outline-offset: 1px;
   }
 
@@ -262,7 +243,7 @@
     position: absolute;
     width: 1px;
     height: 1px;
-    padding: 0;
+    padding: var(--space-0);
     margin: -1px;
     overflow: hidden;
     clip: rect(0, 0, 0, 0);

@@ -2,6 +2,7 @@
   import { Search, X } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import type { HistorySearchStore } from "$lib/stores/historySearch.svelte";
+  import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
   import type {
     HistoryStatusFilter,
     HistoryTypeFilter,
@@ -68,9 +69,9 @@
       spellcheck="false"
     />
     {#if searchStore.query !== ""}
-      <button class="clear-btn" onclick={clearSearch} title="Clear search" aria-label="Clear search">
-        <X size={ICON_SIZE.md} />
-      </button>
+      <span class="clear-btn-wrap">
+        <ActionIconButton icon={X} size={ICON_SIZE.md} onclick={clearSearch} title="Clear search" />
+      </span>
     {/if}
   </div>
 
@@ -126,9 +127,9 @@
   .toolbar {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 10px 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    gap: var(--space-4);
+    padding: var(--space-5) var(--space-6);
+    border-bottom: 1px solid var(--border-default);
     flex-shrink: 0;
   }
 
@@ -143,20 +144,20 @@
     left: 10px;
     display: flex;
     align-items: center;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-disabled);
     pointer-events: none;
   }
 
   .search-input {
     flex: 1;
     width: 100%;
-    padding: 6px 32px 6px 30px;
-    background: #2a2a2a;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
-    color: #e0e0e0;
+    padding: var(--space-3) 32px var(--space-3) 30px;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-hard);
+    border-radius: var(--radius-lg);
+    color: var(--text-primary);
     font: inherit;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     outline: none;
   }
 
@@ -166,65 +167,57 @@
   }
 
   .search-input:focus {
-    border-color: rgba(100, 160, 255, 0.5);
-    background: #2e2e2e;
+    border-color: var(--accent-border);
+    background: var(--surface-sunken);
   }
 
   .search-input::placeholder {
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--text-disabled);
   }
 
-  .clear-btn {
+  .clear-btn-wrap {
     position: absolute;
     right: 6px;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 2px;
-    border: none;
-    border-radius: 4px;
-    background: transparent;
-    color: rgba(255, 255, 255, 0.4);
-    cursor: pointer;
   }
 
-  .clear-btn:hover {
-    color: rgba(255, 255, 255, 0.8);
-    background: rgba(255, 255, 255, 0.08);
+  .clear-btn-wrap :global(.action-icon-btn) {
+    padding: var(--space-1);
+    color: var(--text-disabled);
   }
 
   .filters-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     flex-wrap: wrap;
   }
 
   .type-segment {
     display: flex;
-    gap: 2px;
+    gap: var(--space-1);
   }
 
   .segment-btn {
-    padding: 3px 10px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
+    padding: 3px var(--space-5);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
     background: transparent;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--text-muted);
     cursor: pointer;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
   }
 
   .segment-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.85);
+    background: var(--surface-overlay);
+    color: var(--text-primary);
   }
 
   .segment-btn.active {
-    background: rgba(100, 160, 255, 0.15);
-    border-color: rgba(100, 160, 255, 0.4);
-    color: rgba(100, 160, 255, 0.95);
+    background: var(--accent-bg-soft);
+    border-color: var(--accent-bg);
+    color: var(--accent);
   }
 
   .status-wrap {
@@ -234,26 +227,25 @@
   .clear-all-btn {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 3px 8px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
+    gap: var(--space-2);
+    padding: 3px var(--space-4);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
     background: transparent;
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--text-muted);
     cursor: pointer;
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
   }
 
   .clear-all-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.85);
+    background: var(--surface-overlay);
+    color: var(--text-primary);
   }
 
   .segment-btn:focus-visible,
-  .clear-btn:focus-visible,
   .clear-all-btn:focus-visible {
-    outline: 2px solid rgba(100, 160, 255, 0.6);
+    outline: 2px solid var(--accent-ring);
     outline-offset: 1px;
   }
 </style>

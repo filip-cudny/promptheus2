@@ -90,9 +90,9 @@
 
 <style>
   .tool-group {
-    margin: 4px 0;
-    border-left: 3px solid rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
+    margin: var(--space-2) var(--space-0);
+    border-left: 3px solid var(--border-strong);
+    border-radius: var(--radius-md);
     background: rgba(255, 255, 255, 0.03);
     overflow: hidden;
   }
@@ -100,20 +100,20 @@
   .tool-group-header-active {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     width: 100%;
-    padding: 6px 10px;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 13px;
+    padding: var(--space-3) var(--space-5);
+    color: var(--text-secondary);
+    font-size: var(--font-size-base);
   }
 
   .tool-group-label-active {
-    font-weight: 600;
+    font-weight: var(--font-weight-semibold);
     background: linear-gradient(
       90deg,
-      rgba(91, 141, 217, 0.6) 0%,
-      rgba(150, 190, 240, 0.9) 50%,
-      rgba(91, 141, 217, 0.6) 100%
+      var(--accent-ring) 0%,
+      var(--accent) 50%,
+      var(--accent-ring) 100%
     );
     background-size: 200% auto;
     -webkit-background-clip: text;
@@ -125,44 +125,39 @@
   .tool-group-toggle {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     width: 100%;
-    padding: 6px 10px;
+    padding: var(--space-3) var(--space-5);
     border: none;
     background: none;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--text-secondary);
     font: inherit;
-    font-size: 13px;
+    font-size: var(--font-size-base);
     text-align: left;
     cursor: pointer;
   }
 
   .tool-group-toggle:hover {
-    background: rgba(255, 255, 255, 0.04);
-    color: rgba(255, 255, 255, 0.9);
+    background: var(--surface-overlay-faint);
+    color: var(--text-primary);
   }
 
   .tool-group-summary {
-    font-weight: 500;
+    font-weight: var(--font-weight-medium);
   }
 
   .tool-group-items {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 4px 8px 10px 8px;
-  }
-
-  @keyframes shimmer {
-    0% { background-position: -200% center; }
-    100% { background-position: 200% center; }
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4) var(--space-5) var(--space-4);
   }
 
   @media (prefers-reduced-motion: reduce) {
     .tool-group-label-active {
       animation: none;
       background: none;
-      -webkit-text-fill-color: #96bef0;
+      -webkit-text-fill-color: var(--accent);
     }
   }
 </style>

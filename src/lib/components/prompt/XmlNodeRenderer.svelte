@@ -46,59 +46,59 @@
   .xml-node {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--space-2);
   }
 
   .xml-node.nested {
-    padding-left: 12px;
-    border-left: 1px solid rgba(255, 255, 255, 0.06);
+    padding-left: var(--space-6);
+    border-left: 1px solid var(--border-faint);
   }
 
   .xml-tag-header {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: var(--space-4);
     flex-wrap: wrap;
   }
 
   .xml-tag-name {
-    font-size: 11px;
-    font-weight: 600;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
     color: rgba(200, 180, 230, 0.8);
   }
 
   .xml-attrs {
     display: flex;
-    gap: 8px;
+    gap: var(--space-4);
     flex-wrap: wrap;
   }
 
   .xml-attr {
     display: inline-flex;
     gap: 3px;
-    font-size: 10px;
+    font-size: var(--font-size-xs);
   }
 
   .xml-attr-key {
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--text-disabled);
   }
 
   .xml-attr-value {
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--text-muted);
   }
 
   .xml-text {
-    font-size: 11px;
-    line-height: 1.5;
-    color: rgba(255, 255, 255, 0.55);
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-normal);
+    color: var(--text-muted);
     white-space: pre-wrap;
     word-break: break-word;
-    margin: 0;
+    margin: var(--space-0);
   }
 
   .xml-children {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--space-3);
   }
 </style>

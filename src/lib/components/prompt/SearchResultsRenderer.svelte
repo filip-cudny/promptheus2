@@ -112,15 +112,15 @@
   .search-results {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-1);
   }
 
   .result-card {
     display: flex;
     flex-direction: column;
     gap: 3px;
-    padding: 6px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding: var(--space-3) var(--space-0);
+    border-bottom: 1px solid var(--border-faint);
   }
 
   .result-card:last-child {
@@ -130,21 +130,21 @@
   .result-header {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
   }
 
   .result-title-link {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-2);
     background: none;
     border: none;
-    padding: 0;
-    margin: 0;
+    padding: var(--space-0);
+    margin: var(--space-0);
     color: rgba(130, 180, 230, 0.9);
     font: inherit;
-    font-size: 12px;
-    font-weight: 500;
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-medium);
     cursor: pointer;
     text-align: left;
   }
@@ -159,17 +159,17 @@
   }
 
   .result-title {
-    font-size: 12px;
-    font-weight: 500;
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-medium);
   }
 
   .relevance-pill {
     font-size: 9px;
     font-weight: 700;
-    color: rgba(255, 255, 255, 0.4);
-    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-disabled);
+    background: var(--surface-overlay-faint);
     padding: 1px 5px;
-    border-radius: 3px;
+    border-radius: var(--radius-sm);
     flex-shrink: 0;
   }
 
@@ -177,29 +177,29 @@
     display: flex;
     align-items: center;
     gap: 5px;
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.35);
+    font-size: var(--font-size-xs);
+    color: var(--text-disabled);
   }
 
   .meta-sep {
-    color: rgba(255, 255, 255, 0.2);
+    color: var(--text-faint);
   }
 
   .result-content {
-    font-size: 11px;
-    line-height: 1.5;
-    color: rgba(255, 255, 255, 0.5);
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-normal);
+    color: var(--text-muted);
     white-space: pre-wrap;
     word-break: break-word;
-    margin: 0;
+    margin: var(--space-0);
   }
 
   .expand-toggle {
     background: none;
     border: none;
-    padding: 0;
+    padding: var(--space-0);
     color: rgba(130, 180, 230, 0.6);
-    font-size: 10px;
+    font-size: var(--font-size-xs);
     cursor: pointer;
     align-self: flex-start;
   }
@@ -209,16 +209,16 @@
   }
 
   .unknown-child {
-    padding-top: 4px;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--border-faint);
   }
 
   .fallback-text {
-    font-size: 11px;
-    line-height: 1.5;
-    color: rgba(255, 255, 255, 0.6);
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-normal);
+    color: var(--text-muted);
     white-space: pre-wrap;
     word-break: break-word;
-    margin: 0;
+    margin: var(--space-0);
   }
 </style>

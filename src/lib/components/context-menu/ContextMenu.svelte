@@ -9,6 +9,7 @@
   import ContextSection from "./ContextSection.svelte";
   import LastInteractionSection from "./LastInteractionSection.svelte";
   import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
+  import { prefetchCapabilities, getCachedCapabilities } from "$lib/stores/capabilities.svelte";
   import FloatingPanel from "$lib/components/ui/FloatingPanel.svelte";
   import MenuList from "$lib/components/ui/MenuList.svelte";
   import { ArrowBigUp, ChevronRight, MessageSquare, MessageSquareShare, Mic, Square, X } from "lucide-svelte";
@@ -17,6 +18,16 @@
     openConversationDialog,
     openConversationDialogNewWindow,
   } from "$lib/services/conversationDialog";
+  import {
+    clearContext,
+    getContextText,
+    setContextFromClipboard,
+    appendContextFromClipboard,
+    removeContextItem,
+  } from "$lib/services/context";
+  import { openContextEditor } from "$lib/services/contextEditor";
+  import { copyHistoryContent } from "$lib/services/history";
+  import { openHistoryDialog } from "$lib/services/historyDialog";
   import {
     getWebviewProviders,
     type WebviewProvider,
@@ -28,34 +39,14 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import { updateSurfaceModel, updateSurfaceReasoningEffort, setSpeechToTextModel } from "$lib/services/settings";
   import type { ModelConfig, Provider } from "$lib/types";
+  import { useContextMenu } from "$lib/stores/useContextMenu.svelte";
+  import MenuShell from "./MenuShell.svelte";
   import {
-    getItems,
-    getSelectedIndex,
-    setSelectedIndex,
-    isVisible,
-    getOpenTrigger,
-    isRecording,
-    getRecordingSkillId,
-    closeMenu,
-    suppressClose,
-    isSuppressed,
-    resumeClose,
-    isInBlurGrace,
-    moveSelection,
-    executeItem,
-    executeSelected,
-    startAlternativeExecution,
-    handleNumberInput,
     clearNumberBuffer,
-    getAllSkillItems,
-    getSkillItems,
-    isRecordingChat,
-    toggleChatRecording,
-    openDialogForItem,
     getWorkArea,
-    init,
-    destroy,
   } from "$lib/stores/contextMenu.svelte";
+
+  const menu = useContextMenu();
 
   const SHIFTED_CHAR_TO_DIGIT: Record<string, string> = {
     "!": "1", "@": "2", "#": "3", "$": "4", "%": "5",
@@ -63,9 +54,9 @@
   };
 
   function isRecordingThisSkill(item: MenuItem): boolean {
-    if (!isRecording()) return false;
+    if (!menu.recording) return false;
     const data = item.data as { skill_id: string } | null;
-    return data?.skill_id === getRecordingSkillId();
+    return data?.skill_id === menu.recordingSkillId;
   }
 
   function isExecutingSkill(item: MenuItem): boolean {
@@ -218,7 +209,7 @@
 
   async function pickChatProvider(providerId: string) {
     closeChatProviders();
-    await closeMenu();
+    await menu.closeMenu();
     try {
       const arg = providerId === PROMPTHEUS_PROVIDER_ID ? undefined : providerId;
       await openConversationDialogNewWindow(undefined, arg);
@@ -237,31 +228,31 @@
         if (settingsOpen || activeActionMenuId || chatProvidersOpen) {
           closePanels();
         } else {
-          closeMenu();
+          menu.closeMenu();
         }
         break;
       case "ArrowDown":
         e.preventDefault();
-        moveSelection(1);
+        menu.moveSelection(1);
         break;
       case "ArrowUp":
         e.preventDefault();
-        moveSelection(-1);
+        menu.moveSelection(-1);
         break;
       case "Enter":
         e.preventDefault();
-        executeSelected(e.shiftKey);
+        menu.executeSelected(e.shiftKey);
         break;
       default: {
         if (e.key >= "0" && e.key <= "9") {
           e.preventDefault();
-          handleNumberInput(e.key, e.shiftKey);
+          menu.handleNumberInput(e.key, e.shiftKey);
           return;
         }
         const mappedDigit = SHIFTED_CHAR_TO_DIGIT[e.key];
         if (mappedDigit) {
           e.preventDefault();
-          handleNumberInput(mappedDigit, true);
+          menu.handleNumberInput(mappedDigit, true);
         }
       }
     }
@@ -287,7 +278,7 @@
     const gen = ++resizeGeneration;
     await tick();
     if (gen !== resizeGeneration) return;
-    if (!menuEl || !isVisible()) return;
+    if (!menuEl || !menu.visible) return;
 
     let height = menuEl.scrollHeight + 2;
     const win = getCurrentWebviewWindow();
@@ -310,30 +301,30 @@
     positionFromHeight(height);
     hoverEnabled = false;
     await win.setSize(new LogicalSize(MENU_WIDTH, height));
-    if (gen !== resizeGeneration || !isVisible()) return;
+    if (gen !== resizeGeneration || !menu.visible) return;
     if (wa) {
       currentWindowPos = { x, y };
       await win.setPosition(new LogicalPosition(x, y));
-      if (gen !== resizeGeneration || !isVisible()) return;
+      if (gen !== resizeGeneration || !menu.visible) return;
     }
     await invoke("show_context_menu_panel");
-    if (gen !== resizeGeneration || !isVisible()) return;
+    if (gen !== resizeGeneration || !menu.visible) return;
 
     const correctedHeight = menuEl.scrollHeight + 2;
     if (correctedHeight !== height) {
       height = correctedHeight;
       positionFromHeight(height);
       await win.setSize(new LogicalSize(MENU_WIDTH, height));
-      if (gen !== resizeGeneration || !isVisible()) return;
+      if (gen !== resizeGeneration || !menu.visible) return;
       if (wa) {
         currentWindowPos = { x, y };
         await win.setPosition(new LogicalPosition(x, y));
-        if (gen !== resizeGeneration || !isVisible()) return;
+        if (gen !== resizeGeneration || !menu.visible) return;
       }
     }
 
     await invoke("focus_context_menu");
-    lastShownTrigger = getOpenTrigger();
+    lastShownTrigger = menu.openTrigger;
     logDebug(`[ctx-menu] opened at (${x}, ${y}), size ${MENU_WIDTH}x${height}`);
   }
 
@@ -341,7 +332,7 @@
     if (settingsOpen) {
       logDebug("[ctx-menu] closing settings panel");
       settingsOpen = false;
-      resumeClose();
+      menu.resumeClose();
     }
   }
 
@@ -350,7 +341,7 @@
       logDebug(`[ctx-menu] closing action menu: ${activeActionMenuId}`);
       activeActionMenuId = "";
       activeActionAnchorEl = undefined;
-      resumeClose();
+      menu.resumeClose();
     }
   }
 
@@ -380,7 +371,7 @@
   }
 
   $effect(() => {
-    void getOpenTrigger();
+    void menu.openTrigger;
     if (menuVisible && menuItems.length > 0) {
       untrack(() => closePanels());
       resizeAndPositionWindow();
@@ -388,7 +379,7 @@
   });
 
   let sections = $derived.by(() => {
-    const allItems = getItems();
+    const allItems = menu.items;
     const groups: SectionGroup[] = [];
     let currentSection: SectionGroup | null = null;
 
@@ -407,11 +398,11 @@
     return groups.filter((g) => g.sectionId !== "models");
   });
 
-  let menuVisible = $derived(isVisible());
+  let menuVisible = $derived(menu.visible);
   $effect(() => { if (!menuVisible) closePanels(); });
 
   $effect(() => {
-    const items = getItems();
+    const items = menu.items;
     const modelsItem = items.find((i) => i.item_type === "models");
     if (modelsItem) {
       const data = extractModelsData(modelsItem);
@@ -423,7 +414,7 @@
     }
   });
   let modelsData = $derived.by(() => {
-    const modelsItem = getItems().find((i) => i.item_type === "models");
+    const modelsItem = menu.items.find((i) => i.item_type === "models");
     return modelsItem ? extractModelsData(modelsItem) : null;
   });
   let modelNames = $derived.by(() => {
@@ -434,10 +425,55 @@
     }
     return map;
   });
-  let menuItems = $derived(getItems());
-  let allSkillItems = $derived(getAllSkillItems());
-  let skillItems = $derived(getSkillItems());
-  let currentSelectedIndex = $derived(getSelectedIndex());
+  let quickActionModel = $derived.by(() => {
+    if (!modelsData || !modelsDefaultModelId) return null;
+    return modelsData.models.find((m) => m.id === modelsDefaultModelId) ?? null;
+  });
+
+  $effect(() => {
+    if (quickActionModel) {
+      prefetchCapabilities({
+        id: quickActionModel.id,
+        type: "text",
+        model: quickActionModel.model,
+        display_name: quickActionModel.display_name,
+        provider: quickActionModel.provider,
+        group: quickActionModel.group,
+        api_key: null,
+        base_url: null,
+        parameters: null,
+        context_window_size: null,
+        api_mode: null,
+        store: true,
+      });
+    }
+  });
+
+  let quickActionCapabilities = $derived(
+    getCachedCapabilities(
+      quickActionModel
+        ? {
+            id: quickActionModel.id,
+            type: "text",
+            model: quickActionModel.model,
+            display_name: quickActionModel.display_name,
+            provider: quickActionModel.provider,
+            group: quickActionModel.group,
+            api_key: null,
+            base_url: null,
+            parameters: null,
+            context_window_size: null,
+            api_mode: null,
+            store: true,
+          }
+        : null,
+    ),
+  );
+
+  let menuItems = $derived(menu.items);
+  let allSkillItems = $derived(menu.allSkillItems);
+  let skillItems = $derived(menu.skillItems);
+  let currentSelectedIndex = $derived(menu.selectedIndex);
 
   $effect(() => {
     if (menuVisible && menuEl) {
@@ -448,11 +484,41 @@
   });
 
   function handleItemClick(index: number, e: MouseEvent) {
-    executeItem(index, e.shiftKey);
+    menu.executeItem(index, e.shiftKey);
+  }
+
+  interface LastTextEntryRef {
+    id: string;
+    skill_id: string | null;
+    skill_name: string | null;
+  }
+
+  async function handleContextCopyAll() {
+    const text = await getContextText();
+    if (text) await navigator.clipboard.writeText(text);
+  }
+
+  async function handleOpenImagePreview(data: string, mediaType: string) {
+    menu.suppressClose();
+    await invoke("open_image_preview", { data, mediaType });
+  }
+
+  async function handleCopyHistoryContent(content: string) {
+    await copyHistoryContent(content);
+  }
+
+  async function handleOpenLastInteraction(entry: LastTextEntryRef) {
+    await menu.closeMenu();
+    await openConversationDialog(entry.skill_id ?? "", entry.skill_name ?? "", entry.id, true);
+  }
+
+  async function handleOpenHistory() {
+    await menu.closeMenu();
+    await openHistoryDialog();
   }
 
   onMount(async () => {
-    await init();
+    await menu.init();
 
     await refreshWebviewProviders();
     unlistenSettings = await onSettingsChanged(refreshWebviewProviders);
@@ -466,21 +532,21 @@
         }
         return;
       }
-      if (isInBlurGrace()) return;
-      if (isSuppressed()) {
-        resumeClose();
+      if (menu.isInBlurGrace()) return;
+      if (menu.isSuppressed()) {
+        menu.resumeClose();
         if (suppressedBlurCheckTimer) clearTimeout(suppressedBlurCheckTimer);
         suppressedBlurCheckTimer = setTimeout(() => {
           suppressedBlurCheckTimer = null;
           win.isFocused()
             .then((stillFocused) => {
-              if (!stillFocused) closeMenu();
+              if (!stillFocused) menu.closeMenu();
             })
             .catch(() => {});
         }, SUPPRESSED_BLUR_RECHECK_MS);
         return;
       }
-      closeMenu();
+      menu.closeMenu();
     });
 
   });
@@ -490,15 +556,14 @@
       clearTimeout(suppressedBlurCheckTimer);
       suppressedBlurCheckTimer = null;
     }
-    destroy();
+    menu.destroy();
     unlistenSettings?.();
   });
 </script>
 
 <svelte:window onkeydown={handleKeydown} onkeyup={handleKeyup} />
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="context-menu" role="menu" bind:this={menuEl} onmousemove={handleMouseMove}>
+<MenuShell bind:ref={menuEl} onmousemove={handleMouseMove}>
   {#if menuItems.length === 0}
     <div class="empty-state" role="menuitem">No items available</div>
   {:else}
@@ -507,14 +572,14 @@
         <div class="separator"></div>
       {/if}
       {#if section.sectionId === "chat"}
-        {@const chatRecording = isRecordingChat()}
-        {@const chatDisabled = isRecording() && !chatRecording}
+        {@const chatRecording = menu.chatRecording}
+        {@const chatDisabled = menu.recording && !chatRecording}
         <div
           class="chat-row"
           class:selected={chatRecording}
           role="menuitem"
           bind:this={chatRowEl}
-          onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}
+          onmouseenter={() => { if (hoverEnabled) menu.setSelectedIndex(-1); }}
           oncontextmenu={(e) => { if (!chatDisabled) openChatProviders(e); else e.preventDefault(); }}
         >
           <button
@@ -523,10 +588,10 @@
             onclick={async (e) => {
               if (chatDisabled) return;
               if (chatRecording || e.shiftKey) {
-                await toggleChatRecording();
+                await menu.toggleChatRecording();
                 return;
               }
-              await closeMenu();
+              await menu.closeMenu();
               await focusOrOpenChat();
             }}
           >
@@ -554,7 +619,7 @@
         <div
           class="menu-item-row"
           bind:this={settingsAnchorEl}
-          onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}
+          onmouseenter={() => { if (hoverEnabled) menu.setSelectedIndex(-1); }}
         >
           <button
             class="menu-item settings-toggle"
@@ -579,7 +644,7 @@
         <FloatingPanel visible={settingsOpen} anchorEl={settingsAnchorEl} onclose={closeSettingsPanel}>
           {#if modelsData && modelsData.models.length > 0}
             <div class="panel-label">Quick action model</div>
-            <div class="models-row" onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}>
+            <div class="models-row" onmouseenter={() => { if (hoverEnabled) menu.setSelectedIndex(-1); }}>
               <ModelSelector
                 models={modelsData.models.map((m) => ({
                   id: m.id,
@@ -597,6 +662,7 @@
                 }))}
                 selectedModelId={modelsDefaultModelId}
                 reasoningEffort={modelsReasoningEffort}
+                capabilities={quickActionCapabilities}
                 onModelSelect={async (modelId) => {
                   modelsDefaultModelId = modelId;
                   await updateSurfaceModel("quick_actions", modelId);
@@ -605,13 +671,13 @@
                   modelsReasoningEffort = effort;
                   await updateSurfaceReasoningEffort("quick_actions", effort);
                 }}
-                preventDismiss={{ suppress: suppressClose, resume: resumeClose }}
+                preventDismiss={{ suppress: menu.suppressClose, resume: menu.resumeClose }}
               />
             </div>
           {/if}
           {#if modelsData && modelsData.stt_models.length > 0}
             <div class="panel-label">Speech-to-text model</div>
-            <div class="models-row" onmouseenter={() => { if (hoverEnabled) setSelectedIndex(-1); }}>
+            <div class="models-row" onmouseenter={() => { if (hoverEnabled) menu.setSelectedIndex(-1); }}>
               <ModelSelector
                 models={modelsData.stt_models.map((m) => ({
                   id: m.id,
@@ -634,7 +700,7 @@
                   await setSpeechToTextModel(modelId);
                 }}
                 onReasoningSelect={() => {}}
-                preventDismiss={{ suppress: suppressClose, resume: resumeClose }}
+                preventDismiss={{ suppress: menu.suppressClose, resume: menu.resumeClose }}
               />
             </div>
           {/if}
@@ -644,9 +710,23 @@
         {@const contextItems = extractContextItems(item)}
         {@const lastInteractionData = extractLastInteractionData(item)}
         {#if contextItems}
-          <ContextSection items={contextItems} />
+          <ContextSection
+            items={contextItems}
+            onReplaceFromClipboard={setContextFromClipboard}
+            onAppendFromClipboard={appendContextFromClipboard}
+            onOpenEditor={openContextEditor}
+            onCopyAll={handleContextCopyAll}
+            onClear={clearContext}
+            onRemoveItem={removeContextItem}
+            onOpenImagePreview={handleOpenImagePreview}
+          />
         {:else if lastInteractionData !== null}
-          <LastInteractionSection data={lastInteractionData} />
+          <LastInteractionSection
+            data={lastInteractionData}
+            onCopyContent={handleCopyHistoryContent}
+            onOpenLastInteraction={handleOpenLastInteraction}
+            onOpenHistory={handleOpenHistory}
+          />
         {:else}
           {@const executingThis = item.item_type === "skill" && isExecutingSkill(item)}
           {@const recordingThis = item.item_type === "skill" && isRecordingThisSkill(item)}
@@ -655,7 +735,7 @@
           <div
             class="menu-item-row"
             class:selected={globalIndex === currentSelectedIndex}
-            onmouseenter={() => { if (hoverEnabled && item.enabled) setSelectedIndex(globalIndex); }}
+            onmouseenter={() => { if (hoverEnabled && item.enabled) menu.setSelectedIndex(globalIndex); }}
             oncontextmenu={item.item_type === "skill"
               ? (e) => openActionMenu(e, item, executingThis)
               : undefined}
@@ -703,7 +783,7 @@
                   class="menu-list-item"
                   onclick={() => {
                     closeActionMenu();
-                    void openDialogForItem(globalIndex);
+                    void menu.openDialogForItem(globalIndex);
                   }}
                 >
                   <MessageSquareShare size={ICON_SIZE.md} />
@@ -716,7 +796,7 @@
                   disabled={micDisabled}
                   onclick={() => {
                     closeActionMenu();
-                    void startAlternativeExecution(globalIndex);
+                    void menu.startAlternativeExecution(globalIndex);
                   }}
                 >
                   <Mic size={ICON_SIZE.md} />
@@ -758,27 +838,12 @@
       </div>
     {/if}
   {/if}
-</div>
+</MenuShell>
 
 <style>
-  .context-menu {
-    display: flex;
-    flex-direction: column;
-    background: #1e1e1e;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding: 4px 0;
-    width: 100%;
-    box-sizing: border-box;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 13px;
-    color: #e0e0e0;
-    overflow-y: hidden;
-  }
-
   .empty-state {
-    padding: 12px 16px;
-    color: rgba(255, 255, 255, 0.4);
+    padding: var(--space-6) var(--space-8);
+    color: var(--text-disabled);
     text-align: center;
     font-style: italic;
   }
@@ -787,8 +852,8 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 4px;
-    padding: 4px 12px;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-6);
   }
 
   .chat-row {
@@ -798,7 +863,7 @@
 
   .chat-row:hover,
   .chat-row.selected {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--surface-overlay);
   }
 
   .chat-row:active {
@@ -808,13 +873,13 @@
   .chat-button {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-4);
     flex: 1;
     min-width: 0;
-    padding: 6px 12px;
+    padding: var(--space-3) var(--space-6);
     border: none;
     background: transparent;
-    color: #e0e0e0;
+    color: var(--text-primary);
     font: inherit;
     text-align: left;
     cursor: pointer;
@@ -823,14 +888,14 @@
   }
 
   .chat-button.disabled {
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--text-disabled);
     cursor: default;
   }
 
   .separator {
     height: 1px;
-    background: rgba(255, 255, 255, 0.1);
-    margin: 4px 8px;
+    background: var(--surface-overlay);
+    margin: var(--space-2) var(--space-4);
   }
 
   .menu-item-row {
@@ -839,17 +904,17 @@
   }
 
   .menu-item-row.selected {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--surface-overlay);
   }
 
   .menu-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-6);
     border: none;
     background: transparent;
-    color: #e0e0e0;
+    color: var(--text-primary);
     font: inherit;
     text-align: left;
     cursor: pointer;
@@ -861,7 +926,7 @@
   }
 
   .menu-item.disabled {
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--text-disabled);
     cursor: default;
   }
 
@@ -882,13 +947,13 @@
     flex-shrink: 0;
     min-width: 20px;
     text-align: right;
-    color: rgba(255, 255, 255, 0.25);
-    font-size: 12px;
+    color: var(--text-faint);
+    font-size: var(--font-size-md);
     margin-left: -4px;
   }
 
   .prompt-number.executing {
-    color: #e0e0e0;
+    color: var(--text-primary);
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -902,14 +967,14 @@
   }
 
   .settings-toggle {
-    gap: 4px;
+    gap: var(--space-2);
   }
 
   .settings-chevron {
     display: flex;
     align-items: center;
-    transition: transform 150ms ease;
-    color: rgba(255, 255, 255, 0.4);
+    transition: transform var(--motion-default) var(--ease-default);
+    color: var(--text-disabled);
   }
 
   .settings-chevron.expanded {
@@ -917,25 +982,25 @@
   }
 
   .panel-label {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.35);
-    margin-bottom: 4px;
+    font-size: var(--font-size-sm);
+    color: var(--text-disabled);
+    margin-bottom: var(--space-2);
   }
 
   .footer-hint {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 12px 2px;
-    margin-top: 2px;
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.25);
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-6) var(--space-1);
+    margin-top: var(--space-1);
+    font-size: var(--font-size-sm);
+    color: var(--text-faint);
     user-select: none;
-    transition: color 120ms ease;
+    transition: color var(--motion-fast) var(--ease-default);
   }
 
   .footer-hint.active {
-    color: rgba(255, 255, 255, 0.55);
+    color: var(--text-muted);
   }
 
   .footer-hint-key {

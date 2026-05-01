@@ -83,15 +83,15 @@
   :global(html),
   :global(body) {
     background: transparent;
-    margin: 0;
+    margin: var(--space-0);
   }
 
   .menu-shell {
     display: inline-flex;
-    background: #252525;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
-    padding: 4px 0;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2) var(--space-0);
     overflow: hidden;
   }
 </style>

@@ -6,13 +6,13 @@
     REASONING_LEVEL_LABELS,
     type ReasoningLevel,
   } from "$lib/constants/models";
-  import { getModelCapabilities } from "$lib/services/capabilities";
   import type { ModelCapabilities, ModelConfig } from "$lib/types";
 
   let {
     models,
     selectedModelId,
     reasoningEffort,
+    capabilities = null,
     onModelSelect,
     onReasoningSelect,
     preventDismiss,
@@ -21,6 +21,7 @@
     models: ModelConfig[];
     selectedModelId: string | null;
     reasoningEffort: string | null;
+    capabilities?: ModelCapabilities | null;
     onModelSelect: (modelId: string) => void;
     onReasoningSelect: (effort: string | null) => void;
     preventDismiss?: { suppress: () => void; resume: () => void };
@@ -29,7 +30,6 @@
 
   let modelDropdownOpen = $state(false);
   let reasoningDropdownOpen = $state(false);
-  let capabilitiesCache = $state<Record<string, ModelCapabilities>>({});
 
   let modelChipEl: HTMLButtonElement | undefined = $state();
   let reasoningChipEl: HTMLButtonElement | undefined = $state();
@@ -45,22 +45,7 @@
     models.find((m) => m.id === selectedModelId) ?? models[0] ?? null,
   );
 
-  $effect(() => {
-    if (!selectedModel?.provider) return;
-    const key = `${selectedModel.provider}::${selectedModel.model}`;
-    if (capabilitiesCache[key]) return;
-    getModelCapabilities(selectedModel.provider, selectedModel.model).then(
-      (caps) => {
-        capabilitiesCache = { ...capabilitiesCache, [key]: caps };
-      },
-    );
-  });
-
-  let currentCapabilities = $derived.by(() => {
-    if (!selectedModel?.provider) return null;
-    const key = `${selectedModel.provider}::${selectedModel.model}`;
-    return capabilitiesCache[key] ?? null;
-  });
+  let currentCapabilities = $derived(capabilities ?? null);
 
   let showReasoning = $derived(
     currentCapabilities
@@ -269,7 +254,7 @@
   .model-selector {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--space-2);
     position: relative;
   }
 
@@ -278,11 +263,11 @@
     align-items: center;
     gap: 3px;
     padding: 3px 8px;
-    background: #2a2a2a;
-    border: 1px solid #3e3e3e;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-hard-2);
     border-radius: 10px;
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.6);
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
     cursor: pointer;
     white-space: nowrap;
     font-family: inherit;
@@ -295,8 +280,8 @@
   }
 
   .selector-chip:hover {
-    background: #333;
-    color: rgba(255, 255, 255, 0.8);
+    background: var(--surface-elevated);
+    color: var(--text-secondary);
   }
 
   .reasoning-wrapper {
@@ -315,13 +300,13 @@
 
   .dropdown {
     position: fixed;
-    z-index: 1000;
+    z-index: var(--z-overlay);
     width: 220px;
-    background: #252525;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
-    padding: 4px 0;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2) var(--space-0);
+    box-shadow: var(--shadow-md);
     overflow-y: auto;
     overscroll-behavior: contain;
   }
@@ -333,24 +318,24 @@
   .dropdown-item {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--space-3);
     width: 100%;
     padding: 5px 10px;
     border: none;
     background: transparent;
-    color: rgba(255, 255, 255, 0.75);
+    color: var(--text-secondary);
     font: inherit;
-    font-size: 12px;
+    font-size: var(--font-size-md);
     text-align: left;
     cursor: pointer;
   }
 
   .dropdown-item:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--surface-overlay);
   }
 
   .dropdown-item.active {
-    color: #5b8dd9;
+    color: var(--accent);
   }
 
   .dropdown-label {
@@ -360,17 +345,17 @@
   }
 
   .dropdown-group-label {
-    padding: 6px 10px 2px;
-    font-size: 10px;
-    font-weight: 600;
+    padding: var(--space-3) var(--space-5) var(--space-1);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: rgba(255, 255, 255, 0.35);
+    letter-spacing: var(--tracking-label);
+    color: var(--text-disabled);
   }
 
   .dropdown-group-label:not(:first-child) {
     margin-top: 4px;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    border-top: 1px solid var(--border-faint);
     padding-top: 8px;
   }
 </style>

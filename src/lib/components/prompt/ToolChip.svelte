@@ -33,25 +33,25 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0;
+    gap: var(--space-0);
     width: 24px;
     height: 24px;
-    padding: 0;
-    background: rgba(91, 141, 217, 0.15);
-    border: 1px solid rgba(91, 141, 217, 0.35);
-    color: #5b8dd9;
-    border-radius: 6px;
+    padding: var(--space-0);
+    background: var(--accent-bg-soft);
+    border: 1px solid var(--accent-bg);
+    color: var(--accent);
+    border-radius: var(--radius-lg);
     font: inherit;
-    font-size: 11px;
+    font-size: var(--font-size-sm);
     cursor: pointer;
     white-space: nowrap;
     flex-shrink: 0;
     overflow: hidden;
-    transition: background 0.15s ease, width 0.15s ease;
+    transition: background var(--motion-default) var(--ease-default), width var(--motion-default) var(--ease-default);
   }
 
   .tool-chip:hover {
-    background: rgba(91, 141, 217, 0.25);
+    background: var(--accent-bg);
     width: 36px;
   }
 
@@ -65,15 +65,15 @@
     width: 0;
     opacity: 0;
     overflow: hidden;
-    transition: width 0.15s ease, opacity 0.15s ease, margin 0.15s ease;
-    margin-left: 0;
-    color: #5b8dd9;
+    transition: width var(--motion-default) var(--ease-default), opacity var(--motion-default) var(--ease-default), margin var(--motion-default) var(--ease-default);
+    margin-left: var(--space-0);
+    color: var(--accent);
     pointer-events: none;
   }
 
   .tool-chip:hover .tool-chip-dismiss {
     width: 10px;
     opacity: 1;
-    margin-left: 2px;
+    margin-left: var(--space-1);
   }
 </style>

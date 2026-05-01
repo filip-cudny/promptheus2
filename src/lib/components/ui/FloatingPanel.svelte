@@ -121,17 +121,17 @@
     position: fixed;
     left: 4px;
     right: 4px;
-    z-index: 1000;
-    background: #252525;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
-    padding: 8px 12px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    z-index: var(--z-overlay);
+    background: var(--surface-floating-popover);
+    border: 1px solid var(--surface-floating-popover-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4) var(--space-6);
+    box-shadow: var(--shadow-md);
     box-sizing: border-box;
   }
 
   .floating-panel.flush {
-    padding: 4px 0;
+    padding: var(--space-2) var(--space-0);
     overflow: hidden;
   }
 

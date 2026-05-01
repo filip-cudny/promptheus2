@@ -151,11 +151,11 @@
 
 <style>
   .context-inline {
-    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    border-bottom: 1px solid var(--border-strong);
   }
 
   .context-inline.disabled {
-    opacity: 0.5;
+    opacity: var(--opacity-disabled);
   }
 
   .context-inline :global(.collapsible-section) {
@@ -165,25 +165,25 @@
 
   .context-inline :global(.collapsible-header) {
     background: transparent;
-    padding: 6px 10px;
-    font-size: 12px;
+    padding: var(--space-3) var(--space-5);
+    font-size: var(--font-size-md);
   }
 
   .context-inline :global(.collapsible-header:hover) {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--surface-overlay-faint);
   }
 
   .context-inline :global(.collapsible-header.context-has-content) {
-    background: rgba(100, 160, 255, 0.08);
+    background: var(--accent-bg-soft);
   }
 
   .context-inline :global(.collapsible-header.context-has-content .collapsible-title) {
-    color: #7dd3f0;
+    color: var(--info);
     font-weight: 700;
   }
 
   .context-inline :global(.collapsible-content) {
-    padding: 6px 10px 8px;
+    padding: var(--space-3) var(--space-5) var(--space-4);
     max-height: 35vh;
     overflow-y: auto;
   }
@@ -192,43 +192,43 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
-    padding: 8px 10px;
-    background: rgba(220, 60, 60, 0.08);
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-5);
+    background: var(--danger-bg-soft);
   }
 
   .confirm-text {
-    font-size: 12px;
-    color: #e0e0e0;
+    font-size: var(--font-size-md);
+    color: var(--text-primary);
   }
 
   .confirm-actions {
     display: flex;
-    gap: 6px;
+    gap: var(--space-3);
     flex-shrink: 0;
   }
 
   .confirm-btn {
-    padding: 4px 10px;
-    border-radius: 4px;
+    padding: var(--space-2) var(--space-5);
+    border-radius: var(--radius-md);
     border: none;
-    font-size: 11px;
-    font-weight: 600;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
     cursor: pointer;
   }
 
   .confirm-yes {
-    background: rgba(220, 60, 60, 0.8);
-    color: #fff;
+    background: var(--danger);
+    color: var(--text-primary);
   }
 
   .confirm-yes:hover {
-    background: rgba(220, 60, 60, 1);
+    background: var(--danger);
   }
 
   .confirm-no {
-    background: rgba(255, 255, 255, 0.1);
-    color: #e0e0e0;
+    background: var(--surface-overlay);
+    color: var(--text-primary);
   }
 
   .confirm-no:hover {
