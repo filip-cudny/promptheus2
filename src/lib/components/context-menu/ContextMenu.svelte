@@ -8,11 +8,8 @@
   import type { ContextItem } from "$lib/types/context";
   import ContextSection from "./ContextSection.svelte";
   import LastInteractionSection from "./LastInteractionSection.svelte";
-  import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
   import { prefetchCapabilities, getCachedCapabilities } from "$lib/stores/capabilities.svelte";
   import FloatingPanel from "$lib/components/ui/FloatingPanel.svelte";
-  import MenuList from "$lib/components/ui/MenuList.svelte";
-  import { ArrowBigUp, ChevronRight, MessageSquare, MessageSquareShare, Mic, Square, X } from "lucide-svelte";
   import {
     focusOrOpenChat,
     openConversationDialog,
@@ -36,15 +33,21 @@
   import { onSettingsChanged } from "$lib/services/events";
   import ProviderMenuList from "$lib/components/provider-menu/ProviderMenuList.svelte";
   import { isExecuting, getExecutingSkillId } from "$lib/stores/execution.svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
   import { updateSurfaceModel, updateSurfaceReasoningEffort, setSpeechToTextModel } from "$lib/services/settings";
-  import type { ModelConfig, Provider } from "$lib/types";
+  import type { Provider } from "$lib/types";
   import { useContextMenu } from "$lib/stores/useContextMenu.svelte";
   import MenuShell from "./MenuShell.svelte";
   import {
-    clearNumberBuffer,
     getWorkArea,
   } from "$lib/stores/contextMenu.svelte";
+  import MenuEmptyState from "./components/MenuEmptyState.svelte";
+  import MenuSeparator from "./components/MenuSeparator.svelte";
+  import MenuItemRow from "./components/MenuItemRow.svelte";
+  import ChatRow from "./components/ChatRow.svelte";
+  import SettingsToggleRow from "./components/SettingsToggleRow.svelte";
+  import FooterHint from "./components/FooterHint.svelte";
+  import SkillActionMenu from "./components/SkillActionMenu.svelte";
+  import SettingsPanel from "./components/SettingsPanel.svelte";
 
   const menu = useContextMenu();
 
@@ -472,7 +475,6 @@
 
   let menuItems = $derived(menu.items);
   let allSkillItems = $derived(menu.allSkillItems);
-  let skillItems = $derived(menu.skillItems);
   let currentSelectedIndex = $derived(menu.selectedIndex);
 
   $effect(() => {
@@ -485,12 +487,6 @@
 
   function handleItemClick(index: number, e: MouseEvent) {
     menu.executeItem(index, e.shiftKey);
-  }
-
-  interface LastTextEntryRef {
-    id: string;
-    skill_id: string | null;
-    skill_name: string | null;
   }
 
   async function handleContextCopyAll() {
@@ -565,44 +561,32 @@
 
 <MenuShell bind:ref={menuEl} onmousemove={handleMouseMove}>
   {#if menuItems.length === 0}
-    <div class="empty-state" role="menuitem">No items available</div>
+    <MenuEmptyState />
   {:else}
     {#each sections as section, sectionIdx}
       {#if sectionIdx > 0}
-        <div class="separator"></div>
+        <MenuSeparator />
       {/if}
       {#if section.sectionId === "chat"}
         {@const chatRecording = menu.chatRecording}
         {@const chatDisabled = menu.recording && !chatRecording}
-        <div
-          class="chat-row"
-          class:selected={chatRecording}
-          role="menuitem"
-          bind:this={chatRowEl}
-          onmouseenter={() => { if (hoverEnabled) menu.setSelectedIndex(-1); }}
+        <ChatRow
+          recording={chatRecording}
+          disabled={chatDisabled}
+          selected={chatRecording}
+          bind:rowEl={chatRowEl}
+          onhover={() => { if (hoverEnabled) menu.setSelectedIndex(-1); }}
           oncontextmenu={(e) => { if (!chatDisabled) openChatProviders(e); else e.preventDefault(); }}
-        >
-          <button
-            class="chat-button"
-            class:disabled={chatDisabled}
-            onclick={async (e) => {
-              if (chatDisabled) return;
-              if (chatRecording || e.shiftKey) {
-                await menu.toggleChatRecording();
-                return;
-              }
-              await menu.closeMenu();
-              await focusOrOpenChat();
-            }}
-          >
-            {#if chatRecording}
-              <Square size={ICON_SIZE.md} />
-            {:else}
-              <MessageSquare size={ICON_SIZE.md} />
-            {/if}
-            <span>Chat</span>
-          </button>
-        </div>
+          onclick={async (e) => {
+            if (chatDisabled) return;
+            if (chatRecording || e.shiftKey) {
+              await menu.toggleChatRecording();
+              return;
+            }
+            await menu.closeMenu();
+            await focusOrOpenChat();
+          }}
+        />
         <FloatingPanel visible={chatProvidersOpen} anchorEl={chatRowEl} flush onclose={closeChatProviders}>
           <ProviderMenuList
             providers={providerEntries}
@@ -615,95 +599,43 @@
         <div data-section="skills-anchor"></div>
       {/if}
       {#if section.sectionId === "settings"}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="menu-item-row"
-          bind:this={settingsAnchorEl}
-          onmouseenter={() => { if (hoverEnabled) menu.setSelectedIndex(-1); }}
-        >
-          <button
-            class="menu-item settings-toggle"
-            role="menuitem"
-            tabindex={-1}
-            onclick={() => {
-              if (settingsOpen) {
-                closeSettingsPanel();
-              } else {
-                closePanels();
-                logDebug("[ctx-menu] opening settings panel");
-                settingsOpen = true;
-              }
-            }}
-          >
-            <span class="settings-chevron" class:expanded={settingsOpen}>
-              <ChevronRight size={ICON_SIZE.sm} />
-            </span>
-            <span class="item-label">Settings</span>
-          </button>
-        </div>
+        <SettingsToggleRow
+          expanded={settingsOpen}
+          bind:anchorEl={settingsAnchorEl}
+          onhover={() => { if (hoverEnabled) menu.setSelectedIndex(-1); }}
+          onclick={() => {
+            if (settingsOpen) {
+              closeSettingsPanel();
+            } else {
+              closePanels();
+              logDebug("[ctx-menu] opening settings panel");
+              settingsOpen = true;
+            }
+          }}
+        />
         <FloatingPanel visible={settingsOpen} anchorEl={settingsAnchorEl} onclose={closeSettingsPanel}>
-          {#if modelsData && modelsData.models.length > 0}
-            <div class="panel-label">Quick action model</div>
-            <div class="models-row" onmouseenter={() => { if (hoverEnabled) menu.setSelectedIndex(-1); }}>
-              <ModelSelector
-                models={modelsData.models.map((m) => ({
-                  id: m.id,
-                  type: "text" as const,
-                  model: m.model,
-                  display_name: m.display_name,
-                  provider: m.provider,
-                  group: m.group,
-                  api_key: null,
-                  base_url: null,
-                  parameters: null,
-                  context_window_size: null,
-                  api_mode: null,
-                  store: true,
-                }))}
-                selectedModelId={modelsDefaultModelId}
-                reasoningEffort={modelsReasoningEffort}
-                capabilities={quickActionCapabilities}
-                onModelSelect={async (modelId) => {
-                  modelsDefaultModelId = modelId;
-                  await updateSurfaceModel("quick_actions", modelId);
-                }}
-                onReasoningSelect={async (effort) => {
-                  modelsReasoningEffort = effort;
-                  await updateSurfaceReasoningEffort("quick_actions", effort);
-                }}
-                preventDismiss={{ suppress: menu.suppressClose, resume: menu.resumeClose }}
-              />
-            </div>
-          {/if}
-          {#if modelsData && modelsData.stt_models.length > 0}
-            <div class="panel-label">Speech-to-text model</div>
-            <div class="models-row" onmouseenter={() => { if (hoverEnabled) menu.setSelectedIndex(-1); }}>
-              <ModelSelector
-                models={modelsData.stt_models.map((m) => ({
-                  id: m.id,
-                  type: "stt" as const,
-                  model: m.model,
-                  display_name: m.display_name,
-                  provider: m.provider,
-                  group: m.group,
-                  api_key: null,
-                  base_url: null,
-                  parameters: null,
-                  context_window_size: null,
-                  api_mode: null,
-                  store: true,
-                }))}
-                selectedModelId={sttModelId}
-                reasoningEffort={null}
-                onModelSelect={async (modelId) => {
-                  sttModelId = modelId;
-                  await setSpeechToTextModel(modelId);
-                }}
-                onReasoningSelect={() => {}}
-                preventDismiss={{ suppress: menu.suppressClose, resume: menu.resumeClose }}
-              />
-            </div>
-          {/if}
+          <SettingsPanel
+            models={modelsData?.models ?? []}
+            sttModels={modelsData?.stt_models ?? []}
+            defaultModelId={modelsDefaultModelId}
+            reasoningEffort={modelsReasoningEffort}
+            sttModelId={sttModelId}
+            quickActionCapabilities={quickActionCapabilities}
+            preventDismiss={{ suppress: menu.suppressClose, resume: menu.resumeClose }}
+            onModelSelect={async (modelId) => {
+              modelsDefaultModelId = modelId;
+              await updateSurfaceModel("quick_actions", modelId);
+            }}
+            onReasoningSelect={async (effort) => {
+              modelsReasoningEffort = effort;
+              await updateSurfaceReasoningEffort("quick_actions", effort);
+            }}
+            onSttSelect={async (modelId) => {
+              sttModelId = modelId;
+              await setSpeechToTextModel(modelId);
+            }}
+            onHover={() => { if (hoverEnabled) menu.setSelectedIndex(-1); }}
+          />
         </FloatingPanel>
       {/if}
       {#each section.sectionId === "chat" || section.sectionId === "settings" ? [] : section.items as { item, globalIndex }}
@@ -731,284 +663,52 @@
           {@const executingThis = item.item_type === "skill" && isExecutingSkill(item)}
           {@const recordingThis = item.item_type === "skill" && isRecordingThisSkill(item)}
           {@const micDisabled = executingThis || (!item.enabled && !recordingThis)}
-          <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div
-            class="menu-item-row"
-            class:selected={globalIndex === currentSelectedIndex}
-            onmouseenter={() => { if (hoverEnabled && item.enabled) menu.setSelectedIndex(globalIndex); }}
+          {@const skillIndex = item.item_type === "skill" ? allSkillItems.indexOf(item) : -1}
+          {@const promptNumber = skillIndex >= 0 ? skillIndex + 1 : null}
+          <MenuItemRow
+            selected={globalIndex === currentSelectedIndex}
+            disabled={!item.enabled}
+            executing={executingThis}
+            recording={recordingThis}
+            iconName={item.icon}
+            promptNumber={promptNumber}
+            label={item.label}
+            onhover={() => { if (hoverEnabled && item.enabled) menu.setSelectedIndex(globalIndex); }}
             oncontextmenu={item.item_type === "skill"
               ? (e) => openActionMenu(e, item, executingThis)
               : undefined}
-          >
-            <button
-              class="menu-item"
-              class:disabled={!item.enabled}
-              class:executing={executingThis}
-              role="menuitem"
-              aria-disabled={!item.enabled}
-              tabindex={-1}
-              onclick={(e) => handleItemClick(globalIndex, e)}
-            >
-              {#if item.icon === "square"}
-                <span class="item-icon"><Square size={ICON_SIZE.sm} /></span>
-              {:else if item.icon === "mic"}
-                <span class="item-icon"><Mic size={ICON_SIZE.md} /></span>
-              {/if}
-              {#if item.item_type === "skill"}
-                {@const skillIndex = allSkillItems.indexOf(item)}
-                {#if skillIndex >= 0}
-                  {#if executingThis}
-                    <span class="prompt-number executing"><X size={ICON_SIZE.sm} /></span>
-                  {:else if recordingThis}
-                    <span class="prompt-number executing"><Square size={ICON_SIZE.sm} /></span>
-                  {:else}
-                    <span class="prompt-number">{skillIndex + 1}.</span>
-                  {/if}
-                {/if}
-              {/if}
-              <span class="item-label">{item.label}</span>
-            </button>
-          </div>
+            onclick={(e) => handleItemClick(globalIndex, e)}
+          />
           {#if item.item_type === "skill"}
+            {@const skillId = (item.data as { skill_id?: string } | null)?.skill_id ?? ""}
+            {@const metaEntries = buildMetaEntries(skillMetadata[skillId], modelNames)}
             <FloatingPanel
               visible={activeActionMenuId === item.id}
               anchorEl={activeActionAnchorEl}
               flush
               onclose={closeActionMenu}
             >
-              <MenuList role="menu" expand>
-                <button
-                  type="button"
-                  role="menuitem"
-                  class="menu-list-item"
-                  onclick={() => {
-                    closeActionMenu();
-                    void menu.openDialogForItem(globalIndex);
-                  }}
-                >
-                  <MessageSquareShare size={ICON_SIZE.md} />
-                  <span class="menu-list-label">Open in dialog</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  class="menu-list-item"
-                  disabled={micDisabled}
-                  onclick={() => {
-                    closeActionMenu();
-                    void menu.startAlternativeExecution(globalIndex);
-                  }}
-                >
-                  <Mic size={ICON_SIZE.md} />
-                  <span class="menu-list-label">
-                    {recordingThis ? "Stop recording" : "Run with transcription"}
-                  </span>
-                  <span class="menu-list-shortcut"><ArrowBigUp size={14} strokeWidth={2.25} /></span>
-                </button>
-                {@const skillId = (item.data as { skill_id?: string } | null)?.skill_id ?? ""}
-                {@const metaEntries = buildMetaEntries(skillMetadata[skillId], modelNames)}
-                {#if item.tooltip || metaEntries.length > 0}
-                  <div class="menu-list-separator"></div>
-                  {#if item.tooltip}
-                    <div class="menu-list-info">{item.tooltip}</div>
-                  {/if}
-                  {#if metaEntries.length > 0}
-                    <div class="menu-list-meta-group">
-                      {#each metaEntries as entry (entry.key)}
-                        <div class="menu-list-meta">
-                          <span class="menu-list-meta-key">{entry.key}</span>
-                          <span class="menu-list-meta-value">{entry.value}</span>
-                        </div>
-                      {/each}
-                    </div>
-                  {/if}
-                {/if}
-              </MenuList>
+              <SkillActionMenu
+                recording={recordingThis}
+                {micDisabled}
+                tooltip={item.tooltip}
+                {metaEntries}
+                onOpenInDialog={() => {
+                  closeActionMenu();
+                  void menu.openDialogForItem(globalIndex);
+                }}
+                onAlternativeExecute={() => {
+                  closeActionMenu();
+                  void menu.startAlternativeExecution(globalIndex);
+                }}
+              />
             </FloatingPanel>
           {/if}
         {/if}
       {/each}
     {/each}
     {#if menuItems.some((i) => i.item_type === "skill")}
-      <div class="footer-hint" class:active={shiftHeld}>
-        <span class="footer-hint-key"><ArrowBigUp size={12} strokeWidth={2.25} /></span>
-        <span>voice input</span>
-        <span class="footer-hint-sep">·</span>
-        <span>right-click for actions</span>
-      </div>
+      <FooterHint {shiftHeld} />
     {/if}
   {/if}
 </MenuShell>
-
-<style>
-  .empty-state {
-    padding: var(--space-6) var(--space-8);
-    color: var(--text-disabled);
-    text-align: center;
-    font-style: italic;
-  }
-
-  .models-row {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-6);
-  }
-
-  .chat-row {
-    display: flex;
-    align-items: center;
-  }
-
-  .chat-row:hover,
-  .chat-row.selected {
-    background: var(--surface-overlay);
-  }
-
-  .chat-row:active {
-    background: rgba(255, 255, 255, 0.15);
-  }
-
-  .chat-button {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    flex: 1;
-    min-width: 0;
-    padding: var(--space-3) var(--space-6);
-    border: none;
-    background: transparent;
-    color: var(--text-primary);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    box-sizing: border-box;
-    outline: none;
-  }
-
-  .chat-button.disabled {
-    color: var(--text-disabled);
-    cursor: default;
-  }
-
-  .separator {
-    height: 1px;
-    background: var(--surface-overlay);
-    margin: var(--space-2) var(--space-4);
-  }
-
-  .menu-item-row {
-    display: flex;
-    align-items: center;
-  }
-
-  .menu-item-row.selected {
-    background: var(--surface-overlay);
-  }
-
-  .menu-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    padding: var(--space-3) var(--space-6);
-    border: none;
-    background: transparent;
-    color: var(--text-primary);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    flex: 1;
-    min-width: 0;
-    box-sizing: border-box;
-    border-radius: 0;
-    outline: none;
-  }
-
-  .menu-item.disabled {
-    color: var(--text-disabled);
-    cursor: default;
-  }
-
-
-  .menu-item-row.selected:active {
-    background: rgba(255, 255, 255, 0.15);
-  }
-
-  .item-icon {
-    flex-shrink: 0;
-    width: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .prompt-number {
-    flex-shrink: 0;
-    min-width: 20px;
-    text-align: right;
-    color: var(--text-faint);
-    font-size: var(--font-size-md);
-    margin-left: -4px;
-  }
-
-  .prompt-number.executing {
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-  }
-
-  .item-label {
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .settings-toggle {
-    gap: var(--space-2);
-  }
-
-  .settings-chevron {
-    display: flex;
-    align-items: center;
-    transition: transform var(--motion-default) var(--ease-default);
-    color: var(--text-disabled);
-  }
-
-  .settings-chevron.expanded {
-    transform: rotate(90deg);
-  }
-
-  .panel-label {
-    font-size: var(--font-size-sm);
-    color: var(--text-disabled);
-    margin-bottom: var(--space-2);
-  }
-
-  .footer-hint {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-2) var(--space-6) var(--space-1);
-    margin-top: var(--space-1);
-    font-size: var(--font-size-sm);
-    color: var(--text-faint);
-    user-select: none;
-    transition: color var(--motion-fast) var(--ease-default);
-  }
-
-  .footer-hint.active {
-    color: var(--text-muted);
-  }
-
-  .footer-hint-key {
-    display: inline-flex;
-    align-items: center;
-  }
-
-  .footer-hint-sep {
-    color: rgba(255, 255, 255, 0.18);
-  }
-</style>
