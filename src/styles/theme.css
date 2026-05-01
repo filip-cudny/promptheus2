@@ -137,6 +137,11 @@
   --surface-floating-popover-border: rgba(255, 255, 255, 0.12);
   --surface-floating-popover-radius: 6px;
 
+  --surface-input-bar      : rgba(30, 30, 30, 0.75);
+  --surface-input-bar-solid: rgba(30, 30, 30, 0.95);
+  --surface-side-drawer      : rgba(5, 5, 5, 0.3);
+  --surface-side-drawer-solid: rgba(22, 22, 24, 0.92);
+
   /* 4.15 component-specific */
   --icon-size-sm: 12px;
   --icon-size-md: 14px;
@@ -153,32 +158,32 @@
   color-scheme: light;
 
   /* surfaces */
-  --surface-base          : #f5f5f5;
+  --surface-base          : #f3f4f6;
   --surface-raised        : #ffffff;
-  --surface-elevated      : #ebebeb;
-  --surface-sunken        : #e0e0e0;
-  --surface-overlay-faint : rgba(0,0,0,0.04);
-  --surface-overlay       : rgba(0,0,0,0.08);
-  --surface-overlay-strong: rgba(0,0,0,0.12);
+  --surface-elevated      : #ffffff;
+  --surface-sunken        : #ffffff;
+  --surface-overlay-faint : rgba(0,0,0,0.03);
+  --surface-overlay       : rgba(0,0,0,0.06);
+  --surface-overlay-strong: rgba(0,0,0,0.10);
   --surface-scrim         : rgba(0,0,0,0.4);
   --surface-floating-modal      : #ffffff;
-  --surface-floating-modal-border: rgba(0,0,0,0.08);
+  --surface-floating-modal-border: rgba(0,0,0,0.10);
   --surface-floating-popover    : #ffffff;
-  --surface-floating-popover-border: rgba(0,0,0,0.12);
+  --surface-floating-popover-border: rgba(0,0,0,0.14);
 
   /* borders */
   --border-faint  : rgba(0,0,0,0.06);
   --border-default: rgba(0,0,0,0.12);
-  --border-strong : rgba(0,0,0,0.20);
-  --border-hard   : #c8c8c8;
-  --border-hard-2 : #bbbbbb;
+  --border-strong : rgba(0,0,0,0.22);
+  --border-hard   : #d4d4d8;
+  --border-hard-2 : #c4c4c8;
 
   /* text */
-  --text-primary  : rgba(0,0,0,0.88);
-  --text-secondary: rgba(0,0,0,0.65);
-  --text-muted    : rgba(0,0,0,0.45);
-  --text-disabled : rgba(0,0,0,0.30);
-  --text-faint    : rgba(0,0,0,0.20);
+  --text-primary  : rgba(0,0,0,0.92);
+  --text-secondary: rgba(0,0,0,0.74);
+  --text-muted    : rgba(0,0,0,0.58);
+  --text-disabled : rgba(0,0,0,0.42);
+  --text-faint    : rgba(0,0,0,0.28);
 
   /* accent */
   --accent        : #3b6dbf;
@@ -217,4 +222,10 @@
   --notification-fg-secondary: rgba(0,0,0,0.65);
   --notification-border      : rgba(0,0,0,0.08);
   --notification-shadow      : 0 4px 12px rgba(0,0,0,0.15);
+
+  /* glassy floating surfaces */
+  --surface-input-bar        : rgba(255, 255, 255, 0.75);
+  --surface-input-bar-solid  : rgba(255, 255, 255, 0.96);
+  --surface-side-drawer      : rgba(255, 255, 255, 0.55);
+  --surface-side-drawer-solid: rgba(248, 249, 251, 0.96);
 }

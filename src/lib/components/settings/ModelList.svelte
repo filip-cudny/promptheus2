@@ -239,7 +239,7 @@
     font-weight: var(--font-weight-semibold);
     letter-spacing: var(--tracking-label);
     text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.32);
+    color: var(--text-muted);
   }
 
   .row {

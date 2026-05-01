@@ -183,7 +183,7 @@
     left: 0;
     bottom: 0;
     width: 240px;
-    background: rgba(5, 5, 5, 0.3);
+    background: var(--surface-side-drawer);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
     border-right: 1px solid var(--border-strong);
@@ -200,7 +200,7 @@
   }
 
   :global([data-platform="linux"]) .sidebar {
-    background: rgba(22, 22, 24, 0.92);
+    background: var(--surface-side-drawer-solid);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }

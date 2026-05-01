@@ -304,14 +304,14 @@
     margin: -8px var(--space-8) var(--space-4);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-xl);
-    background: rgba(30, 30, 30, 0.75);
+    background: var(--surface-input-bar);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     overflow: visible;
   }
 
   :global([data-platform="linux"]) .input-area {
-    background: rgba(30, 30, 30, 0.95);
+    background: var(--surface-input-bar-solid);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
