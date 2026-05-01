@@ -5,11 +5,10 @@
   import ContextSection from "./ContextSection.svelte";
   import AttachMenu from "./AttachMenu.svelte";
   import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
-  import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
-  import TextChipBar from "$lib/components/ui/TextChipBar.svelte";
   import SkillEditable from "$lib/components/ui/SkillEditable.svelte";
   import ModelSelector from "$lib/components/ui/ModelSelector.svelte";
   import ToolChip from "./ToolChip.svelte";
+  import AttachmentRow from "./components/AttachmentRow.svelte";
   import { prefetchCapabilities, getCachedCapabilities } from "$lib/stores/capabilities.svelte";
   import { SendHorizonal, RefreshCw, Square, CopyCheck, Globe } from "lucide-svelte";
   import type { ComponentType, SvelteComponent } from "svelte";
@@ -292,6 +291,17 @@
     if (target.closest("button, .attach-menu, .model-selector, .autocomplete-dropdown, .context-section, .attachment-row")) return;
     skillEditable?.focus();
   }
+
+  function openTextPreview(text: string, index: number) {
+    const sourceWindow = getCurrentWebviewWindow().label;
+    invoke("open_text_preview", { text, index, sourceWindow }).catch((e) =>
+      console.error("open_text_preview failed:", e),
+    );
+  }
+
+  function openImagePreview(image: ConversationImage) {
+    invoke("open_image_preview", { data: image.data, mediaType: image.media_type });
+  }
 </script>
 
 <div class="input-area" onclick={handleInputAreaClick}>
@@ -300,12 +310,15 @@
   {/if}
 
   <div class="input-field">
-    {#if localTextAttachments.length > 0 || localImages.length > 0}
-      <div class="attachment-row">
-        <TextChipBar textAttachments={localTextAttachments} readonly={false} variant="small" onremove={handleRemoveTextAttachment} onopen={(text, index) => { const sourceWindow = getCurrentWebviewWindow().label; invoke("open_text_preview", { text, index, sourceWindow }).catch((e) => console.error("open_text_preview failed:", e)); }} />
-        <ImageChipBar images={localImages} readonly={false} variant="small" onremove={handleRemoveImage} onopen={(image) => invoke("open_image_preview", { data: image.data, mediaType: image.media_type })} />
-      </div>
-    {/if}
+    <AttachmentRow
+      textAttachments={localTextAttachments}
+      images={localImages}
+      variant="small"
+      onRemoveText={handleRemoveTextAttachment}
+      onRemoveImage={handleRemoveImage}
+      onOpenText={openTextPreview}
+      onOpenImage={openImagePreview}
+    />
     <SkillEditable
       bind:this={skillEditable}
       bind:text={localText}
@@ -402,14 +415,6 @@
     flex-direction: column;
     gap: var(--space-2);
     padding: var(--space-4) var(--space-4) var(--space-0);
-  }
-
-  .attachment-row {
-    display: flex;
-    flex-wrap: nowrap;
-    gap: var(--space-3);
-    padding: var(--space-3) var(--space-0) var(--space-1);
-    overflow-x: auto;
   }
 
   .input-field :global(.input-editable) {

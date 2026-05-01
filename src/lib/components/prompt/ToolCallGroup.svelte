@@ -4,6 +4,7 @@
   import { ChevronRight, ChevronDown, Wrench } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import ToolCallItem from "./ToolCallItem.svelte";
+  import ProcessingIndicator from "./components/ProcessingIndicator.svelte";
 
   let {
     toolCalls,
@@ -55,7 +56,7 @@
   <div class="tool-group">
     <div class="tool-group-header-active">
       <Wrench size={ICON_SIZE.sm} />
-      <span class="tool-group-label-active">Running tools</span>
+      <ProcessingIndicator label="Running tools" inline />
     </div>
     <div class="tool-group-items">
       {#each toolCalls as toolCall (toolCall.tool_call_id)}
@@ -107,21 +108,6 @@
     font-size: var(--font-size-base);
   }
 
-  .tool-group-label-active {
-    font-weight: var(--font-weight-semibold);
-    background: linear-gradient(
-      90deg,
-      var(--accent-ring) 0%,
-      var(--accent) 50%,
-      var(--accent-ring) 100%
-    );
-    background-size: 200% auto;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: shimmer 2s linear infinite;
-  }
-
   .tool-group-toggle {
     display: flex;
     align-items: center;
@@ -151,13 +137,5 @@
     flex-direction: column;
     gap: var(--space-2);
     padding: var(--space-2) var(--space-4) var(--space-5) var(--space-4);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .tool-group-label-active {
-      animation: none;
-      background: none;
-      -webkit-text-fill-color: var(--accent);
-    }
   }
 </style>

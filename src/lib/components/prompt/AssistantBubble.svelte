@@ -8,8 +8,14 @@
   import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
   import ThinkingBlock from "$lib/components/ui/ThinkingBlock.svelte";
   import ToolCallGroup from "./ToolCallGroup.svelte";
+  import ProcessingIndicator from "./components/ProcessingIndicator.svelte";
+  import ErrorBanner from "./components/ErrorBanner.svelte";
+  import BranchNav from "./components/BranchNav.svelte";
+  import ToolCallReadOnlyChip from "./components/ToolCallReadOnlyChip.svelte";
+  import BubbleEditField from "./components/BubbleEditField.svelte";
+  import BubbleActionsFooter from "./components/BubbleActionsFooter.svelte";
   import { resizeTextarea } from "$lib/utils/autoResize";
-  import { Copy, Check, RefreshCw, Trash2, ChevronLeft, ChevronRight, Pencil, AlertCircle, Wrench, Save } from "lucide-svelte";
+  import { Copy, Check, RefreshCw, Trash2, Pencil, Save } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
@@ -222,7 +228,7 @@
       {/if}
 
       {#if editMode}
-        <div class="bubble-edit-field">
+        <BubbleEditField variant="assistant">
           {#each editSegments as seg, i (i)}
             {#if seg.type === "text" && seg.text.trim() !== ""}
               <textarea
@@ -235,13 +241,10 @@
               ></textarea>
             {:else if seg.type === "tool_call"}
               {@const tc = allToolCalls.get(seg.tool_call_id)}
-              <div class="tool-call-chip" title="Tool call (read-only)">
-                <Wrench size={ICON_SIZE.sm} />
-                <span>{tc?.tool_name ?? "tool call"}</span>
-              </div>
+              <ToolCallReadOnlyChip label={tc?.tool_name ?? "tool call"} />
             {/if}
           {/each}
-        </div>
+        </BubbleEditField>
       {:else if hasMarkers}
         {#each renderBlocks as block}
           {#if block.kind === "text"}
@@ -266,45 +269,29 @@
       {/if}
 
       {#if showGenerating}
-        <div class="processing-indicator" role="status" aria-live="polite">
-          <span class="processing-label">Generating</span>
-        </div>
+        <ProcessingIndicator />
       {/if}
 
       {#if node.error}
-        <div class="error-banner">
-          <AlertCircle size={ICON_SIZE.sm} />
-          <span class="error-text">{node.error}</span>
-          <button class="retry-btn" onclick={() => onRegenerate(node.node_id)}>
-            <RefreshCw size={ICON_SIZE.sm} />
-            Retry
-          </button>
-        </div>
+        <ErrorBanner message={node.error} onRetry={() => onRegenerate(node.node_id)} />
       {:else if node.cancelled}
-        <span class="cancelled-hint">Response interrupted</span>
+        <ErrorBanner message="Response interrupted" variant="cancelled" />
       {/if}
     </div>
   </div>
 
-  <div class="bubble-footer" class:actions-visible={editMode}>
+  <BubbleActionsFooter visible={editMode}>
     {#if node.query_duration != null}
       <span class="query-time" title="Query time">{formatDuration(node.query_duration)}</span>
     {/if}
     <div class="bubble-actions">
       {#if branchInfo.total > 1}
-        <span class="branch-nav">
-          <button
-            class="branch-btn"
-            onclick={() => onBranchPrev(node.node_id)}
-            disabled={branchInfo.current <= 1}
-          ><ChevronLeft size={ICON_SIZE.md} /></button>
-          <span class="branch-counter">{branchInfo.current}/{branchInfo.total}</span>
-          <button
-            class="branch-btn"
-            onclick={() => onBranchNext(node.node_id)}
-            disabled={branchInfo.current >= branchInfo.total}
-          ><ChevronRight size={ICON_SIZE.md} /></button>
-        </span>
+        <BranchNav
+          current={branchInfo.current}
+          total={branchInfo.total}
+          onPrev={() => onBranchPrev(node.node_id)}
+          onNext={() => onBranchNext(node.node_id)}
+        />
       {/if}
 
       <ActionIconButton
@@ -335,7 +322,7 @@
         </button>
       {/if}
     </div>
-  </div>
+  </BubbleActionsFooter>
 </div>
 
 <style>
@@ -344,21 +331,6 @@
     border-radius: var(--radius-lg);
     user-select: none;
     -webkit-user-select: none;
-  }
-
-  .bubble-footer {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: var(--space-4);
-    padding: var(--space-2) var(--space-0);
-    opacity: 0;
-    transition: opacity var(--motion-fast) var(--ease-default);
-  }
-
-  .assistant-message-wrapper:hover .bubble-footer,
-  .bubble-footer.actions-visible {
-    opacity: 1;
   }
 
   .query-time {
@@ -371,41 +343,6 @@
     display: flex;
     gap: var(--space-2);
     align-items: center;
-  }
-
-  .branch-nav {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-  }
-
-  .branch-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    border-radius: var(--radius-md);
-    padding: var(--space-1);
-    cursor: pointer;
-  }
-
-  .branch-btn:hover:not(:disabled) {
-    background: var(--surface-overlay);
-    color: var(--text-secondary);
-  }
-
-  .branch-btn:disabled {
-    opacity: var(--opacity-disabled);
-    cursor: default;
-  }
-
-  .branch-counter {
-    font-size: var(--font-size-sm);
-    color: var(--text-muted);
-    min-width: 24px;
-    text-align: center;
   }
 
   .icon-btn {
@@ -436,20 +373,6 @@
     color: var(--danger);
   }
 
-  .bubble-edit-field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-md);
-    padding: var(--space-4) var(--space-4) var(--space-0);
-  }
-
-  .bubble-edit-field:focus-within {
-    border-color: var(--border-strong);
-  }
-
   .bubble-textarea {
     width: 100%;
     background: transparent;
@@ -466,108 +389,5 @@
 
   .bubble-textarea:focus {
     outline: none;
-  }
-
-  .tool-call-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-2) var(--space-4);
-    margin: var(--space-1) var(--space-0);
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-md);
-    color: var(--text-secondary);
-    font-size: var(--font-size-md);
-    width: fit-content;
-    user-select: none;
-  }
-
-  .error-banner {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    margin-top: var(--space-3);
-    padding: var(--space-4) var(--space-5);
-    background: var(--danger-bg-soft);
-    border-radius: var(--radius-md);
-    color: var(--danger);
-    font-size: var(--font-size-md);
-  }
-
-  .error-banner :global(svg:first-child) {
-    flex-shrink: 0;
-  }
-
-  .error-text {
-    flex: 1;
-    min-width: 0;
-    overflow-wrap: break-word;
-    user-select: text;
-    -webkit-user-select: text;
-    cursor: text;
-  }
-
-  .retry-btn {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-4);
-    border: none;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-muted);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    cursor: pointer;
-  }
-
-  .retry-btn:hover {
-    background: var(--danger-bg-soft);
-    color: var(--danger);
-  }
-
-  .cancelled-hint {
-    display: block;
-    margin-top: var(--space-3);
-    font-size: var(--font-size-sm);
-    font-style: italic;
-    color: var(--text-disabled);
-  }
-
-  .processing-indicator {
-    display: flex;
-    align-items: center;
-    padding: var(--space-3) var(--space-0);
-  }
-
-  .processing-label {
-    font-size: var(--font-size-base);
-    font-weight: var(--font-weight-semibold);
-    background: linear-gradient(
-      90deg,
-      var(--accent-ring) 0%,
-      var(--accent) 50%,
-      var(--accent-ring) 100%
-    );
-    background-size: 200% auto;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: processingShimmer 2s linear infinite;
-  }
-
-  @keyframes processingShimmer {
-    0% { background-position: -200% center; }
-    100% { background-position: 200% center; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .processing-label {
-      animation: none;
-      background: none;
-      -webkit-text-fill-color: var(--accent);
-    }
   }
 </style>
