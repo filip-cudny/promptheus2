@@ -141,6 +141,7 @@
 
   --notification-bg: #ffffff;
   --notification-fg: #1a1a1a;
+  --notification-fg-secondary: rgba(0, 0, 0, 0.65);
   --notification-border: rgba(0, 0, 0, 0.08);
   --notification-border-radius: 8px;
   --notification-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -207,8 +208,9 @@
   --shadow-lg-linux: 0 6px 18px rgba(0,0,0,0.12);
 
   /* notifications */
-  --notification-bg    : #ffffff;
-  --notification-fg    : #1a1a1a;
-  --notification-border: rgba(0,0,0,0.08);
-  --notification-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  --notification-bg          : #ffffff;
+  --notification-fg          : #1a1a1a;
+  --notification-fg-secondary: rgba(0,0,0,0.65);
+  --notification-border      : rgba(0,0,0,0.08);
+  --notification-shadow      : 0 4px 12px rgba(0,0,0,0.15);
 }

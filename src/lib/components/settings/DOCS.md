@@ -1,6 +1,6 @@
 # Settings UI
 
-Settings dialog window — sidebar navigation + per-section content. Lives in its own Tauri window (`settings-dialog` label, entry `settings-dialog.html` → `SettingsDialogApp.svelte`).
+Settings dialog window — sidebar navigation + per-section content. Lives in its own Tauri window (`settings-dialog` label, entry `settings-dialog.html` → `src/windows/settings-dialog/App.svelte`).
 
 Design principles are codified in [`migration/settings-ux.md`](../../../../../migration/settings-ux.md). This doc captures the patterns actually applied here so new sections stay consistent.
 
@@ -19,7 +19,7 @@ settings/
 
 Surrounding pieces (not in this dir):
 
-- `src/SettingsDialogApp.svelte` — root: mounts sidebar + active section, calls `store.init()` / `store.destroy()`.
+- `src/windows/settings-dialog/App.svelte` — root: mounts sidebar + active section, calls `store.init()` / `store.destroy()`.
 - `src/lib/stores/settings.svelte.ts` — single shared rune store (`getSettingsStore()`); subscribes to backend `settings-changed` events.
 - `src/lib/services/settings.ts` — typed `invoke()` wrappers for `get_settings`, `update_model`, etc.
 - `src/lib/services/settingsDialog.ts` — `openSettingsWindow(section?)` + `checkEnvVar(name)`.
@@ -29,7 +29,7 @@ Surrounding pieces (not in this dir):
 ### Adding a new section
 
 1. Add the id to the `SettingsSection` union and `SIDEBAR_ITEMS` array in `SettingsSidebar.svelte`. Set `enabled: true` only when the section actually renders.
-2. Create `Section<Name>.svelte` here and branch on it in `SettingsDialogApp.svelte`'s `{#if activeSection === ...}`.
+2. Create `Section<Name>.svelte` here and branch on it in `src/windows/settings-dialog/App.svelte`'s `{#if activeSection === ...}`.
 3. Read state from `getSettingsStore()` — never `invoke("get_settings")` directly from a component.
 4. Write through `$lib/services/settings.ts` helpers; the store auto-refreshes on the backend's `settings-changed` event.
 

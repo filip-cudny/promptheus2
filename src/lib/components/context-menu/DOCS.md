@@ -4,7 +4,7 @@ Borderless popup window that renders menu items fetched from the Rust `MenuCoord
 
 ## Architecture
 
-The context menu runs in a **separate Tauri window** (`context-menu` label) with its own HTML entry point (`context-menu.html` → `ContextMenuApp.svelte`). This window is borderless, transparent, always-on-top, and hidden by default.
+The context menu runs in a **separate Tauri window** (`context-menu` label) with its own HTML entry point (`context-menu.html` → `src/windows/context-menu/App.svelte`). This window is borderless, transparent, always-on-top, and hidden by default.
 
 `ContextMenu.svelte` is split into three layers:
 
@@ -41,8 +41,8 @@ The context menu runs in a **separate Tauri window** (`context-menu` label) with
 | `$lib/stores/contextMenu.svelte.ts` | Reactive state — items, selection, open/close lifecycle, IPC listeners |
 | `$lib/stores/useContextMenu.svelte.ts` | Getter wrapper around `contextMenu.svelte.ts` |
 | `context-menu.html` (project root) | HTML entry point for the context-menu window |
-| `src/ContextMenuApp.svelte` | Minimal root that mounts `ContextMenu` |
-| `src/context-menu-main.ts` | JS entry point for the context-menu window |
+| `src/windows/context-menu/App.svelte` | Minimal root that mounts `ContextMenu` |
+| `src/windows/context-menu/entry.ts` | JS entry point for the context-menu window |
 
 ### Layer contracts
 
@@ -113,7 +113,7 @@ Action buttons are always visible (not gated by empty state) since Replace/Appen
 
 **Edit mode**: when active, replaces chips with `ContextEditor` (textarea + image chips). Save persists via `clearContext()` + `setContext()` + `setContextImage()`. The `onEditingChange` callback notifies `ContextMenu.svelte` to suppress blur-close and keyboard handling.
 
-The context store (`$lib/stores/context.svelte.ts`) is initialized in `ContextMenuApp.svelte` so the section updates reactively via the `"context-changed"` Tauri event.
+The context store (`$lib/stores/context.svelte.ts`) is initialized in `src/windows/context-menu/App.svelte` so the section updates reactively via the `"context-changed"` Tauri event.
 
 ### Skill execution
 
@@ -121,7 +121,7 @@ When a `skill` item is clicked, the context menu store intercepts it (instead of
 
 During execution, skill items are disabled. The store applies this by overlaying `enabled: false` on skill items when `isExecuting()` is true (see `applyExecutionState` in `contextMenu.svelte.ts`). On `execution-completed`, the store refreshes items so they re-enable on next open.
 
-The execution store is initialized in `ContextMenuApp.svelte` alongside the context store.
+The execution store is initialized in `src/windows/context-menu/App.svelte` alongside the context store.
 
 ### LastInteractionSection (`LastInteractionSection.svelte`)
 

@@ -175,7 +175,7 @@
   }
 
   :global([data-sonner-toast] [data-description]) {
-    color: var(--text-secondary) !important;
+    color: var(--notification-fg-secondary) !important;
     font-size: var(--font-size-base) !important;
   }
 

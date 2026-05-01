@@ -4,8 +4,19 @@
 
 ```
 src/
-├── main.ts                     # App entry point (mounts App.svelte)
-├── App.svelte                  # Root component, layout shell
+├── windows/                    # One folder per Tauri window — entry.ts + App.svelte
+│   ├── main/                   # Default app window (index.html)
+│   ├── context-menu/           # Borderless popup menu
+│   ├── conversation-dialog/
+│   ├── shell-toolbar/
+│   ├── provider-menu/
+│   ├── palette/
+│   ├── context-editor/
+│   ├── history-dialog/
+│   ├── settings-dialog/
+│   ├── image-preview/
+│   ├── text-preview/
+│   └── notification/
 ├── lib/
 │   ├── components/             # UI components
 │   │   ├── ui/                 # Reusable primitives (buttons, inputs, dialogs)
@@ -51,6 +62,21 @@ Use Svelte 5 runes, not legacy stores:
 - `$effect()` for side effects (e.g., syncing with Tauri backend)
 
 Store files use `.svelte.ts` extension to enable rune syntax outside components.
+
+### Window entries
+
+This is a multi-window Tauri app. Every window has its own HTML at the project root and a matching folder under `src/windows/<window-name>/`:
+
+- `entry.ts` — mounts the root component (`mount(App, { target: ... })`).
+- `App.svelte` — root component for that window. Keep thin; pull feature UI from `lib/components/`.
+
+Adding a new window:
+
+1. Create `<name>.html` at project root with `<script type="module" src="/src/windows/<name>/entry.ts">`.
+2. Create `src/windows/<name>/{entry.ts, App.svelte}`.
+3. Add the HTML to `vite.config.ts → rollupOptions.input`.
+4. Add the window label to `src-tauri/capabilities/default.json → windows`.
+5. Define the window in `src-tauri/tauri.conf.json` (or create it programmatically) with the same label.
 
 ### Components
 
