@@ -80,6 +80,7 @@
       pageSize = saved;
     }
     window.addEventListener("keydown", handleWindowKeydown);
+    searchInput?.focus();
   });
 
   onDestroy(() => {
