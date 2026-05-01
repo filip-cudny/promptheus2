@@ -14,7 +14,7 @@
   import ToolCallReadOnlyChip from "./components/ToolCallReadOnlyChip.svelte";
   import BubbleEditField from "./components/BubbleEditField.svelte";
   import BubbleActionsFooter from "./components/BubbleActionsFooter.svelte";
-  import { resizeTextarea } from "$lib/utils/autoResize";
+  import { useEditSegments } from "./drivers/useEditSegments.svelte";
   import { Copy, Check, RefreshCw, Trash2, Pencil, Save } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
@@ -127,69 +127,22 @@
     return blocks;
   });
 
-  type EditSegment =
-    | { type: "text"; leadingWs: string; text: string; trailingWs: string }
-    | { type: "tool_call"; tool_call_id: string };
-
   let editMode = $state(false);
-  let editSegments = $state<EditSegment[]>([]);
-  let textareaRefs: Array<HTMLTextAreaElement | undefined> = $state([]);
-
-  function splitTextSegment(text: string): { leadingWs: string; text: string; trailingWs: string } {
-    const leadingWs = text.match(/^\s*/)?.[0] ?? "";
-    const rest = text.slice(leadingWs.length);
-    const trailingWs = rest.match(/\s*$/)?.[0] ?? "";
-    const mid = rest.slice(0, rest.length - trailingWs.length);
-    return { leadingWs, text: mid, trailingWs };
-  }
-
-  function buildEditSegments(content: string): EditSegment[] {
-    const parsed = parseContentSegments(content);
-    if (parsed.length === 0) {
-      const split = splitTextSegment(content);
-      return [{ type: "text", ...split }];
-    }
-    return parsed.map((s) =>
-      s.type === "text"
-        ? { type: "text" as const, ...splitTextSegment(s.text) }
-        : { type: "tool_call" as const, tool_call_id: s.tool_call_id }
-    );
-  }
-
-  function rebuildContentFromEditSegments(): string {
-    return editSegments
-      .map((s) =>
-        s.type === "text"
-          ? s.leadingWs + s.text + s.trailingWs
-          : `{{tool_call:${s.tool_call_id}}}`
-      )
-      .join("");
-  }
-
-  function handleSegmentInput(idx: number, e: Event) {
-    const target = e.target as HTMLTextAreaElement;
-    const seg = editSegments[idx];
-    if (seg.type !== "text") return;
-    editSegments[idx] = { ...seg, text: target.value };
-    resizeTextarea(target);
-  }
+  const edit = useEditSegments({ parseContent: parseContentSegments });
 
   function toggleEditMode() {
     if (!editMode) {
-      editSegments = buildEditSegments(displayContent);
-    }
-    editMode = !editMode;
-    if (editMode) {
-      requestAnimationFrame(() => {
-        for (const ta of textareaRefs) {
-          if (ta) resizeTextarea(ta);
-        }
-      });
+      edit.enter(displayContent);
+      editMode = true;
+    } else {
+      edit.exit();
+      editMode = false;
     }
   }
 
   function submitEdit() {
-    onContentChange(rebuildContentFromEditSegments());
+    onContentChange(edit.rebuild());
+    edit.exit();
     editMode = false;
   }
 
@@ -229,12 +182,12 @@
 
       {#if editMode}
         <BubbleEditField variant="assistant">
-          {#each editSegments as seg, i (i)}
+          {#each edit.segments as seg, i (i)}
             {#if seg.type === "text" && seg.text.trim() !== ""}
               <textarea
-                bind:this={textareaRefs[i]}
+                bind:this={edit.textareaRefs[i]}
                 value={seg.text}
-                oninput={(e) => handleSegmentInput(i, e)}
+                oninput={(e) => edit.onSegmentInput(i, e)}
                 onkeydown={handleEditKeydown}
                 class="bubble-textarea"
                 rows="1"

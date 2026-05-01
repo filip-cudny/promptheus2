@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
   import { slide } from "svelte/transition";
   import type { ToolCall, ToolCallType } from "$lib/types/ai";
   import {
@@ -20,6 +19,7 @@
   } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import ToolResultRenderer from "./ToolResultRenderer.svelte";
+  import { useElapsedTimer } from "./drivers/useElapsedTimer.svelte";
 
   let {
     toolCall,
@@ -34,8 +34,6 @@
   } = $props();
 
   let expanded = $state(false);
-  let elapsed = $state(0);
-  let intervalId: ReturnType<typeof setInterval> | null = null;
 
   const TOOL_ICONS: Record<ToolCallType, typeof Search> = {
     web_search: Search,
@@ -52,37 +50,15 @@
   let isCompleted = $derived(toolCall.status === "completed");
   let isFailed = $derived(toolCall.status === "failed");
   let isCancelled = $derived(toolCall.status === "cancelled");
-  let hasExpandableContent = $derived(
-    (toolCall.arguments && Object.keys(toolCall.arguments).length > 0) ||
-    !!toolCall.result ||
-    !!toolCall.error
-  );
   let isClickable = $derived(isCompleted || isFailed || isCancelled);
 
-  $effect(() => {
-    if (isInProgress && toolCall.started_at) {
-      const start = new Date(toolCall.started_at).getTime();
-      elapsed = (Date.now() - start) / 1000;
-      intervalId = setInterval(() => {
-        elapsed = (Date.now() - start) / 1000;
-      }, 100);
-      return () => {
-        if (intervalId) clearInterval(intervalId);
-      };
-    } else if (toolCall.started_at && toolCall.completed_at) {
-      elapsed =
-        (new Date(toolCall.completed_at).getTime() -
-          new Date(toolCall.started_at).getTime()) /
-        1000;
-    }
-  });
-
-  onDestroy(() => {
-    if (intervalId) clearInterval(intervalId);
+  const timer = useElapsedTimer({
+    isActive: () => isInProgress,
+    startedAt: () => toolCall.started_at,
+    completedAt: () => toolCall.completed_at,
   });
 
   function formatElapsed(seconds: number): string {
-    if (seconds < 10) return `${seconds.toFixed(1)}s`;
     return `${seconds.toFixed(1)}s`;
   }
 
@@ -118,7 +94,7 @@
     </span>
     <span class="tool-name">{toolCall.tool_display_name}</span>
     {#if toolCall.started_at}
-      <span class="tool-elapsed">{formatElapsed(elapsed)}</span>
+      <span class="tool-elapsed">{formatElapsed(timer.elapsed)}</span>
     {/if}
     <span class="tool-status">
       {#if isPending}

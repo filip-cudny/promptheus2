@@ -6,6 +6,7 @@
   import UserBubble from "./UserBubble.svelte";
   import AssistantBubble from "./AssistantBubble.svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
+  import { useAutoScroll } from "./drivers/useAutoScroll.svelte";
 
   const skillsStore = getSkillsStore();
 
@@ -22,70 +23,31 @@
   } = $props();
 
   let container: HTMLDivElement | undefined = $state();
-  let userScrolledUp = $state(false);
-  let visibleCount = $state(PAGE_SIZE);
 
-  let allPairs = $derived(store.messagePairs);
-  let hasMore = $derived(visibleCount < allPairs.length);
-  let visiblePairs = $derived(
-    hasMore ? allPairs.slice(allPairs.length - visibleCount) : allPairs,
+  const allPairs = $derived(store.messagePairs);
+
+  const scroll = useAutoScroll({
+    getContainer: () => container,
+    pageSize: PAGE_SIZE,
+    totalCount: () => allPairs.length,
+    trackChange: () => [store.messagePairs, store.streamedContent],
+    resetKey: () => store.activeTabId,
+  });
+
+  const visiblePairs = $derived(
+    scroll.hasMore ? allPairs.slice(allPairs.length - scroll.visibleCount) : allPairs,
   );
 
-  $effect(() => {
-    store.activeTabId;
-    visibleCount = PAGE_SIZE;
-  });
-
-  function handleScroll() {
-    if (!container) return;
-    const threshold = 50;
-    const distanceFromBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight;
-    userScrolledUp = distanceFromBottom > threshold;
-
-    if (container.scrollTop < 100 && hasMore) {
-      loadMore();
-    }
-  }
-
-  function loadMore() {
-    if (!container || !hasMore) return;
-    const prevHeight = container.scrollHeight;
-    visibleCount = Math.min(visibleCount + PAGE_SIZE, allPairs.length);
-    requestAnimationFrame(() => {
-      if (container) {
-        container.scrollTop += container.scrollHeight - prevHeight;
-      }
-    });
-  }
-
   function isLastAssistant(pair: MessagePair): boolean {
-    const pairs = allPairs;
-    return pairs[pairs.length - 1] === pair;
+    return allPairs[allPairs.length - 1] === pair;
   }
-
-  $effect(() => {
-    store.messagePairs;
-    store.streamedContent;
-    if (!userScrolledUp && container) {
-      requestAnimationFrame(() => {
-        container!.scrollTop = container!.scrollHeight;
-      });
-    }
-  });
-
-  $effect(() => {
-    if (allPairs.length > visibleCount) {
-      visibleCount = Math.max(visibleCount, PAGE_SIZE);
-    }
-  });
 </script>
 
-<div class="conversation-area" bind:this={container} onscroll={handleScroll}>
+<div class="conversation-area" bind:this={container} onscroll={scroll.onScroll}>
   {#if allPairs.length === 0}
     <div class="empty-state">Send a message to start the conversation.</div>
   {:else}
-    {#if hasMore}
+    {#if scroll.hasMore}
       <div class="load-more-zone">
         <Loader2 size={ICON_SIZE.sm} class="spin" />
         <span>Scroll up for older messages</span>
@@ -162,5 +124,4 @@
   .load-more-zone :global(.spin) {
     animation: spin 1s linear infinite;
   }
-
 </style>
