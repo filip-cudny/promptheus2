@@ -283,12 +283,16 @@
   select,
   textarea {
     padding: 5px var(--space-4);
-    background: var(--surface-sunken);
+    background-color: var(--surface-sunken);
     border: 1px solid var(--border-hard);
     border-radius: var(--radius-md);
     color: var(--text-primary);
     font: inherit;
     font-size: var(--font-size-md);
+  }
+
+  select {
+    padding-right: var(--space-8);
   }
 
   .value-input {
