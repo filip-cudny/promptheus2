@@ -4,6 +4,7 @@
   import { X, MessageSquare, MessagesSquare, Mic, Circle, EllipsisVertical, Pencil, Trash2 } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { getConversations, updateHistoryEntryTitle, deleteHistoryEntry } from "$lib/services/history";
+  import { focusConversationInput } from "$lib/utils/conversationFocus";
   import type { HistoryEntry } from "$lib/types";
   import type { TabState } from "$lib/types/conversation";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
@@ -112,6 +113,7 @@
       store.switchTab(item.tab.tab_id);
     }
     onClose();
+    focusConversationInput();
   }
 
   let menuOpenForId = $state<string | null>(null);

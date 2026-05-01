@@ -17,6 +17,7 @@
   import TabSidebar from "$lib/components/prompt/TabSidebar.svelte";
   import { openPalette, reloadActiveInHost } from "$lib/services/shellToolbar";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
+  import { focusConversationInput } from "$lib/utils/conversationFocus";
 
   interface DialogInitParams {
     skill_id: string;
@@ -45,13 +46,12 @@
   let defaultModelId = $state<string | null>(null);
 
   let chatPaletteOpen = $state(false);
-  let inputArea = $state<ReturnType<typeof InputArea> | undefined>();
   let prevChatPaletteOpen = false;
 
   $effect(() => {
     const isOpen = chatPaletteOpen;
     if (prevChatPaletteOpen && !isOpen) {
-      requestAnimationFrame(() => inputArea?.focusInput());
+      focusConversationInput();
     }
     prevChatPaletteOpen = isOpen;
   });
@@ -216,7 +216,7 @@
       "shell:active-changed",
       (event) => {
         if (event.payload.provider_id === null) {
-          requestAnimationFrame(() => inputArea?.focusInput());
+          focusConversationInput();
         }
       },
       { target: SELF_TARGET },
@@ -290,7 +290,7 @@
     </button>
   </div>
   <ConversationArea {store} />
-  <InputArea bind:this={inputArea} {store} {models} {contextVisible} {contextDisabled} {contextInitialCollapsed} {contextWindowSize} {defaultModelId} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
+  <InputArea {store} {models} {contextVisible} {contextDisabled} {contextInitialCollapsed} {contextWindowSize} {defaultModelId} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
   <TabSidebar {store} open={sidebarOpen} onClose={() => sidebarOpen = false} />
 </div>
 

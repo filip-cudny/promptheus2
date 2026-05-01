@@ -17,6 +17,7 @@
   type LucideIcon = ComponentType<SvelteComponent<IconProps>>;
   import { handleEditablePaste } from "$lib/utils/paste";
   import { formatTokenCount } from "$lib/utils/contextWindow";
+  import { focusConversationInput, setConversationInputFocus } from "$lib/utils/conversationFocus";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
@@ -88,6 +89,32 @@
       }
     }
     store.toggleTool(id, enabled);
+    focusConversationInput();
+  }
+
+  function handleSelectModel(modelId: string) {
+    store.updateModelId(modelId);
+    focusConversationInput();
+  }
+
+  function handleSelectReasoning(effort: string | null) {
+    store.updateReasoningEffort(effort);
+    focusConversationInput();
+  }
+
+  function handleRemoveTextAttachment(idx: number) {
+    localTextAttachments = localTextAttachments.filter((_, i) => i !== idx);
+    focusConversationInput();
+  }
+
+  function handleRemoveImage(idx: number) {
+    localImages = localImages.filter((_, i) => i !== idx);
+    focusConversationInput();
+  }
+
+  function handleDismissTool(id: string) {
+    store.toggleTool(id, false);
+    focusConversationInput();
   }
 
   const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
@@ -156,11 +183,8 @@
   function onKeyDown(e: KeyboardEvent) { shiftHeld = e.shiftKey; }
   function onKeyUp(e: KeyboardEvent) { shiftHeld = e.shiftKey; }
 
-  export function focusInput() {
-    skillEditable?.focus();
-  }
-
   onMount(async () => {
+    setConversationInputFocus(() => skillEditable?.focus());
     skillEditable?.focus();
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -194,6 +218,7 @@
   });
 
   onDestroy(() => {
+    setConversationInputFocus(null);
     unlistenTextUpdate?.();
     unlistenMcpReady?.();
     window.removeEventListener("keydown", onKeyDown);
@@ -273,8 +298,8 @@
   <div class="input-field">
     {#if localTextAttachments.length > 0 || localImages.length > 0}
       <div class="attachment-row">
-        <TextChipBar bind:textAttachments={localTextAttachments} readonly={false} variant="small" />
-        <ImageChipBar bind:images={localImages} readonly={false} variant="small" />
+        <TextChipBar textAttachments={localTextAttachments} readonly={false} variant="small" onremove={handleRemoveTextAttachment} />
+        <ImageChipBar images={localImages} readonly={false} variant="small" onremove={handleRemoveImage} />
       </div>
     {/if}
     <SkillEditable
@@ -296,7 +321,7 @@
         onToggleTool={handleToggleTool}
       />
       {#each availableTools.filter(t => t.active) as tool (tool.id)}
-        <ToolChip label={tool.label} icon={tool.icon} ondismiss={() => store.toggleTool(tool.id, false)} />
+        <ToolChip label={tool.label} icon={tool.icon} ondismiss={() => handleDismissTool(tool.id)} />
       {/each}
     </div>
 
@@ -311,8 +336,8 @@
           {models}
           selectedModelId={store.modelId}
           reasoningEffort={store.reasoningEffort}
-          onModelSelect={(modelId) => store.updateModelId(modelId)}
-          onReasoningSelect={(effort) => store.updateReasoningEffort(effort)}
+          onModelSelect={handleSelectModel}
+          onReasoningSelect={handleSelectReasoning}
         />
       {/if}
 
