@@ -1,9 +1,7 @@
 <script lang="ts">
-  import { onMount, onDestroy, tick, untrack } from "svelte";
+  import { onMount, onDestroy, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { debug as logDebug } from "@tauri-apps/plugin-log";
-  import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
   import type { MenuItem } from "$lib/types/menu";
   import type { ContextItem } from "$lib/types/context";
   import ContextSection from "./ContextSection.svelte";
@@ -37,9 +35,7 @@
   import type { Provider } from "$lib/types";
   import { useContextMenu } from "$lib/stores/useContextMenu.svelte";
   import MenuShell from "./MenuShell.svelte";
-  import {
-    getWorkArea,
-  } from "$lib/stores/contextMenu.svelte";
+  import { getWorkArea } from "$lib/stores/contextMenu.svelte";
   import MenuEmptyState from "./components/MenuEmptyState.svelte";
   import MenuSeparator from "./components/MenuSeparator.svelte";
   import MenuItemRow from "./components/MenuItemRow.svelte";
@@ -48,13 +44,40 @@
   import FooterHint from "./components/FooterHint.svelte";
   import SkillActionMenu from "./components/SkillActionMenu.svelte";
   import SettingsPanel from "./components/SettingsPanel.svelte";
+  import { useFloatingPanelMutex } from "./drivers/useFloatingPanelMutex.svelte";
+  import { useMenuKeyboard } from "./drivers/useMenuKeyboard.svelte";
+  import { useMenuBlurClose } from "./drivers/useMenuBlurClose.svelte";
+  import { useMenuPositioning } from "./drivers/useMenuPositioning.svelte";
 
   const menu = useContextMenu();
 
-  const SHIFTED_CHAR_TO_DIGIT: Record<string, string> = {
-    "!": "1", "@": "2", "#": "3", "$": "4", "%": "5",
-    "^": "6", "&": "7", "*": "8", "(": "9", ")": "0",
-  };
+  const panels = useFloatingPanelMutex({
+    onSettingsClose: menu.resumeClose,
+    onActionMenuClose: menu.resumeClose,
+  });
+
+  const positioning = useMenuPositioning({
+    getMenuEl: () => menuEl,
+    isVisible: () => menu.visible,
+    getWorkArea,
+  });
+
+  const keyboard = useMenuKeyboard({
+    isVisible: () => menuVisible,
+    hasOpenPanel: () => panels.hasAny,
+    closePanels: panels.closeAll,
+    closeMenu: menu.closeMenu,
+    moveSelection: menu.moveSelection,
+    executeSelected: menu.executeSelected,
+    handleNumberInput: menu.handleNumberInput,
+  });
+
+  const blurClose = useMenuBlurClose({
+    isInBlurGrace: menu.isInBlurGrace,
+    isSuppressed: menu.isSuppressed,
+    resumeClose: menu.resumeClose,
+    closeMenu: menu.closeMenu,
+  });
 
   function isRecordingThisSkill(item: MenuItem): boolean {
     if (!menu.recording) return false;
@@ -121,10 +144,8 @@
   let sttModelId = $state<string | null>(null);
 
   let menuEl: HTMLDivElement | undefined = $state();
-  let settingsOpen = $state(false);
-  let settingsAnchorEl: HTMLElement | undefined = $state();
-  let activeActionMenuId = $state("");
-  let activeActionAnchorEl: HTMLElement | undefined = $state();
+  let chatRowEl: HTMLElement | undefined = $state();
+  let settingsToggleEl: HTMLElement | undefined = $state();
   let skillMetadata = $state<Record<string, SkillMeta>>({});
 
   type SkillMeta = {
@@ -172,14 +193,9 @@
       logDebug(`get_skill failed for ${skillId}: ${e}`);
     }
   }
-  let hoverEnabled = $state(false);
-  let shiftHeld = $state(false);
-  let chatProvidersOpen = $state(false);
-  let chatRowEl: HTMLElement | undefined = $state();
+
   let webviewProviders = $state<WebviewProvider[]>([]);
   let unlistenSettings: (() => void) | undefined;
-  let suppressedBlurCheckTimer: ReturnType<typeof setTimeout> | null = null;
-  const SUPPRESSED_BLUR_RECHECK_MS = 150;
 
   let providerEntries = $derived<{ id: string; name: string; url?: string | null }[]>([
     { id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
@@ -194,24 +210,8 @@
     }
   }
 
-  function closeChatProviders() {
-    if (!chatProvidersOpen) return;
-    chatProvidersOpen = false;
-  }
-
-  function openChatProviders(e: MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    if (chatProvidersOpen) {
-      closeChatProviders();
-      return;
-    }
-    closePanels();
-    chatProvidersOpen = true;
-  }
-
   async function pickChatProvider(providerId: string) {
-    closeChatProviders();
+    panels.closeChatProviders();
     await menu.closeMenu();
     try {
       const arg = providerId === PROMPTHEUS_PROVIDER_ID ? undefined : providerId;
@@ -221,163 +221,22 @@
     }
   }
 
-  function handleKeydown(e: KeyboardEvent) {
-    if (e.key === "Shift") shiftHeld = true;
-    if (!menuVisible) return;
-
-    switch (e.key) {
-      case "Escape":
-        e.preventDefault();
-        if (settingsOpen || activeActionMenuId || chatProvidersOpen) {
-          closePanels();
-        } else {
-          menu.closeMenu();
-        }
-        break;
-      case "ArrowDown":
-        e.preventDefault();
-        menu.moveSelection(1);
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        menu.moveSelection(-1);
-        break;
-      case "Enter":
-        e.preventDefault();
-        menu.executeSelected(e.shiftKey);
-        break;
-      default: {
-        if (e.key >= "0" && e.key <= "9") {
-          e.preventDefault();
-          menu.handleNumberInput(e.key, e.shiftKey);
-          return;
-        }
-        const mappedDigit = SHIFTED_CHAR_TO_DIGIT[e.key];
-        if (mappedDigit) {
-          e.preventDefault();
-          menu.handleNumberInput(mappedDigit, true);
-        }
-      }
-    }
-  }
-
-  function handleKeyup(e: KeyboardEvent) {
-    if (e.key === "Shift") shiftHeld = false;
-  }
-
-  const MENU_WIDTH = 320;
-  let resizeGeneration = 0;
-  let lastShownTrigger = 0;
-  let currentWindowPos = { x: 0, y: 0 };
-
-  function getSkillsSectionOffset(): number {
-    if (!menuEl) return 0;
-    const anchor = menuEl.querySelector("[data-section='skills-anchor']");
-    if (!anchor) return 0;
-    return (anchor as HTMLElement).offsetTop;
-  }
-
-  async function resizeAndPositionWindow() {
-    const gen = ++resizeGeneration;
-    await tick();
-    if (gen !== resizeGeneration) return;
-    if (!menuEl || !menu.visible) return;
-
-    let height = menuEl.scrollHeight + 2;
-    const win = getCurrentWebviewWindow();
-    const wa = getWorkArea();
-    let x = 0, y = 0;
-
-    function positionFromHeight(h: number) {
-      if (!wa) return;
-      const anchorOffset = getSkillsSectionOffset();
-      x = wa.cursorX;
-      y = wa.cursorY - anchorOffset;
-      const rightEdge = wa.workX + wa.workWidth;
-      const bottomEdge = wa.workY + wa.workHeight;
-      if (x + MENU_WIDTH > rightEdge) x = rightEdge - MENU_WIDTH;
-      if (y + h > bottomEdge) y = bottomEdge - h;
-      if (x < wa.workX) x = wa.workX;
-      if (y < wa.workY) y = wa.workY;
-    }
-
-    positionFromHeight(height);
-    hoverEnabled = false;
-    await win.setSize(new LogicalSize(MENU_WIDTH, height));
-    if (gen !== resizeGeneration || !menu.visible) return;
-    if (wa) {
-      currentWindowPos = { x, y };
-      await win.setPosition(new LogicalPosition(x, y));
-      if (gen !== resizeGeneration || !menu.visible) return;
-    }
-    await invoke("show_context_menu_panel");
-    if (gen !== resizeGeneration || !menu.visible) return;
-
-    const correctedHeight = menuEl.scrollHeight + 2;
-    if (correctedHeight !== height) {
-      height = correctedHeight;
-      positionFromHeight(height);
-      await win.setSize(new LogicalSize(MENU_WIDTH, height));
-      if (gen !== resizeGeneration || !menu.visible) return;
-      if (wa) {
-        currentWindowPos = { x, y };
-        await win.setPosition(new LogicalPosition(x, y));
-        if (gen !== resizeGeneration || !menu.visible) return;
-      }
-    }
-
-    await invoke("focus_context_menu");
-    lastShownTrigger = menu.openTrigger;
-    logDebug(`[ctx-menu] opened at (${x}, ${y}), size ${MENU_WIDTH}x${height}`);
-  }
-
-  function closeSettingsPanel() {
-    if (settingsOpen) {
-      logDebug("[ctx-menu] closing settings panel");
-      settingsOpen = false;
-      menu.resumeClose();
-    }
-  }
-
-  function closeActionMenu() {
-    if (activeActionMenuId) {
-      logDebug(`[ctx-menu] closing action menu: ${activeActionMenuId}`);
-      activeActionMenuId = "";
-      activeActionAnchorEl = undefined;
-      menu.resumeClose();
-    }
-  }
-
   function openActionMenu(e: MouseEvent, item: MenuItem, executingThis: boolean) {
     e.preventDefault();
     e.stopPropagation();
     if (executingThis) return;
-    if (activeActionMenuId === item.id) {
-      closeActionMenu();
-      return;
+    panels.openActionMenu(item.id, e.currentTarget as HTMLElement);
+    if (panels.actionMenuId === item.id) {
+      const skillId = (item.data as { skill_id?: string } | null)?.skill_id;
+      if (skillId) void fetchSkillMetadata(skillId);
     }
-    closePanels();
-    activeActionMenuId = item.id;
-    activeActionAnchorEl = e.currentTarget as HTMLElement;
-    const skillId = (item.data as { skill_id?: string } | null)?.skill_id;
-    if (skillId) void fetchSkillMetadata(skillId);
-  }
-
-  function closePanels() {
-    closeSettingsPanel();
-    closeActionMenu();
-    closeChatProviders();
-  }
-
-  function handleMouseMove() {
-    if (!hoverEnabled) hoverEnabled = true;
   }
 
   $effect(() => {
     void menu.openTrigger;
     if (menuVisible && menuItems.length > 0) {
-      untrack(() => closePanels());
-      resizeAndPositionWindow();
+      untrack(() => panels.closeAll());
+      void positioning.triggerReposition();
     }
   });
 
@@ -402,7 +261,7 @@
   });
 
   let menuVisible = $derived(menu.visible);
-  $effect(() => { if (!menuVisible) closePanels(); });
+  $effect(() => { if (!menuVisible) panels.closeAll(); });
 
   $effect(() => {
     const items = menu.items;
@@ -515,51 +374,21 @@
 
   onMount(async () => {
     await menu.init();
-
     await refreshWebviewProviders();
     unlistenSettings = await onSettingsChanged(refreshWebviewProviders);
-
-    const win = getCurrentWebviewWindow();
-    win.onFocusChanged(({ payload: focused }) => {
-      if (focused) {
-        if (suppressedBlurCheckTimer) {
-          clearTimeout(suppressedBlurCheckTimer);
-          suppressedBlurCheckTimer = null;
-        }
-        return;
-      }
-      if (menu.isInBlurGrace()) return;
-      if (menu.isSuppressed()) {
-        menu.resumeClose();
-        if (suppressedBlurCheckTimer) clearTimeout(suppressedBlurCheckTimer);
-        suppressedBlurCheckTimer = setTimeout(() => {
-          suppressedBlurCheckTimer = null;
-          win.isFocused()
-            .then((stillFocused) => {
-              if (!stillFocused) menu.closeMenu();
-            })
-            .catch(() => {});
-        }, SUPPRESSED_BLUR_RECHECK_MS);
-        return;
-      }
-      menu.closeMenu();
-    });
-
+    await blurClose.init();
   });
 
   onDestroy(() => {
-    if (suppressedBlurCheckTimer) {
-      clearTimeout(suppressedBlurCheckTimer);
-      suppressedBlurCheckTimer = null;
-    }
+    blurClose.destroy();
     menu.destroy();
     unlistenSettings?.();
   });
 </script>
 
-<svelte:window onkeydown={handleKeydown} onkeyup={handleKeyup} />
+<svelte:window onkeydown={keyboard.onkeydown} onkeyup={keyboard.onkeyup} />
 
-<MenuShell bind:ref={menuEl} onmousemove={handleMouseMove}>
+<MenuShell bind:ref={menuEl} onmousemove={positioning.enableHover}>
   {#if menuItems.length === 0}
     <MenuEmptyState />
   {:else}
@@ -575,8 +404,16 @@
           disabled={chatDisabled}
           selected={chatRecording}
           bind:rowEl={chatRowEl}
-          onhover={() => { if (hoverEnabled) menu.setSelectedIndex(-1); }}
-          oncontextmenu={(e) => { if (!chatDisabled) openChatProviders(e); else e.preventDefault(); }}
+          onhover={() => { if (positioning.hoverEnabled) menu.setSelectedIndex(-1); }}
+          oncontextmenu={(e) => {
+            if (chatDisabled) {
+              e.preventDefault();
+              return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            panels.openChatProviders();
+          }}
           onclick={async (e) => {
             if (chatDisabled) return;
             if (chatRecording || e.shiftKey) {
@@ -587,7 +424,12 @@
             await focusOrOpenChat();
           }}
         />
-        <FloatingPanel visible={chatProvidersOpen} anchorEl={chatRowEl} flush onclose={closeChatProviders}>
+        <FloatingPanel
+          visible={panels.chatProvidersOpen}
+          anchorEl={chatRowEl}
+          flush
+          onclose={panels.closeChatProviders}
+        >
           <ProviderMenuList
             providers={providerEntries}
             expand
@@ -600,20 +442,16 @@
       {/if}
       {#if section.sectionId === "settings"}
         <SettingsToggleRow
-          expanded={settingsOpen}
-          bind:anchorEl={settingsAnchorEl}
-          onhover={() => { if (hoverEnabled) menu.setSelectedIndex(-1); }}
-          onclick={() => {
-            if (settingsOpen) {
-              closeSettingsPanel();
-            } else {
-              closePanels();
-              logDebug("[ctx-menu] opening settings panel");
-              settingsOpen = true;
-            }
-          }}
+          expanded={panels.settingsOpen}
+          bind:anchorEl={settingsToggleEl}
+          onhover={() => { if (positioning.hoverEnabled) menu.setSelectedIndex(-1); }}
+          onclick={() => panels.openSettings(settingsToggleEl)}
         />
-        <FloatingPanel visible={settingsOpen} anchorEl={settingsAnchorEl} onclose={closeSettingsPanel}>
+        <FloatingPanel
+          visible={panels.settingsOpen}
+          anchorEl={panels.settingsAnchor}
+          onclose={panels.closeSettings}
+        >
           <SettingsPanel
             models={modelsData?.models ?? []}
             sttModels={modelsData?.stt_models ?? []}
@@ -634,7 +472,7 @@
               sttModelId = modelId;
               await setSpeechToTextModel(modelId);
             }}
-            onHover={() => { if (hoverEnabled) menu.setSelectedIndex(-1); }}
+            onHover={() => { if (positioning.hoverEnabled) menu.setSelectedIndex(-1); }}
           />
         </FloatingPanel>
       {/if}
@@ -673,7 +511,7 @@
             iconName={item.icon}
             promptNumber={promptNumber}
             label={item.label}
-            onhover={() => { if (hoverEnabled && item.enabled) menu.setSelectedIndex(globalIndex); }}
+            onhover={() => { if (positioning.hoverEnabled && item.enabled) menu.setSelectedIndex(globalIndex); }}
             oncontextmenu={item.item_type === "skill"
               ? (e) => openActionMenu(e, item, executingThis)
               : undefined}
@@ -683,10 +521,10 @@
             {@const skillId = (item.data as { skill_id?: string } | null)?.skill_id ?? ""}
             {@const metaEntries = buildMetaEntries(skillMetadata[skillId], modelNames)}
             <FloatingPanel
-              visible={activeActionMenuId === item.id}
-              anchorEl={activeActionAnchorEl}
+              visible={panels.actionMenuId === item.id}
+              anchorEl={panels.actionMenuAnchor}
               flush
-              onclose={closeActionMenu}
+              onclose={panels.closeActionMenu}
             >
               <SkillActionMenu
                 recording={recordingThis}
@@ -694,11 +532,11 @@
                 tooltip={item.tooltip}
                 {metaEntries}
                 onOpenInDialog={() => {
-                  closeActionMenu();
+                  panels.closeActionMenu();
                   void menu.openDialogForItem(globalIndex);
                 }}
                 onAlternativeExecute={() => {
-                  closeActionMenu();
+                  panels.closeActionMenu();
                   void menu.startAlternativeExecution(globalIndex);
                 }}
               />
@@ -708,7 +546,7 @@
       {/each}
     {/each}
     {#if menuItems.some((i) => i.item_type === "skill")}
-      <FooterHint {shiftHeld} />
+      <FooterHint shiftHeld={keyboard.shiftHeld} />
     {/if}
   {/if}
 </MenuShell>
