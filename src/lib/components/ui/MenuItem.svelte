@@ -6,6 +6,7 @@
     icon,
     shortcut,
     active = false,
+    activeStyle = "tint",
     disabled = false,
     description,
     onclick,
@@ -14,6 +15,7 @@
     icon?: Snippet;
     shortcut?: Snippet;
     active?: boolean;
+    activeStyle?: "tint" | "rail";
     disabled?: boolean;
     description?: string;
     onclick?: () => void;
@@ -23,6 +25,7 @@
 <button
   class="menu-item"
   class:active
+  class:rail={active && activeStyle === "rail"}
   class:is-disabled={disabled}
   {disabled}
   {onclick}
@@ -66,6 +69,12 @@
   .menu-item.active {
     color: var(--accent);
     background: var(--accent-bg-soft);
+  }
+
+  .menu-item.active.rail {
+    color: var(--text-primary);
+    background: var(--surface-overlay);
+    box-shadow: inset 3px 0 0 0 var(--accent);
   }
 
   .menu-item:disabled,

@@ -32,6 +32,7 @@
       label={p.name}
       icon={providerIcon}
       active={activeId === p.id}
+      activeStyle="rail"
       onclick={() => onSelect(p.id)}
     />
   {/each}

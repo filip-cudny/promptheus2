@@ -66,8 +66,8 @@ pub async fn toggle_speech_recording(
             let _ = s.notifications.notify(
                 "speech_recording_start",
                 NotificationLevel::Warning,
-                "Please wait",
-                Some("Cooldown active — try again"),
+                "Cooldown active",
+                Some("Try again in a moment"),
                 &notification_settings,
             );
             return Ok(());
@@ -242,7 +242,7 @@ pub async fn toggle_speech_recording(
                     let _ = s.notifications.notify(
                         "speech_transcription_success",
                         NotificationLevel::Success,
-                        "Transcription completed",
+                        "Speech transcribed",
                         Some(duration_display),
                         &notification_settings,
                     );
