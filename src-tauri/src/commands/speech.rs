@@ -5,6 +5,9 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 use crate::models::history::HistoryEntryType;
+use crate::models::speech::{
+    SpeechRecordingStartedEvent, SpeechRecordingStoppedEvent, SpeechTranscriptionError,
+};
 use crate::services::config::ConfigService;
 use crate::services::notification::{NotificationLevel, NotificationService};
 use crate::services::speech::{self, SpeechError, SpeechService};
@@ -17,11 +20,6 @@ const MIN_RECORDING_SAMPLES_SECS: f64 = 1.0;
 struct TranscriptionComplete {
     text: String,
     duration_secs: f64,
-}
-
-#[derive(Clone, Serialize)]
-struct SpeechErrorEvent {
-    message: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -38,6 +36,13 @@ pub struct RecordingState {
     action_id: Option<String>,
 }
 
+fn transcription_recoverable(error: &SpeechError) -> bool {
+    !matches!(
+        error,
+        SpeechError::ApiKeyMissing | SpeechError::NoInputDevice | SpeechError::NoSupportedConfig
+    )
+}
+
 #[tauri::command]
 pub async fn toggle_speech_recording(
     app: AppHandle,
@@ -50,6 +55,7 @@ pub async fn toggle_speech_recording(
 
     let was_recording;
     let raw_audio;
+    let started_action_id;
 
     {
         let mut s = speech_state.lock().await;
@@ -85,27 +91,24 @@ pub async fn toggle_speech_recording(
         was_recording = s.is_recording();
 
         if was_recording {
-            match s.stop_recording_raw() {
-                Ok(audio) => {
-                    s.set_transcribing(true);
-                    raw_audio = Some(audio);
-                }
-                Err(e) => {
-                    let _ = app.emit("speech-error", SpeechErrorEvent { message: e.to_string() });
-                    return Err(e.into());
-                }
-            }
+            let audio = s.stop_recording_raw()?;
+            s.set_transcribing(true);
+            started_action_id = None;
+            raw_audio = Some(audio);
         } else {
             raw_audio = None;
-            if let Err(e) = s.start_recording(action_id) {
-                let _ = app.emit("speech-error", SpeechErrorEvent { message: e.to_string() });
-                return Err(e.into());
-            }
+            s.start_recording(action_id.clone())?;
+            started_action_id = action_id;
         }
     }
 
     if !was_recording {
-        let _ = app.emit("speech-recording-started", ());
+        let _ = app.emit(
+            "speech-recording-started",
+            SpeechRecordingStartedEvent {
+                action_id: started_action_id,
+            },
+        );
         let notification_settings = config_state.lock().await.settings().notifications.clone();
         let _ = notifications.notify(
             "speech_recording_start",
@@ -117,9 +120,13 @@ pub async fn toggle_speech_recording(
         return Ok(());
     }
 
-    let _ = app.emit("speech-recording-stopped", ());
-
     let (samples, sample_rate) = raw_audio.unwrap();
+    let had_audio = !samples.is_empty();
+
+    let _ = app.emit(
+        "speech-recording-stopped",
+        SpeechRecordingStoppedEvent { had_audio },
+    );
 
     let min_samples = (sample_rate as f64 * MIN_RECORDING_SAMPLES_SECS) as usize;
     if samples.len() < min_samples {
@@ -139,23 +146,17 @@ pub async fn toggle_speech_recording(
         return Ok(());
     }
 
-    let app_for_encode = app.clone();
-    let wav_bytes = tokio::task::spawn_blocking(move || speech::encode_wav(&samples, sample_rate))
+    let wav_bytes = match tokio::task::spawn_blocking(move || speech::encode_wav(&samples, sample_rate))
         .await
         .map_err(|e| Error::Other(e.to_string()))?
-        .map_err(|e| {
-            let _ = app_for_encode.emit("speech-error", SpeechErrorEvent { message: e.to_string() });
-            Error::from(e)
-        });
-
-    let wav_bytes = match wav_bytes {
+    {
         Ok(bytes) => bytes,
         Err(e) => {
             let mut s = speech_state.lock().await;
             s.set_transcribing(false);
             s.mark_transcription_finished();
             s.set_pending_prompt(None, None);
-            return Err(e);
+            return Err(e.into());
         }
     };
 
@@ -189,10 +190,7 @@ pub async fn toggle_speech_recording(
                 s.set_transcribing(false);
                 s.mark_transcription_finished();
                 s.set_pending_prompt(None, None);
-                let _ = app.emit("speech-error", SpeechErrorEvent {
-                    message: "Speech-to-text model not configured".into(),
-                });
-                return Err(Error::Other("Speech-to-text model not configured".into()));
+                return Err(Error::Speech(SpeechError::ApiKeyMissing));
             }
         }
     };
@@ -232,7 +230,7 @@ pub async fn toggle_speech_recording(
                         log::error!("Failed to copy transcription to clipboard: {e}");
                     }
 
-                    history_inner.lock().await.add_entry(
+                    let added_id = history_inner.lock().await.add_entry(
                         text.clone(),
                         HistoryEntryType::Speech,
                         Some(text),
@@ -242,6 +240,11 @@ pub async fn toggle_speech_recording(
                         false,
                         None,
                         true,
+                    );
+                    let _ = crate::services::history_events::emit_history_changed(
+                        &app_clone,
+                        added_id,
+                        None,
                     );
 
                     let notification_settings =
@@ -298,10 +301,12 @@ pub async fn toggle_speech_recording(
             }
             Err(e) => {
                 let message = e.to_string();
+                let recoverable = transcription_recoverable(&e);
                 let _ = app_clone.emit(
-                    "speech-error",
-                    SpeechErrorEvent {
+                    "speech-transcription-error",
+                    SpeechTranscriptionError {
                         message: message.clone(),
+                        recoverable,
                     },
                 );
 

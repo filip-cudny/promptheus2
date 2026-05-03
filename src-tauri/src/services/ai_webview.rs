@@ -575,8 +575,17 @@ pub fn new_chat_in_host(app: &tauri::AppHandle, host_label: &str) -> Result<(), 
         .get_active(host_label)
         .ok_or_else(|| "no active webview".to_string())?;
     if active_label == host_label {
+        if app.get_webview_window(host_label).is_none() {
+            return Err(format!("missing host window: {host_label}"));
+        }
         return app
-            .emit_to(host_label, "new-conversation", serde_json::json!({}))
+            .emit_to(
+                host_label,
+                "new-conversation",
+                crate::commands::conversation_dialog::NewConversationEvent {
+                    reason: "shell".into(),
+                },
+            )
             .map_err(|e| e.to_string());
     }
     let provider = state

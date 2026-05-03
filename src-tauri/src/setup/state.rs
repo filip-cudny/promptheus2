@@ -12,6 +12,7 @@ use crate::services::context::{ContextManagerService, ContextMenuProvider};
 use crate::services::database::Database;
 use crate::services::dock::DockManager;
 use crate::services::execution::PromptExecutionService;
+use crate::services::history_events::HistoryVersion;
 use crate::services::history_search::HistorySearch;
 use crate::services::image_storage::ImageStorage;
 use crate::services::mcp::McpRegistry;
@@ -97,6 +98,7 @@ pub fn manage(
     app.manage(Arc::new(Mutex::new(ai_service)));
     app.manage(Arc::new(Mutex::new(history_service)));
     app.manage(Arc::new(Mutex::new(HistorySearch::new())));
+    app.manage(HistoryVersion::new());
     app.manage(image_storage);
     app.manage(Arc::new(mcp_registry));
     app.manage(Arc::new(Mutex::new(PromptExecutionService::new())));

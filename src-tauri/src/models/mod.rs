@@ -6,3 +6,4 @@ pub mod menu;
 pub mod message;
 pub mod settings;
 pub mod skill;
+pub mod speech;

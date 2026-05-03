@@ -1,5 +1,7 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
@@ -7,8 +9,16 @@ use crate::models::context::ContextItem;
 use crate::services::clipboard::ClipboardService;
 use crate::services::context::ContextManagerService;
 
+static CONTEXT_VERSION: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Serialize, Clone)]
+struct ContextChangedEvent {
+    version: u64,
+}
+
 fn emit_context_changed(app: &AppHandle) -> crate::Result<()> {
-    app.emit("context-changed", ())?;
+    let version = CONTEXT_VERSION.fetch_add(1, Ordering::Relaxed) + 1;
+    app.emit("context-changed", ContextChangedEvent { version })?;
     Ok(())
 }
 

@@ -464,7 +464,7 @@ async function init() {
     clearRecordingState();
     refreshItems();
   });
-  unlistenSpeechError = await listen("speech-error", () => {
+  unlistenSpeechError = await listen("speech-transcription-error", () => {
     clearRecordingState();
     refreshItems();
   });

@@ -1,5 +1,7 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
+use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
@@ -9,8 +11,16 @@ use crate::models::settings::{
 use crate::services::ai::AiService;
 use crate::services::config::{ConfigService, SurfaceKind};
 
+static SETTINGS_VERSION: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Serialize, Clone)]
+struct SettingsChangedEvent {
+    version: u64,
+}
+
 fn emit_changed(app: &AppHandle) -> crate::Result<()> {
-    app.emit("settings-changed", ())?;
+    let version = SETTINGS_VERSION.fetch_add(1, Ordering::Relaxed) + 1;
+    app.emit("settings-changed", SettingsChangedEvent { version })?;
     Ok(())
 }
 

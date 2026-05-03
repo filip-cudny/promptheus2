@@ -66,6 +66,13 @@ pub struct ConversationHistoryData {
     pub reasoning_effort: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct HistoryChangedEvent {
+    pub added_id: Option<String>,
+    pub removed_id: Option<String>,
+    pub version: u64,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct ImagePayload {
     pub node_id: Option<String>,

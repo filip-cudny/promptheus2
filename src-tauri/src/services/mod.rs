@@ -26,6 +26,7 @@ pub mod recent_apps;
 pub mod skill;
 pub mod skill_message;
 pub mod speech;
+pub mod history_events;
 pub mod history_search;
 pub mod sqlite_history;
 pub mod tokenizer;

@@ -329,7 +329,7 @@ impl SkillExecutor {
             applied_skills: vec![],
         };
 
-        history.add_conversation_entry(
+        let added_id = history.add_conversation_entry(
             String::new(),
             Some(skill_name.to_string()),
             Some(skill_display_name.to_string()),
@@ -344,7 +344,7 @@ impl SkillExecutor {
             None,
             None,
         );
-        let _ = app.emit("history-changed", ());
+        let _ = crate::services::history_events::emit_history_changed(app, Some(added_id), None);
 
         let _ = notifications.notify(
             "prompt_execution_success",

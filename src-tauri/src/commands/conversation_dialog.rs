@@ -7,6 +7,30 @@ use crate::services::ai_webview;
 use crate::services::dialog::{self, focus_host_window, is_shell_toolbar_label, DialogConfig};
 use crate::Error;
 
+#[derive(Serialize, Clone)]
+pub struct NewConversationEvent {
+    pub reason: String,
+}
+
+#[derive(Serialize, Clone)]
+struct RestoreHistoryEvent {
+    entry_id: String,
+    last_interaction_only: bool,
+}
+
+#[derive(Serialize, Clone)]
+struct VoiceInputEvent {
+    text: String,
+    auto_send: bool,
+}
+
+#[derive(Serialize, Clone)]
+struct OpenForSkillEvent {
+    skill_id: String,
+    skill_name: String,
+    skill_model: Option<String>,
+}
+
 struct PendingDialogParams {
     skill_id: String,
     skill_name: String,
@@ -255,35 +279,47 @@ fn emit_reuse_event(
     skill_model: Option<&str>,
     new_chat: bool,
 ) -> crate::Result<()> {
+    if app.get_webview_window(label).is_none() {
+        return Err(Error::Other(format!(
+            "conversation dialog window '{label}' missing"
+        )));
+    }
+
     if new_chat {
-        app.emit_to(label, "new-conversation", serde_json::json!({}))?;
+        app.emit_to(
+            label,
+            "new-conversation",
+            NewConversationEvent {
+                reason: "reopen".into(),
+            },
+        )?;
     } else if let Some(entry_id) = history_entry_id {
         app.emit_to(
             label,
             "restore-history",
-            serde_json::json!({
-                "entry_id": entry_id,
-                "last_interaction_only": last_interaction_only,
-            }),
+            RestoreHistoryEvent {
+                entry_id,
+                last_interaction_only,
+            },
         )?;
-    } else if let Some(input) = &initial_input {
+    } else if let Some(text) = initial_input {
         app.emit_to(
             label,
             "voice-input",
-            serde_json::json!({
-                "text": input,
-                "auto_send": auto_send_input,
-            }),
+            VoiceInputEvent {
+                text,
+                auto_send: auto_send_input,
+            },
         )?;
     } else if !skill_id.is_empty() {
         app.emit_to(
             label,
             "open-for-skill",
-            serde_json::json!({
-                "skill_id": skill_id,
-                "skill_name": skill_name,
-                "skill_model": skill_model,
-            }),
+            OpenForSkillEvent {
+                skill_id: skill_id.to_string(),
+                skill_name: skill_name.to_string(),
+                skill_model: skill_model.map(|s| s.to_string()),
+            },
         )?;
     }
     Ok(())

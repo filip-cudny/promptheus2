@@ -32,7 +32,7 @@ export function useConversationDialogIpc(opts: {
       { target: opts.selfTarget },
     );
 
-    const u4 = await listen(
+    const u4 = await listen<{ reason: string }>(
       "new-conversation",
       () => opts.onNewConversation(),
       { target: opts.selfTarget },

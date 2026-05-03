@@ -44,6 +44,11 @@ struct SelectPayload {
     provider_id: String,
 }
 
+#[derive(Serialize, Clone)]
+struct ProviderMenuClosedEvent {
+    via_select: bool,
+}
+
 #[tauri::command]
 pub async fn show_provider_menu(
     app: AppHandle,
@@ -97,7 +102,11 @@ pub async fn hide_provider_menu(app: AppHandle) -> crate::Result<()> {
     }
     if let Some(host) = take_menu_host() {
         let toolbar = shell_toolbar_label_for(&host);
-        let _ = app.emit_to(toolbar.as_str(), "provider-menu:closed", ());
+        let _ = app.emit_to(
+            toolbar.as_str(),
+            "provider-menu:closed",
+            ProviderMenuClosedEvent { via_select: false },
+        );
     }
     Ok(())
 }
@@ -142,6 +151,10 @@ pub async fn provider_menu_select(
         "provider-menu:select",
         SelectPayload { provider_id },
     )?;
-    let _ = app.emit_to(toolbar.as_str(), "provider-menu:closed", ());
+    let _ = app.emit_to(
+        toolbar.as_str(),
+        "provider-menu:closed",
+        ProviderMenuClosedEvent { via_select: true },
+    );
     Ok(())
 }

@@ -52,7 +52,7 @@ impl SqliteHistoryService {
         is_multi_turn: bool,
         skill_name: Option<String>,
         quick_action: bool,
-    ) {
+    ) -> Option<String> {
         let id = Self::generate_id();
         let now = Self::now_timestamp();
         let entry_type_str = match entry_type {
@@ -80,10 +80,11 @@ impl SqliteHistoryService {
 
         if let Err(e) = result {
             log::error!("failed to add history entry: {}", e);
-            return;
+            return None;
         }
 
         self.enforce_max_entries();
+        Some(id)
     }
 
     pub fn add_conversation_entry(

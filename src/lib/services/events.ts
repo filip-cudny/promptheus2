@@ -1,12 +1,42 @@
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { listen } from "@tauri-apps/api/event";
 
-export function onSettingsChanged(callback: () => void): Promise<UnlistenFn> {
-  return listen("settings-changed", callback);
+export interface SettingsChangedEvent {
+  version: number;
 }
 
-export function onHistoryChanged(callback: () => void): Promise<UnlistenFn> {
-  return listen("history-changed", callback);
+export interface HistoryChangedEvent {
+  added_id: string | null;
+  removed_id: string | null;
+  version: number;
+}
+
+export interface ContextChangedEvent {
+  version: number;
+}
+
+export function onSettingsChanged(
+  callback: (payload: SettingsChangedEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<SettingsChangedEvent>("settings-changed", (event) =>
+    callback(event.payload),
+  );
+}
+
+export function onHistoryChanged(
+  callback: (payload: HistoryChangedEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<HistoryChangedEvent>("history-changed", (event) =>
+    callback(event.payload),
+  );
+}
+
+export function onContextChanged(
+  callback: (payload: ContextChangedEvent) => void,
+): Promise<UnlistenFn> {
+  return listen<ContextChangedEvent>("context-changed", (event) =>
+    callback(event.payload),
+  );
 }
 
 export function onExecutionStarted(

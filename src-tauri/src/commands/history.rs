@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 
 use crate::models::history::{
@@ -10,6 +10,7 @@ use crate::models::history::{
 };
 use crate::services::clipboard::ClipboardService;
 use crate::services::conversation_context::ConversationContextCache;
+use crate::services::history_events::emit_history_changed;
 use crate::services::history_search::{HistorySearch, SearchQuery, SearchResponse};
 use crate::services::sqlite_history::SqliteHistoryService;
 
@@ -24,11 +25,6 @@ pub struct SkillCount {
 pub struct LastInteractionData {
     pub last_text: Option<HistoryEntry>,
     pub last_speech: Option<HistoryEntry>,
-}
-
-fn emit_history_changed(app: &AppHandle) -> crate::Result<()> {
-    app.emit("history-changed", ())?;
-    Ok(())
 }
 
 #[tauri::command]
@@ -68,7 +64,7 @@ pub async fn add_history_entry(
     is_multi_turn: bool,
     skill_name: Option<String>,
 ) -> crate::Result<()> {
-    history.lock().await.add_entry(
+    let added_id = history.lock().await.add_entry(
         input_content,
         entry_type,
         output_content,
@@ -79,7 +75,7 @@ pub async fn add_history_entry(
         skill_name,
         false,
     );
-    emit_history_changed(&app)
+    emit_history_changed(&app, added_id, None)
 }
 
 #[tauri::command]
@@ -123,7 +119,7 @@ pub async fn add_conversation_entry(
         model_id,
         reasoning_effort,
     );
-    emit_history_changed(&app)?;
+    emit_history_changed(&app, Some(id.clone()), None)?;
     Ok(id)
 }
 
@@ -150,7 +146,7 @@ pub async fn update_conversation_entry(
         model_id,
         reasoning_effort,
     )?;
-    emit_history_changed(&app)
+    emit_history_changed(&app, Some(entry_id), None)
 }
 
 #[tauri::command]
@@ -172,7 +168,7 @@ pub async fn update_history_entry_title(
     title: String,
 ) -> crate::Result<()> {
     history.lock().await.update_entry_title(&entry_id, title)?;
-    emit_history_changed(&app)
+    emit_history_changed(&app, Some(entry_id), None)
 }
 
 #[tauri::command]
@@ -182,7 +178,7 @@ pub async fn delete_history_entry(
     entry_id: String,
 ) -> crate::Result<()> {
     history.lock().await.delete_entry(&entry_id)?;
-    emit_history_changed(&app)
+    emit_history_changed(&app, None, Some(entry_id))
 }
 
 #[tauri::command]
@@ -191,7 +187,7 @@ pub async fn clear_history(
     history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
 ) -> crate::Result<()> {
     history.lock().await.clear();
-    emit_history_changed(&app)
+    emit_history_changed(&app, None, None)
 }
 
 #[tauri::command]

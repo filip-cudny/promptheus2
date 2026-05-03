@@ -30,6 +30,11 @@ pub struct ImagePayload {
     media_type: String,
 }
 
+#[derive(Serialize, Clone)]
+struct LoadImageEvent {
+    media_type: String,
+}
+
 #[derive(Serialize)]
 pub struct ImagePreviewWorkArea {
     cursor_x: f64,
@@ -56,6 +61,7 @@ pub async fn open_image_preview(
     let work = monitor.work_area();
     let scale = monitor.scale_factor();
 
+    let media_type_event = media_type.clone();
     *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(PendingImage { data, media_type });
     *WORK_AREA.lock().unwrap_or_else(|e| e.into_inner()) = Some(StoredWorkArea {
         cursor_x: cursor_pos.x / scale,
@@ -75,7 +81,13 @@ pub async fn open_image_preview(
     #[cfg(target_os = "macos")]
     app.show()?;
 
-    app.emit_to("image-preview", "load-image", ())?;
+    app.emit_to(
+        "image-preview",
+        "load-image",
+        LoadImageEvent {
+            media_type: media_type_event,
+        },
+    )?;
 
     Ok(())
 }
