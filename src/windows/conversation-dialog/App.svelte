@@ -3,22 +3,22 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
-  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { createConversationStore } from "$lib/stores/conversation.svelte";
   import { hasContext } from "$lib/services/context";
   import { getSettings } from "$lib/services/settings";
   import { getContextWindowSize } from "$lib/utils/contextWindow";
-  import { ICON_SIZE } from "$lib/constants/ui";
-  import { PanelLeft, SquarePen } from "lucide-svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
   import ChatPalette from "$lib/components/features/conversation-dialog/ChatPalette.svelte";
+  import ChatTopButtons from "$lib/components/features/conversation-dialog/ChatTopButtons.svelte";
   import ConversationArea from "$lib/components/features/conversation-dialog/ConversationArea.svelte";
   import InputArea from "$lib/components/features/conversation-dialog/InputArea.svelte";
   import TabSidebar from "$lib/components/features/conversation-dialog/TabSidebar.svelte";
+  import { useConversationDialogIpc } from "$lib/components/features/conversation-dialog/drivers/useConversationDialogIpc.svelte";
   import { openPalette, reloadActiveInHost } from "$lib/services/shellToolbar";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
   import { focusConversationInput } from "$lib/utils/conversationFocus";
   import { initTheme } from "$lib/stores/theme.svelte";
+  import type { ModelConfig } from "$lib/types";
 
   interface DialogInitParams {
     skill_id: string;
@@ -36,8 +36,6 @@
   const SELF_TARGET = getCurrentWebview().label;
 
   const store = createConversationStore("", "");
-
-  import type { ModelConfig } from "$lib/types";
 
   let sidebarOpen = $state(false);
   let contextVisible = $state(false);
@@ -64,28 +62,16 @@
     return getContextWindowSize(activeModel.model, activeModel.context_window_size);
   });
 
-  let unlistenRestore: UnlistenFn | undefined;
-  let unlistenContextChanged: UnlistenFn | undefined;
-  let unlistenVoiceInput: UnlistenFn | undefined;
-  let unlistenOpenForSkill: UnlistenFn | undefined;
-  let unlistenNewConversation: UnlistenFn | undefined;
-  let unlistenActiveChanged: UnlistenFn | undefined;
-  let unlistenMenuReload: UnlistenFn | undefined;
-
   async function handleGlobalKeydown(e: KeyboardEvent) {
     if (matches(e, SHORTCUTS.reloadActive)) {
       e.preventDefault();
       e.stopImmediatePropagation();
-      if (chatPaletteOpen) {
-        chatPaletteOpen = false;
-      }
+      if (chatPaletteOpen) chatPaletteOpen = false;
       await reloadActiveProvider();
       return;
     }
 
-    if (chatPaletteOpen) {
-      return;
-    }
+    if (chatPaletteOpen) return;
 
     if (matches(e, SHORTCUTS.openPalette)) {
       e.preventDefault();
@@ -138,15 +124,13 @@
   }
 
   function handleVoiceInput(skillId: string, text: string, autoSend: boolean) {
-    const currentTab = store.tabs.find(t => t.tab_id === store.activeTabId);
+    const currentTab = store.tabs.find((t) => t.tab_id === store.activeTabId);
     if (currentTab && currentTab.tree.current_path.length > 0) {
       store.addTab();
     }
     const inputText = skillId ? `/${skillId} ${text}` : text;
     store.updateInputText(inputText);
-    if (autoSend) {
-      store.sendMessage();
-    }
+    if (autoSend) store.sendMessage();
   }
 
   async function applyInitParams(p: DialogInitParams) {
@@ -169,6 +153,23 @@
     } catch {}
   }
 
+  const ipc = useConversationDialogIpc({
+    selfTarget: SELF_TARGET,
+    onRestoreHistory: (entryId, lastInteractionOnly) => {
+      store.restoreFromHistory(entryId, lastInteractionOnly);
+    },
+    onVoiceInput: (text, autoSend) => handleVoiceInput("", text, autoSend),
+    onOpenForSkill: (skillId, skillName, skillModel) =>
+      store.openForSkill(skillId, skillName, skillModel),
+    onNewConversation: () => store.addTab(),
+    onActiveProviderCleared: () => focusConversationInput(),
+    onMenuReloadActive: () => {
+      if (chatPaletteOpen) chatPaletteOpen = false;
+      reloadActiveProvider();
+    },
+    onContextChanged: () => autoShowContextIfNeeded(),
+  });
+
   onMount(async () => {
     initTheme();
     window.addEventListener("keydown", handleGlobalKeydown);
@@ -183,62 +184,8 @@
       await applyInitParams(initParams);
     }
 
-    unlistenRestore = await listen<{ entry_id: string; last_interaction_only?: boolean }>(
-      "restore-history",
-      (event) => {
-        store.restoreFromHistory(event.payload.entry_id, event.payload.last_interaction_only);
-      },
-      { target: SELF_TARGET },
-    );
-
-    unlistenVoiceInput = await listen<{ text: string; auto_send: boolean }>(
-      "voice-input",
-      (event) => {
-        handleVoiceInput("", event.payload.text, event.payload.auto_send);
-      },
-      { target: SELF_TARGET },
-    );
-
-    unlistenOpenForSkill = await listen<{ skill_id: string; skill_name: string; skill_model: string | null }>(
-      "open-for-skill",
-      (event) => {
-        store.openForSkill(event.payload.skill_id, event.payload.skill_name, event.payload.skill_model);
-      },
-      { target: SELF_TARGET },
-    );
-
-    unlistenNewConversation = await listen(
-      "new-conversation",
-      () => {
-        store.addTab();
-      },
-      { target: SELF_TARGET },
-    );
-
-    unlistenActiveChanged = await listen<{ provider_id: string | null }>(
-      "shell:active-changed",
-      (event) => {
-        if (event.payload.provider_id === null) {
-          focusConversationInput();
-        }
-      },
-      { target: SELF_TARGET },
-    );
-
-    unlistenMenuReload = await listen(
-      "menu:reload-active",
-      () => {
-        if (chatPaletteOpen) chatPaletteOpen = false;
-        reloadActiveProvider();
-      },
-      { target: SELF_TARGET },
-    );
-
+    await ipc.init();
     await autoShowContextIfNeeded();
-
-    unlistenContextChanged = await listen("context-changed", () => {
-      autoShowContextIfNeeded();
-    });
   });
 
   function handleContextAutoShow() {
@@ -249,11 +196,8 @@
   }
 
   function toggleContext() {
-    if (contextVisible) {
-      closeContext();
-    } else {
-      contextVisible = true;
-    }
+    if (contextVisible) closeContext();
+    else contextVisible = true;
   }
 
   function closeContext() {
@@ -273,38 +217,32 @@
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleGlobalKeydown);
-    unlistenRestore?.();
-    unlistenContextChanged?.();
-    unlistenVoiceInput?.();
-    unlistenOpenForSkill?.();
-    unlistenNewConversation?.();
-    unlistenActiveChanged?.();
-    unlistenMenuReload?.();
+    ipc.destroy();
     store.destroy();
   });
 </script>
 
 <div class="dialog-shell">
-  <div class="top-buttons" class:sidebar-open={sidebarOpen}>
-    <button
-      class="top-btn sidebar-toggle"
-      class:hidden={sidebarOpen}
-      onclick={() => sidebarOpen = !sidebarOpen}
-      title="Toggle conversations"
-    >
-      <PanelLeft size={ICON_SIZE.md} />
-    </button>
-    <button
-      class="top-btn"
-      onclick={() => store.addTab()}
-      title="New conversation"
-    >
-      <SquarePen size={ICON_SIZE.md} />
-    </button>
-  </div>
+  <ChatTopButtons
+    {sidebarOpen}
+    onToggleSidebar={() => (sidebarOpen = !sidebarOpen)}
+    onNewChat={() => store.addTab()}
+  />
   <ConversationArea {store} />
-  <InputArea {store} {models} {contextVisible} {contextDisabled} {contextInitialCollapsed} {contextWindowSize} {defaultModelId} onSendAndCopy={handleSendAndCopy} onContextAutoShow={handleContextAutoShow} onCloseContext={closeContext} onToggleContext={toggleContext} />
-  <TabSidebar {store} open={sidebarOpen} onClose={() => sidebarOpen = false} />
+  <InputArea
+    {store}
+    {models}
+    {contextVisible}
+    {contextDisabled}
+    {contextInitialCollapsed}
+    {contextWindowSize}
+    {defaultModelId}
+    onSendAndCopy={handleSendAndCopy}
+    onContextAutoShow={handleContextAutoShow}
+    onCloseContext={closeContext}
+    onToggleContext={toggleContext}
+  />
+  <TabSidebar {store} open={sidebarOpen} onClose={() => (sidebarOpen = false)} />
 </div>
 
 <ChatPalette
@@ -330,60 +268,5 @@
     font-size: var(--font-size-base);
     overflow: hidden;
     position: relative;
-  }
-
-  .top-buttons {
-    position: absolute;
-    top: 6px;
-    left: 6px;
-    z-index: 201;
-    display: flex;
-    gap: var(--space-2);
-    transition: transform var(--motion-slow) var(--ease-default);
-  }
-
-  .top-buttons.sidebar-open {
-    transform: translateX(240px);
-  }
-
-  .sidebar-toggle {
-    width: 28px;
-    overflow: visible;
-    transition: width var(--motion-slow) var(--ease-default), opacity var(--motion-slow) var(--ease-default);
-  }
-
-  .sidebar-toggle.hidden {
-    width: 0;
-    opacity: 0;
-    overflow: hidden;
-    pointer-events: none;
-  }
-
-  .top-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: var(--radius-lg);
-    border: none;
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    color: var(--text-disabled);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-0);
-    position: relative;
-  }
-
-  :global([data-platform="linux"]) .top-btn {
-    background: var(--surface-overlay-faint);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-
-  .top-btn:hover {
-    color: var(--text-secondary);
-    background: var(--surface-overlay);
   }
 </style>
