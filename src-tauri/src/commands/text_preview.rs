@@ -57,14 +57,14 @@ pub async fn open_text_preview(
     text: String,
     index: usize,
     source_window: String,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let label = label_for(&text);
     log::debug!("open_text_preview: label={} index={} source={}", label, index, source_window);
 
     if let Some(win) = app.get_webview_window(&label) {
         log::debug!("open_text_preview: reusing existing window {}", label);
-        win.show().map_err(|e| e.to_string())?;
-        dialog::focus_window(&win)?;
+        win.show()?;
+        dialog::focus_window(&win).map_err(crate::Error::Other)?;
         return Ok(());
     }
 
@@ -99,7 +99,7 @@ pub async fn open_text_preview(
 
     let win = builder.build().map_err(|e| {
         pending_remove(&label);
-        e.to_string()
+        crate::Error::from(e)
     })?;
 
     if geometry.is_none() {
@@ -124,10 +124,10 @@ pub async fn open_text_preview(
     });
 
     #[cfg(target_os = "macos")]
-    app.show().map_err(|e| e.to_string())?;
+    app.show()?;
 
-    win.show().map_err(|e| e.to_string())?;
-    dialog::focus_window(&win)?;
+    win.show()?;
+    dialog::focus_window(&win).map_err(crate::Error::Other)?;
 
     Ok(())
 }

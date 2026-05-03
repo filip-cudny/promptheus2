@@ -5,6 +5,7 @@ use tauri::{Emitter, Manager};
 
 use crate::services::ai_webview;
 use crate::services::dialog::{self, focus_host_window, is_shell_toolbar_label, DialogConfig};
+use crate::Error;
 
 struct PendingDialogParams {
     skill_id: String,
@@ -42,7 +43,7 @@ pub async fn open_conversation_dialog(
     initial_input: Option<String>,
     auto_send_input: Option<bool>,
     new_chat: Option<bool>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let label = "conversation-dialog";
     let last_interaction_only = last_interaction_only.unwrap_or(false);
     let auto_send_input = auto_send_input.unwrap_or(false);
@@ -85,7 +86,9 @@ pub async fn open_conversation_dialog(
         return Ok(());
     }
 
-    let (_, _created) = dialog::open_or_focus(&app, &config).await?;
+    let (_, _created) = dialog::open_or_focus(&app, &config)
+        .await
+        .map_err(Error::Other)?;
     Ok(())
 }
 
@@ -114,7 +117,7 @@ fn surface_conversation_dialog(app: &tauri::AppHandle, label: &str) {
 }
 
 #[tauri::command]
-pub async fn focus_or_open_chat(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn focus_or_open_chat(app: tauri::AppHandle) -> crate::Result<()> {
     let label = "conversation-dialog";
 
     if app.get_window(label).is_some() {
@@ -122,7 +125,7 @@ pub async fn focus_or_open_chat(app: tauri::AppHandle) -> Result<(), String> {
             target: "app_lib::commands::conversation_dialog",
             "focus_or_open_chat: focusing existing host {label}",
         );
-        return focus_host_window(&app, label);
+        return focus_host_window(&app, label).map_err(Error::Other);
     }
 
     let config = DialogConfig {
@@ -134,7 +137,9 @@ pub async fn focus_or_open_chat(app: tauri::AppHandle) -> Result<(), String> {
         geometry_key: "conversation-dialog".into(),
     };
 
-    let (_, _) = dialog::open_or_focus(&app, &config).await?;
+    let (_, _) = dialog::open_or_focus(&app, &config)
+        .await
+        .map_err(Error::Other)?;
     Ok(())
 }
 
@@ -146,7 +151,7 @@ pub async fn open_conversation_dialog_new_window(
     skill_id: Option<String>,
     skill_name: Option<String>,
     skill_model: Option<String>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let label = next_conversation_dialog_label(&app);
     log::info!(
         target: "app_lib::commands::conversation_dialog",
@@ -193,7 +198,9 @@ pub async fn open_conversation_dialog_new_window(
         }
     }
 
-    let (_, _) = dialog::open_or_focus(&app, &config).await?;
+    let (_, _) = dialog::open_or_focus(&app, &config)
+        .await
+        .map_err(Error::Other)?;
     log::info!(
         target: "app_lib::commands::conversation_dialog",
         "open_conversation_dialog_new_window: window created label={label}",
@@ -247,10 +254,9 @@ fn emit_reuse_event(
     skill_name: &str,
     skill_model: Option<&str>,
     new_chat: bool,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     if new_chat {
-        app.emit_to(label, "new-conversation", serde_json::json!({}))
-            .map_err(|e| e.to_string())
+        app.emit_to(label, "new-conversation", serde_json::json!({}))?;
     } else if let Some(entry_id) = history_entry_id {
         app.emit_to(
             label,
@@ -259,8 +265,7 @@ fn emit_reuse_event(
                 "entry_id": entry_id,
                 "last_interaction_only": last_interaction_only,
             }),
-        )
-        .map_err(|e| e.to_string())
+        )?;
     } else if let Some(input) = &initial_input {
         app.emit_to(
             label,
@@ -269,8 +274,7 @@ fn emit_reuse_event(
                 "text": input,
                 "auto_send": auto_send_input,
             }),
-        )
-        .map_err(|e| e.to_string())
+        )?;
     } else if !skill_id.is_empty() {
         app.emit_to(
             label,
@@ -280,9 +284,7 @@ fn emit_reuse_event(
                 "skill_name": skill_name,
                 "skill_model": skill_model,
             }),
-        )
-        .map_err(|e| e.to_string())
-    } else {
-        Ok(())
+        )?;
     }
+    Ok(())
 }

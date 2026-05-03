@@ -24,6 +24,7 @@ use crate::models::message::{
 use crate::services::notification::NotificationLevel;
 use crate::services::execution::{ExecutionSnapshot, LiveExecution, PromptExecutionService};
 use crate::services::skill_message;
+use crate::Error;
 
 fn tool_display_name(tool_name: &str) -> &str {
     match tool_name {
@@ -92,7 +93,7 @@ async fn run_stream_loop(
     live: Arc<TokioMutex<LiveExecution>>,
     cancel_rx: Option<watch::Receiver<bool>>,
     text_prefix: &str,
-) -> Result<StreamResult, String> {
+) -> crate::Result<StreamResult> {
     let mut full_text = String::new();
     let mut full_thinking = String::new();
     let mut prompt_tokens: Option<usize> = None;
@@ -112,7 +113,7 @@ async fn run_stream_loop(
                         if let Some(ref ch) = live.channel {
                             let _ = ch.send(StreamEvent::Error { message: "Cancelled".to_string() });
                         }
-                        return Err("Cancelled".to_string());
+                        return Err(Error::Other("Cancelled".to_string()));
                     }
                     continue;
                 }
@@ -219,9 +220,9 @@ async fn run_stream_loop(
                 live.snapshot.finished = true;
                 live.snapshot.error = Some(msg.clone());
                 if let Some(ref ch) = live.channel {
-                    let _ = ch.send(StreamEvent::Error { message: msg.clone() });
+                    let _ = ch.send(StreamEvent::Error { message: msg });
                 }
-                return Err(msg);
+                return Err(Error::from(e));
             }
         }
     }
@@ -390,7 +391,7 @@ pub async fn execute_skill(
     skill_name: String,
     input_override: Option<String>,
     on_event: Channel<StreamEvent>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let start_time = Instant::now();
 
     let (execution_id, cancel_rx, model_id, model_display_name, skill_display_name, skill_version_id, input_content, messages, ai, param_overrides) = {
@@ -398,24 +399,23 @@ pub async fn execute_skill(
 
         let (execution_id, cancel_rx) = state
             .prompt_execution
-            .start_skill_execution(skill_name.clone())
-            .map_err(|e| e.to_string())?;
+            .start_skill_execution(skill_name.clone())?;
 
         let skill = skill_message::resolve_skill_or_err(&state.skill_service, &skill_name)
             .map_err(|e| {
                 state.prompt_execution.finish_skill_execution();
-                e.to_string()
+                Error::from(e)
             })?;
         let skill_display_name = skill.display_name.clone();
         let skill_version_id = skill.skill_version_id.ok_or_else(|| {
             state.prompt_execution.finish_skill_execution();
-            format!("Skill '{}' is missing a registered version", skill_name)
+            Error::Other(format!("Skill '{}' is missing a registered version", skill_name))
         })?;
 
         let model_id = PromptExecutionService::resolve_quick_action_model(&state.config, skill.model.as_deref())
             .map_err(|e| {
                 state.prompt_execution.finish_skill_execution();
-                e.to_string()
+                Error::from(e)
             })?;
 
         let model_display_name = state
@@ -431,7 +431,7 @@ pub async fn execute_skill(
             Some(text) => text.clone(),
             None => state.clipboard.get_text().map_err(|e| {
                 state.prompt_execution.finish_skill_execution();
-                e.to_string()
+                Error::from(e)
             })?,
         };
 
@@ -473,16 +473,12 @@ pub async fn execute_skill(
         },
     );
 
-    let stream_result = {
-        let stream = ai
-            .complete_stream(&model_id, messages, param_overrides, None, vec![])
-            .await
-            .map_err(|e| e.to_string());
-
-        match stream {
-            Ok(stream) => run_stream_loop(stream, live_execution, Some(cancel_rx), "").await,
-            Err(e) => Err(e),
-        }
+    let stream_result = match ai
+        .complete_stream(&model_id, messages, param_overrides, None, vec![])
+        .await
+    {
+        Ok(stream) => run_stream_loop(stream, live_execution, Some(cancel_rx), "").await,
+        Err(e) => Err(e.into()),
     };
 
     let mut state = state.lock().await;
@@ -582,7 +578,8 @@ pub async fn execute_skill(
             Ok(())
         }
         Err(error) => {
-            let is_cancelled = error == "Cancelled";
+            let message = error.to_string();
+            let is_cancelled = message == "Cancelled";
 
             if is_cancelled {
                 let _ = state.notifications.notify(
@@ -597,7 +594,7 @@ pub async fn execute_skill(
                     "prompt_execution_error",
                     NotificationLevel::Error,
                     "Execution failed",
-                    Some(error.as_str()),
+                    Some(message.as_str()),
                     &state.config.settings().notifications,
                 );
             }
@@ -608,7 +605,7 @@ pub async fn execute_skill(
                 ExecutionCompletedPayload {
                     execution_id,
                     success: false,
-                    error: Some(error.clone()),
+                    error: Some(message),
                     cancelled: is_cancelled,
                 },
             );
@@ -621,13 +618,12 @@ pub async fn execute_skill(
 pub async fn generate_conversation_title(
     state: State<'_, Mutex<AppState>>,
     user_message: String,
-) -> Result<String, String> {
+) -> crate::Result<String> {
     let (model_id, prompt, ai) = {
         let state = state.lock().await;
         let settings = state.config.settings();
 
-        let model_id = PromptExecutionService::resolve_title_generation_model(&state.config)
-            .map_err(|e| e.to_string())?;
+        let model_id = PromptExecutionService::resolve_title_generation_model(&state.config)?;
 
         (
             model_id,
@@ -651,10 +647,7 @@ pub async fn generate_conversation_title(
         },
     ];
 
-    let title = ai
-        .complete(&model_id, messages)
-        .await
-        .map_err(|e| e.to_string())?;
+    let title = ai.complete(&model_id, messages).await?;
 
     Ok(title.trim().to_string())
 }
@@ -694,7 +687,7 @@ pub fn build_system_prompt_base(config: &ConfigService, resolved_environment_sec
 #[tauri::command]
 pub async fn resolve_environment_section(
     state: State<'_, Mutex<AppState>>,
-) -> Result<String, String> {
+) -> crate::Result<String> {
     let state = state.lock().await;
     Ok(resolve_environment_section_template(&state.config, state.active_app(), &state.recent_apps_display()))
 }
@@ -703,7 +696,7 @@ pub async fn resolve_environment_section(
 pub async fn release_conversation_context(
     state: State<'_, Mutex<AppState>>,
     tab_id: String,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
     state.conversation_context.remove(&tab_id);
     Ok(())
@@ -714,7 +707,7 @@ pub async fn seed_conversation_context(
     state: State<'_, Mutex<AppState>>,
     tab_id: String,
     resolved_environment_section: String,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
     if !state.conversation_context.has(&tab_id) {
         state.conversation_context.insert(tab_id, resolved_environment_section);
@@ -732,7 +725,7 @@ pub struct ResolveSkillInputResult {
 pub async fn resolve_skill_input(
     state: State<'_, Mutex<AppState>>,
     text: String,
-) -> Result<ResolveSkillInputResult, String> {
+) -> crate::Result<ResolveSkillInputResult> {
     let state = state.lock().await;
     let result = skill_message::resolve_skill_input(&state.skill_service, &text);
     Ok(ResolveSkillInputResult {
@@ -746,18 +739,24 @@ pub async fn respond_to_tool_call(
     state: State<'_, Mutex<AppState>>,
     tool_call_id: String,
     approved: bool,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
-    state.tool_confirmation.respond(&tool_call_id, approved)
+    state
+        .tool_confirmation
+        .respond(&tool_call_id, approved)
+        .map_err(Error::Other)
 }
 
 #[tauri::command]
 pub async fn retry_tool_call(
     state: State<'_, Mutex<AppState>>,
     tool_call_id: String,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
-    state.tool_confirmation.respond(&tool_call_id, true)
+    state
+        .tool_confirmation
+        .respond(&tool_call_id, true)
+        .map_err(Error::Other)
 }
 
 #[tauri::command]
@@ -774,16 +773,14 @@ pub async fn execute_conversation_from_tree(
     reasoning_effort: Option<String>,
     tools_override: Option<Vec<String>>,
     on_event: Channel<StreamEvent>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let (execution_id, resolved_model_id, _model_display_name, mut all_messages, ai, updates_for_event, param_overrides) = {
         let mut state = state.lock().await;
 
         let execution_id = uuid::Uuid::new_v4().to_string();
 
         let resolved_model_id =
-            PromptExecutionService::resolve_model(&state.config, model_id.as_deref()).map_err(|e| {
-                e.to_string()
-            })?;
+            PromptExecutionService::resolve_model(&state.config, model_id.as_deref())?;
 
         let chat_surface_params = state
             .config
@@ -864,8 +861,7 @@ pub async fn execute_conversation_from_tree(
 
         let version_ids = skill_message::collect_skill_version_ids(&nodes);
         let skill_bodies =
-            skill_message::load_skill_version_bodies(state.history.conn(), &version_ids)
-                .map_err(|e| e.to_string())?;
+            skill_message::load_skill_version_bodies(state.history.conn(), &version_ids)?;
         let tree_messages =
             skill_message::build_messages_from_tree(&nodes, &context_images, &skill_bodies);
 
@@ -923,7 +919,7 @@ pub async fn execute_conversation_from_tree(
     let mut iteration = 0;
     let mut accumulated_prefix = String::new();
     loop {
-        let stream = ai
+        let stream_result = match ai
             .complete_stream(
                 &resolved_model_id,
                 all_messages.clone(),
@@ -932,11 +928,9 @@ pub async fn execute_conversation_from_tree(
                 mcp_tools.clone(),
             )
             .await
-            .map_err(|e| e.to_string());
-
-        let stream_result = match stream {
+        {
             Ok(stream) => run_stream_loop(stream, Arc::clone(&live_execution), Some(cancel_rx.clone()), &accumulated_prefix).await,
-            Err(e) => Err(e),
+            Err(e) => Err(e.into()),
         };
 
         match stream_result {
@@ -984,7 +978,7 @@ pub async fn execute_conversation_from_tree(
                 all_messages.extend(new_messages);
             }
             Err(error) => {
-                let _ = on_event.send(StreamEvent::Error { message: error.clone() });
+                let _ = on_event.send(StreamEvent::Error { message: error.to_string() });
                 let mut s = state.lock().await;
                 s.prompt_execution.clear_live();
                 return Err(error);
@@ -998,7 +992,7 @@ pub async fn execute_conversation_from_tree(
 pub async fn reconnect_to_execution(
     state: State<'_, Mutex<AppState>>,
     on_event: Channel<StreamEvent>,
-) -> Result<Option<ExecutionSnapshot>, String> {
+) -> crate::Result<Option<ExecutionSnapshot>> {
     let live_arc = {
         let state = state.lock().await;
         state.prompt_execution.live.clone()
@@ -1021,7 +1015,7 @@ pub async fn reconnect_to_execution(
 #[tauri::command]
 pub async fn cancel_skill_execution(
     state: State<'_, Mutex<AppState>>,
-) -> Result<bool, String> {
+) -> crate::Result<bool> {
     let mut state = state.lock().await;
     Ok(state.prompt_execution.cancel_execution())
 }
@@ -1029,7 +1023,7 @@ pub async fn cancel_skill_execution(
 #[tauri::command]
 pub async fn cancel_live_execution(
     state: State<'_, Mutex<AppState>>,
-) -> Result<bool, String> {
+) -> crate::Result<bool> {
     let mut state = state.lock().await;
     Ok(state.prompt_execution.cancel_live())
 }
@@ -1037,7 +1031,7 @@ pub async fn cancel_live_execution(
 #[tauri::command]
 pub async fn get_executing_skill_id(
     state: State<'_, Mutex<AppState>>,
-) -> Result<Option<String>, String> {
+) -> crate::Result<Option<String>> {
     let state = state.lock().await;
     Ok(state.prompt_execution.executing_skill_id().map(|s| s.to_string()))
 }

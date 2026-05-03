@@ -1,7 +1,8 @@
 use crate::services::dialog::{self, DialogConfig};
+use crate::Error;
 
 #[tauri::command]
-pub async fn check_env_var(name: String) -> Result<bool, String> {
+pub async fn check_env_var(name: String) -> crate::Result<bool> {
     if name.is_empty() {
         return Ok(false);
     }
@@ -12,7 +13,7 @@ pub async fn check_env_var(name: String) -> Result<bool, String> {
 pub async fn open_settings_window(
     app: tauri::AppHandle,
     section: Option<String>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let config = DialogConfig {
         label: "settings-dialog".into(),
         url: "settings-dialog.html".into(),
@@ -22,7 +23,9 @@ pub async fn open_settings_window(
         geometry_key: "settings-dialog".into(),
     };
 
-    let (win, created) = dialog::open_or_focus(&app, &config).await?;
+    let (win, created) = dialog::open_or_focus(&app, &config)
+        .await
+        .map_err(Error::Other)?;
 
     if created {
         if let Err(e) = win.set_min_size(Some(tauri::LogicalSize::new(800.0, 560.0))) {

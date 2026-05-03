@@ -1,7 +1,8 @@
 use crate::services::dialog::{self, DialogConfig};
+use crate::Error;
 
 #[tauri::command]
-pub async fn open_context_editor(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn open_context_editor(app: tauri::AppHandle) -> crate::Result<()> {
     let config = DialogConfig {
         label: "context-editor".into(),
         url: "context-editor.html".into(),
@@ -11,6 +12,8 @@ pub async fn open_context_editor(app: tauri::AppHandle) -> Result<(), String> {
         geometry_key: "context-editor".into(),
     };
 
-    dialog::open_or_focus(&app, &config).await?;
+    dialog::open_or_focus(&app, &config)
+        .await
+        .map_err(Error::Other)?;
     Ok(())
 }

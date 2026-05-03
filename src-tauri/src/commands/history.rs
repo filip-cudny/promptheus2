@@ -24,12 +24,13 @@ pub struct LastInteractionData {
     pub last_speech: Option<HistoryEntry>,
 }
 
-fn emit_history_changed(app: &AppHandle) -> Result<(), String> {
-    app.emit("history-changed", ()).map_err(|e| e.to_string())
+fn emit_history_changed(app: &AppHandle) -> crate::Result<()> {
+    app.emit("history-changed", ())?;
+    Ok(())
 }
 
 #[tauri::command]
-pub async fn get_history(state: State<'_, Mutex<AppState>>) -> Result<Vec<HistoryEntry>, String> {
+pub async fn get_history(state: State<'_, Mutex<AppState>>) -> crate::Result<Vec<HistoryEntry>> {
     let state = state.lock().await;
     Ok(state.history.get_history())
 }
@@ -39,7 +40,7 @@ pub async fn get_conversations(
     state: State<'_, Mutex<AppState>>,
     offset: u32,
     limit: u32,
-) -> Result<Vec<HistoryEntry>, String> {
+) -> crate::Result<Vec<HistoryEntry>> {
     let state = state.lock().await;
     Ok(state.history.get_conversations(offset, limit))
 }
@@ -48,7 +49,7 @@ pub async fn get_conversations(
 pub async fn get_history_entry(
     state: State<'_, Mutex<AppState>>,
     entry_id: String,
-) -> Result<Option<HistoryEntry>, String> {
+) -> crate::Result<Option<HistoryEntry>> {
     let state = state.lock().await;
     Ok(state.history.get_entry_by_id(&entry_id))
 }
@@ -65,7 +66,7 @@ pub async fn add_history_entry(
     error: Option<String>,
     is_multi_turn: bool,
     skill_name: Option<String>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let state = state.lock().await;
     state.history.add_entry(
         input_content,
@@ -97,7 +98,7 @@ pub async fn add_conversation_entry(
     #[allow(unused_variables)] images: Vec<ImagePayload>,
     model_id: Option<String>,
     reasoning_effort: Option<String>,
-) -> Result<String, String> {
+) -> crate::Result<String> {
     let state = state.lock().await;
     let resolved_environment_section = tab_id
         .as_deref()
@@ -134,7 +135,7 @@ pub async fn update_conversation_entry(
     #[allow(unused_variables)] images: Vec<ImagePayload>,
     model_id: Option<String>,
     reasoning_effort: Option<String>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let state = state.lock().await;
     state
         .history
@@ -148,14 +149,14 @@ pub async fn update_conversation_entry(
             model_id,
             reasoning_effort,
         )
-        .map_err(|e| e.to_string())?;
+        ?;
     emit_history_changed(&app)
 }
 
 #[tauri::command]
 pub async fn get_last_interaction(
     state: State<'_, Mutex<AppState>>,
-) -> Result<LastInteractionData, String> {
+) -> crate::Result<LastInteractionData> {
     let state = state.lock().await;
     Ok(LastInteractionData {
         last_text: state.history.get_last_quick_action(HistoryEntryType::Text),
@@ -171,12 +172,12 @@ pub async fn update_history_entry_title(
     state: State<'_, Mutex<AppState>>,
     entry_id: String,
     title: String,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let state = state.lock().await;
     state
         .history
         .update_entry_title(&entry_id, title)
-        .map_err(|e| e.to_string())?;
+        ?;
     emit_history_changed(&app)
 }
 
@@ -185,12 +186,12 @@ pub async fn delete_history_entry(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
     entry_id: String,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let state = state.lock().await;
     state
         .history
         .delete_entry(&entry_id)
-        .map_err(|e| e.to_string())?;
+        ?;
     emit_history_changed(&app)
 }
 
@@ -198,7 +199,7 @@ pub async fn delete_history_entry(
 pub async fn clear_history(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let state = state.lock().await;
     state.history.clear();
     emit_history_changed(&app)
@@ -208,7 +209,7 @@ pub async fn clear_history(
 pub async fn search_history(
     state: State<'_, Mutex<AppState>>,
     query: SearchQuery,
-) -> Result<SearchResponse, String> {
+) -> crate::Result<SearchResponse> {
     let mut state = state.lock().await;
     let state = &mut *state;
     let response = state.history_search.run(&state.history, &query);
@@ -249,7 +250,7 @@ fn collect_skill_counts(entries: &[HistoryEntry]) -> Vec<SkillCount> {
 #[tauri::command]
 pub async fn list_history_skills(
     state: State<'_, Mutex<AppState>>,
-) -> Result<Vec<SkillCount>, String> {
+) -> crate::Result<Vec<SkillCount>> {
     let state = state.lock().await;
     let entries = state.history.get_history();
     let list = collect_skill_counts(&entries);
@@ -265,12 +266,10 @@ pub async fn list_history_skills(
 pub async fn copy_history_content(
     state: State<'_, Mutex<AppState>>,
     content: String,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let state = state.lock().await;
-    state
-        .clipboard
-        .set_text(&content)
-        .map_err(|e| e.to_string())
+    state.clipboard.set_text(&content)?;
+    Ok(())
 }
 
 #[cfg(test)]

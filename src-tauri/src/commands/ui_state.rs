@@ -7,7 +7,7 @@ use super::settings::AppState;
 pub async fn get_ui_state(
     state: State<'_, Mutex<AppState>>,
     key: String,
-) -> Result<Option<serde_json::Value>, String> {
+) -> crate::Result<Option<serde_json::Value>> {
     let state = state.lock().await;
     Ok(state.ui_state.get(&key))
 }
@@ -17,7 +17,8 @@ pub async fn set_ui_state(
     state: State<'_, Mutex<AppState>>,
     key: String,
     value: serde_json::Value,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
-    state.ui_state.set(&key, value).map_err(|e| e.to_string())
+    state.ui_state.set(&key, value)?;
+    Ok(())
 }

@@ -13,7 +13,7 @@ use crate::models::settings::Provider;
 pub async fn get_model_capabilities(
     provider: Provider,
     model: String,
-) -> Result<ModelCapabilities, String> {
+) -> crate::Result<ModelCapabilities> {
     Ok(capabilities_for(&provider, &model))
 }
 
@@ -22,11 +22,9 @@ pub async fn complete(
     state: State<'_, Mutex<AppState>>,
     model_id: String,
     messages: Vec<ProcessedMessage>,
-) -> Result<String, String> {
+) -> crate::Result<String> {
     let ai = state.lock().await.ai.clone();
-    ai.complete(&model_id, messages)
-        .await
-        .map_err(|e| e.to_string())
+    Ok(ai.complete(&model_id, messages).await?)
 }
 
 #[tauri::command]
@@ -35,12 +33,11 @@ pub async fn complete_stream(
     model_id: String,
     messages: Vec<ProcessedMessage>,
     on_event: Channel<StreamEvent>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let ai = state.lock().await.ai.clone();
     let mut stream = ai
         .complete_stream(&model_id, messages, None, None, vec![])
-        .await
-        .map_err(|e| e.to_string())?;
+        .await?;
 
     let mut full_text = String::new();
     let mut full_thinking = String::new();
@@ -77,7 +74,7 @@ pub async fn complete_stream(
                 let _ = on_event.send(StreamEvent::Error {
                     message: e.to_string(),
                 });
-                return Err(e.to_string());
+                return Err(e.into());
             }
         }
     }

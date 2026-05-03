@@ -11,6 +11,7 @@ use crate::models::settings::Provider;
 use crate::services::ai::tools::ToolRegistry;
 use crate::services::skill_message;
 use crate::services::tokenizer;
+use crate::Error;
 
 use super::execution::{build_system_prompt_base, resolve_environment_section_template};
 
@@ -66,20 +67,18 @@ pub async fn count_tokens(
     text: String,
     provider: String,
     _state: State<'_, Mutex<AppState>>,
-) -> Result<usize, String> {
+) -> crate::Result<usize> {
     let provider = parse_provider(&provider);
-    Ok(tokio::task::spawn_blocking(move || {
-        tokenizer::count_tokens(&text, &provider)
-    })
-    .await
-    .map_err(|e| e.to_string())?)
+    tokio::task::spawn_blocking(move || tokenizer::count_tokens(&text, &provider))
+        .await
+        .map_err(|e| Error::Other(e.to_string()))
 }
 
 #[tauri::command]
 pub async fn get_skill_token_counts(
     provider: String,
     state: State<'_, Mutex<AppState>>,
-) -> Result<HashMap<String, usize>, String> {
+) -> crate::Result<HashMap<String, usize>> {
     let skills: Vec<(String, String)> = {
         let s = state.lock().await;
         s.skill_service
@@ -100,7 +99,7 @@ pub async fn get_skill_token_counts(
             .collect()
     })
     .await
-    .map_err(|e| e.to_string())
+    .map_err(|e| Error::Other(e.to_string()))
 }
 
 #[tauri::command]
@@ -111,7 +110,7 @@ pub async fn count_conversation_tokens(
     tab_id: String,
     tool_names: Vec<String>,
     state: State<'_, Mutex<AppState>>,
-) -> Result<usize, String> {
+) -> crate::Result<usize> {
     let (all_text, image_count, provider) = {
         let state = state.lock().await;
 
@@ -196,8 +195,7 @@ pub async fn count_conversation_tokens(
 
         let version_ids = skill_message::collect_skill_version_ids(&nodes);
         let skill_bodies =
-            skill_message::load_skill_version_bodies(state.history.conn(), &version_ids)
-                .map_err(|e| e.to_string())?;
+            skill_message::load_skill_version_bodies(state.history.conn(), &version_ids)?;
         let tree_messages =
             skill_message::build_messages_from_tree(&nodes, &context_images, &skill_bodies);
 
@@ -220,7 +218,7 @@ pub async fn count_conversation_tokens(
         tokenizer::count_tokens(&all_text, &provider)
     })
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(|e| Error::Other(e.to_string()))?;
 
     Ok(text_tokens + image_tokens)
 }

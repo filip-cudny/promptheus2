@@ -14,7 +14,7 @@ pub struct McpToolInfo {
 #[tauri::command]
 pub async fn list_mcp_tools(
     state: State<'_, Mutex<AppState>>,
-) -> Result<Vec<McpToolInfo>, String> {
+) -> crate::Result<Vec<McpToolInfo>> {
     let state = state.lock().await;
     let tools = state
         .mcp

@@ -7,6 +7,7 @@ use crate::models::history::HistoryEntryType;
 use crate::models::menu::{MenuItem, MenuItemType};
 use crate::providers::SpeechMenuProvider;
 use crate::services::monitor::find_monitor_at;
+use crate::Error;
 
 #[derive(Serialize, Clone)]
 struct ShowMenuPayload {
@@ -45,7 +46,7 @@ fn truncate(s: &str, max_len: usize) -> String {
 #[tauri::command]
 pub async fn get_context_menu_items(
     state: State<'_, Mutex<AppState>>,
-) -> Result<Vec<MenuItem>, String> {
+) -> crate::Result<Vec<MenuItem>> {
     let mut state = state.lock().await;
     let context_items = state.context.get_items();
     state.menu_coordinator.update_context_items(context_items);
@@ -97,7 +98,7 @@ pub async fn execute_menu_item(
     state: State<'_, Mutex<AppState>>,
     item_id: String,
     shift_pressed: bool,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     log::debug!("execute_menu_item: id={item_id}, shift={shift_pressed}");
 
     if item_id == "system_speech_to_text" {
@@ -134,15 +135,15 @@ pub async fn execute_menu_item(
 }
 
 #[tauri::command]
-pub async fn show_context_menu_window(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn show_context_menu_window(app: tauri::AppHandle) -> crate::Result<()> {
     log::debug!(target: "app_lib::commands::menu", "show_context_menu_window: ENTER");
     let win = app
         .get_webview_window("context-menu")
-        .ok_or("context-menu window not found")?;
+        .ok_or_else(|| Error::Other("context-menu window not found".into()))?;
 
     log::debug!(target: "app_lib::commands::menu", "show_context_menu_window: calling cursor_position()");
     let t0 = std::time::Instant::now();
-    let cursor_pos = win.cursor_position().map_err(|e| e.to_string())?;
+    let cursor_pos = win.cursor_position()?;
     log::debug!(
         target: "app_lib::commands::menu",
         "show_context_menu_window: cursor_position OK in {:?} -> ({}, {})",
@@ -150,7 +151,8 @@ pub async fn show_context_menu_window(app: tauri::AppHandle) -> Result<(), Strin
     );
 
     let t1 = std::time::Instant::now();
-    let monitor = find_monitor_at(&app, cursor_pos.x as i32, cursor_pos.y as i32)?;
+    let monitor = find_monitor_at(&app, cursor_pos.x as i32, cursor_pos.y as i32)
+        .map_err(Error::Other)?;
     log::debug!(
         target: "app_lib::commands::menu",
         "show_context_menu_window: find_monitor_at OK in {:?}",
@@ -176,8 +178,7 @@ pub async fn show_context_menu_window(app: tauri::AppHandle) -> Result<(), Strin
     );
 
     let t2 = std::time::Instant::now();
-    app.emit_to("context-menu", "show-context-menu", payload)
-        .map_err(|e| e.to_string())?;
+    app.emit_to("context-menu", "show-context-menu", payload)?;
     log::debug!(
         target: "app_lib::commands::menu",
         "show_context_menu_window: emit_to OK in {:?}",
@@ -188,10 +189,10 @@ pub async fn show_context_menu_window(app: tauri::AppHandle) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub async fn show_context_menu_panel(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn show_context_menu_panel(app: tauri::AppHandle) -> crate::Result<()> {
     let win = app
         .get_webview_window("context-menu")
-        .ok_or("context-menu window not found")?;
+        .ok_or_else(|| Error::Other("context-menu window not found".into()))?;
 
     #[cfg(target_os = "macos")]
     {
@@ -201,20 +202,24 @@ pub async fn show_context_menu_panel(app: tauri::AppHandle) -> Result<(), String
             let _ = tx.send(
                 crate::services::macos_panel::show_panel_without_activating(&win_clone),
             );
-        })
-        .map_err(|e| e.to_string())?;
-        return rx.await.map_err(|e| e.to_string())?;
+        })?;
+        rx.await
+            .map_err(|e| Error::Other(e.to_string()))?
+            .map_err(Error::Other)
     }
 
     #[cfg(not(target_os = "macos"))]
-    win.show().map_err(|e| e.to_string())
+    {
+        win.show()?;
+        Ok(())
+    }
 }
 
 #[tauri::command]
-pub async fn hide_context_menu_panel(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn hide_context_menu_panel(app: tauri::AppHandle) -> crate::Result<()> {
     let win = app
         .get_webview_window("context-menu")
-        .ok_or("context-menu window not found")?;
+        .ok_or_else(|| Error::Other("context-menu window not found".into()))?;
 
     #[cfg(target_os = "macos")]
     {
@@ -222,21 +227,25 @@ pub async fn hide_context_menu_panel(app: tauri::AppHandle) -> Result<(), String
         let win_clone = win.clone();
         app.run_on_main_thread(move || {
             let _ = tx.send(crate::services::macos_panel::hide_panel(&win_clone));
-        })
-        .map_err(|e| e.to_string())?;
-        return rx.await.map_err(|e| e.to_string())?;
+        })?;
+        rx.await
+            .map_err(|e| Error::Other(e.to_string()))?
+            .map_err(Error::Other)
     }
 
     #[cfg(not(target_os = "macos"))]
-    win.hide().map_err(|e| e.to_string())
+    {
+        win.hide()?;
+        Ok(())
+    }
 }
 
 #[tauri::command]
-pub async fn focus_context_menu(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn focus_context_menu(app: tauri::AppHandle) -> crate::Result<()> {
     log::debug!(target: "app_lib::commands::menu", "focus_context_menu: ENTER");
     let win = app
         .get_webview_window("context-menu")
-        .ok_or("context-menu window not found")?;
+        .ok_or_else(|| Error::Other("context-menu window not found".into()))?;
 
     #[cfg(target_os = "linux")]
     {
@@ -281,19 +290,23 @@ pub async fn focus_context_menu(app: tauri::AppHandle) -> Result<(), String> {
         let win_clone = win.clone();
         app.run_on_main_thread(move || {
             let _ = tx.send(crate::services::macos_panel::make_key_without_activating(&win_clone));
-        })
-        .map_err(|e| e.to_string())?;
-        return rx.await.map_err(|e| e.to_string())?;
+        })?;
+        rx.await
+            .map_err(|e| Error::Other(e.to_string()))?
+            .map_err(Error::Other)
     }
 
     #[cfg(not(target_os = "macos"))]
-    win.set_focus().map_err(|e| e.to_string())
+    {
+        win.set_focus()?;
+        Ok(())
+    }
 }
 
 #[tauri::command]
 pub async fn refresh_menu_providers(
     state: State<'_, Mutex<AppState>>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
     state.menu_coordinator.refresh_all();
     Ok(())

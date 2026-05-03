@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager};
 
 use crate::services::dialog::shell_toolbar_label_for;
+use crate::Error;
 
 const MENU_LABEL: &str = "provider-menu";
 
@@ -53,7 +54,7 @@ pub async fn show_provider_menu(
     height: f64,
     providers: Vec<ProviderEntry>,
     active_id: String,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     log::debug!(
         target: "app_lib::commands::provider_menu",
         "show_provider_menu: host={host_label} anchor=({anchor_x}, {anchor_y}) size=({width}x{height}) active={active_id} count={}",
@@ -62,12 +63,10 @@ pub async fn show_provider_menu(
 
     let win = app
         .get_webview_window(MENU_LABEL)
-        .ok_or("provider-menu window not found")?;
+        .ok_or_else(|| Error::Other("provider-menu window not found".into()))?;
 
-    win.set_size(LogicalSize::new(width.max(80.0), height.max(20.0)))
-        .map_err(|e| e.to_string())?;
-    win.set_position(LogicalPosition::new(anchor_x, anchor_y))
-        .map_err(|e| e.to_string())?;
+    win.set_size(LogicalSize::new(width.max(80.0), height.max(20.0)))?;
+    win.set_position(LogicalPosition::new(anchor_x, anchor_y))?;
 
     let payload = ShowPayload {
         providers: providers
@@ -81,21 +80,20 @@ pub async fn show_provider_menu(
         active_id,
     };
 
-    app.emit_to(MENU_LABEL, "provider-menu:show", payload)
-        .map_err(|e| e.to_string())?;
+    app.emit_to(MENU_LABEL, "provider-menu:show", payload)?;
 
     store_menu_host(host_label);
 
-    win.show().map_err(|e| e.to_string())?;
-    win.set_focus().map_err(|e| e.to_string())?;
+    win.show()?;
+    win.set_focus()?;
 
     Ok(())
 }
 
 #[tauri::command]
-pub async fn hide_provider_menu(app: AppHandle) -> Result<(), String> {
+pub async fn hide_provider_menu(app: AppHandle) -> crate::Result<()> {
     if let Some(win) = app.get_webview_window(MENU_LABEL) {
-        win.hide().map_err(|e| e.to_string())?;
+        win.hide()?;
     }
     if let Some(host) = take_menu_host() {
         let toolbar = shell_toolbar_label_for(&host);
@@ -109,10 +107,9 @@ pub async fn size_provider_menu(
     app: AppHandle,
     width: f64,
     height: f64,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     if let Some(win) = app.get_webview_window(MENU_LABEL) {
-        win.set_size(LogicalSize::new(width.max(80.0), height.max(20.0)))
-            .map_err(|e| e.to_string())?;
+        win.set_size(LogicalSize::new(width.max(80.0), height.max(20.0)))?;
     }
     Ok(())
 }
@@ -121,7 +118,7 @@ pub async fn size_provider_menu(
 pub async fn provider_menu_select(
     app: AppHandle,
     provider_id: String,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     log::debug!(
         target: "app_lib::commands::provider_menu",
         "provider_menu_select: {provider_id}",
@@ -144,8 +141,7 @@ pub async fn provider_menu_select(
         toolbar.as_str(),
         "provider-menu:select",
         SelectPayload { provider_id },
-    )
-    .map_err(|e| e.to_string())?;
+    )?;
     let _ = app.emit_to(toolbar.as_str(), "provider-menu:closed", ());
     Ok(())
 }

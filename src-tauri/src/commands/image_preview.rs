@@ -5,6 +5,7 @@ use tauri::{Emitter, Manager};
 
 use crate::services::dock::DockManager;
 use crate::services::monitor::find_monitor_at;
+use crate::Error;
 
 struct PendingImage {
     data: String,
@@ -44,13 +45,14 @@ pub async fn open_image_preview(
     app: tauri::AppHandle,
     data: String,
     media_type: String,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let win = app
         .get_webview_window("image-preview")
-        .ok_or("image-preview window not found")?;
+        .ok_or_else(|| Error::Other("image-preview window not found".into()))?;
 
-    let cursor_pos = win.cursor_position().map_err(|e| e.to_string())?;
-    let monitor = find_monitor_at(&app, cursor_pos.x as i32, cursor_pos.y as i32)?;
+    let cursor_pos = win.cursor_position()?;
+    let monitor = find_monitor_at(&app, cursor_pos.x as i32, cursor_pos.y as i32)
+        .map_err(Error::Other)?;
     let work = monitor.work_area();
     let scale = monitor.scale_factor();
 
@@ -71,21 +73,20 @@ pub async fn open_image_preview(
     }
 
     #[cfg(target_os = "macos")]
-    app.show().map_err(|e| e.to_string())?;
+    app.show()?;
 
-    app.emit_to("image-preview", "load-image", ())
-        .map_err(|e| e.to_string())?;
+    app.emit_to("image-preview", "load-image", ())?;
 
     Ok(())
 }
 
 #[tauri::command]
-pub fn get_image_preview_work_area() -> Result<ImagePreviewWorkArea, String> {
+pub fn get_image_preview_work_area() -> crate::Result<ImagePreviewWorkArea> {
     let wa = WORK_AREA
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .take()
-        .ok_or("no work area stored")?;
+        .ok_or_else(|| Error::Other("no work area stored".into()))?;
 
     Ok(ImagePreviewWorkArea {
         cursor_x: wa.cursor_x,

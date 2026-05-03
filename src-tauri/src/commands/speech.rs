@@ -5,6 +5,7 @@ use tokio::sync::Mutex;
 use crate::models::history::HistoryEntryType;
 use crate::services::notification::NotificationLevel;
 use crate::services::speech::{self, SpeechError};
+use crate::Error;
 
 use super::settings::AppState;
 
@@ -40,7 +41,7 @@ pub async fn toggle_speech_recording(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
     action_id: Option<String>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let was_recording;
     let raw_audio;
 
@@ -83,14 +84,14 @@ pub async fn toggle_speech_recording(
                 }
                 Err(e) => {
                     let _ = app.emit("speech-error", SpeechErrorEvent { message: e.to_string() });
-                    return Err(e.to_string());
+                    return Err(e.into());
                 }
             }
         } else {
             raw_audio = None;
             if let Err(e) = s.speech.start_recording(action_id) {
                 let _ = app.emit("speech-error", SpeechErrorEvent { message: e.to_string() });
-                return Err(e.to_string());
+                return Err(e.into());
             }
         }
     }
@@ -136,10 +137,10 @@ pub async fn toggle_speech_recording(
         speech::encode_wav(&samples, sample_rate)
     })
     .await
-    .map_err(|e| e.to_string())?
+    .map_err(|e| Error::Other(e.to_string()))?
     .map_err(|e| {
         let _ = app.emit("speech-error", SpeechErrorEvent { message: e.to_string() });
-        e.to_string()
+        Error::from(e)
     });
 
     let wav_bytes = match wav_bytes {
@@ -184,7 +185,7 @@ pub async fn toggle_speech_recording(
                 let _ = app.emit("speech-error", SpeechErrorEvent {
                     message: "Speech-to-text model not configured".into(),
                 });
-                return Err("Speech-to-text model not configured".into());
+                return Err(Error::Other("Speech-to-text model not configured".into()));
             }
         }
     };
@@ -320,7 +321,7 @@ pub async fn toggle_speech_recording(
 #[tauri::command]
 pub async fn get_recording_state(
     state: State<'_, Mutex<AppState>>,
-) -> Result<RecordingState, String> {
+) -> crate::Result<RecordingState> {
     let s = state.lock().await;
     Ok(RecordingState {
         is_recording: s.speech.is_recording(),

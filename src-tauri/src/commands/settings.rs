@@ -66,12 +66,13 @@ impl AppState {
     }
 }
 
-fn emit_changed(app: &AppHandle) -> Result<(), String> {
-    app.emit("settings-changed", ()).map_err(|e| e.to_string())
+fn emit_changed(app: &AppHandle) -> crate::Result<()> {
+    app.emit("settings-changed", ())?;
+    Ok(())
 }
 
-fn save_and_emit(config: &ConfigService, app: &AppHandle) -> Result<(), String> {
-    config.save().map_err(|e| e.to_string())?;
+fn save_and_emit(config: &ConfigService, app: &AppHandle) -> crate::Result<()> {
+    config.save()?;
     emit_changed(app)
 }
 
@@ -82,7 +83,7 @@ fn rebuild_ai(state: &mut AppState) {
 #[tauri::command]
 pub async fn get_settings(
     state: State<'_, Mutex<AppState>>,
-) -> Result<Settings, String> {
+) -> crate::Result<Settings> {
     let state = state.lock().await;
     Ok(state.config.settings().clone())
 }
@@ -93,7 +94,7 @@ pub async fn update_setting(
     state: State<'_, Mutex<AppState>>,
     key: String,
     value: serde_json::Value,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
     state.config.update_setting(&key, value);
     save_and_emit(&state.config, &app)
@@ -105,7 +106,7 @@ pub async fn update_surface_model(
     state: State<'_, Mutex<AppState>>,
     surface: SurfaceKind,
     model_id: Option<String>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
     state.config.update_surface_model(surface, model_id);
     save_and_emit(&state.config, &app)
@@ -118,7 +119,7 @@ pub async fn update_surface_parameter(
     surface: SurfaceKind,
     key: String,
     value: serde_json::Value,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
     state.config.update_surface_parameter(surface, &key, value);
     save_and_emit(&state.config, &app)
@@ -130,7 +131,7 @@ pub async fn update_surface_enabled_tools(
     state: State<'_, Mutex<AppState>>,
     surface: SurfaceKind,
     tools: Vec<String>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
     state.config.update_surface_enabled_tools(surface, tools);
     save_and_emit(&state.config, &app)
@@ -141,7 +142,7 @@ pub async fn update_speech_to_text_config(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
     config: SpeechToTextConfig,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
     state.config.update_speech_to_text(config);
     save_and_emit(&state.config, &app)
@@ -152,7 +153,7 @@ pub async fn add_model(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
     config: ModelConfig,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
     state.config.add_model(config);
     rebuild_ai(&mut state);
@@ -165,7 +166,7 @@ pub async fn update_model(
     state: State<'_, Mutex<AppState>>,
     model_id: String,
     config: ModelConfig,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
     state.config.update_model(&model_id, config);
     rebuild_ai(&mut state);
@@ -177,7 +178,7 @@ pub async fn delete_model(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
     model_id: String,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
     state.config.delete_model(&model_id);
     rebuild_ai(&mut state);
@@ -189,7 +190,7 @@ pub async fn update_notifications(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
     config: NotificationSettings,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
     state.config.update_notifications(config);
     save_and_emit(&state.config, &app)
@@ -200,7 +201,7 @@ pub async fn update_keymaps(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
     keymaps: Vec<KeymapGroup>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let settings = {
         let mut s = state.lock().await;
         s.config.update_keymaps(keymaps);
@@ -216,7 +217,7 @@ pub async fn update_menu_section_order(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
     order: Vec<String>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let mut state = state.lock().await;
     state.config.update_menu_section_order(order);
     save_and_emit(&state.config, &app)
@@ -226,10 +227,10 @@ pub async fn update_menu_section_order(
 pub async fn reload_settings(
     app: AppHandle,
     state: State<'_, Mutex<AppState>>,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let settings = {
         let mut s = state.lock().await;
-        s.config.reload().map_err(|e| e.to_string())?;
+        s.config.reload()?;
         rebuild_ai(&mut s);
         s.config.settings().clone()
     };

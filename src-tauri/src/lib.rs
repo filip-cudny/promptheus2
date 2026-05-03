@@ -5,10 +5,13 @@ use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 mod commands;
+mod error;
 mod models;
 mod providers;
 mod services;
 mod traits;
+
+pub use error::{Error, Result};
 
 use commands::settings::AppState;
 use services::ai::AiService;
@@ -197,7 +200,7 @@ use services::skill::SkillService;
 use services::speech::SpeechService;
 use providers::{LastInteractionMenuProvider, SkillMenuProvider, SpeechMenuProvider};
 
-fn create_app_windows(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+fn create_app_windows(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::Error>> {
     use tauri::webview::WebviewWindowBuilder;
 
     let context_menu_window = WebviewWindowBuilder::new(
@@ -345,7 +348,7 @@ fn configure_overlay_windows_linux(app: &tauri::App) {
 }
 
 #[cfg(target_os = "macos")]
-fn install_macos_app_menu(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+fn install_macos_app_menu(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::Error>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 
     let app_submenu = Submenu::with_items(
@@ -412,7 +415,7 @@ fn install_macos_app_menu(app: &tauri::App) -> Result<(), Box<dyn std::error::Er
     Ok(())
 }
 
-fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+fn setup_tray(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::Error>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::TrayIconBuilder;
 
@@ -470,7 +473,7 @@ async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
         "set_context_value" => {
             let notification_settings = {
                 let mut s = state.lock().await;
-                let result: Result<(), String> = if s.clipboard.has_image() {
+                let result: std::result::Result<(), String> = if s.clipboard.has_image() {
                     s.clipboard
                         .get_image_base64()
                         .map(|(data, mt)| s.context.set_context_image(data, mt))
@@ -499,7 +502,7 @@ async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
         "append_context_value" => {
             let notification_settings = {
                 let mut s = state.lock().await;
-                let result: Result<(), String> = if s.clipboard.has_image() {
+                let result: std::result::Result<(), String> = if s.clipboard.has_image() {
                     s.clipboard
                         .get_image_base64()
                         .map(|(data, mt)| s.context.append_context_image(data, mt))
@@ -816,6 +819,8 @@ pub fn run() {
             log::info!("image storage initialized at {}", app_data_dir.display());
 
             let mcp_servers_config = config_service.settings().mcp_servers.clone();
+            let mcp_registry =
+                tauri::async_runtime::block_on(McpRegistry::start_all(&mcp_servers_config));
 
             app.manage(Mutex::new(AppState {
                 config: config_service,
@@ -828,7 +833,7 @@ pub fn run() {
                 history: history_service,
                 history_search: HistorySearch::new(),
                 image_storage,
-                mcp: std::sync::Arc::new(McpRegistry::empty()),
+                mcp: std::sync::Arc::new(mcp_registry),
                 prompt_execution: PromptExecutionService::new(),
                 skill_service,
                 speech: SpeechService::new(),
@@ -839,13 +844,7 @@ pub fn run() {
             }));
 
             if !mcp_servers_config.is_empty() {
-                let app_handle = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    let registry = McpRegistry::start_all(&mcp_servers_config).await;
-                    let state = app_handle.state::<Mutex<AppState>>();
-                    state.lock().await.mcp = std::sync::Arc::new(registry);
-                    let _ = app_handle.emit("mcp-ready", ());
-                });
+                let _ = app.emit("mcp-ready", ());
             }
 
             {

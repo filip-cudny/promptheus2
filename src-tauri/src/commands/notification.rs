@@ -5,6 +5,7 @@ use tauri::Manager;
 
 use crate::services::monitor::find_monitor_at;
 use crate::services::notification::NotificationPayload;
+use crate::Error;
 
 static PENDING: Mutex<Vec<NotificationPayload>> = Mutex::new(Vec::new());
 static SHOW_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
@@ -41,13 +42,14 @@ pub fn show_notification(handle: &tauri::AppHandle, payload: NotificationPayload
     }
 }
 
-fn show_notification_window(handle: &tauri::AppHandle) -> Result<(), String> {
+fn show_notification_window(handle: &tauri::AppHandle) -> crate::Result<()> {
     let win = handle
         .get_webview_window("notification")
-        .ok_or("notification window not found")?;
+        .ok_or_else(|| Error::Other("notification window not found".into()))?;
 
-    let cursor_pos = win.cursor_position().map_err(|e| e.to_string())?;
-    let monitor = find_monitor_at(handle, cursor_pos.x as i32, cursor_pos.y as i32)?;
+    let cursor_pos = win.cursor_position()?;
+    let monitor = find_monitor_at(handle, cursor_pos.x as i32, cursor_pos.y as i32)
+        .map_err(Error::Other)?;
     let work = monitor.work_area();
     let scale = monitor.scale_factor();
 
@@ -66,10 +68,9 @@ fn show_notification_window(handle: &tauri::AppHandle) -> Result<(), String> {
     let x = work_right - win_width;
     let y = work_bottom - win_height;
 
-    win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
-        .map_err(|e| e.to_string())?;
+    win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))?;
 
-    win.show().map_err(|e| e.to_string())?;
+    win.show()?;
 
     #[cfg(target_os = "linux")]
     {
@@ -79,7 +80,7 @@ fn show_notification_window(handle: &tauri::AppHandle) -> Result<(), String> {
         }
     }
 
-    win.eval("drainPending()").map_err(|e| e.to_string())?;
+    win.eval("drainPending()")?;
 
     Ok(())
 }
@@ -95,13 +96,13 @@ pub async fn update_notification_window(
     app: tauri::AppHandle,
     count: u32,
     height: u32,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     let win = app
         .get_webview_window("notification")
-        .ok_or("notification window not found")?;
+        .ok_or_else(|| Error::Other("notification window not found".into()))?;
 
     if count == 0 {
-        win.hide().map_err(|e| e.to_string())?;
+        win.hide()?;
         *ANCHOR.lock().unwrap_or_else(|e| e.into_inner()) = None;
         SHOW_IN_FLIGHT.store(false, Ordering::Release);
         return Ok(());
@@ -113,7 +114,8 @@ pub async fn update_notification_window(
         .as_ref()
         .map(|a| (a.work_right, a.work_bottom, a.scale));
 
-    let (work_right, work_bottom, scale) = anchor.ok_or("no anchor position cached")?;
+    let (work_right, work_bottom, scale) = anchor
+        .ok_or_else(|| Error::Other("no anchor position cached".into()))?;
 
     let new_height = height.max(60);
     let win_width = (380.0 * scale) as i32;
@@ -122,13 +124,11 @@ pub async fn update_notification_window(
     let x = work_right - win_width;
     let y = work_bottom - win_height;
 
-    win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))
-        .map_err(|e| e.to_string())?;
+    win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))?;
     win.set_size(tauri::Size::Logical(tauri::LogicalSize {
         width: 380.0,
         height: new_height as f64,
-    }))
-    .map_err(|e| e.to_string())?;
+    }))?;
 
     #[cfg(target_os = "linux")]
     {
