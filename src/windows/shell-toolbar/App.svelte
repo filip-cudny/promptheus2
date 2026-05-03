@@ -4,7 +4,7 @@
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { ChevronDown, Minus, Square, SquareArrowOutUpRight, X } from "lucide-svelte";
-  import Button from "$lib/components/ui/Button.svelte";
+  import Button from "$lib/components/shared/ui/Button.svelte";
   import {
     getWebviewProviders,
     swapAiWebview,

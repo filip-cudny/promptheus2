@@ -5,8 +5,8 @@
   import { RefreshCw } from "lucide-svelte";
   import { providerIconSvg } from "$lib/icons/providerIcons";
   import { PROMPTHEUS_PROVIDER_ID, closePalette, reloadActiveInHost } from "$lib/services/shellToolbar";
-  import CommandPalette from "$lib/components/ui/CommandPalette.svelte";
-  import KbdHint from "$lib/components/ui/KbdHint.svelte";
+  import CommandPalette from "$lib/components/shared/ui/CommandPalette.svelte";
+  import KbdHint from "$lib/components/shared/ui/KbdHint.svelte";
   import { handleListNavKey } from "$lib/utils/listNavigation";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
 

@@ -3,10 +3,10 @@
   import { invoke } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { save as saveDialog } from "@tauri-apps/plugin-dialog";
-  import ContextEditor from "$lib/components/ui/ContextEditor.svelte";
-  import ImageChipBar from "$lib/components/ui/ImageChipBar.svelte";
-  import EditorToolbar from "$lib/components/ui/EditorToolbar.svelte";
-  import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
+  import ContextEditor from "$lib/components/shared/widgets/ContextEditor.svelte";
+  import ImageChipBar from "$lib/components/shared/ui/ImageChipBar.svelte";
+  import EditorToolbar from "$lib/components/shared/ui/EditorToolbar.svelte";
+  import MarkdownRenderer from "$lib/components/shared/ui/MarkdownRenderer.svelte";
   import {
     getContextItems,
     clearContext,

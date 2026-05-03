@@ -4,9 +4,9 @@
   import { initTheme } from "$lib/stores/theme.svelte";
   import SettingsSidebar, {
     type SettingsSection,
-  } from "$lib/components/settings/SettingsSidebar.svelte";
-  import SectionModels from "$lib/components/settings/SectionModels.svelte";
-  import SectionAppearance from "$lib/components/settings/SectionAppearance.svelte";
+  } from "$lib/components/features/settings/SettingsSidebar.svelte";
+  import SectionModels from "$lib/components/features/settings/SectionModels.svelte";
+  import SectionAppearance from "$lib/components/features/settings/SectionAppearance.svelte";
 
   const store = getSettingsStore();
 

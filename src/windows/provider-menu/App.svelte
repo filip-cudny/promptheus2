@@ -3,7 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import ProviderMenuList from "$lib/components/provider-menu/ProviderMenuList.svelte";
+  import ProviderMenuList from "$lib/components/shared/widgets/ProviderMenuList.svelte";
 
   type Provider = { id: string; name: string; url?: string | null };
   type ShowPayload = {

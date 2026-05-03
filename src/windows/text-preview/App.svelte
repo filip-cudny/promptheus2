@@ -5,10 +5,10 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { save } from "@tauri-apps/plugin-dialog";
   import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-  import MarkdownRenderer from "$lib/components/ui/MarkdownRenderer.svelte";
+  import MarkdownRenderer from "$lib/components/shared/ui/MarkdownRenderer.svelte";
   import { resizeTextarea } from "$lib/utils/autoResize";
   import { countTokensDebounced } from "$lib/services/tokenCounter";
-  import EditorToolbar from "$lib/components/ui/EditorToolbar.svelte";
+  import EditorToolbar from "$lib/components/shared/ui/EditorToolbar.svelte";
 
   const win = getCurrentWebviewWindow();
 

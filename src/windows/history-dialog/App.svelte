@@ -2,15 +2,15 @@
   import { onDestroy, onMount } from "svelte";
   import { ChevronLeft, ChevronRight } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import ActionIconButton from "$lib/components/ui/ActionIconButton.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import { getHistoryStore } from "$lib/stores/history.svelte";
   import { getHistorySearchStore } from "$lib/stores/historySearch.svelte";
   import { openConversationDialog } from "$lib/services/conversationDialog";
   import { getUiState, setUiState } from "$lib/services/uiState";
   import type { HistoryEntry } from "$lib/types";
-  import HistoryEntryRow from "$lib/components/history/HistoryEntryRow.svelte";
-  import HistoryEmptyState from "$lib/components/history/HistoryEmptyState.svelte";
-  import HistoryToolbar from "$lib/components/history/HistoryToolbar.svelte";
+  import HistoryEntryRow from "$lib/components/features/history/HistoryEntryRow.svelte";
+  import HistoryEmptyState from "$lib/components/features/history/HistoryEmptyState.svelte";
+  import HistoryToolbar from "$lib/components/features/history/HistoryToolbar.svelte";
   import { formatActiveFilters } from "$lib/utils/historyFilters";
 
   const PAGE_SIZES = [10, 25, 50] as const;

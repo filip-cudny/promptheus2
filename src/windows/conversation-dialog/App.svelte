@@ -11,10 +11,10 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import { PanelLeft, SquarePen } from "lucide-svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
-  import ChatPalette from "$lib/components/conversation-dialog/ChatPalette.svelte";
-  import ConversationArea from "$lib/components/conversation-dialog/ConversationArea.svelte";
-  import InputArea from "$lib/components/conversation-dialog/InputArea.svelte";
-  import TabSidebar from "$lib/components/conversation-dialog/TabSidebar.svelte";
+  import ChatPalette from "$lib/components/features/conversation-dialog/ChatPalette.svelte";
+  import ConversationArea from "$lib/components/features/conversation-dialog/ConversationArea.svelte";
+  import InputArea from "$lib/components/features/conversation-dialog/InputArea.svelte";
+  import TabSidebar from "$lib/components/features/conversation-dialog/TabSidebar.svelte";
   import { openPalette, reloadActiveInHost } from "$lib/services/shellToolbar";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
   import { focusConversationInput } from "$lib/utils/conversationFocus";

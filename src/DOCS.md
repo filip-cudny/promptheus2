@@ -19,12 +19,14 @@ src/
 │   └── notification/
 ├── lib/
 │   ├── components/             # UI components
-│   │   ├── ui/                 # Reusable primitives (buttons, inputs, dialogs)
-│   │   ├── menu/               # Context menu rendering
-│   │   ├── prompt/             # Prompt execution dialog, conversation tabs
-│   │   ├── settings/           # Settings panels
-│   │   ├── history/            # History browser
-│   │   └── context/            # Context editor
+│   │   ├── shared/
+│   │   │   ├── ui/             # Dumb styling primitives (buttons, inputs, dialogs)
+│   │   │   └── widgets/        # Smart shared composites (ModelSelector, SkillEditable, ContextEditor, ProviderMenuList)
+│   │   └── features/
+│   │       ├── context-menu/   # Context menu window
+│   │       ├── conversation-dialog/ # Chat window
+│   │       ├── settings/       # Settings panels
+│   │       └── history/        # History browser
 │   ├── stores/                 # Reactive state (Svelte 5 runes)
 │   │   ├── menu.svelte.ts      # Menu items, selection state
 │   │   ├── execution.svelte.ts # Execution state, streaming
@@ -81,8 +83,9 @@ Adding a new window:
 ### Components
 
 - One component per file, organized by feature domain.
-- Reusable UI primitives go in `lib/components/ui/`.
-- Feature components (menu, prompt, settings) go in their own subdirectories.
+- Dumb reusable primitives go in `lib/components/shared/ui/` (no state machines, no feature concepts).
+- Smart shared composites (state + logic, but reusable across features) go in `lib/components/shared/widgets/`.
+- Feature-specific UI lives under `lib/components/features/<feature>/`. No cross-feature imports — pull into `shared/widgets/` if a component is needed by two features.
 - Keep components thin — business logic lives in stores and services.
 
 ### Services (IPC Layer)
