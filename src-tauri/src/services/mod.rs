@@ -1,8 +1,10 @@
 pub mod ai;
 pub mod ai_webview;
 pub mod autostart;
+pub mod capability_audit;
 pub mod clipboard;
 pub mod env_resolve;
+pub mod frontmost_app;
 pub mod shell_env;
 pub mod mcp;
 pub mod config;
@@ -28,3 +30,5 @@ pub mod sqlite_history;
 pub mod tokenizer;
 pub mod tool_confirmation;
 pub mod ui_state;
+#[cfg(target_os = "linux")]
+pub mod webkit_pressure;

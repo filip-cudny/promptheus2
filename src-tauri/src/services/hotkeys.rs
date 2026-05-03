@@ -1,7 +1,14 @@
 use std::collections::HashMap;
 use std::sync::RwLock;
 
+use tauri::{Emitter, Manager};
+use tokio::sync::Mutex;
+
+use crate::commands;
+use crate::commands::settings::AppState;
 use crate::models::settings::Settings;
+use crate::services::frontmost_app;
+use crate::services::notification::NotificationLevel;
 
 pub struct ShortcutActionMap(pub RwLock<HashMap<String, String>>);
 
@@ -82,6 +89,162 @@ fn get_active_bindings_for_os(settings: &Settings, os: &str) -> Vec<(String, Str
         }
     }
     bindings
+}
+
+#[cfg(desktop)]
+pub fn reload_shortcuts(app: &tauri::AppHandle, settings: &Settings) {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+    let global_shortcut = app.global_shortcut();
+
+    log::debug!(target: "app_lib::hotkey_handler", "reload_shortcuts: unregistering all");
+    if let Err(e) = global_shortcut.unregister_all() {
+        log::error!("failed to unregister shortcuts: {}", e);
+        return;
+    }
+
+    let bindings = get_active_bindings(settings);
+    let mut new_action_map = HashMap::new();
+
+    for (shortcut_str, action) in &bindings {
+        match shortcut_str.parse::<Shortcut>() {
+            Ok(shortcut) => {
+                let canonical = shortcut.into_string();
+                new_action_map.insert(canonical.clone(), action.clone());
+                if let Err(e) = global_shortcut.register(shortcut) {
+                    log::warn!(
+                        "failed to register shortcut {} ({}): {}",
+                        shortcut_str, canonical, e
+                    );
+                }
+            }
+            Err(e) => {
+                log::warn!("invalid shortcut {}: {}", shortcut_str, e);
+            }
+        }
+    }
+
+    let action_map_state = app.state::<ShortcutActionMap>();
+    let mut map = action_map_state.0.write().unwrap();
+    *map = new_action_map;
+
+    log::info!(
+        target: "app_lib::hotkey_handler",
+        "reloaded {} global shortcuts",
+        bindings.len()
+    );
+}
+
+pub async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
+    match action {
+        "set_context_value" | "append_context_value" | "clear_context" => {
+            execute_context_action(app, action).await;
+        }
+        "open_context_menu" => {
+            let frontmost = frontmost_app::detect();
+            {
+                let state = app.state::<Mutex<AppState>>();
+                state.lock().await.push_active_app(frontmost);
+            }
+            if let Err(e) = commands::menu::show_context_menu_window(app.clone()).await {
+                log::error!("open_context_menu failed: {e}");
+            }
+        }
+        "speech_to_text_toggle" => {
+            let state = app.state::<Mutex<AppState>>();
+            if let Err(e) =
+                commands::speech::toggle_speech_recording(app.clone(), state, None).await
+            {
+                log::error!("speech_to_text_toggle failed: {e}");
+            }
+        }
+        "execute_active_prompt" => {
+            log::warn!("hotkey action '{}' is not yet implemented", action);
+        }
+        _ => {
+            log::warn!("unknown hotkey action: {}", action);
+        }
+    }
+}
+
+async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
+    let state = app.state::<Mutex<AppState>>();
+    match action {
+        "set_context_value" => {
+            let notification_settings = {
+                let mut s = state.lock().await;
+                let result: std::result::Result<(), String> = if s.clipboard.has_image() {
+                    s.clipboard
+                        .get_image_base64()
+                        .map(|(data, mt)| s.context.set_context_image(data, mt))
+                        .map_err(|e| e.to_string())
+                } else {
+                    s.clipboard
+                        .get_text()
+                        .map(|text| s.context.set_context(text))
+                        .map_err(|e| e.to_string())
+                };
+                if let Err(e) = result {
+                    log::error!("set_context_value hotkey failed: {}", e);
+                    return;
+                }
+                s.config.settings().notifications.clone()
+            };
+            let _ = app.emit("context-changed", ());
+            let _ = state.lock().await.notifications.notify(
+                "context_set",
+                NotificationLevel::Success,
+                "Context set",
+                None::<String>,
+                &notification_settings,
+            );
+        }
+        "append_context_value" => {
+            let notification_settings = {
+                let mut s = state.lock().await;
+                let result: std::result::Result<(), String> = if s.clipboard.has_image() {
+                    s.clipboard
+                        .get_image_base64()
+                        .map(|(data, mt)| s.context.append_context_image(data, mt))
+                        .map_err(|e| e.to_string())
+                } else {
+                    s.clipboard
+                        .get_text()
+                        .map(|text| s.context.append_context(text))
+                        .map_err(|e| e.to_string())
+                };
+                if let Err(e) = result {
+                    log::error!("append_context_value hotkey failed: {}", e);
+                    return;
+                }
+                s.config.settings().notifications.clone()
+            };
+            let _ = app.emit("context-changed", ());
+            let _ = state.lock().await.notifications.notify(
+                "context_append",
+                NotificationLevel::Success,
+                "Context appended",
+                None::<String>,
+                &notification_settings,
+            );
+        }
+        "clear_context" => {
+            let notification_settings = {
+                let mut s = state.lock().await;
+                s.context.clear();
+                s.config.settings().notifications.clone()
+            };
+            let _ = app.emit("context-changed", ());
+            let _ = state.lock().await.notifications.notify(
+                "context_cleared",
+                NotificationLevel::Success,
+                "Context cleared",
+                None::<String>,
+                &notification_settings,
+            );
+        }
+        _ => {}
+    }
 }
 
 #[cfg(test)]
