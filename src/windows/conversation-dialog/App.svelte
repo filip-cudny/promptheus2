@@ -70,6 +70,7 @@
   let unlistenOpenForSkill: UnlistenFn | undefined;
   let unlistenNewConversation: UnlistenFn | undefined;
   let unlistenActiveChanged: UnlistenFn | undefined;
+  let unlistenMenuReload: UnlistenFn | undefined;
 
   async function handleGlobalKeydown(e: KeyboardEvent) {
     if (matches(e, SHORTCUTS.reloadActive)) {
@@ -224,6 +225,15 @@
       { target: SELF_TARGET },
     );
 
+    unlistenMenuReload = await listen(
+      "menu:reload-active",
+      () => {
+        if (chatPaletteOpen) chatPaletteOpen = false;
+        reloadActiveProvider();
+      },
+      { target: SELF_TARGET },
+    );
+
     await autoShowContextIfNeeded();
 
     unlistenContextChanged = await listen("context-changed", () => {
@@ -269,6 +279,7 @@
     unlistenOpenForSkill?.();
     unlistenNewConversation?.();
     unlistenActiveChanged?.();
+    unlistenMenuReload?.();
     store.destroy();
   });
 </script>

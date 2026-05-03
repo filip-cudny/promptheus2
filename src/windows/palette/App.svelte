@@ -70,6 +70,7 @@
 
   let unlistenShow: UnlistenFn | undefined;
   let unlistenBlur: UnlistenFn | undefined;
+  let unlistenMenuReload: UnlistenFn | undefined;
 
   async function dismiss(selectedId: string | null) {
     if (!hostLabel) return;
@@ -150,12 +151,17 @@
     unlistenBlur = await getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (!focused) dismiss(null);
     });
+
+    unlistenMenuReload = await listen("menu:reload-active", () => {
+      reloadActive();
+    });
   });
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleKeydown);
     unlistenShow?.();
     unlistenBlur?.();
+    unlistenMenuReload?.();
   });
 </script>
 
