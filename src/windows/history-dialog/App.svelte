@@ -1,8 +1,5 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { ChevronLeft, ChevronRight } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
-  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import { getHistoryStore } from "$lib/stores/history.svelte";
   import { getHistorySearchStore } from "$lib/stores/historySearch.svelte";
   import { openConversationDialog } from "$lib/services/conversationDialog";
@@ -11,6 +8,7 @@
   import HistoryEntryRow from "$lib/components/features/history/HistoryEntryRow.svelte";
   import HistoryEmptyState from "$lib/components/features/history/HistoryEmptyState.svelte";
   import HistoryToolbar from "$lib/components/features/history/HistoryToolbar.svelte";
+  import HistoryPagination from "$lib/components/features/history/HistoryPagination.svelte";
   import { formatActiveFilters } from "$lib/utils/historyFilters";
 
   const PAGE_SIZES = [10, 25, 50] as const;
@@ -123,38 +121,13 @@
   </div>
 
   {#if searchStore.total > 0}
-    <div class="pagination-bar">
-      <div class="page-size">
-        {#each PAGE_SIZES as size}
-          <button
-            class="page-size-btn"
-            class:active={pageSize === size}
-            onclick={() => changePageSize(size)}
-          >
-            {size}
-          </button>
-        {/each}
-      </div>
-
-      <span class="page-label">Page {currentPage + 1} of {totalPages}</span>
-
-      <div class="page-nav">
-        <ActionIconButton
-          icon={ChevronLeft}
-          size={ICON_SIZE.md}
-          disabled={currentPage === 0}
-          onclick={() => currentPage--}
-          title="Previous page"
-        />
-        <ActionIconButton
-          icon={ChevronRight}
-          size={ICON_SIZE.md}
-          disabled={currentPage >= totalPages - 1}
-          onclick={() => currentPage++}
-          title="Next page"
-        />
-      </div>
-    </div>
+    <HistoryPagination
+      pageSizes={PAGE_SIZES}
+      {pageSize}
+      bind:currentPage
+      {totalPages}
+      onChangePageSize={changePageSize}
+    />
   {/if}
 </div>
 
@@ -182,62 +155,6 @@
 
   .entries-list.loading {
     opacity: 0.5;
-  }
-
-  .pagination-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: var(--space-4) var(--space-6);
-    border-top: 1px solid var(--border-default);
-    flex-shrink: 0;
-  }
-
-  .page-size {
-    display: flex;
-    gap: var(--space-1);
-  }
-
-  .page-size-btn {
-    padding: var(--space-1) var(--space-4);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    font: inherit;
-    font-size: var(--font-size-sm);
-  }
-
-  .page-size-btn:hover {
-    background: var(--surface-overlay);
-    color: var(--text-secondary);
-  }
-
-  .page-size-btn.active {
-    background: var(--accent-bg-soft);
-    border-color: var(--accent-bg);
-    color: var(--accent);
-  }
-
-  .page-label {
-    color: var(--text-disabled);
-    font-size: var(--font-size-sm);
-  }
-
-  .page-nav {
-    display: flex;
-    gap: var(--space-1);
-  }
-
-  .page-nav :global(.action-icon-btn) {
-    border: 1px solid var(--border-strong);
-    padding: var(--space-1);
-  }
-
-  .page-size-btn:focus-visible {
-    outline: 2px solid var(--accent-ring);
-    outline-offset: 1px;
   }
 
   .sr-only {
