@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
@@ -7,9 +8,10 @@ use tokio::sync::Mutex;
 use crate::models::history::{
     HistoryEntry, HistoryEntryType, ImagePayload, SerializedConversationNode,
 };
-use crate::services::history_search::{SearchQuery, SearchResponse};
-
-use super::settings::AppState;
+use crate::services::clipboard::ClipboardService;
+use crate::services::conversation_context::ConversationContextCache;
+use crate::services::history_search::{HistorySearch, SearchQuery, SearchResponse};
+use crate::services::sqlite_history::SqliteHistoryService;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SkillCount {
@@ -30,34 +32,33 @@ fn emit_history_changed(app: &AppHandle) -> crate::Result<()> {
 }
 
 #[tauri::command]
-pub async fn get_history(state: State<'_, Mutex<AppState>>) -> crate::Result<Vec<HistoryEntry>> {
-    let state = state.lock().await;
-    Ok(state.history.get_history())
+pub async fn get_history(
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
+) -> crate::Result<Vec<HistoryEntry>> {
+    Ok(history.lock().await.get_history())
 }
 
 #[tauri::command]
 pub async fn get_conversations(
-    state: State<'_, Mutex<AppState>>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     offset: u32,
     limit: u32,
 ) -> crate::Result<Vec<HistoryEntry>> {
-    let state = state.lock().await;
-    Ok(state.history.get_conversations(offset, limit))
+    Ok(history.lock().await.get_conversations(offset, limit))
 }
 
 #[tauri::command]
 pub async fn get_history_entry(
-    state: State<'_, Mutex<AppState>>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     entry_id: String,
 ) -> crate::Result<Option<HistoryEntry>> {
-    let state = state.lock().await;
-    Ok(state.history.get_entry_by_id(&entry_id))
+    Ok(history.lock().await.get_entry_by_id(&entry_id))
 }
 
 #[tauri::command]
 pub async fn add_history_entry(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     input_content: String,
     entry_type: HistoryEntryType,
     output_content: Option<String>,
@@ -67,8 +68,7 @@ pub async fn add_history_entry(
     is_multi_turn: bool,
     skill_name: Option<String>,
 ) -> crate::Result<()> {
-    let state = state.lock().await;
-    state.history.add_entry(
+    history.lock().await.add_entry(
         input_content,
         entry_type,
         output_content,
@@ -85,7 +85,8 @@ pub async fn add_history_entry(
 #[tauri::command]
 pub async fn add_conversation_entry(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
+    conversation_context: State<'_, Arc<Mutex<ConversationContextCache>>>,
     context_text: String,
     skill_id: Option<String>,
     skill_name: Option<String>,
@@ -99,12 +100,15 @@ pub async fn add_conversation_entry(
     model_id: Option<String>,
     reasoning_effort: Option<String>,
 ) -> crate::Result<String> {
-    let state = state.lock().await;
-    let resolved_environment_section = tab_id
-        .as_deref()
-        .and_then(|id| state.conversation_context.get(id))
-        .map(|s| s.to_string());
-    let id = state.history.add_conversation_entry(
+    let resolved_environment_section = match tab_id.as_deref() {
+        Some(id) => conversation_context
+            .lock()
+            .await
+            .get(id)
+            .map(|s| s.to_string()),
+        None => None,
+    };
+    let id = history.lock().await.add_conversation_entry(
         context_text,
         skill_id,
         skill_name,
@@ -126,7 +130,7 @@ pub async fn add_conversation_entry(
 #[tauri::command]
 pub async fn update_conversation_entry(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     entry_id: String,
     context_text: String,
     nodes: Vec<SerializedConversationNode>,
@@ -136,83 +140,69 @@ pub async fn update_conversation_entry(
     model_id: Option<String>,
     reasoning_effort: Option<String>,
 ) -> crate::Result<()> {
-    let state = state.lock().await;
-    state
-        .history
-        .update_conversation_entry(
-            &entry_id,
-            context_text,
-            nodes,
-            root_node_id,
-            current_path,
-            images,
-            model_id,
-            reasoning_effort,
-        )
-        ?;
+    history.lock().await.update_conversation_entry(
+        &entry_id,
+        context_text,
+        nodes,
+        root_node_id,
+        current_path,
+        images,
+        model_id,
+        reasoning_effort,
+    )?;
     emit_history_changed(&app)
 }
 
 #[tauri::command]
 pub async fn get_last_interaction(
-    state: State<'_, Mutex<AppState>>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
 ) -> crate::Result<LastInteractionData> {
-    let state = state.lock().await;
+    let history = history.lock().await;
     Ok(LastInteractionData {
-        last_text: state.history.get_last_quick_action(HistoryEntryType::Text),
-        last_speech: state
-            .history
-            .get_last_quick_action(HistoryEntryType::Speech),
+        last_text: history.get_last_quick_action(HistoryEntryType::Text),
+        last_speech: history.get_last_quick_action(HistoryEntryType::Speech),
     })
 }
 
 #[tauri::command]
 pub async fn update_history_entry_title(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     entry_id: String,
     title: String,
 ) -> crate::Result<()> {
-    let state = state.lock().await;
-    state
-        .history
-        .update_entry_title(&entry_id, title)
-        ?;
+    history.lock().await.update_entry_title(&entry_id, title)?;
     emit_history_changed(&app)
 }
 
 #[tauri::command]
 pub async fn delete_history_entry(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     entry_id: String,
 ) -> crate::Result<()> {
-    let state = state.lock().await;
-    state
-        .history
-        .delete_entry(&entry_id)
-        ?;
+    history.lock().await.delete_entry(&entry_id)?;
     emit_history_changed(&app)
 }
 
 #[tauri::command]
 pub async fn clear_history(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
 ) -> crate::Result<()> {
-    let state = state.lock().await;
-    state.history.clear();
+    history.lock().await.clear();
     emit_history_changed(&app)
 }
 
 #[tauri::command]
 pub async fn search_history(
-    state: State<'_, Mutex<AppState>>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
+    history_search: State<'_, Arc<Mutex<HistorySearch>>>,
     query: SearchQuery,
 ) -> crate::Result<SearchResponse> {
-    let mut state = state.lock().await;
-    let state = &mut *state;
-    let response = state.history_search.run(&state.history, &query);
+    let history = history.lock().await;
+    let mut search = history_search.lock().await;
+    let response = search.run(&history, &query);
     log::debug!(
         target: "app_lib::history_search",
         "search_history: query='{}' type={:?} status={:?} skills={} date_from={:?} total={} returned={}",
@@ -249,10 +239,9 @@ fn collect_skill_counts(entries: &[HistoryEntry]) -> Vec<SkillCount> {
 
 #[tauri::command]
 pub async fn list_history_skills(
-    state: State<'_, Mutex<AppState>>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
 ) -> crate::Result<Vec<SkillCount>> {
-    let state = state.lock().await;
-    let entries = state.history.get_history();
+    let entries = history.lock().await.get_history();
     let list = collect_skill_counts(&entries);
     log::debug!(
         target: "app_lib::history_search",
@@ -264,11 +253,10 @@ pub async fn list_history_skills(
 
 #[tauri::command]
 pub async fn copy_history_content(
-    state: State<'_, Mutex<AppState>>,
+    clipboard: State<'_, ClipboardService>,
     content: String,
 ) -> crate::Result<()> {
-    let state = state.lock().await;
-    state.clipboard.set_text(&content)?;
+    clipboard.set_text(&content)?;
     Ok(())
 }
 

@@ -1,9 +1,9 @@
 use std::path::Path;
+use std::sync::Arc;
 
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
-use crate::commands::settings::AppState;
 use crate::providers::{LastInteractionMenuProvider, SkillMenuProvider, SpeechMenuProvider};
 use crate::services::ai::AiService;
 use crate::services::clipboard::ClipboardService;
@@ -18,6 +18,7 @@ use crate::services::mcp::McpRegistry;
 use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::notification::NotificationService;
 use crate::services::placeholder::PlaceholderService;
+use crate::services::recent_apps::RecentAppsState;
 use crate::services::skill::SkillService;
 use crate::services::speech::SpeechService;
 use crate::services::sqlite_history::SqliteHistoryService;
@@ -87,26 +88,28 @@ pub fn manage(
     let mcp_servers_config = config_service.settings().mcp_servers.clone();
     let mcp_registry = tauri::async_runtime::block_on(McpRegistry::start_all(&mcp_servers_config));
 
-    app.manage(Mutex::new(AppState {
-        config: config_service,
-        clipboard: clipboard_service,
-        notifications: notification_service,
-        menu_coordinator,
-        context: context_service,
-        placeholder: placeholder_service,
-        ai: ai_service,
-        history: history_service,
-        history_search: HistorySearch::new(),
-        image_storage,
-        mcp: std::sync::Arc::new(mcp_registry),
-        prompt_execution: PromptExecutionService::new(),
-        skill_service,
-        speech: SpeechService::new(),
-        ui_state: ui_state_service,
-        conversation_context: conversation_context::ConversationContextCache::new(),
-        tool_confirmation: tool_confirmation::ToolConfirmationService::new(),
-        recent_apps: std::collections::VecDeque::new(),
-    }));
+    app.manage(Arc::new(Mutex::new(config_service)));
+    app.manage(clipboard_service);
+    app.manage(notification_service);
+    app.manage(Arc::new(Mutex::new(menu_coordinator)));
+    app.manage(Arc::new(Mutex::new(context_service)));
+    app.manage(Arc::new(Mutex::new(placeholder_service)));
+    app.manage(Arc::new(Mutex::new(ai_service)));
+    app.manage(Arc::new(Mutex::new(history_service)));
+    app.manage(Arc::new(Mutex::new(HistorySearch::new())));
+    app.manage(image_storage);
+    app.manage(Arc::new(mcp_registry));
+    app.manage(Arc::new(Mutex::new(PromptExecutionService::new())));
+    app.manage(Arc::new(Mutex::new(skill_service)));
+    app.manage(Arc::new(Mutex::new(SpeechService::new())));
+    app.manage(Arc::new(Mutex::new(ui_state_service)));
+    app.manage(Arc::new(Mutex::new(
+        conversation_context::ConversationContextCache::new(),
+    )));
+    app.manage(Arc::new(Mutex::new(
+        tool_confirmation::ToolConfirmationService::new(),
+    )));
+    app.manage(Arc::new(RecentAppsState::new()));
 
     if !mcp_servers_config.is_empty() {
         let _ = app.emit("mcp-ready", ());

@@ -22,6 +22,7 @@ pub mod hotkeys;
 #[cfg(target_os = "macos")]
 pub mod macos_panel;
 pub mod execution;
+pub mod recent_apps;
 pub mod skill;
 pub mod skill_message;
 pub mod speech;

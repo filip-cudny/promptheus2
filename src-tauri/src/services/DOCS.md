@@ -83,7 +83,7 @@ Service tests use `tempfile::TempDir` to create isolated config directories. A `
 
 Manages an ordered list of `ContextItem` values (text and/or images) in memory. Session-only — no persistence to disk.
 
-**No internal locking**: the struct is a plain `Vec<ContextItem>`. Thread safety is provided by the `Mutex<AppState>` wrapper in the command layer, matching the project-wide pattern.
+**No internal locking**: the struct is a plain `Vec<ContextItem>`. Thread safety is provided by the `Arc<Mutex<ContextManagerService>>` wrapper at the state-management layer (see `setup/state.rs`).
 
 **No error enum**: all operations are infallible in-memory list manipulation.
 
@@ -103,7 +103,7 @@ Persistent history storage via SQLite. Database file at `{app_data_dir}/history.
 
 **Schema**: two tables — `conversations` (metadata columns + `tree_json` blob for full conversation tree) and `conversation_images` (binary image data with foreign key to conversations, cascade delete). Schema migrations via `database.rs` with version table.
 
-**No internal locking**: plain struct with `Database`. Thread safety provided by `Mutex<AppState>` in the command layer.
+**No internal locking**: plain struct with `Database`. Thread safety provided by `Arc<Mutex<SqliteHistoryService>>` at the state-management layer.
 
 **Constructor**: `SqliteHistoryService::new(database, max_entries)` — takes ownership of a `Database` instance.
 
@@ -222,7 +222,7 @@ Multi-provider LLM service. Lives in `ai/` subdirectory with one file per provid
 2. Add a match arm in `AiService::new()` for the new `Provider` variant.
 3. Add the variant to `Provider` enum in `models/settings.rs` and `types/index.ts`.
 
-**Streaming architecture**: The `complete_stream` trait method returns an owned `Stream`. The Tauri command layer (`commands/ai.rs`) bridges this to a `tauri::ipc::Channel<StreamEvent>`. The `Mutex<AppState>` lock is released before stream iteration to avoid holding it for the duration of the HTTP response.
+**Streaming architecture**: The `complete_stream` trait method returns an owned `Stream`. The Tauri command layer (`commands/ai.rs`) bridges this to a `tauri::ipc::Channel<StreamEvent>`. The per-service `AiService` lock is released (via clone of the cheap `Arc`-backed handle) before stream iteration to avoid holding it for the duration of the HTTP response.
 
 **SSE parser** (`sse.rs`): Converts a `reqwest::Response` byte stream into parsed `data:` line payloads. Handles line buffering, comment skipping, and `[DONE]` termination. Provider-agnostic — usable by any SSE-based provider.
 

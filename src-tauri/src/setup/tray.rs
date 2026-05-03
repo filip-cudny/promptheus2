@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use tokio::sync::Mutex;
 
 use crate::commands;
-use crate::commands::settings::AppState;
+use crate::services::config::ConfigService;
 use crate::services::frontmost_app;
+use crate::services::recent_apps::RecentAppsState;
 
 pub fn install(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::Error>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -32,10 +35,15 @@ pub fn install(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::
                     let frontmost = frontmost_app::detect();
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move {
-                        {
-                            let state = app.state::<Mutex<AppState>>();
-                            state.lock().await.push_active_app(frontmost);
-                        }
+                        let max = app
+                            .state::<Arc<Mutex<ConfigService>>>()
+                            .lock()
+                            .await
+                            .settings()
+                            .recent_apps_count;
+                        app.state::<Arc<RecentAppsState>>()
+                            .push(frontmost, max)
+                            .await;
                         let _ = commands::menu::show_context_menu_window(app).await;
                     });
                 }

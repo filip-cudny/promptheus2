@@ -31,6 +31,7 @@ pub enum NotificationError {
     EmitFailed(String),
 }
 
+#[derive(Clone)]
 pub struct NotificationService {
     handle: AppHandle,
 }

@@ -1,8 +1,9 @@
+use std::sync::Arc;
+
 use serde::Serialize;
 use tauri::State;
-use tokio::sync::Mutex;
 
-use crate::commands::settings::AppState;
+use crate::services::mcp::McpRegistry;
 
 #[derive(Serialize)]
 pub struct McpToolInfo {
@@ -13,11 +14,9 @@ pub struct McpToolInfo {
 
 #[tauri::command]
 pub async fn list_mcp_tools(
-    state: State<'_, Mutex<AppState>>,
+    mcp: State<'_, Arc<McpRegistry>>,
 ) -> crate::Result<Vec<McpToolInfo>> {
-    let state = state.lock().await;
-    let tools = state
-        .mcp
+    let tools = mcp
         .tools_with_server()
         .iter()
         .map(|(server, tool)| McpToolInfo {

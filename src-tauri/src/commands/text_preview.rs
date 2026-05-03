@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::Arc;
 use std::sync::Mutex;
 
 use serde::Serialize;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
-use crate::commands::settings::AppState;
 use crate::services::dialog;
 use crate::services::dock::DockManager;
 use crate::services::monitor::find_monitor_at;
+use crate::services::ui_state::UiStateService;
 
 const GEOMETRY_KEY: &str = "text-preview";
 const LABEL_PREFIX: &str = "text-preview-";
@@ -73,8 +74,11 @@ pub async fn open_text_preview(
         PendingText { text, index, source_window },
     );
 
-    let state = app.state::<tokio::sync::Mutex<AppState>>();
-    let geometry = state.lock().await.ui_state.get_geometry(GEOMETRY_KEY);
+    let geometry = app
+        .state::<Arc<tokio::sync::Mutex<UiStateService>>>()
+        .lock()
+        .await
+        .get_geometry(GEOMETRY_KEY);
 
     let (width, height) = geometry
         .as_ref()

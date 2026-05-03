@@ -16,6 +16,7 @@ pub enum ClipboardError {
     ImageConversion(String),
 }
 
+#[derive(Clone)]
 pub struct ClipboardService {
     app: Option<AppHandle>,
 }

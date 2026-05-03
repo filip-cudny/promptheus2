@@ -1,14 +1,18 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::RwLock;
 
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 use crate::commands;
-use crate::commands::settings::AppState;
 use crate::models::settings::Settings;
+use crate::services::clipboard::ClipboardService;
+use crate::services::config::ConfigService;
+use crate::services::context::ContextManagerService;
 use crate::services::frontmost_app;
-use crate::services::notification::NotificationLevel;
+use crate::services::notification::{NotificationLevel, NotificationService};
+use crate::services::recent_apps::RecentAppsState;
 
 pub struct ShortcutActionMap(pub RwLock<HashMap<String, String>>);
 
@@ -142,19 +146,21 @@ pub async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
         }
         "open_context_menu" => {
             let frontmost = frontmost_app::detect();
-            {
-                let state = app.state::<Mutex<AppState>>();
-                state.lock().await.push_active_app(frontmost);
-            }
+            let max = app
+                .state::<Arc<Mutex<ConfigService>>>()
+                .lock()
+                .await
+                .settings()
+                .recent_apps_count;
+            app.state::<Arc<RecentAppsState>>()
+                .push(frontmost, max)
+                .await;
             if let Err(e) = commands::menu::show_context_menu_window(app.clone()).await {
                 log::error!("open_context_menu failed: {e}");
             }
         }
         "speech_to_text_toggle" => {
-            let state = app.state::<Mutex<AppState>>();
-            if let Err(e) =
-                commands::speech::toggle_speech_recording(app.clone(), state, None).await
-            {
+            if let Err(e) = commands::speech::toggle_speech_recording(app.clone(), None).await {
                 log::error!("speech_to_text_toggle failed: {e}");
             }
         }
@@ -168,30 +174,36 @@ pub async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
 }
 
 async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
-    let state = app.state::<Mutex<AppState>>();
+    let clipboard = app.state::<ClipboardService>();
+    let context = app.state::<Arc<Mutex<ContextManagerService>>>();
+    let config = app.state::<Arc<Mutex<ConfigService>>>();
+    let notifications = app.state::<NotificationService>();
     match action {
         "set_context_value" => {
-            let notification_settings = {
-                let mut s = state.lock().await;
-                let result: std::result::Result<(), String> = if s.clipboard.has_image() {
-                    s.clipboard
-                        .get_image_base64()
-                        .map(|(data, mt)| s.context.set_context_image(data, mt))
-                        .map_err(|e| e.to_string())
-                } else {
-                    s.clipboard
-                        .get_text()
-                        .map(|text| s.context.set_context(text))
-                        .map_err(|e| e.to_string())
-                };
-                if let Err(e) = result {
-                    log::error!("set_context_value hotkey failed: {}", e);
-                    return;
+            let result: std::result::Result<(), String> = if clipboard.has_image() {
+                match clipboard.get_image_base64() {
+                    Ok((data, mt)) => {
+                        context.lock().await.set_context_image(data, mt);
+                        Ok(())
+                    }
+                    Err(e) => Err(e.to_string()),
                 }
-                s.config.settings().notifications.clone()
+            } else {
+                match clipboard.get_text() {
+                    Ok(text) => {
+                        context.lock().await.set_context(text);
+                        Ok(())
+                    }
+                    Err(e) => Err(e.to_string()),
+                }
             };
+            if let Err(e) = result {
+                log::error!("set_context_value hotkey failed: {}", e);
+                return;
+            }
+            let notification_settings = config.lock().await.settings().notifications.clone();
             let _ = app.emit("context-changed", ());
-            let _ = state.lock().await.notifications.notify(
+            let _ = notifications.notify(
                 "context_set",
                 NotificationLevel::Success,
                 "Context set",
@@ -200,27 +212,30 @@ async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
             );
         }
         "append_context_value" => {
-            let notification_settings = {
-                let mut s = state.lock().await;
-                let result: std::result::Result<(), String> = if s.clipboard.has_image() {
-                    s.clipboard
-                        .get_image_base64()
-                        .map(|(data, mt)| s.context.append_context_image(data, mt))
-                        .map_err(|e| e.to_string())
-                } else {
-                    s.clipboard
-                        .get_text()
-                        .map(|text| s.context.append_context(text))
-                        .map_err(|e| e.to_string())
-                };
-                if let Err(e) = result {
-                    log::error!("append_context_value hotkey failed: {}", e);
-                    return;
+            let result: std::result::Result<(), String> = if clipboard.has_image() {
+                match clipboard.get_image_base64() {
+                    Ok((data, mt)) => {
+                        context.lock().await.append_context_image(data, mt);
+                        Ok(())
+                    }
+                    Err(e) => Err(e.to_string()),
                 }
-                s.config.settings().notifications.clone()
+            } else {
+                match clipboard.get_text() {
+                    Ok(text) => {
+                        context.lock().await.append_context(text);
+                        Ok(())
+                    }
+                    Err(e) => Err(e.to_string()),
+                }
             };
+            if let Err(e) = result {
+                log::error!("append_context_value hotkey failed: {}", e);
+                return;
+            }
+            let notification_settings = config.lock().await.settings().notifications.clone();
             let _ = app.emit("context-changed", ());
-            let _ = state.lock().await.notifications.notify(
+            let _ = notifications.notify(
                 "context_append",
                 NotificationLevel::Success,
                 "Context appended",
@@ -229,13 +244,10 @@ async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
             );
         }
         "clear_context" => {
-            let notification_settings = {
-                let mut s = state.lock().await;
-                s.context.clear();
-                s.config.settings().notifications.clone()
-            };
+            context.lock().await.clear();
+            let notification_settings = config.lock().await.settings().notifications.clone();
             let _ = app.emit("context-changed", ());
-            let _ = state.lock().await.notifications.notify(
+            let _ = notifications.notify(
                 "context_cleared",
                 NotificationLevel::Success,
                 "Context cleared",

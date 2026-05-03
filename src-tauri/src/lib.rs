@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use tauri::Manager;
 use tokio::sync::Mutex;
 
@@ -11,8 +13,9 @@ mod traits;
 
 pub use error::{Error, Result};
 
-use commands::settings::AppState;
+use services::config::ConfigService;
 use services::frontmost_app;
+use services::recent_apps::RecentAppsState;
 
 #[cfg(desktop)]
 pub use services::hotkeys::reload_shortcuts;
@@ -43,8 +46,13 @@ pub fn run() {
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
                     let detected = frontmost_app::detect();
-                    let state = app.state::<Mutex<AppState>>();
-                    state.lock().await.push_active_app(detected);
+                    let max = app
+                        .state::<Arc<Mutex<ConfigService>>>()
+                        .lock()
+                        .await
+                        .settings()
+                        .recent_apps_count;
+                    app.state::<Arc<RecentAppsState>>().push(detected, max).await;
                 });
             }
         })

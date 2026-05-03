@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
-use crate::commands::settings::AppState;
 use crate::models::context::ContextItem;
+use crate::services::clipboard::ClipboardService;
+use crate::services::context::ContextManagerService;
 
 fn emit_context_changed(app: &AppHandle) -> crate::Result<()> {
     app.emit("context-changed", ())?;
@@ -11,39 +14,39 @@ fn emit_context_changed(app: &AppHandle) -> crate::Result<()> {
 
 #[tauri::command]
 pub async fn get_context_items(
-    state: State<'_, Mutex<AppState>>,
+    context: State<'_, Arc<Mutex<ContextManagerService>>>,
 ) -> crate::Result<Vec<ContextItem>> {
-    let state = state.lock().await;
-    Ok(state.context.get_items())
+    Ok(context.lock().await.get_items())
 }
 
 #[tauri::command]
 pub async fn get_context_text(
-    state: State<'_, Mutex<AppState>>,
+    context: State<'_, Arc<Mutex<ContextManagerService>>>,
 ) -> crate::Result<Option<String>> {
-    let state = state.lock().await;
-    Ok(state.context.get_context())
+    Ok(context.lock().await.get_context())
 }
 
 #[tauri::command]
-pub async fn has_context(state: State<'_, Mutex<AppState>>) -> crate::Result<bool> {
-    let state = state.lock().await;
-    Ok(state.context.has_context())
+pub async fn has_context(
+    context: State<'_, Arc<Mutex<ContextManagerService>>>,
+) -> crate::Result<bool> {
+    Ok(context.lock().await.has_context())
 }
 
 #[tauri::command]
-pub async fn has_context_images(state: State<'_, Mutex<AppState>>) -> crate::Result<bool> {
-    let state = state.lock().await;
-    Ok(state.context.has_images())
+pub async fn has_context_images(
+    context: State<'_, Arc<Mutex<ContextManagerService>>>,
+) -> crate::Result<bool> {
+    Ok(context.lock().await.has_images())
 }
 
 #[tauri::command]
 pub async fn set_context(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    context: State<'_, Arc<Mutex<ContextManagerService>>>,
     value: String,
 ) -> crate::Result<()> {
-    state.lock().await.context.set_context(value);
+    context.lock().await.set_context(value);
     emit_context_changed(&app)?;
     Ok(())
 }
@@ -51,10 +54,10 @@ pub async fn set_context(
 #[tauri::command]
 pub async fn append_context(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    context: State<'_, Arc<Mutex<ContextManagerService>>>,
     value: String,
 ) -> crate::Result<()> {
-    state.lock().await.context.append_context(value);
+    context.lock().await.append_context(value);
     emit_context_changed(&app)?;
     Ok(())
 }
@@ -62,9 +65,9 @@ pub async fn append_context(
 #[tauri::command]
 pub async fn clear_context(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    context: State<'_, Arc<Mutex<ContextManagerService>>>,
 ) -> crate::Result<()> {
-    state.lock().await.context.clear();
+    context.lock().await.clear();
     emit_context_changed(&app)?;
     Ok(())
 }
@@ -72,13 +75,10 @@ pub async fn clear_context(
 #[tauri::command]
 pub async fn remove_context_item(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    context: State<'_, Arc<Mutex<ContextManagerService>>>,
     index: usize,
 ) -> crate::Result<bool> {
-    let removed = {
-        let mut state = state.lock().await;
-        state.context.remove_item(index)
-    };
+    let removed = context.lock().await.remove_item(index);
     if removed {
         emit_context_changed(&app)?;
     }
@@ -88,11 +88,11 @@ pub async fn remove_context_item(
 #[tauri::command]
 pub async fn set_context_image(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    context: State<'_, Arc<Mutex<ContextManagerService>>>,
     data: String,
     media_type: String,
 ) -> crate::Result<()> {
-    state.lock().await.context.set_context_image(data, media_type);
+    context.lock().await.set_context_image(data, media_type);
     emit_context_changed(&app)?;
     Ok(())
 }
@@ -100,11 +100,14 @@ pub async fn set_context_image(
 #[tauri::command]
 pub async fn append_context_image(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    context: State<'_, Arc<Mutex<ContextManagerService>>>,
     data: String,
     media_type: String,
 ) -> crate::Result<()> {
-    state.lock().await.context.append_context_image(data, media_type);
+    context
+        .lock()
+        .await
+        .append_context_image(data, media_type);
     emit_context_changed(&app)?;
     Ok(())
 }
@@ -112,17 +115,15 @@ pub async fn append_context_image(
 #[tauri::command]
 pub async fn set_context_from_clipboard(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    clipboard: State<'_, ClipboardService>,
+    context: State<'_, Arc<Mutex<ContextManagerService>>>,
 ) -> crate::Result<()> {
-    {
-        let mut state = state.lock().await;
-        if state.clipboard.has_image() {
-            let (data, media_type) = state.clipboard.get_image_base64()?;
-            state.context.set_context_image(data, media_type);
-        } else {
-            let text = state.clipboard.get_text()?;
-            state.context.set_context(text);
-        }
+    if clipboard.has_image() {
+        let (data, media_type) = clipboard.get_image_base64()?;
+        context.lock().await.set_context_image(data, media_type);
+    } else {
+        let text = clipboard.get_text()?;
+        context.lock().await.set_context(text);
     }
     emit_context_changed(&app)?;
     Ok(())
@@ -131,17 +132,18 @@ pub async fn set_context_from_clipboard(
 #[tauri::command]
 pub async fn append_context_from_clipboard(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    clipboard: State<'_, ClipboardService>,
+    context: State<'_, Arc<Mutex<ContextManagerService>>>,
 ) -> crate::Result<()> {
-    {
-        let mut state = state.lock().await;
-        if state.clipboard.has_image() {
-            let (data, media_type) = state.clipboard.get_image_base64()?;
-            state.context.append_context_image(data, media_type);
-        } else {
-            let text = state.clipboard.get_text()?;
-            state.context.append_context(text);
-        }
+    if clipboard.has_image() {
+        let (data, media_type) = clipboard.get_image_base64()?;
+        context
+            .lock()
+            .await
+            .append_context_image(data, media_type);
+    } else {
+        let text = clipboard.get_text()?;
+        context.lock().await.append_context(text);
     }
     emit_context_changed(&app)?;
     Ok(())

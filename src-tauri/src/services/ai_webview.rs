@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::time::{Duration, Instant};
 
@@ -8,7 +9,8 @@ use tauri::{Emitter, LogicalPosition, LogicalSize, Manager, WebviewUrl, WebviewW
 use tokio::sync::Mutex;
 
 use crate::models::settings::WebviewProvider;
-use crate::services::notification::NotificationLevel;
+use crate::services::config::ConfigService;
+use crate::services::notification::{NotificationLevel, NotificationService};
 use super::dialog::{
     self, attach_undecorated_resize_handler, configure_linux_child_packing, content_layout,
     focus_host_window, focus_window, is_conversation_dialog_host, is_shell_toolbar_label,
@@ -16,8 +18,7 @@ use super::dialog::{
     TOOLBAR_HEIGHT,
 };
 use super::dock::DockManager;
-use super::ui_state::WindowGeometry;
-use crate::commands::settings::AppState;
+use super::ui_state::{UiStateService, WindowGeometry};
 
 const DEFAULT_WIDTH: f64 = 1000.0;
 const DEFAULT_HEIGHT: f64 = 720.0;
@@ -434,13 +435,20 @@ fn emit_provider_lifecycle_toast(
 ) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let state = app.state::<Mutex<AppState>>();
-        let guard = state.lock().await;
-        let settings = guard.config.settings().notifications.clone();
-        if let Err(e) = guard
+        let settings = app
+            .state::<Arc<Mutex<ConfigService>>>()
+            .lock()
+            .await
+            .settings()
             .notifications
-            .notify(event_name, level, title, message, &settings)
-        {
+            .clone();
+        if let Err(e) = app.state::<NotificationService>().notify(
+            event_name,
+            level,
+            title,
+            message,
+            &settings,
+        ) {
             log::warn!(
                 target: "app_lib::services::ai_webview",
                 "lifecycle toast emit failed: {e}",
@@ -952,11 +960,13 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
             .unwrap_or_else(|| PROMPTHEUS_PROVIDER_ID.to_string())
     };
 
-    let providers = {
-        let app_state = app.state::<Mutex<AppState>>();
-        let guard = app_state.lock().await;
-        guard.config.settings().webview_providers.clone()
-    };
+    let providers = app
+        .state::<Arc<Mutex<ConfigService>>>()
+        .lock()
+        .await
+        .settings()
+        .webview_providers
+        .clone();
 
     let scale = host.scale_factor().map_err(|e| e.to_string())?;
     let inner_pos = host.inner_position().map_err(|e| e.to_string())?;
@@ -1166,9 +1176,12 @@ pub async fn lookup_webview_provider(
     app: &tauri::AppHandle,
     id: &str,
 ) -> Option<WebviewProvider> {
-    let state = app.state::<Mutex<AppState>>();
-    let guard = state.lock().await;
-    guard.config.settings().find_webview_provider(id).cloned()
+    app.state::<Arc<Mutex<ConfigService>>>()
+        .lock()
+        .await
+        .settings()
+        .find_webview_provider(id)
+        .cloned()
 }
 
 async fn swap_to_provider_standalone(
@@ -1192,9 +1205,12 @@ async fn swap_to_provider_standalone(
     let target_already_open = app.get_webview_window(&target_label).is_some();
     if !target_already_open {
         if let Some(geom) = read_window_geometry(app, from_label) {
-            let state = app.state::<Mutex<AppState>>();
-            let mut guard = state.lock().await;
-            if let Err(e) = guard.ui_state.set_geometry(&target_label, geom) {
+            if let Err(e) = app
+                .state::<Arc<Mutex<UiStateService>>>()
+                .lock()
+                .await
+                .set_geometry(&target_label, geom)
+            {
                 log::warn!(
                     target: "app_lib::services::ai_webview",
                     "failed to seed target geometry: {e}",
@@ -1225,10 +1241,10 @@ async fn swap_to_conversation_dialog_standalone(
     }
 
     if let Some(geom) = read_window_geometry(app, from_label) {
-        let state = app.state::<Mutex<AppState>>();
-        let mut guard = state.lock().await;
-        if let Err(e) = guard
-            .ui_state
+        if let Err(e) = app
+            .state::<Arc<Mutex<UiStateService>>>()
+            .lock()
+            .await
             .set_geometry(CONVERSATION_DIALOG_LABEL, geom)
         {
             log::warn!(
@@ -1293,11 +1309,11 @@ async fn open_window(
     label: &str,
     url: Option<String>,
 ) -> Result<(), String> {
-    let geometry = {
-        let state = app.state::<Mutex<AppState>>();
-        let guard = state.lock().await;
-        guard.ui_state.get_geometry(label)
-    };
+    let geometry = app
+        .state::<Arc<Mutex<UiStateService>>>()
+        .lock()
+        .await
+        .get_geometry(label);
 
     let (width, height) = geometry
         .as_ref()

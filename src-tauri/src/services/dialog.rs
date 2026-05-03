@@ -1,11 +1,12 @@
+use std::sync::Arc;
+
 use tauri::window::Color;
 use tauri::{LogicalPosition, LogicalSize, Manager, Rect, Window, WindowEvent};
 use tokio::sync::Mutex;
 
 use super::ai_webview;
 use super::dock::DockManager;
-use super::ui_state::WindowGeometry;
-use crate::commands::settings::AppState;
+use super::ui_state::{UiStateService, WindowGeometry};
 
 pub const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
 pub const SHELL_TOOLBAR_LABEL: &str = "shell-toolbar";
@@ -255,8 +256,11 @@ pub async fn open_or_focus(
 
     ai_webview::cleanup_host_state(app, &config.label);
 
-    let state = app.state::<Mutex<AppState>>();
-    let geometry = state.lock().await.ui_state.get_geometry(&config.geometry_key);
+    let geometry = app
+        .state::<Arc<Mutex<UiStateService>>>()
+        .lock()
+        .await
+        .get_geometry(&config.geometry_key);
 
     let (width, height) = geometry
         .as_ref()
@@ -466,9 +470,12 @@ pub fn save_geometry(app: &tauri::AppHandle, window_label: &str, geometry_key: &
     let app = app.clone();
     let key = geometry_key.to_string();
     tauri::async_runtime::spawn(async move {
-        let state = app.state::<Mutex<AppState>>();
-        let mut s = state.lock().await;
-        if let Err(e) = s.ui_state.set_geometry(&key, geom) {
+        if let Err(e) = app
+            .state::<Arc<Mutex<UiStateService>>>()
+            .lock()
+            .await
+            .set_geometry(&key, geom)
+        {
             log::warn!("failed to save window geometry: {e}");
         }
     });
@@ -499,9 +506,9 @@ pub async fn seed_geometry_from(
         height: size.height as f64 / scale,
     };
 
-    let state = app.state::<Mutex<AppState>>();
-    let mut guard = state.lock().await;
-    if let Err(e) = guard.ui_state.set_geometry(target_key, geom) {
+    let ui_state = app.state::<Arc<Mutex<UiStateService>>>();
+    let mut guard = ui_state.lock().await;
+    if let Err(e) = guard.set_geometry(target_key, geom) {
         log::warn!(
             target: "app_lib::services::dialog",
             "seed_geometry_from {source_label} -> {target_key} failed: {e}",

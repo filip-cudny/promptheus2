@@ -1,18 +1,20 @@
+use std::sync::Arc;
+
 use tauri::{Manager, State};
 use tokio::sync::Mutex;
 
-use crate::commands::settings::AppState;
 use crate::models::settings::WebviewProvider;
 use crate::services::ai_webview;
+use crate::services::config::ConfigService;
 use crate::Error;
 
 async fn require_provider(
-    state: &State<'_, Mutex<AppState>>,
+    config: &State<'_, Arc<Mutex<ConfigService>>>,
     provider_id: &str,
 ) -> crate::Result<WebviewProvider> {
-    let guard = state.lock().await;
-    guard
-        .config
+    config
+        .lock()
+        .await
         .settings()
         .find_webview_provider(provider_id)
         .cloned()
@@ -22,7 +24,7 @@ async fn require_provider(
 #[tauri::command]
 pub async fn open_ai_webview(
     app: tauri::AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
     provider_id: String,
     url: Option<String>,
 ) -> crate::Result<()> {
@@ -30,7 +32,7 @@ pub async fn open_ai_webview(
         target: "app_lib::commands::ai_webview",
         "open_ai_webview: {provider_id} url={url:?}",
     );
-    let provider = require_provider(&state, &provider_id).await?;
+    let provider = require_provider(&config, &provider_id).await?;
     ai_webview::open_or_focus(&app, provider, url)
         .await
         .map_err(Error::Other)
@@ -39,7 +41,7 @@ pub async fn open_ai_webview(
 #[tauri::command]
 pub async fn open_ai_webview_new_window(
     app: tauri::AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
     provider_id: String,
     url: Option<String>,
     source_label: Option<String>,
@@ -48,7 +50,7 @@ pub async fn open_ai_webview_new_window(
         target: "app_lib::commands::ai_webview",
         "open_ai_webview_new_window: {provider_id} url={url:?} source={source_label:?}",
     );
-    let provider = require_provider(&state, &provider_id).await?;
+    let provider = require_provider(&config, &provider_id).await?;
     ai_webview::open_new_instance(&app, provider, url, source_label)
         .await
         .map_err(Error::Other)
@@ -57,7 +59,7 @@ pub async fn open_ai_webview_new_window(
 #[tauri::command]
 pub async fn swap_ai_webview(
     app: tauri::AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
     provider_id: String,
     from_label: String,
 ) -> crate::Result<()> {
@@ -65,7 +67,7 @@ pub async fn swap_ai_webview(
         target: "app_lib::commands::ai_webview",
         "swap_ai_webview: {provider_id} from={from_label}",
     );
-    let provider = require_provider(&state, &provider_id).await?;
+    let provider = require_provider(&config, &provider_id).await?;
     ai_webview::swap_to_provider(&app, provider, &from_label)
         .await
         .map_err(Error::Other)
@@ -111,20 +113,19 @@ pub fn close_ai_webview(app: tauri::AppHandle, provider_id: String) -> crate::Re
 
 #[tauri::command]
 pub async fn get_webview_providers(
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
 ) -> crate::Result<Vec<WebviewProvider>> {
-    let guard = state.lock().await;
-    Ok(guard.config.settings().webview_providers.clone())
+    Ok(config.lock().await.settings().webview_providers.clone())
 }
 
 #[tauri::command]
 pub async fn get_webview_provider(
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
     provider_id: String,
 ) -> crate::Result<Option<WebviewProvider>> {
-    let guard = state.lock().await;
-    Ok(guard
-        .config
+    Ok(config
+        .lock()
+        .await
         .settings()
         .find_webview_provider(&provider_id)
         .cloned())

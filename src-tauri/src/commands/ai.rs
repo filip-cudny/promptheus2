@@ -1,13 +1,15 @@
+use std::sync::Arc;
+
 use tauri::ipc::Channel;
 use tauri::State;
 use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
 
-use crate::commands::settings::AppState;
 use crate::models::ai::StreamEvent;
 use crate::models::message::ProcessedMessage;
-use crate::services::ai::capabilities::{capabilities_for, ModelCapabilities};
 use crate::models::settings::Provider;
+use crate::services::ai::capabilities::{capabilities_for, ModelCapabilities};
+use crate::services::ai::AiService;
 
 #[tauri::command]
 pub async fn get_model_capabilities(
@@ -19,22 +21,22 @@ pub async fn get_model_capabilities(
 
 #[tauri::command]
 pub async fn complete(
-    state: State<'_, Mutex<AppState>>,
+    ai: State<'_, Arc<Mutex<AiService>>>,
     model_id: String,
     messages: Vec<ProcessedMessage>,
 ) -> crate::Result<String> {
-    let ai = state.lock().await.ai.clone();
+    let ai = ai.lock().await.clone();
     Ok(ai.complete(&model_id, messages).await?)
 }
 
 #[tauri::command]
 pub async fn complete_stream(
-    state: State<'_, Mutex<AppState>>,
+    ai: State<'_, Arc<Mutex<AiService>>>,
     model_id: String,
     messages: Vec<ProcessedMessage>,
     on_event: Channel<StreamEvent>,
 ) -> crate::Result<()> {
-    let ai = state.lock().await.ai.clone();
+    let ai = ai.lock().await.clone();
     let mut stream = ai
         .complete_stream(&model_id, messages, None, None, vec![])
         .await?;

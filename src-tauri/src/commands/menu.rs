@@ -1,12 +1,20 @@
+use std::sync::Arc;
+
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
-use crate::commands::settings::AppState;
 use crate::models::history::HistoryEntryType;
 use crate::models::menu::{MenuItem, MenuItemType};
 use crate::providers::SpeechMenuProvider;
+use crate::services::config::ConfigService;
+use crate::services::context::ContextManagerService;
+use crate::services::execution::PromptExecutionService;
+use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::monitor::find_monitor_at;
+use crate::services::skill::SkillService;
+use crate::services::speech::SpeechService;
+use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
 
 #[derive(Serialize, Clone)]
@@ -45,31 +53,42 @@ fn truncate(s: &str, max_len: usize) -> String {
 
 #[tauri::command]
 pub async fn get_context_menu_items(
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+    context: State<'_, Arc<Mutex<ContextManagerService>>>,
+    menu_coordinator: State<'_, Arc<Mutex<MenuCoordinator>>>,
+    speech: State<'_, Arc<Mutex<SpeechService>>>,
+    prompt_execution: State<'_, Arc<Mutex<PromptExecutionService>>>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
+    skill_service: State<'_, Arc<Mutex<SkillService>>>,
 ) -> crate::Result<Vec<MenuItem>> {
-    let mut state = state.lock().await;
-    let context_items = state.context.get_items();
-    state.menu_coordinator.update_context_items(context_items);
+    let context_items = context.lock().await.get_items();
+    let mut menu_coordinator = menu_coordinator.lock().await;
+    menu_coordinator.update_context_items(context_items);
 
-    let is_recording = state.speech.is_recording();
-    let is_executing = state.prompt_execution.is_busy();
-    for provider in state.menu_coordinator.providers_mut() {
+    let is_recording = speech.lock().await.is_recording();
+    let is_executing = prompt_execution.lock().await.is_busy();
+    for provider in menu_coordinator.providers_mut() {
         if let Some(speech) = provider.as_any_mut().downcast_mut::<SpeechMenuProvider>() {
             speech.set_recording(is_recording);
             speech.set_action_executing(is_executing);
         }
     }
 
-    let last_text = state.history.get_last_quick_action(HistoryEntryType::Text);
-    let last_speech = state.history.get_last_quick_action(HistoryEntryType::Speech);
+    let history = history.lock().await;
+    let last_text = history.get_last_quick_action(HistoryEntryType::Text);
+    let last_speech = history.get_last_quick_action(HistoryEntryType::Speech);
+    drop(history);
 
-    let mut items = state.menu_coordinator.get_menu_items(&state.config);
+    let config = config.lock().await;
+    let skill_service = skill_service.lock().await;
+
+    let mut items = menu_coordinator.get_menu_items(&config);
 
     for item in &mut items {
         if item.item_type == MenuItemType::LastInteraction {
             item.data = Some(serde_json::json!({
                 "input": last_text.as_ref().map(|e| {
-                    let raw_input = strip_skill_prefix(&e.input_content, &state.skill_service);
+                    let raw_input = strip_skill_prefix(&e.input_content, &skill_service);
                     serde_json::json!({ "content": raw_input, "preview": truncate(raw_input, 200) })
                 }),
                 "output": last_text.as_ref().and_then(|e| {
@@ -95,38 +114,37 @@ pub async fn get_context_menu_items(
 #[tauri::command]
 pub async fn execute_menu_item(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    skill_service: State<'_, Arc<Mutex<SkillService>>>,
+    speech: State<'_, Arc<Mutex<SpeechService>>>,
     item_id: String,
     shift_pressed: bool,
 ) -> crate::Result<()> {
     log::debug!("execute_menu_item: id={item_id}, shift={shift_pressed}");
 
     if item_id == "system_speech_to_text" {
-        return super::speech::toggle_speech_recording(app, state, None).await;
+        return super::speech::toggle_speech_recording(app, None).await;
     }
 
     if shift_pressed {
         let display_name = if item_id == "__chat__" {
             Some("Chat".to_string())
         } else {
-            let s = state.lock().await;
-            s.skill_service.get_skill(&item_id).map(|sk| sk.display_name.clone())
+            skill_service
+                .lock()
+                .await
+                .get_skill(&item_id)
+                .map(|sk| sk.display_name.clone())
         };
 
         if let Some(display_name) = display_name {
-            let mut s = state.lock().await;
-            if s.speech.is_recording() {
+            let mut s = speech.lock().await;
+            if s.is_recording() {
                 drop(s);
-                return super::speech::toggle_speech_recording(app, state, None).await;
+                return super::speech::toggle_speech_recording(app, None).await;
             }
-            s.speech.set_pending_prompt(Some(item_id.clone()), Some(display_name));
+            s.set_pending_prompt(Some(item_id.clone()), Some(display_name));
             drop(s);
-            return super::speech::toggle_speech_recording(
-                app,
-                state,
-                Some(item_id),
-            )
-            .await;
+            return super::speech::toggle_speech_recording(app, Some(item_id)).await;
         }
     }
 
@@ -305,9 +323,8 @@ pub async fn focus_context_menu(app: tauri::AppHandle) -> crate::Result<()> {
 
 #[tauri::command]
 pub async fn refresh_menu_providers(
-    state: State<'_, Mutex<AppState>>,
+    menu_coordinator: State<'_, Arc<Mutex<MenuCoordinator>>>,
 ) -> crate::Result<()> {
-    let mut state = state.lock().await;
-    state.menu_coordinator.refresh_all();
+    menu_coordinator.lock().await.refresh_all();
     Ok(())
 }

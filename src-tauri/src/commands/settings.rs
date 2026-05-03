@@ -1,4 +1,3 @@
-use std::collections::VecDeque;
 use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, State};
@@ -8,63 +7,7 @@ use crate::models::settings::{
     KeymapGroup, ModelConfig, NotificationSettings, Settings, SpeechToTextConfig,
 };
 use crate::services::ai::AiService;
-use crate::services::clipboard::ClipboardService;
 use crate::services::config::{ConfigService, SurfaceKind};
-use crate::services::context::ContextManagerService;
-use crate::services::history_search::HistorySearch;
-use crate::services::sqlite_history::SqliteHistoryService;
-use crate::services::image_storage::ImageStorage;
-use crate::services::mcp::McpRegistry;
-use crate::services::menu_coordinator::MenuCoordinator;
-use crate::services::notification::NotificationService;
-use crate::services::placeholder::PlaceholderService;
-use crate::services::execution::PromptExecutionService;
-use crate::services::skill::SkillService;
-use crate::services::speech::SpeechService;
-use crate::services::conversation_context::ConversationContextCache;
-use crate::services::tool_confirmation::ToolConfirmationService;
-use crate::services::ui_state::UiStateService;
-
-pub struct AppState {
-    pub config: ConfigService,
-    pub clipboard: ClipboardService,
-    pub notifications: NotificationService,
-    pub menu_coordinator: MenuCoordinator,
-    pub context: ContextManagerService,
-    pub placeholder: PlaceholderService,
-    pub ai: AiService,
-    pub history: SqliteHistoryService,
-    pub history_search: HistorySearch,
-    pub image_storage: ImageStorage,
-    pub prompt_execution: PromptExecutionService,
-    pub skill_service: SkillService,
-    pub speech: SpeechService,
-    pub ui_state: UiStateService,
-    pub conversation_context: ConversationContextCache,
-    pub mcp: Arc<McpRegistry>,
-    pub tool_confirmation: ToolConfirmationService,
-    pub recent_apps: VecDeque<String>,
-}
-
-impl AppState {
-    pub fn push_active_app(&mut self, app: String) {
-        if app.is_empty() || app.to_lowercase().contains("promptheus") {
-            return;
-        }
-        let max = self.config.settings().recent_apps_count;
-        self.recent_apps.retain(|a| a != &app);
-        self.recent_apps.push_front(app);
-        self.recent_apps.truncate(max);
-    }
-
-    pub fn active_app(&self) -> &str {
-        self.recent_apps.front().map(|s| s.as_str()).unwrap_or("")
-    }
-
-    pub fn recent_apps_display(&self) -> String {
-        self.recent_apps.iter().cloned().collect::<Vec<_>>().join(", ")
-    }
-}
 
 fn emit_changed(app: &AppHandle) -> crate::Result<()> {
     app.emit("settings-changed", ())?;
@@ -76,137 +19,139 @@ fn save_and_emit(config: &ConfigService, app: &AppHandle) -> crate::Result<()> {
     emit_changed(app)
 }
 
-fn rebuild_ai(state: &mut AppState) {
-    state.ai = AiService::new(&state.config.settings().models);
+fn rebuild_ai(config: &ConfigService, ai: &mut AiService) {
+    *ai = AiService::new(&config.settings().models);
 }
 
 #[tauri::command]
 pub async fn get_settings(
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
 ) -> crate::Result<Settings> {
-    let state = state.lock().await;
-    Ok(state.config.settings().clone())
+    Ok(config.lock().await.settings().clone())
 }
 
 #[tauri::command]
 pub async fn update_setting(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
     key: String,
     value: serde_json::Value,
 ) -> crate::Result<()> {
-    let mut state = state.lock().await;
-    state.config.update_setting(&key, value);
-    save_and_emit(&state.config, &app)
+    let mut config = config.lock().await;
+    config.update_setting(&key, value);
+    save_and_emit(&config, &app)
 }
 
 #[tauri::command]
 pub async fn update_surface_model(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
     surface: SurfaceKind,
     model_id: Option<String>,
 ) -> crate::Result<()> {
-    let mut state = state.lock().await;
-    state.config.update_surface_model(surface, model_id);
-    save_and_emit(&state.config, &app)
+    let mut config = config.lock().await;
+    config.update_surface_model(surface, model_id);
+    save_and_emit(&config, &app)
 }
 
 #[tauri::command]
 pub async fn update_surface_parameter(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
     surface: SurfaceKind,
     key: String,
     value: serde_json::Value,
 ) -> crate::Result<()> {
-    let mut state = state.lock().await;
-    state.config.update_surface_parameter(surface, &key, value);
-    save_and_emit(&state.config, &app)
+    let mut config = config.lock().await;
+    config.update_surface_parameter(surface, &key, value);
+    save_and_emit(&config, &app)
 }
 
 #[tauri::command]
 pub async fn update_surface_enabled_tools(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
     surface: SurfaceKind,
     tools: Vec<String>,
 ) -> crate::Result<()> {
-    let mut state = state.lock().await;
-    state.config.update_surface_enabled_tools(surface, tools);
-    save_and_emit(&state.config, &app)
+    let mut config = config.lock().await;
+    config.update_surface_enabled_tools(surface, tools);
+    save_and_emit(&config, &app)
 }
 
 #[tauri::command]
 pub async fn update_speech_to_text_config(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
-    config: SpeechToTextConfig,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+    config_value: SpeechToTextConfig,
 ) -> crate::Result<()> {
-    let mut state = state.lock().await;
-    state.config.update_speech_to_text(config);
-    save_and_emit(&state.config, &app)
+    let mut config = config.lock().await;
+    config.update_speech_to_text(config_value);
+    save_and_emit(&config, &app)
 }
 
 #[tauri::command]
 pub async fn add_model(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
-    config: ModelConfig,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+    ai: State<'_, Arc<Mutex<AiService>>>,
+    config_value: ModelConfig,
 ) -> crate::Result<()> {
-    let mut state = state.lock().await;
-    state.config.add_model(config);
-    rebuild_ai(&mut state);
-    save_and_emit(&state.config, &app)
+    let mut config = config.lock().await;
+    config.add_model(config_value);
+    rebuild_ai(&config, &mut *ai.lock().await);
+    save_and_emit(&config, &app)
 }
 
 #[tauri::command]
 pub async fn update_model(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+    ai: State<'_, Arc<Mutex<AiService>>>,
     model_id: String,
-    config: ModelConfig,
+    config_value: ModelConfig,
 ) -> crate::Result<()> {
-    let mut state = state.lock().await;
-    state.config.update_model(&model_id, config);
-    rebuild_ai(&mut state);
-    save_and_emit(&state.config, &app)
+    let mut config = config.lock().await;
+    config.update_model(&model_id, config_value);
+    rebuild_ai(&config, &mut *ai.lock().await);
+    save_and_emit(&config, &app)
 }
 
 #[tauri::command]
 pub async fn delete_model(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+    ai: State<'_, Arc<Mutex<AiService>>>,
     model_id: String,
 ) -> crate::Result<()> {
-    let mut state = state.lock().await;
-    state.config.delete_model(&model_id);
-    rebuild_ai(&mut state);
-    save_and_emit(&state.config, &app)
+    let mut config = config.lock().await;
+    config.delete_model(&model_id);
+    rebuild_ai(&config, &mut *ai.lock().await);
+    save_and_emit(&config, &app)
 }
 
 #[tauri::command]
 pub async fn update_notifications(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
-    config: NotificationSettings,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+    config_value: NotificationSettings,
 ) -> crate::Result<()> {
-    let mut state = state.lock().await;
-    state.config.update_notifications(config);
-    save_and_emit(&state.config, &app)
+    let mut config = config.lock().await;
+    config.update_notifications(config_value);
+    save_and_emit(&config, &app)
 }
 
 #[tauri::command]
 pub async fn update_keymaps(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
     keymaps: Vec<KeymapGroup>,
 ) -> crate::Result<()> {
     let settings = {
-        let mut s = state.lock().await;
-        s.config.update_keymaps(keymaps);
-        save_and_emit(&s.config, &app)?;
-        s.config.settings().clone()
+        let mut c = config.lock().await;
+        c.update_keymaps(keymaps);
+        save_and_emit(&c, &app)?;
+        c.settings().clone()
     };
     crate::reload_shortcuts(&app, &settings);
     Ok(())
@@ -215,24 +160,25 @@ pub async fn update_keymaps(
 #[tauri::command]
 pub async fn update_menu_section_order(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
     order: Vec<String>,
 ) -> crate::Result<()> {
-    let mut state = state.lock().await;
-    state.config.update_menu_section_order(order);
-    save_and_emit(&state.config, &app)
+    let mut config = config.lock().await;
+    config.update_menu_section_order(order);
+    save_and_emit(&config, &app)
 }
 
 #[tauri::command]
 pub async fn reload_settings(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+    ai: State<'_, Arc<Mutex<AiService>>>,
 ) -> crate::Result<()> {
     let settings = {
-        let mut s = state.lock().await;
-        s.config.reload()?;
-        rebuild_ai(&mut s);
-        s.config.settings().clone()
+        let mut c = config.lock().await;
+        c.reload()?;
+        rebuild_ai(&c, &mut *ai.lock().await);
+        c.settings().clone()
     };
     crate::reload_shortcuts(&app, &settings);
     crate::services::autostart::reconcile(&app, &settings);

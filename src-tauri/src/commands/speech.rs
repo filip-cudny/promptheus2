@@ -1,13 +1,15 @@
+use std::sync::Arc;
+
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 use crate::models::history::HistoryEntryType;
-use crate::services::notification::NotificationLevel;
-use crate::services::speech::{self, SpeechError};
+use crate::services::config::ConfigService;
+use crate::services::notification::{NotificationLevel, NotificationService};
+use crate::services::speech::{self, SpeechError, SpeechService};
+use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
-
-use super::settings::AppState;
 
 const MIN_RECORDING_SAMPLES_SECS: f64 = 1.0;
 
@@ -39,19 +41,24 @@ pub struct RecordingState {
 #[tauri::command]
 pub async fn toggle_speech_recording(
     app: AppHandle,
-    state: State<'_, Mutex<AppState>>,
     action_id: Option<String>,
 ) -> crate::Result<()> {
+    let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
+    let config_state = app.state::<Arc<Mutex<ConfigService>>>();
+    let notifications = app.state::<NotificationService>();
+    let history_state = app.state::<Arc<Mutex<SqliteHistoryService>>>();
+
     let was_recording;
     let raw_audio;
 
     {
-        let mut s = state.lock().await;
+        let mut s = speech_state.lock().await;
 
-        if s.speech.is_transcribing() {
+        if s.is_transcribing() {
             log::debug!("toggle_speech_recording: ignored, transcription in progress");
-            let notification_settings = s.config.settings().notifications.clone();
-            let _ = s.notifications.notify(
+            let notification_settings =
+                config_state.lock().await.settings().notifications.clone();
+            let _ = notifications.notify(
                 "speech_recording_start",
                 NotificationLevel::Warning,
                 "Transcription in progress",
@@ -61,10 +68,11 @@ pub async fn toggle_speech_recording(
             return Ok(());
         }
 
-        if !s.speech.is_recording() && s.speech.is_on_cooldown() {
+        if !s.is_recording() && s.is_on_cooldown() {
             log::debug!("toggle_speech_recording: ignored, cooldown active");
-            let notification_settings = s.config.settings().notifications.clone();
-            let _ = s.notifications.notify(
+            let notification_settings =
+                config_state.lock().await.settings().notifications.clone();
+            let _ = notifications.notify(
                 "speech_recording_start",
                 NotificationLevel::Warning,
                 "Cooldown active",
@@ -74,12 +82,12 @@ pub async fn toggle_speech_recording(
             return Ok(());
         }
 
-        was_recording = s.speech.is_recording();
+        was_recording = s.is_recording();
 
         if was_recording {
-            match s.speech.stop_recording_raw() {
+            match s.stop_recording_raw() {
                 Ok(audio) => {
-                    s.speech.set_transcribing(true);
+                    s.set_transcribing(true);
                     raw_audio = Some(audio);
                 }
                 Err(e) => {
@@ -89,7 +97,7 @@ pub async fn toggle_speech_recording(
             }
         } else {
             raw_audio = None;
-            if let Err(e) = s.speech.start_recording(action_id) {
+            if let Err(e) = s.start_recording(action_id) {
                 let _ = app.emit("speech-error", SpeechErrorEvent { message: e.to_string() });
                 return Err(e.into());
             }
@@ -98,16 +106,14 @@ pub async fn toggle_speech_recording(
 
     if !was_recording {
         let _ = app.emit("speech-recording-started", ());
-        {
-            let s = state.lock().await;
-            let _ = s.notifications.notify(
-                "speech_recording_start",
-                NotificationLevel::Info,
-                "Recording started",
-                Some("Click Speech to Text again to stop."),
-                &s.config.settings().notifications,
-            );
-        }
+        let notification_settings = config_state.lock().await.settings().notifications.clone();
+        let _ = notifications.notify(
+            "speech_recording_start",
+            NotificationLevel::Info,
+            "Recording started",
+            Some("Click Speech to Text again to stop."),
+            &notification_settings,
+        );
         return Ok(());
     }
 
@@ -126,49 +132,48 @@ pub async fn toggle_speech_recording(
             "speech-transcription-complete",
             TranscriptionComplete { text: String::new(), duration_secs: 0.0 },
         );
-        let mut s = state.lock().await;
-        s.speech.set_transcribing(false);
-        s.speech.mark_transcription_finished();
-        s.speech.set_pending_prompt(None, None);
+        let mut s = speech_state.lock().await;
+        s.set_transcribing(false);
+        s.mark_transcription_finished();
+        s.set_pending_prompt(None, None);
         return Ok(());
     }
 
-    let wav_bytes = tokio::task::spawn_blocking(move || {
-        speech::encode_wav(&samples, sample_rate)
-    })
-    .await
-    .map_err(|e| Error::Other(e.to_string()))?
-    .map_err(|e| {
-        let _ = app.emit("speech-error", SpeechErrorEvent { message: e.to_string() });
-        Error::from(e)
-    });
+    let app_for_encode = app.clone();
+    let wav_bytes = tokio::task::spawn_blocking(move || speech::encode_wav(&samples, sample_rate))
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?
+        .map_err(|e| {
+            let _ = app_for_encode.emit("speech-error", SpeechErrorEvent { message: e.to_string() });
+            Error::from(e)
+        });
 
     let wav_bytes = match wav_bytes {
         Ok(bytes) => bytes,
         Err(e) => {
-            let mut s = state.lock().await;
-            s.speech.set_transcribing(false);
-            s.speech.mark_transcription_finished();
-            s.speech.set_pending_prompt(None, None);
+            let mut s = speech_state.lock().await;
+            s.set_transcribing(false);
+            s.mark_transcription_finished();
+            s.set_pending_prompt(None, None);
             return Err(e);
         }
     };
 
     let (speech_config, stt_options) = {
-        let mut s = state.lock().await;
-        let _ = s.notifications.notify(
+        let config_guard = config_state.lock().await;
+        let _ = notifications.notify(
             "speech_recording_stop",
             NotificationLevel::Info,
             "Processing audio",
             Some("Transcribing your speech to text"),
-            &s.config.settings().notifications,
+            &config_guard.settings().notifications,
         );
 
-        let stt_prompt = s.config.stt_prompt();
-        let keyterms = s.config.stt_keyterms();
-        let stt_surface = s.config.settings().surfaces.speech_to_text.clone();
+        let stt_prompt = config_guard.stt_prompt();
+        let keyterms = config_guard.stt_keyterms();
+        let stt_surface = config_guard.settings().surfaces.speech_to_text.clone();
 
-        match s.config.resolve_stt_model().cloned() {
+        match config_guard.resolve_stt_model().cloned() {
             Some(config) => {
                 let options = crate::services::speech::SttOptions {
                     language: stt_surface.language,
@@ -179,9 +184,11 @@ pub async fn toggle_speech_recording(
                 (config, options)
             }
             None => {
-                s.speech.set_transcribing(false);
-                s.speech.mark_transcription_finished();
-                s.speech.set_pending_prompt(None, None);
+                drop(config_guard);
+                let mut s = speech_state.lock().await;
+                s.set_transcribing(false);
+                s.mark_transcription_finished();
+                s.set_pending_prompt(None, None);
                 let _ = app.emit("speech-error", SpeechErrorEvent {
                     message: "Speech-to-text model not configured".into(),
                 });
@@ -191,9 +198,12 @@ pub async fn toggle_speech_recording(
     };
 
     let app_clone = app.clone();
+    let speech_inner = Arc::clone(&*speech_state);
+    let config_inner = Arc::clone(&*config_state);
+    let history_inner = Arc::clone(&*history_state);
 
     tokio::spawn(async move {
-        let state_inner = app_clone.state::<Mutex<AppState>>();
+        let notifications_inner = app_clone.state::<NotificationService>();
         let start = std::time::Instant::now();
         match speech::transcribe(wav_bytes, &speech_config, &stt_options).await {
             Ok(text) => {
@@ -206,10 +216,7 @@ pub async fn toggle_speech_recording(
                     },
                 );
 
-                let pending = {
-                    let mut s = state_inner.lock().await;
-                    s.speech.take_pending_prompt()
-                };
+                let pending = speech_inner.lock().await.take_pending_prompt();
 
                 if let Some(skill_id) = pending.0 {
                     let _ = app_clone.emit(
@@ -225,8 +232,7 @@ pub async fn toggle_speech_recording(
                         log::error!("Failed to copy transcription to clipboard: {e}");
                     }
 
-                    let mut s = state_inner.lock().await;
-                    s.history.add_entry(
+                    history_inner.lock().await.add_entry(
                         text.clone(),
                         HistoryEntryType::Speech,
                         Some(text),
@@ -238,9 +244,10 @@ pub async fn toggle_speech_recording(
                         true,
                     );
 
-                    let notification_settings = s.config.settings().notifications.clone();
+                    let notification_settings =
+                        config_inner.lock().await.settings().notifications.clone();
                     let duration_display = format!("Processed in {:.1}s", duration_secs);
-                    let _ = s.notifications.notify(
+                    let _ = notifications_inner.notify(
                         "speech_transcription_success",
                         NotificationLevel::Success,
                         "Speech transcribed",
@@ -249,9 +256,9 @@ pub async fn toggle_speech_recording(
                     );
                 }
 
-                let mut s = state_inner.lock().await;
-                s.speech.set_transcribing(false);
-                s.speech.mark_transcription_finished();
+                let mut s = speech_inner.lock().await;
+                s.set_transcribing(false);
+                s.mark_transcription_finished();
             }
             Err(SpeechError::NoSpeechDetected) => {
                 let _ = app_clone.emit(
@@ -262,8 +269,8 @@ pub async fn toggle_speech_recording(
                     },
                 );
 
-                let mut s = state_inner.lock().await;
-                let had_pending = s.speech.take_pending_prompt().0.is_some();
+                let mut s = speech_inner.lock().await;
+                let had_pending = s.take_pending_prompt().0.is_some();
 
                 let title = if had_pending {
                     "Speech execution cancelled"
@@ -276,8 +283,9 @@ pub async fn toggle_speech_recording(
                     "No speech was detected in the recording"
                 };
 
-                let notification_settings = s.config.settings().notifications.clone();
-                let _ = s.notifications.notify(
+                let notification_settings =
+                    config_inner.lock().await.settings().notifications.clone();
+                let _ = notifications_inner.notify(
                     "speech_transcription_success",
                     NotificationLevel::Info,
                     title,
@@ -285,8 +293,8 @@ pub async fn toggle_speech_recording(
                     &notification_settings,
                 );
 
-                s.speech.set_transcribing(false);
-                s.speech.mark_transcription_finished();
+                s.set_transcribing(false);
+                s.mark_transcription_finished();
             }
             Err(e) => {
                 let message = e.to_string();
@@ -297,11 +305,12 @@ pub async fn toggle_speech_recording(
                     },
                 );
 
-                let mut s = state_inner.lock().await;
-                s.speech.set_pending_prompt(None, None);
+                let mut s = speech_inner.lock().await;
+                s.set_pending_prompt(None, None);
 
-                let notification_settings = s.config.settings().notifications.clone();
-                let _ = s.notifications.notify(
+                let notification_settings =
+                    config_inner.lock().await.settings().notifications.clone();
+                let _ = notifications_inner.notify(
                     "speech_transcription_success",
                     NotificationLevel::Error,
                     "Transcription error",
@@ -309,8 +318,8 @@ pub async fn toggle_speech_recording(
                     &notification_settings,
                 );
 
-                s.speech.set_transcribing(false);
-                s.speech.mark_transcription_finished();
+                s.set_transcribing(false);
+                s.mark_transcription_finished();
             }
         }
     });
@@ -320,12 +329,12 @@ pub async fn toggle_speech_recording(
 
 #[tauri::command]
 pub async fn get_recording_state(
-    state: State<'_, Mutex<AppState>>,
+    speech: State<'_, Arc<Mutex<SpeechService>>>,
 ) -> crate::Result<RecordingState> {
-    let s = state.lock().await;
+    let s = speech.lock().await;
     Ok(RecordingState {
-        is_recording: s.speech.is_recording(),
-        is_transcribing: s.speech.is_transcribing(),
-        action_id: s.speech.recording_action_id().map(String::from),
+        is_recording: s.is_recording(),
+        is_transcribing: s.is_transcribing(),
+        action_id: s.recording_action_id().map(String::from),
     })
 }

@@ -4,6 +4,9 @@ pub mod clipboard;
 pub mod context;
 pub mod context_editor;
 pub mod dock;
+pub mod execution_control;
+pub mod execution_generation;
+pub mod execution_stream;
 pub mod history;
 pub mod history_dialog;
 pub mod image_preview;
@@ -11,7 +14,6 @@ pub mod mcp;
 pub mod menu;
 pub mod notification;
 pub mod provider_menu;
-pub mod execution;
 pub mod fs;
 pub mod conversation_dialog;
 pub mod settings;
@@ -73,20 +75,22 @@ macro_rules! handlers {
             $crate::commands::conversation_dialog::get_dialog_init_params,
             // === dock ===
             $crate::commands::dock::hide_dialog_window,
-            // === execution ===
-            $crate::commands::execution::execute_skill,
-            $crate::commands::execution::resolve_environment_section,
-            $crate::commands::execution::release_conversation_context,
-            $crate::commands::execution::seed_conversation_context,
-            $crate::commands::execution::generate_conversation_title,
-            $crate::commands::execution::resolve_skill_input,
-            $crate::commands::execution::execute_conversation_from_tree,
-            $crate::commands::execution::reconnect_to_execution,
-            $crate::commands::execution::cancel_skill_execution,
-            $crate::commands::execution::cancel_live_execution,
-            $crate::commands::execution::get_executing_skill_id,
-            $crate::commands::execution::respond_to_tool_call,
-            $crate::commands::execution::retry_tool_call,
+            // === execution_stream ===
+            $crate::commands::execution_stream::execute_skill,
+            $crate::commands::execution_stream::execute_conversation_from_tree,
+            $crate::commands::execution_stream::resolve_environment_section,
+            $crate::commands::execution_stream::release_conversation_context,
+            $crate::commands::execution_stream::seed_conversation_context,
+            $crate::commands::execution_stream::resolve_skill_input,
+            // === execution_control ===
+            $crate::commands::execution_control::reconnect_to_execution,
+            $crate::commands::execution_control::cancel_skill_execution,
+            $crate::commands::execution_control::cancel_live_execution,
+            $crate::commands::execution_control::get_executing_skill_id,
+            $crate::commands::execution_control::respond_to_tool_call,
+            $crate::commands::execution_control::retry_tool_call,
+            // === execution_generation ===
+            $crate::commands::execution_generation::generate_conversation_title,
             // === fs ===
             $crate::commands::fs::write_text_file,
             // === history ===

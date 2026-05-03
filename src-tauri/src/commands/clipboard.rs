@@ -1,7 +1,6 @@
 use tauri::State;
-use tokio::sync::Mutex;
 
-use super::settings::AppState;
+use crate::services::clipboard::ClipboardService;
 use crate::Error;
 
 #[tauri::command(async)]
@@ -20,30 +19,26 @@ pub fn get_clipboard_text() -> crate::Result<String> {
 
 #[tauri::command]
 pub fn set_clipboard_text(
-    state: State<'_, Mutex<AppState>>,
+    clipboard: State<'_, ClipboardService>,
     content: String,
 ) -> crate::Result<()> {
-    let state = state.blocking_lock();
-    state.clipboard.set_text(&content)?;
+    clipboard.set_text(&content)?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn clipboard_is_empty(state: State<'_, Mutex<AppState>>) -> crate::Result<bool> {
-    let state = state.blocking_lock();
-    Ok(state.clipboard.is_empty())
+pub fn clipboard_is_empty(clipboard: State<'_, ClipboardService>) -> crate::Result<bool> {
+    Ok(clipboard.is_empty())
 }
 
 #[tauri::command]
-pub fn clipboard_has_image(state: State<'_, Mutex<AppState>>) -> crate::Result<bool> {
-    let state = state.blocking_lock();
-    Ok(state.clipboard.has_image())
+pub fn clipboard_has_image(clipboard: State<'_, ClipboardService>) -> crate::Result<bool> {
+    Ok(clipboard.has_image())
 }
 
 #[tauri::command(async)]
 pub fn get_clipboard_image(
-    state: State<'_, Mutex<AppState>>,
+    clipboard: State<'_, ClipboardService>,
 ) -> crate::Result<(String, String)> {
-    let state = state.blocking_lock();
-    Ok(state.clipboard.get_image_base64()?)
+    Ok(clipboard.get_image_base64()?)
 }
