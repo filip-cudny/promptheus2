@@ -93,7 +93,7 @@
       </div>
     {/if}
     {#if editMode}
-      <ContextEditor bind:text bind:images />
+      <ContextEditor bind:text bind:images variant="flat" hideChipRow />
     {:else}
       <div class="markdown-view">
         <MarkdownRenderer content={text} isStreaming={false} onopen={openUrl} onsavesvg={handleSaveSvg} />
@@ -127,23 +127,6 @@
     -webkit-backdrop-filter: blur(8px);
   }
 
-  .editor-content :global(.context-editor) {
-    flex: 1;
-    padding: var(--space-4);
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    overflow: hidden;
-  }
-
-  .editor-content :global(.context-editor:focus-within) {
-    border-color: transparent;
-  }
-
-  .editor-content :global(.context-editor > .chip-row) {
-    display: none;
-  }
-
   .image-row {
     display: flex;
     flex-wrap: wrap;
@@ -156,15 +139,6 @@
   .image-row :global(.chip-wrapper) {
     width: 80px;
     height: 80px;
-  }
-
-  .editor-content :global(.context-textarea) {
-    flex: 1;
-    min-height: 100px;
-    max-height: none !important;
-    height: auto !important;
-    resize: none;
-    overflow-y: auto;
   }
 
   .markdown-view {

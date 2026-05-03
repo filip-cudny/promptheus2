@@ -10,13 +10,17 @@
     images = $bindable(),
     readonly = false,
     disabled = false,
-    placeholder = "Enter context text\u2026",
+    placeholder = "Enter context text…",
+    variant = "default",
+    hideChipRow = false,
   }: {
     text: string;
     images: ConversationImage[];
     readonly?: boolean;
     disabled?: boolean;
     placeholder?: string;
+    variant?: "default" | "flat";
+    hideChipRow?: boolean;
   } = $props();
 
   let textarea: HTMLTextAreaElement | undefined = $state();
@@ -35,8 +39,8 @@
   }
 </script>
 
-<div class="context-editor">
-  {#if images.length > 0}
+<div class="context-editor" class:flat={variant === "flat"}>
+  {#if !hideChipRow && images.length > 0}
     <div class="chip-row">
       <ImageChipBar bind:images readonly={readonly || disabled} onopen={(image) => invoke("open_image_preview", { data: image.data, mediaType: image.media_type })} />
     </div>
@@ -64,6 +68,14 @@
     padding: var(--space-4) var(--space-4) var(--space-0);
   }
 
+  .context-editor.flat {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    overflow: hidden;
+  }
+
   .chip-row {
     display: flex;
     flex-wrap: wrap;
@@ -72,6 +84,10 @@
 
   .context-editor:focus-within {
     border-color: var(--accent-border);
+  }
+
+  .context-editor.flat:focus-within {
+    border-color: transparent;
   }
 
   .context-textarea {
@@ -84,6 +100,15 @@
     padding: var(--space-2) var(--space-0) var(--space-4);
     box-sizing: border-box;
     overflow: hidden;
+  }
+
+  .context-editor.flat > .context-textarea {
+    flex: 1;
+    min-height: 100px;
+    max-height: none;
+    height: auto;
+    resize: none;
+    overflow-y: auto;
   }
 
   .context-textarea:focus {
