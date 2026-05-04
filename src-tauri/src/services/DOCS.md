@@ -12,11 +12,26 @@ services/
 │   ├── provider.rs      #   AiProvider trait, CompletionRequest, StreamChunk
 │   ├── openai.rs        #   OpenAiProvider — reqwest-based OpenAI implementation
 │   └── sse.rs           #   Lightweight SSE line parser for reqwest byte streams
+├── ai_webview/          # AiWebviewState + provider window management
+│   ├── mod.rs           #   AiWebviewState (shared mutex maps), public API re-exports
+│   ├── lifecycle.rs     #   Window/webview creation, teardown, media permissions
+│   ├── provider_swap.rs #   Hosted/standalone provider swap, active-changed events
+│   ├── palette.rs       #   Palette open/close + router-message handling
+│   ├── cold_suspend.rs  #   Idle tracking, suspend-to-blank, lifecycle toasts
+│   └── scripts.rs       #   Initialization JS (dark-mode shim + palette keybind)
 ├── clipboard.rs         # ClipboardService — text and image clipboard operations
-├── config.rs            # ConfigService — settings load/validate/save/mutate
+├── config/              # ConfigService — settings load/validate/save/mutate
+│   ├── mod.rs           #   ConfigService struct + load/save/reload + mutators; SurfaceKind
+│   ├── loader.rs        #   File I/O, env-var loading, default-asset initialisation
+│   ├── migrator.rs      #   Legacy schema migration (default_model → surfaces, etc.)
+│   ├── defaults.rs      #   Surface-default backfill + Settings validation
+│   └── tests.rs         #   Integration tests using ConfigService::load with TempDir
 ├── context.rs           # ContextManagerService — ordered context items (text/image)
 ├── database.rs          # Database — SQLite connection, schema creation, migrations
-├── sqlite_history.rs    # SqliteHistoryService — persistent history storage via SQLite
+├── sqlite_history/      # SqliteHistoryService — persistent history storage via SQLite
+│   ├── mod.rs           #   SqliteHistoryService CRUD + public API
+│   ├── codec.rs         #   TreeJson, row→entry mapping, summary builders (pure)
+│   └── tests.rs         #   CRUD integration tests against an in-memory database
 ├── hotkeys.rs           # Hotkey translation and OS-filtered binding resolution
 ├── image_storage.rs     # ImageStorage — temp image file save/load for conversation history
 ├── mcp/                 # MCP client — rmcp-based tool server management
@@ -26,6 +41,13 @@ services/
 ├── notification.rs      # NotificationService — event-gated Tauri event emission
 ├── placeholder.rs       # PlaceholderService — template variable substitution and image injection
 ├── execution.rs         # PromptExecutionService — execution state machine (cancel, streaming, model resolution)
+├── skill/               # SkillService — file-based skill loading + DB-backed versioning
+│   ├── mod.rs           #   SkillService load/list/sync_versions; SkillError
+│   └── parser.rs        #   YAML frontmatter + body splitter (pure)
+├── speech/              # SpeechService — recording + transcription
+│   ├── mod.rs           #   SpeechService state machine, SpeechError
+│   ├── recorder.rs      #   cpal device discovery, sample-rate negotiation, WAV encoding
+│   └── transcriber.rs   #   HTTP transcribe() for OpenAI/ElevenLabs + SttOptions
 └── DOCS.md
 ```
 
