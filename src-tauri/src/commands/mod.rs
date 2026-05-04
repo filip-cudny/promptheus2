@@ -14,7 +14,6 @@ pub mod mcp;
 pub mod menu;
 pub mod notification;
 pub mod provider_menu;
-pub mod fs;
 pub mod conversation_dialog;
 pub mod settings;
 pub mod settings_dialog;
@@ -91,8 +90,6 @@ macro_rules! handlers {
             $crate::commands::execution_control::retry_tool_call,
             // === execution_generation ===
             $crate::commands::execution_generation::generate_conversation_title,
-            // === fs ===
-            $crate::commands::fs::write_text_file,
             // === history ===
             $crate::commands::history::get_history,
             $crate::commands::history::get_conversations,

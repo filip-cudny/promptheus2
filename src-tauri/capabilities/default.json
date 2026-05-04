@@ -26,6 +26,7 @@
     "opener:default",
     "clipboard-manager:default",
     "dialog:default",
+    "fs:allow-write-text-file",
     "global-shortcut:default"
   ]
 }

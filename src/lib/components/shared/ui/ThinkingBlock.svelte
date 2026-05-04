@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { slide } from "svelte/transition";
-  import { invoke } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { save } from "@tauri-apps/plugin-dialog";
+  import { writeTextFile } from "@tauri-apps/plugin-fs";
   import { ChevronRight, ChevronDown, Brain } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import MarkdownRenderer from "./MarkdownRenderer.svelte";
@@ -64,7 +64,7 @@
       defaultPath: "mermaid-diagram.svg",
       filters: [{ name: "SVG", extensions: ["svg"] }],
     });
-    if (path) await invoke("write_text_file", { path, content: svg });
+    if (path) await writeTextFile(path, svg);
   }
 
   function formatElapsed(seconds: number): string {

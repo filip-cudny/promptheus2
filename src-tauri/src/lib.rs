@@ -29,6 +29,7 @@ pub fn run() {
         .plugin(setup::log::plugin())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri::plugin::Builder::<tauri::Wry, ()>::new("platform")

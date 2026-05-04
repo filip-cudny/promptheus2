@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { save as saveDialog } from "@tauri-apps/plugin-dialog";
+  import { writeTextFile } from "@tauri-apps/plugin-fs";
   import EditorToolbar from "$lib/components/shared/ui/EditorToolbar.svelte";
   import MarkdownRenderer from "$lib/components/shared/ui/MarkdownRenderer.svelte";
   import { resizeTextarea } from "$lib/utils/autoResize";
@@ -47,7 +47,7 @@
       defaultPath: "mermaid-diagram.svg",
       filters: [{ name: "SVG", extensions: ["svg"] }],
     });
-    if (path) await invoke("write_text_file", { path, content: svg });
+    if (path) await writeTextFile(path, svg);
   }
 </script>
 
