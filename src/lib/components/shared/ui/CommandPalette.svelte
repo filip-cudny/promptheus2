@@ -55,7 +55,7 @@
     <div
       class="palette-body"
       role="listbox"
-      style="max-height: {bodyMaxHeight}"
+      style="--palette-body-h: {bodyMaxHeight}"
     >
       {@render body()}
     </div>
@@ -141,6 +141,11 @@
     flex-direction: column;
     overflow-y: auto;
     padding: var(--space-2) var(--space-0);
+    max-height: var(--palette-body-h);
+  }
+
+  :global([data-platform="linux"]) .palette-modal.window-variant .palette-body {
+    height: var(--palette-body-h);
   }
 
   .palette-footer {

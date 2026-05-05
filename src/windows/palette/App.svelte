@@ -9,7 +9,16 @@
     onShown: () => inputEl?.focus(),
   });
 
-  onMount(() => ipc.init());
+  onMount(() => {
+    const ua = navigator.userAgent;
+    const platform = ua.includes("Mac")
+      ? "macos"
+      : ua.includes("Win")
+        ? "windows"
+        : "linux";
+    document.documentElement.setAttribute("data-platform", platform);
+    ipc.init();
+  });
   onDestroy(() => ipc.destroy());
 </script>
 
