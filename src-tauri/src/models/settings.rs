@@ -58,9 +58,6 @@ pub struct Settings {
     pub menu_section_order: Vec<String>,
 
     #[serde(default)]
-    pub description_generator: DescriptionGenerator,
-
-    #[serde(default)]
     pub notifications: NotificationSettings,
 
     #[serde(default = "default_debounce_ms")]
@@ -154,22 +151,26 @@ pub struct ChatConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptBase {
-    #[serde(default = "default_system_prompt")]
-    pub system_prompt: String,
+    #[serde(default = "default_system_path")]
+    pub system: String,
 
-    #[serde(default)]
-    pub about_me: Option<String>,
+    #[serde(default = "default_about_me_path")]
+    pub about_me: String,
 
-    #[serde(default)]
-    pub environment_section: Option<String>,
+    #[serde(default = "default_environment_path")]
+    pub environment: String,
+
+    #[serde(default = "default_input_format_path")]
+    pub input_format: String,
 }
 
 impl Default for PromptBase {
     fn default() -> Self {
         Self {
-            system_prompt: default_system_prompt(),
-            about_me: None,
-            environment_section: None,
+            system: default_system_path(),
+            about_me: default_about_me_path(),
+            environment: default_environment_path(),
+            input_format: default_input_format_path(),
         }
     }
 }
@@ -185,7 +186,7 @@ pub struct TitleGenConfig {
     #[serde(default)]
     pub generation: GenerationConfig,
 
-    #[serde(default = "default_conversation_title_prompt")]
+    #[serde(default = "default_title_generation_path")]
     pub prompt: String,
 }
 
@@ -193,7 +194,7 @@ impl Default for TitleGenConfig {
     fn default() -> Self {
         Self {
             generation: GenerationConfig::default(),
-            prompt: default_conversation_title_prompt(),
+            prompt: default_title_generation_path(),
         }
     }
 }
@@ -409,18 +410,6 @@ pub struct NotificationColors {
     pub warning: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DescriptionGenerator {
-    #[serde(default)]
-    pub model: String,
-
-    #[serde(default)]
-    pub system_prompt: Option<String>,
-
-    #[serde(default)]
-    pub prompt: Option<String>,
-}
-
 fn default_true() -> bool {
     true
 }
@@ -444,16 +433,28 @@ fn default_menu_section_order() -> Vec<String> {
     ]
 }
 
-fn default_system_prompt() -> String {
-    "You are a helpful assistant.".to_string()
+fn default_system_path() -> String {
+    "prompts/base/system.md".to_string()
+}
+
+fn default_about_me_path() -> String {
+    "prompts/base/about_me.md".to_string()
+}
+
+fn default_environment_path() -> String {
+    "prompts/base/environment.md".to_string()
+}
+
+fn default_input_format_path() -> String {
+    "prompts/base/input_format.md".to_string()
+}
+
+fn default_title_generation_path() -> String {
+    "prompts/surfaces/title_generation.md".to_string()
 }
 
 fn default_debounce_ms() -> u32 {
     200
-}
-
-fn default_conversation_title_prompt() -> String {
-    "Generate a short conversation title based on the user's first message. Return only the title, 2-6 words, no emoji, no quotes, no trailing punctuation. Match the user's language when possible.".to_string()
 }
 
 fn default_recent_apps_count() -> usize {
@@ -473,7 +474,6 @@ impl Default for Settings {
             code_theme: default_code_theme(),
             theme: default_theme(),
             menu_section_order: default_menu_section_order(),
-            description_generator: DescriptionGenerator::default(),
             notifications: NotificationSettings::default(),
             number_input_debounce_ms: 200,
             models: Vec::new(),
@@ -529,16 +529,6 @@ impl Default for NotificationColors {
     }
 }
 
-impl Default for DescriptionGenerator {
-    fn default() -> Self {
-        Self {
-            model: String::new(),
-            system_prompt: None,
-            prompt: None,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -552,7 +542,10 @@ mod tests {
         assert_eq!(settings.number_input_debounce_ms, 200);
         assert_eq!(settings.menu_section_order.len(), 6);
         assert!(settings.models.is_empty());
-        assert_eq!(settings.prompt_base.system_prompt, "You are a helpful assistant.");
+        assert_eq!(settings.prompt_base.system, "prompts/base/system.md");
+        assert_eq!(settings.prompt_base.about_me, "prompts/base/about_me.md");
+        assert_eq!(settings.prompt_base.environment, "prompts/base/environment.md");
+        assert_eq!(settings.prompt_base.input_format, "prompts/base/input_format.md");
     }
 
     #[test]
@@ -651,7 +644,7 @@ mod tests {
         let mut settings = Settings::default();
         settings.surfaces.chat.generation.model_id = Some("model-1".to_string());
         settings.surfaces.chat.generation.parameters.reasoning_effort = Some("medium".to_string());
-        settings.prompt_base.system_prompt = "Custom".to_string();
+        settings.prompt_base.system = "prompts/base/custom_system.md".to_string();
         settings.surfaces.quick_actions.generation.model_id = Some("model-2".to_string());
         settings.surfaces.quick_actions.generation.parameters.reasoning_effort = Some("high".to_string());
         settings.surfaces.title_generation.generation.model_id = Some("model-3".to_string());
@@ -664,7 +657,7 @@ mod tests {
 
         assert_eq!(parsed.surfaces.chat.generation.model_id.as_deref(), Some("model-1"));
         assert_eq!(parsed.surfaces.chat.generation.parameters.reasoning_effort.as_deref(), Some("medium"));
-        assert_eq!(parsed.prompt_base.system_prompt, "Custom");
+        assert_eq!(parsed.prompt_base.system, "prompts/base/custom_system.md");
         assert_eq!(parsed.surfaces.quick_actions.generation.model_id.as_deref(), Some("model-2"));
         assert_eq!(parsed.surfaces.quick_actions.generation.parameters.reasoning_effort.as_deref(), Some("high"));
         assert_eq!(parsed.surfaces.title_generation.generation.model_id.as_deref(), Some("model-3"));

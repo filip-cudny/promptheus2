@@ -11,10 +11,6 @@
     "SpeechMenuProvider",
     "settings"
   ],
-  "description_generator": {
-    "model": "",
-    "prompt": "Generate a concise 3-4 word description for the following AI prompt.\nThe description should capture the primary purpose or action.\nOnly respond with the description, nothing else.\n\nPrompt name: {{name}}\nSystem message: {{system}}\nUser message template: {{user}}"
-  },
   "notifications": {
     "events": {
       "prompt_execution_success": true,
@@ -40,9 +36,10 @@
   },
   "number_input_debounce_ms": 200,
   "prompt_base": {
-    "system_prompt": "You are a helpful assistant.",
-    "about_me": "about_me.md",
-    "environment_section": "environment_section.md"
+    "system": "prompts/base/system.md",
+    "about_me": "prompts/base/about_me.md",
+    "environment": "prompts/base/environment.md",
+    "input_format": "prompts/base/input_format.md"
   },
   "surfaces": {
     "chat": {
@@ -65,12 +62,12 @@
         "parameters": {},
         "enabled_tools": []
       },
-      "prompt": "Generate a short conversation title based on the user's first message. Return only the title, 2-6 words, no emoji, no quotes, no trailing punctuation. Match the user's language when possible."
+      "prompt": "prompts/surfaces/title_generation.md"
     },
     "speech_to_text": {
       "model_id": "c3d4e5f6-a7b8-4c9d-8e0f-1a2b3c4d5e6f",
       "language": "pl",
-      "prompt": "${STT_PROMPT_FILE}"
+      "prompt": "prompts/surfaces/speech_to_text.md"
     }
   },
   "models": [

@@ -26,7 +26,7 @@ pub fn build_system_prompt_base(
     active_app: &str,
     recent_apps: &str,
 ) -> String {
-    let system_prompt = &config.settings().prompt_base.system_prompt;
+    let system_prompt = config.system_prompt();
     let input_format_guide = config.input_format_guide();
     let about_me = config.about_me();
 

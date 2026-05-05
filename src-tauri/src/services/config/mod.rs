@@ -1,8 +1,11 @@
 mod defaults;
 mod loader;
 mod migrator;
+mod prompts;
 #[cfg(test)]
 mod tests;
+
+pub use prompts::{PromptKind, PromptStore};
 
 use std::path::{Path, PathBuf};
 
@@ -12,11 +15,8 @@ use crate::models::settings::{
 use crate::services::env_resolve::resolve_env_refs;
 
 use defaults::{ensure_surface_defaults, validate};
-use loader::{
-    initialize_about_me, initialize_defaults, initialize_environment_section,
-    initialize_input_format_guide,
-};
-use migrator::{migrate_model_params, parse_and_migrate};
+use loader::initialize_defaults;
+use migrator::{migrate_model_params, parse_and_migrate, InlinePromptWrite, LegacyFlatMdRename};
 
 pub use loader::load_env;
 
@@ -56,12 +56,14 @@ impl ConfigService {
             initialize_defaults(config_dir, resource_dir)?;
         }
 
-        let _ = initialize_input_format_guide(config_dir);
-        let _ = initialize_about_me(config_dir);
-        let _ = initialize_environment_section(config_dir);
-
         let content = std::fs::read_to_string(&settings_path)?;
-        let mut settings = parse_and_migrate(&content)?;
+        let outcome = parse_and_migrate(&content)?;
+        let mut settings = outcome.settings;
+
+        apply_inline_prompts(config_dir, &outcome.inline_prompts)?;
+        apply_legacy_flat_md_renames(config_dir, &outcome.legacy_flat_md_renames);
+        rewrite_legacy_default_paths(config_dir, &mut settings);
+        ensure_prompt_defaults(config_dir, &settings);
 
         migrate_model_params(&mut settings);
         ensure_surface_defaults(&mut settings);
@@ -94,7 +96,13 @@ impl ConfigService {
         }
 
         let content = std::fs::read_to_string(&settings_path)?;
-        let mut settings = parse_and_migrate(&content)?;
+        let outcome = parse_and_migrate(&content)?;
+        let mut settings = outcome.settings;
+
+        apply_inline_prompts(&self.config_dir, &outcome.inline_prompts)?;
+        apply_legacy_flat_md_renames(&self.config_dir, &outcome.legacy_flat_md_renames);
+        rewrite_legacy_default_paths(&self.config_dir, &mut settings);
+        ensure_prompt_defaults(&self.config_dir, &settings);
 
         migrate_model_params(&mut settings);
         ensure_surface_defaults(&mut settings);
@@ -280,58 +288,74 @@ impl ConfigService {
         self.settings.menu_section_order = order;
     }
 
-    pub fn update_system_prompt(&mut self, prompt: String) {
-        self.settings.prompt_base.system_prompt = prompt;
-    }
-
     pub fn update_skills_order(&mut self, order: Vec<String>) {
         self.settings.skills_order = order;
     }
 
-    pub fn input_format_guide(&self) -> String {
-        let guide_path = self.config_dir.join("input_format_guide.md");
-        std::fs::read_to_string(&guide_path).unwrap_or_default()
+    pub fn prompt_path(&self, kind: PromptKind) -> Option<&str> {
+        match kind {
+            PromptKind::System => Some(&self.settings.prompt_base.system),
+            PromptKind::AboutMe => Some(&self.settings.prompt_base.about_me),
+            PromptKind::Environment => Some(&self.settings.prompt_base.environment),
+            PromptKind::InputFormat => Some(&self.settings.prompt_base.input_format),
+            PromptKind::TitleGeneration => Some(&self.settings.surfaces.title_generation.prompt),
+            PromptKind::SpeechToText => self.settings.surfaces.speech_to_text.prompt.as_deref(),
+        }
     }
 
-    pub fn about_me(&self) -> String {
-        let filename = self
-            .settings
-            .prompt_base
-            .about_me
-            .as_deref()
-            .unwrap_or("about_me.md");
-        let path = self.config_dir.join(filename);
-        std::fs::read_to_string(&path).unwrap_or_default()
+    pub fn read_prompt(&self, kind: PromptKind) -> String {
+        let Some(path) = self.prompt_path(kind) else {
+            return String::new();
+        };
+        PromptStore::new(&self.config_dir)
+            .read(path)
+            .unwrap_or_default()
     }
 
-    pub fn environment_section_template(&self) -> String {
-        let filename = self
-            .settings
-            .prompt_base
-            .environment_section
-            .as_deref()
-            .unwrap_or("environment_section.md");
-        let path = self.config_dir.join(filename);
-        std::fs::read_to_string(&path).unwrap_or_default()
-    }
-
-    pub fn stt_prompt(&self) -> Option<String> {
-        let raw = self
-            .settings
-            .surfaces
-            .speech_to_text
-            .prompt
-            .as_deref()
-            .unwrap_or("stt_prompt.md");
-        let filename = resolve_env_refs(raw);
-        let path = self.config_dir.join(filename);
-        let content = std::fs::read_to_string(&path).ok()?;
+    pub fn read_prompt_optional(&self, kind: PromptKind) -> Option<String> {
+        let path = self.prompt_path(kind)?;
+        let content = PromptStore::new(&self.config_dir).read(path).ok()?;
         let trimmed = content.trim();
         if trimmed.is_empty() {
             None
         } else {
             Some(trimmed.to_string())
         }
+    }
+
+    pub fn write_prompt(&self, kind: PromptKind, content: &str) -> Result<(), ConfigError> {
+        let Some(path) = self.prompt_path(kind) else {
+            return Err(ConfigError::InvalidSettings(format!(
+                "no path configured for prompt kind {:?}",
+                kind
+            )));
+        };
+        let path = path.to_string();
+        PromptStore::new(&self.config_dir).write(&path, content)
+    }
+
+    pub fn input_format_guide(&self) -> String {
+        self.read_prompt(PromptKind::InputFormat)
+    }
+
+    pub fn about_me(&self) -> String {
+        self.read_prompt(PromptKind::AboutMe)
+    }
+
+    pub fn environment_section_template(&self) -> String {
+        self.read_prompt(PromptKind::Environment)
+    }
+
+    pub fn system_prompt(&self) -> String {
+        self.read_prompt(PromptKind::System)
+    }
+
+    pub fn title_generation_prompt(&self) -> String {
+        self.read_prompt(PromptKind::TitleGeneration)
+    }
+
+    pub fn stt_prompt(&self) -> Option<String> {
+        self.read_prompt_optional(PromptKind::SpeechToText)
     }
 
     pub fn stt_keyterms(&self) -> Vec<String> {
@@ -356,5 +380,132 @@ impl ConfigService {
 
     pub fn config_dir(&self) -> &Path {
         &self.config_dir
+    }
+}
+
+fn apply_inline_prompts(
+    config_dir: &Path,
+    inline_prompts: &[InlinePromptWrite],
+) -> Result<(), ConfigError> {
+    if inline_prompts.is_empty() {
+        return Ok(());
+    }
+    let store = PromptStore::new(config_dir);
+    for entry in inline_prompts {
+        let target = match store.resolve(&entry.path) {
+            Ok(p) => p,
+            Err(e) => {
+                log::warn!(
+                    "skipping inline prompt write to '{}': {e}",
+                    entry.path
+                );
+                continue;
+            }
+        };
+        if target.exists() {
+            log::info!(
+                "preserving existing prompt file at '{}', migrated inline content discarded",
+                entry.path
+            );
+            continue;
+        }
+        store.write(&entry.path, &entry.content)?;
+        log::info!("migrated inline prompt to '{}'", entry.path);
+    }
+    Ok(())
+}
+
+fn rewrite_legacy_default_paths(config_dir: &Path, settings: &mut Settings) {
+    let rewrites: [(&mut String, &str, &str); 3] = [
+        (
+            &mut settings.prompt_base.about_me,
+            "about_me.md",
+            "prompts/base/about_me.md",
+        ),
+        (
+            &mut settings.prompt_base.environment,
+            "environment_section.md",
+            "prompts/base/environment.md",
+        ),
+        (
+            &mut settings.prompt_base.input_format,
+            "input_format_guide.md",
+            "prompts/base/input_format.md",
+        ),
+    ];
+    for (field, legacy, new_path) in rewrites {
+        if field == legacy && config_dir.join(new_path).exists() {
+            log::info!(
+                "rewriting legacy default prompt path '{}' -> '{}'",
+                legacy,
+                new_path
+            );
+            *field = new_path.to_string();
+        }
+    }
+}
+
+fn apply_legacy_flat_md_renames(config_dir: &Path, renames: &[LegacyFlatMdRename]) {
+    for rename in renames {
+        let old = config_dir.join(rename.old_relative);
+        let new = config_dir.join(rename.new_relative);
+        if !old.exists() || new.exists() {
+            continue;
+        }
+        if let Some(parent) = new.parent() {
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                log::warn!(
+                    "failed to create parent dir for legacy rename '{}': {e}",
+                    rename.new_relative
+                );
+                continue;
+            }
+        }
+        match std::fs::rename(&old, &new) {
+            Ok(_) => log::info!(
+                "migrated legacy prompt file '{}' -> '{}'",
+                rename.old_relative,
+                rename.new_relative
+            ),
+            Err(e) => log::warn!(
+                "failed to rename legacy prompt file '{}' -> '{}': {e}",
+                rename.old_relative,
+                rename.new_relative
+            ),
+        }
+    }
+}
+
+fn ensure_prompt_defaults(config_dir: &Path, settings: &Settings) {
+    let store = PromptStore::new(config_dir);
+    let entries: [(PromptKind, Option<&str>); 6] = [
+        (PromptKind::System, Some(settings.prompt_base.system.as_str())),
+        (PromptKind::AboutMe, Some(settings.prompt_base.about_me.as_str())),
+        (
+            PromptKind::Environment,
+            Some(settings.prompt_base.environment.as_str()),
+        ),
+        (
+            PromptKind::InputFormat,
+            Some(settings.prompt_base.input_format.as_str()),
+        ),
+        (
+            PromptKind::TitleGeneration,
+            Some(settings.surfaces.title_generation.prompt.as_str()),
+        ),
+        (
+            PromptKind::SpeechToText,
+            settings.surfaces.speech_to_text.prompt.as_deref(),
+        ),
+    ];
+    for (kind, raw_path) in entries {
+        let path = raw_path.unwrap_or_else(|| kind.default_path());
+        if let Err(e) = store.ensure_default(kind, path) {
+            log::warn!(
+                "failed to ensure default prompt for {:?} at '{}': {e}",
+                kind,
+                path
+            );
+        }
     }
 }

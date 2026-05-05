@@ -3,6 +3,8 @@
   import type { SettingsSection } from "./SettingsSidebar.svelte";
   import SectionModels from "./SectionModels.svelte";
   import SectionAppearance from "./SectionAppearance.svelte";
+  import SectionPromptBase from "./SectionPromptBase.svelte";
+  import SectionSurfacePrompts from "./SectionSurfacePrompts.svelte";
 
   let { activeSection }: { activeSection: SettingsSection } = $props();
 
@@ -18,6 +20,10 @@
     {/if}
   {:else if activeSection === "models"}
     <SectionModels />
+  {:else if activeSection === "prompt_base"}
+    <SectionPromptBase />
+  {:else if activeSection === "surface_prompts"}
+    <SectionSurfacePrompts />
   {:else if activeSection === "appearance"}
     <SectionAppearance />
   {:else}

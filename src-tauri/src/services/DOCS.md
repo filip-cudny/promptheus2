@@ -23,7 +23,8 @@ services/
 ├── config/              # ConfigService — settings load/validate/save/mutate
 │   ├── mod.rs           #   ConfigService struct + load/save/reload + mutators; SurfaceKind
 │   ├── loader.rs        #   File I/O, env-var loading, default-asset initialisation
-│   ├── migrator.rs      #   Legacy schema migration (default_model → surfaces, etc.)
+│   ├── migrator.rs      #   Legacy schema migration (default_model → surfaces, inline → file)
+│   ├── prompts.rs       #   PromptKind enum + PromptStore (file I/O + path safety)
 │   ├── defaults.rs      #   Surface-default backfill + Settings validation
 │   └── tests.rs         #   Integration tests using ConfigService::load with TempDir
 ├── context.rs           # ContextManagerService — ordered context items (text/image)
@@ -96,6 +97,8 @@ Uses the `arboard` crate for cross-platform clipboard access (text and images). 
 **API key sanitization**: `save()` deep-clones settings before writing. Env-sourced model keys and speech model keys are stripped. Direct API keys are preserved.
 
 **Mutation methods**: `add_model`, `update_model` (upsert), `delete_model`, `add_prompt`, `update_prompt`, `delete_prompt`, `reorder_prompts`, `update_notifications`, `update_keymaps`, `update_menu_section_order`, `update_setting`. STT models live in the same `models` list (discriminated by `ModelConfig.model_type = Stt`) — use `add_model`/`update_model`/`delete_model`. `settings.speech_to_text_model: Option<String>` holds the id of the currently selected STT model; resolve via `ConfigService::resolve_stt_model()`.
+
+**Prompt files**: All prompts live as `.md` files under `<config_dir>/prompts/{base,surfaces}/`. JSON config holds only paths. Six `PromptKind`s — `System`, `AboutMe`, `Environment`, `InputFormat`, `TitleGeneration`, `SpeechToText`. Read via `config.read_prompt(kind)` / write via `config.write_prompt(kind, content)`. `PromptStore` enforces path safety: relative-only, no `..`, must end with `.md`/`.markdown`, env-var refs (`${VAR}`) resolved at read time. Migrator extracts inline-string prompts from legacy `settings.json` into files on first load and renames legacy field names (`system_prompt` → `system`, `environment_section` → `environment`). Only `Environment` substitutes `{{date}}/{{time}}/{{timezone}}/{{os}}/{{active_app}}/{{recent_apps}}` placeholders — other prompts are sent verbatim.
 
 ### Testing pattern
 

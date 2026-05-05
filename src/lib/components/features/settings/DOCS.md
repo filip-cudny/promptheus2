@@ -8,13 +8,19 @@ Design principles are codified in [`migration/settings-ux.md`](../../../../../mi
 
 ```
 settings/
-├── SettingsSidebar.svelte    # Left nav, exports SettingsSection union + SIDEBAR_ITEMS
-├── SectionModels.svelte      # Models section: list pane + editor pane
-├── ModelList.svelte          # Grouped model list, "Add" split-button (text/STT)
-├── ModelEditor.svelte        # Single-model form: basic / connection / capabilities / parameters / danger
-├── ParametersKnown.svelte    # Sliders + toggles for OpenAI-style known params
-├── ParametersCustom.svelte   # Free-form key/type/value rows for arbitrary params
-└── EnvRefChip.svelte         # ${ENV_VAR} reference indicator (resolved/missing)
+├── SettingsSidebar.svelte         # Left nav, exports SettingsSection union + SIDEBAR_ITEMS
+├── SettingsContent.svelte         # Routes activeSection → Section component
+├── SectionModels.svelte           # Models section: list pane + editor pane
+├── SectionAppearance.svelte       # Theme toggle
+├── SectionPromptBase.svelte       # System / about_me / environment / input_format prompts
+├── SectionSurfacePrompts.svelte   # Title generation + STT bias prompts
+├── PromptEditor.svelte            # Per-prompt editor (load/edit/autosave + Cmd+S)
+├── EnvPlaceholdersPanel.svelte    # Side panel of {{date}}/{{time}}/... chips for environment.md
+├── ModelList.svelte               # Grouped model list, "Add" split-button (text/STT)
+├── ModelEditor.svelte             # Single-model form: basic / connection / capabilities / parameters / danger
+├── ParametersKnown.svelte         # Sliders + toggles for OpenAI-style known params
+├── ParametersCustom.svelte        # Free-form key/type/value rows for arbitrary params
+└── EnvRefChip.svelte              # ${ENV_VAR} reference indicator (resolved/missing)
 ```
 
 Surrounding pieces (not in this dir):
@@ -113,6 +119,14 @@ Use `store.isModelReferencedBySurface(id)` from the settings store — never rec
 - Top-level state (`let x = $state(...)`) and effects in this directory follow Svelte 5 runes mode.
 - When mirroring a prop into local `$state`, wrap the assignment in `untrack(() => …)` inside `$effect` so writes to the draft don't re-trigger the effect.
 - `$effect` that watches an array (e.g., `customEntries`) and fires a debounced save: reference the array first (`customEntries;`) before the timer logic — that's what registers the dependency.
+
+### Prompt editor
+
+`PromptEditor.svelte` is the single component for any prompt slot. It loads via `getPrompt(kind)`, autosaves on change with an 800 ms debounce, and supports `Cmd/Ctrl+S` for explicit save. The path field is read-only display (custom paths require manual JSON edit).
+
+Only `kind: "environment"` shows the side `EnvPlaceholdersPanel`. Clicking a chip inserts the token at the cursor in the textarea. Other prompts get a description that says they are sent verbatim — no placeholder substitution happens for them.
+
+Save flow goes through `$lib/services/prompts.ts` → backend `save_prompt` Tauri command → `ConfigService::write_prompt` → `PromptStore` (atomic tempfile + rename). Backend emits `prompt-changed` Tauri event after each save.
 
 ### Window registration reminders
 

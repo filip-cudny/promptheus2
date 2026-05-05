@@ -3,6 +3,7 @@
     | "general"
     | "models"
     | "prompt_base"
+    | "surface_prompts"
     | "surfaces"
     | "notifications"
     | "appearance"
@@ -20,7 +21,8 @@
   export const SIDEBAR_ITEMS: SidebarItem[] = [
     { id: "general", label: "General", enabled: false },
     { id: "models", label: "Models", enabled: true },
-    { id: "prompt_base", label: "Prompt Base", enabled: false },
+    { id: "prompt_base", label: "Prompt Base", enabled: true },
+    { id: "surface_prompts", label: "Surface Prompts", enabled: true },
     { id: "surfaces", label: "Surfaces", enabled: false },
     { id: "notifications", label: "Notifications", enabled: false },
     { id: "appearance", label: "Appearance", enabled: true },

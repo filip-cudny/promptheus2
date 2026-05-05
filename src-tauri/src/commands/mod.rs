@@ -13,6 +13,7 @@ pub mod image_preview;
 pub mod mcp;
 pub mod menu;
 pub mod notification;
+pub mod prompts;
 pub mod provider_menu;
 pub mod conversation_dialog;
 pub mod settings;
@@ -123,6 +124,11 @@ macro_rules! handlers {
             // === notification ===
             $crate::commands::notification::update_notification_window,
             $crate::commands::notification::drain_pending_notifications,
+            // === prompts ===
+            $crate::commands::prompts::list_prompts,
+            $crate::commands::prompts::get_prompt,
+            $crate::commands::prompts::save_prompt,
+            $crate::commands::prompts::get_environment_placeholders,
             // === provider_menu ===
             $crate::commands::provider_menu::show_provider_menu,
             $crate::commands::provider_menu::hide_provider_menu,

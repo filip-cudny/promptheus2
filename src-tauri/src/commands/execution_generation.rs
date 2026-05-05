@@ -17,7 +17,7 @@ pub async fn generate_conversation_title(
     let (model_id, prompt, ai) = {
         let config = config.lock().await;
         let model_id = PromptExecutionService::resolve_title_generation_model(&config)?;
-        let prompt = config.settings().surfaces.title_generation.prompt.clone();
+        let prompt = config.title_generation_prompt();
         (model_id, prompt, ai.lock().await.clone())
     };
 

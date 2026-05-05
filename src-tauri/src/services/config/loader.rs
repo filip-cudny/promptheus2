@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use super::prompts::{PromptKind, PromptStore};
 use super::ConfigError;
 
 pub fn load_env(config_dir: &Path) {
@@ -35,36 +36,15 @@ pub(super) fn initialize_defaults(
     }
 
     initialize_env(config_dir)?;
-    initialize_input_format_guide(config_dir)?;
-    initialize_about_me(config_dir)?;
-    initialize_environment_section(config_dir)?;
+    initialize_prompt_defaults(config_dir)?;
 
     Ok(())
 }
 
-pub(super) fn initialize_input_format_guide(config_dir: &Path) -> Result<(), ConfigError> {
-    let guide_path = config_dir.join("input_format_guide.md");
-    if !guide_path.exists() {
-        let default_guide = include_str!("../../../resources/input_format_guide.md");
-        std::fs::write(&guide_path, default_guide)?;
-    }
-    Ok(())
-}
-
-pub(super) fn initialize_about_me(config_dir: &Path) -> Result<(), ConfigError> {
-    let about_me_path = config_dir.join("about_me.md");
-    if !about_me_path.exists() {
-        let default_about_me = include_str!("../../../resources/about_me.md");
-        std::fs::write(&about_me_path, default_about_me)?;
-    }
-    Ok(())
-}
-
-pub(super) fn initialize_environment_section(config_dir: &Path) -> Result<(), ConfigError> {
-    let path = config_dir.join("environment_section.md");
-    if !path.exists() {
-        let default = include_str!("../../../resources/environment_section.md");
-        std::fs::write(&path, default)?;
+pub(super) fn initialize_prompt_defaults(config_dir: &Path) -> Result<(), ConfigError> {
+    let store = PromptStore::new(config_dir);
+    for kind in PromptKind::ALL {
+        store.ensure_default(kind, kind.default_path())?;
     }
     Ok(())
 }
