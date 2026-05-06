@@ -5,6 +5,7 @@ Desktop application built with **Tauri 2**.
 ## Rules
 
 - Always use the latest versions of Tauri, its plugins, and all dependencies. Before adding any dependency, verify the current latest version (`cargo search`, `npm info`, etc.) — do not trust versions from task files or memory, they may be outdated.
+- **Prefer official `tauri-plugin-*` over rolling your own.** Before writing a service that wraps an OS API, file dialog, shell access, autostart, single-instance, logging, updater, or persistent KV storage, check whether an official plugin already covers it. Only roll your own when the plugin is genuinely insufficient (current example: `services/config/` over `tauri-plugin-store`, justified by hot-reload + migration needs — see `src-tauri/DOCS.md` "Configuration"). When you do deviate, record the rationale in the relevant `DOCS.md`.
 - When using a framework API or plugin not yet documented, follow the process in [`docs/api-verification.md`](docs/api-verification.md).
 - When working in any directory, check for a `DOCS.md` file first — it contains conventions and patterns for that area, or references to detailed files for complex topics.
 - **Global keyboard shortcuts** (`window.addEventListener("keydown", …)`) must use **bubble phase** — never `capture: true`. Components that own a key in some state (open dropdown, modal, autocomplete) call `e.stopPropagation()` in their own handler. This lets the focused element win naturally; capture-phase global listeners break in-context popovers (e.g. Cmd+K hijacked from a skill autocomplete).
