@@ -26,7 +26,7 @@
     node: ConversationNode;
     showDelete: boolean;
     classifyToken: (token: string, finished: boolean) => string | null;
-    onContentChange: (content: string) => void;
+    onContentChange: (content: string) => void | Promise<void>;
     onDelete: (nodeId: string) => void;
     onRegenerate: () => void;
     onRemoveTextAttachment: (index: number) => void;
@@ -64,8 +64,8 @@
     }
   }
 
-  function submitEdit() {
-    onContentChange(editText);
+  async function submitEdit() {
+    await onContentChange(editText);
     editMode = false;
     onRegenerate();
   }

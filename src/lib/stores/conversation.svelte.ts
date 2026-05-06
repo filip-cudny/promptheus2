@@ -983,6 +983,17 @@ export function createConversationStore(
     if (node) tab.tree.nodes.set(nodeId, { ...node, content });
   }
 
+  async function updateUserNodeContent(nodeId: string, content: string): Promise<void> {
+    const tab = getTab(activeTabId);
+    if (!tab) return;
+
+    const node = tab.tree.nodes.get(nodeId);
+    if (!node || node.role !== "user") return;
+
+    const { applied_skills } = await resolveSkillInput(content);
+    tab.tree.nodes.set(nodeId, { ...node, content, applied_skills });
+  }
+
   function addNodeTextAttachment(nodeId: string, text: string): void {
     const tab = getTab(activeTabId);
     if (!tab) return;
@@ -1458,6 +1469,7 @@ export function createConversationStore(
     switchTab,
     renameTab,
     updateNodeContent,
+    updateUserNodeContent,
     addNodeTextAttachment,
     addNodeImage,
     removeNodeTextAttachment,

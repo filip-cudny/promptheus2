@@ -58,7 +58,7 @@
         node={pair.user}
         showDelete={false}
         {classifyToken}
-        onContentChange={(content) => store.updateNodeContent(pair.user.node_id, content)}
+        onContentChange={(content) => store.updateUserNodeContent(pair.user.node_id, content)}
         onDelete={() => {}}
         onRegenerate={() => { if (pair.assistant) store.regenerate(pair.assistant.node_id); }}
         onRemoveTextAttachment={(index) => store.removeNodeTextAttachment(pair.user.node_id, index)}
