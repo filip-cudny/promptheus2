@@ -1,12 +1,14 @@
 <script lang="ts">
-  import { ChevronRight } from "lucide-svelte";
+  import { ChevronRight, SlidersHorizontal } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
 
   type Props = {
     expanded: boolean;
     anchorEl?: HTMLElement;
     onclick: () => void;
     onhover: () => void;
+    onOpenSettings: () => void;
   };
 
   let {
@@ -14,6 +16,7 @@
     anchorEl = $bindable(),
     onclick,
     onhover,
+    onOpenSettings,
   }: Props = $props();
 </script>
 
@@ -30,12 +33,19 @@
     </span>
     <span class="item-label">Settings</span>
   </button>
+  <ActionIconButton
+    icon={SlidersHorizontal}
+    size={ICON_SIZE.sm}
+    title="Open settings window"
+    onclick={onOpenSettings}
+  />
 </div>
 
 <style>
   .menu-item-row {
     display: flex;
     align-items: center;
+    padding-right: var(--space-4);
   }
 
   .menu-item {
@@ -58,6 +68,7 @@
 
   .settings-toggle {
     gap: var(--space-2);
+    padding-right: var(--space-2);
   }
 
   .settings-chevron {

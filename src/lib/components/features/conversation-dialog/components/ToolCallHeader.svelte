@@ -109,10 +109,6 @@
     cursor: pointer;
   }
 
-  .tool-call-header.clickable:hover {
-    background: var(--surface-overlay-faint);
-  }
-
   .tool-call-header:disabled:not(.clickable) {
     cursor: default;
   }

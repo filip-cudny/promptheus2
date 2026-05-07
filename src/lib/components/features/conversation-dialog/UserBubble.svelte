@@ -162,7 +162,8 @@
 
   .user-bubble {
     padding: var(--space-7) var(--space-10);
-    background: rgba(74, 158, 187, 0.06);
+    background: var(--accent-bg-soft);
+    border: 1px solid var(--accent-border);
     border-radius: var(--radius-2xl);
     box-sizing: border-box;
     user-select: none;
@@ -180,8 +181,17 @@
   }
 
   .bubble-text :global(.skill-badge) {
-    display: inline;
-    color: var(--accent);
+    display: inline-block;
+    padding: 0 6px;
+    margin: 0 1px;
+    border-radius: 4px;
+    background: var(--surface-overlay);
+    color: var(--accent-vivid);
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    font-size: 0.92em;
+    font-weight: 500;
+    line-height: 1.5;
+    vertical-align: baseline;
   }
 
   .icon-btn {

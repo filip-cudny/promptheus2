@@ -120,24 +120,25 @@
 
 <style>
   .thinking-block {
-    margin: var(--space-2) var(--space-0);
-    border-left: 3px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.03);
-    overflow: hidden;
+    margin: var(--space-4) var(--space-0);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
     color: var(--text-secondary);
   }
 
   .thinking-active {
     display: flex;
     align-items: center;
-    gap: var(--space-4);
-    padding: var(--space-3) var(--space-5);
+    gap: var(--space-3);
+    padding: var(--space-1) var(--space-0) var(--space-2);
   }
 
   .thinking-label {
-    font-size: var(--font-size-base);
-    font-weight: var(--font-weight-semibold);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
     background: linear-gradient(
       90deg,
       rgba(155, 109, 204, 0.6) 0%,
@@ -160,28 +161,32 @@
   }
 
   .thinking-timer {
-    font-size: var(--font-size-md);
+    font-size: var(--font-size-xs);
     color: var(--text-disabled);
+    letter-spacing: var(--tracking-label);
   }
 
   .thinking-toggle {
     display: flex;
     align-items: center;
-    gap: var(--space-4);
+    gap: var(--space-3);
     width: 100%;
-    padding: var(--space-3) var(--space-5);
+    padding: var(--space-2) var(--space-0);
     border: none;
     background: none;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     font: inherit;
-    font-size: var(--font-size-base);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
     text-align: left;
     cursor: pointer;
+    border-radius: var(--radius-sm);
   }
 
   .thinking-toggle:hover {
-    background: var(--surface-overlay-faint);
-    color: var(--text-primary);
+    color: var(--text-secondary);
   }
 
   .thinking-summary {
@@ -191,7 +196,8 @@
   .thinking-content {
     max-height: 400px;
     overflow-y: auto;
-    padding: var(--space-2) var(--space-5) var(--space-5) var(--space-5);
+    padding: var(--space-1) var(--space-0) var(--space-2) var(--space-6);
+    border-left: 2px solid var(--border-default);
     font-size: var(--font-size-base);
     color: var(--text-muted);
   }

@@ -27,6 +27,7 @@
   import { openContextEditor } from "$lib/services/contextEditor";
   import { copyHistoryContent } from "$lib/services/history";
   import { openHistoryDialog } from "$lib/services/historyDialog";
+  import { openSettingsWindow } from "$lib/services/settingsDialog";
   import { PROMPTHEUS_PROVIDER_ID } from "$lib/services/shellToolbar";
   import ProviderMenuList from "$lib/components/shared/widgets/ProviderMenuList.svelte";
   import { isExecuting, getExecutingSkillId } from "$lib/stores/execution.svelte";
@@ -244,6 +245,11 @@
           bind:anchorEl={settingsToggleEl}
           onhover={() => { if (positioning.hoverEnabled) menu.setSelectedIndex(-1); }}
           onclick={() => panels.openSettings(settingsToggleEl)}
+          onOpenSettings={async () => {
+            panels.closeSettings();
+            await menu.closeMenu();
+            await openSettingsWindow();
+          }}
         />
         <FloatingPanel
           visible={panels.settingsOpen}

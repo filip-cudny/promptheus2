@@ -23,6 +23,7 @@
   } = $props();
 
   let container: HTMLDivElement | undefined = $state();
+  let scrolled = $state(false);
 
   const allPairs = $derived(store.messagePairs);
 
@@ -41,55 +42,68 @@
   function isLastAssistant(pair: MessagePair): boolean {
     return allPairs[allPairs.length - 1] === pair;
   }
+
+  function handleScroll(e: UIEvent) {
+    const el = e.currentTarget as HTMLDivElement;
+    scrolled = el.scrollTop > 4;
+    scroll.onScroll();
+  }
 </script>
 
-<div class="conversation-area" bind:this={container} onscroll={scroll.onScroll}>
-  {#if allPairs.length === 0}
-    <div class="empty-state">Send a message to start the conversation.</div>
-  {:else}
-    {#if scroll.hasMore}
-      <div class="load-more-zone">
-        <Loader2 size={ICON_SIZE.sm} class="spin" />
-        <span>Scroll up for older messages</span>
-      </div>
-    {/if}
-    {#each visiblePairs as pair (pair.user.node_id)}
-      <UserBubble
-        node={pair.user}
-        showDelete={false}
-        {classifyToken}
-        onContentChange={(content) => store.updateUserNodeContent(pair.user.node_id, content)}
-        onDelete={() => {}}
-        onRegenerate={() => { if (pair.assistant) store.regenerate(pair.assistant.node_id); }}
-        onRemoveTextAttachment={(index) => store.removeNodeTextAttachment(pair.user.node_id, index)}
-        onRemoveImage={(index) => store.removeNodeImage(pair.user.node_id, index)}
-        onAddTextAttachment={(text) => store.addNodeTextAttachment(pair.user.node_id, text)}
-        onAddImage={(data, mediaType) => store.addNodeImage(pair.user.node_id, data, mediaType)}
-      />
-      {#if pair.assistant}
-        {@const assistant = pair.assistant}
-        {@const streaming = store.isStreaming && isLastAssistant(pair)}
-        <AssistantBubble
-          node={assistant}
-          displayContent={streaming ? store.streamedContent : assistant.content}
-          showDelete={false}
-          isStreaming={streaming}
-          thinkingContent={streaming ? store.streamedThinking : (assistant.thinking ?? "")}
-          isThinkingActive={streaming && store.isThinking}
-          branchInfo={store.getBranchInfo(assistant.node_id)}
-          activeToolCalls={streaming ? store.activeToolCalls : []}
-          onRegenerate={() => store.regenerate(assistant.node_id)}
-          onBranchPrev={() => store.switchBranch(assistant.node_id, -1)}
-          onBranchNext={() => store.switchBranch(assistant.node_id, 1)}
-          onContentChange={(content) => store.updateNodeContent(assistant.node_id, content)}
-          onDelete={() => {}}
-          onToolCallApprove={(id) => store.approveToolCall(id)}
-          onToolCallReject={(id) => store.rejectToolCall(id)}
-          onToolCallRetry={(id) => store.retryToolCall(id)}
-        />
+<div
+  class="conversation-area"
+  class:scrolled
+  bind:this={container}
+  onscroll={handleScroll}
+>
+  <div class="messages-column">
+    {#if allPairs.length === 0}
+      <div class="empty-state">Send a message to start the conversation.</div>
+    {:else}
+      {#if scroll.hasMore}
+        <div class="load-more-zone">
+          <Loader2 size={ICON_SIZE.sm} class="spin" />
+          <span>Scroll up for older messages</span>
+        </div>
       {/if}
-    {/each}
-  {/if}
+      {#each visiblePairs as pair (pair.user.node_id)}
+        <UserBubble
+          node={pair.user}
+          showDelete={false}
+          {classifyToken}
+          onContentChange={(content) => store.updateUserNodeContent(pair.user.node_id, content)}
+          onDelete={() => {}}
+          onRegenerate={() => { if (pair.assistant) store.regenerate(pair.assistant.node_id); }}
+          onRemoveTextAttachment={(index) => store.removeNodeTextAttachment(pair.user.node_id, index)}
+          onRemoveImage={(index) => store.removeNodeImage(pair.user.node_id, index)}
+          onAddTextAttachment={(text) => store.addNodeTextAttachment(pair.user.node_id, text)}
+          onAddImage={(data, mediaType) => store.addNodeImage(pair.user.node_id, data, mediaType)}
+        />
+        {#if pair.assistant}
+          {@const assistant = pair.assistant}
+          {@const streaming = store.isStreaming && isLastAssistant(pair)}
+          <AssistantBubble
+            node={assistant}
+            displayContent={streaming ? store.streamedContent : assistant.content}
+            showDelete={false}
+            isStreaming={streaming}
+            thinkingContent={streaming ? store.streamedThinking : (assistant.thinking ?? "")}
+            isThinkingActive={streaming && store.isThinking}
+            branchInfo={store.getBranchInfo(assistant.node_id)}
+            activeToolCalls={streaming ? store.activeToolCalls : []}
+            onRegenerate={() => store.regenerate(assistant.node_id)}
+            onBranchPrev={() => store.switchBranch(assistant.node_id, -1)}
+            onBranchNext={() => store.switchBranch(assistant.node_id, 1)}
+            onContentChange={(content) => store.updateNodeContent(assistant.node_id, content)}
+            onDelete={() => {}}
+            onToolCallApprove={(id) => store.approveToolCall(id)}
+            onToolCallReject={(id) => store.rejectToolCall(id)}
+            onToolCallRetry={(id) => store.retryToolCall(id)}
+          />
+        {/if}
+      {/each}
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -99,7 +113,25 @@
     padding: 40px var(--space-8) var(--space-8);
     display: flex;
     flex-direction: column;
+    position: relative;
+    transition: box-shadow var(--motion-default) var(--ease-default),
+      border-color var(--motion-default) var(--ease-default);
+    border-top: 1px solid transparent;
+  }
+
+  .conversation-area.scrolled {
+    border-top-color: var(--border-faint);
+    box-shadow: inset 0 8px 12px -10px rgba(0, 0, 0, 0.55);
+  }
+
+  .messages-column {
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
     gap: var(--space-1);
+    flex: 1;
   }
 
   .empty-state {

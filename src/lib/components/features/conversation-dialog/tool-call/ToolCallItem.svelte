@@ -40,6 +40,7 @@
 
 <div
   class="tool-call-item"
+  class:clickable={isClickable}
   class:pending={isPending}
   class:in-progress={isInProgress}
   class:completed={isCompleted}
@@ -80,30 +81,31 @@
     border-radius: var(--radius-md);
     overflow: hidden;
     font-size: var(--font-size-base);
-    border-left: 3px solid var(--tool-done-stripe);
     background: var(--surface-overlay-faint);
+    transition: background var(--motion-fast) var(--ease-default);
+  }
+
+  .tool-call-item.clickable:hover {
+    background: var(--surface-overlay);
   }
 
   .tool-call-item.pending {
-    border-left-color: var(--warning);
+    border-left: 3px solid var(--warning);
     background: var(--warning-bg-soft);
     animation: pulse 2s ease-in-out infinite;
   }
 
   .tool-call-item.in-progress {
-    border-left-color: var(--tool-running-stripe);
+    border-left: 3px solid var(--tool-running-stripe);
     background: var(--accent-bg-soft);
   }
 
-  .tool-call-item.completed,
-  .tool-call-item.failed {
-    border-left-color: var(--tool-done-stripe);
-    background: var(--surface-overlay-faint);
+  .tool-call-item.cancelled {
+    background: transparent;
   }
 
-  .tool-call-item.cancelled {
-    border-left-color: var(--tool-done-stripe);
-    background: transparent;
+  .tool-call-item.clickable.cancelled:hover {
+    background: var(--surface-overlay-faint);
   }
 
   .tool-call-item.pending :global(.tool-status) {

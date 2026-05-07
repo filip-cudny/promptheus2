@@ -307,23 +307,47 @@
   }
 
   .markdown-renderer :global(.code-block) {
+    position: relative;
     margin: var(--space-4) var(--space-0);
     border-radius: var(--radius-lg);
     overflow: hidden;
-    border: 1px solid var(--border-default);
+    border: 1px solid var(--border-faint);
+    background: var(--surface-sunken);
+  }
+
+  .markdown-renderer :global(.code-block:hover) {
+    border-color: var(--border-default);
   }
 
   .markdown-renderer :global(.code-block-header) {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-3);
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: var(--space-2) var(--space-6);
-    background: var(--surface-overlay-faint);
-    font-size: var(--font-size-md);
+    gap: var(--space-2);
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .markdown-renderer :global(.code-block-header > *) {
+    pointer-events: auto;
   }
 
   .markdown-renderer :global(.code-lang) {
     color: var(--text-muted);
+    background: var(--surface-overlay);
+    padding: 1px var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-family: var(--font-mono);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+    line-height: 1.5;
+  }
+
+  .markdown-renderer :global(.code-lang:empty) {
+    display: none;
   }
 
   .markdown-renderer :global(.copy-btn) {
@@ -333,26 +357,28 @@
     padding: var(--space-2);
     border: none;
     border-radius: var(--radius-md);
-    background: transparent;
+    background: var(--surface-overlay);
     color: var(--text-muted);
     cursor: pointer;
     opacity: 0;
-    transition: opacity var(--motion-fast) var(--ease-default);
+    transition: opacity var(--motion-fast) var(--ease-default),
+      background var(--motion-fast) var(--ease-default),
+      color var(--motion-fast) var(--ease-default);
   }
 
-  .markdown-renderer :global(.code-block-header:hover .copy-btn) {
+  .markdown-renderer :global(.code-block:hover .copy-btn) {
     opacity: 1;
   }
 
   .markdown-renderer :global(.copy-btn:hover) {
-    background: var(--surface-overlay);
-    color: var(--text-secondary);
+    background: var(--surface-overlay-strong);
+    color: var(--text-primary);
   }
 
   .markdown-renderer :global(pre) {
     margin: var(--space-0);
-    padding: var(--space-6);
-    background: rgba(0, 0, 0, 0.3);
+    padding: var(--space-6) var(--space-6) var(--space-6) var(--space-6);
+    background: var(--surface-sunken);
     overflow-x: auto;
   }
 
@@ -364,10 +390,12 @@
   }
 
   .markdown-renderer :global(.mermaid-wrapper) {
+    position: relative;
     margin: var(--space-4) var(--space-0);
     border-radius: var(--radius-lg);
     overflow: hidden;
-    border: 1px solid var(--border-default);
+    border: 1px solid var(--border-faint);
+    background: var(--surface-sunken);
   }
 
   .markdown-renderer :global(.mermaid-actions) {
@@ -377,7 +405,7 @@
 
   .markdown-renderer :global(.mermaid-block) {
     padding: var(--space-8);
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--surface-sunken);
     overflow-x: auto;
     display: flex;
     justify-content: center;
