@@ -97,6 +97,17 @@
     }
   }
 
+  function handleWindowFocus() {
+    requestAnimationFrame(() => {
+      if (chatPaletteOpen) return;
+      const sel = window.getSelection();
+      if (sel && sel.toString().length > 0) return;
+      const active = document.activeElement;
+      if (active && active !== document.body && active !== document.documentElement) return;
+      focusConversationInput();
+    });
+  }
+
   function handleChatPaletteNewChat() {
     chatPaletteOpen = false;
     store.addTab();
@@ -173,6 +184,7 @@
   onMount(async () => {
     initTheme();
     window.addEventListener("keydown", handleGlobalKeydown);
+    window.addEventListener("focus", handleWindowFocus);
     skillsStore.init();
     await store.initFromSettings();
     loadModelInfo();
@@ -217,6 +229,7 @@
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleGlobalKeydown);
+    window.removeEventListener("focus", handleWindowFocus);
     ipc.destroy();
     store.destroy();
   });
