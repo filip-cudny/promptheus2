@@ -199,6 +199,7 @@ mod tests {
             parameters: None,
             context_window_size: None,
             api_mode: None,
+            capabilities: None,
             store: true,
         }
     }

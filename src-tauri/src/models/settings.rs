@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::models::capabilities::ModelCapabilities;
 use crate::services::env_resolve::resolve_env_refs;
 
 const fn default_timeout_secs() -> u64 {
@@ -254,6 +255,9 @@ pub struct ModelConfig {
 
     #[serde(default)]
     pub api_mode: Option<ApiMode>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<ModelCapabilities>,
 
     #[serde(default = "default_true")]
     pub store: bool,
@@ -739,6 +743,109 @@ mod tests {
         let p = settings.find_webview_provider("claude").expect("found");
         assert_eq!(p.name, "Claude");
         assert!(settings.find_webview_provider("nope").is_none());
+    }
+
+    #[test]
+    fn test_model_config_without_capabilities_field() {
+        let json = r#"{
+            "id": "abc",
+            "model": "gpt-4o",
+            "display_name": "GPT-4o"
+        }"#;
+        let config: ModelConfig = serde_json::from_str(json).unwrap();
+        assert!(config.capabilities.is_none());
+
+        let serialized = serde_json::to_string(&config).unwrap();
+        assert!(!serialized.contains("capabilities"));
+    }
+
+    #[test]
+    fn test_model_config_with_effort_capabilities_roundtrip() {
+        use crate::models::capabilities::{Effort, ReasoningMode};
+
+        let json = r#"{
+            "id": "abc",
+            "model": "gpt-5.5",
+            "display_name": "GPT 5.5",
+            "type": "text",
+            "provider": "openai",
+            "capabilities": {
+                "reasoning": {
+                    "kind": "effort",
+                    "allowed": ["none", "minimal", "low", "medium", "high", "xhigh"]
+                }
+            }
+        }"#;
+        let config: ModelConfig = serde_json::from_str(json).unwrap();
+        let caps = config.capabilities.clone().unwrap();
+        let ReasoningMode::Effort { ref allowed } = caps.reasoning else {
+            panic!("expected Effort");
+        };
+        assert_eq!(
+            *allowed,
+            vec![
+                Effort::None,
+                Effort::Minimal,
+                Effort::Low,
+                Effort::Medium,
+                Effort::High,
+                Effort::XHigh,
+            ]
+        );
+
+        let serialized = serde_json::to_string(&config).unwrap();
+        let reparsed: ModelConfig = serde_json::from_str(&serialized).unwrap();
+        assert!(reparsed.capabilities.is_some());
+        assert_eq!(reparsed.capabilities, config.capabilities);
+    }
+
+    #[test]
+    fn test_model_config_with_budget_tokens_capabilities_roundtrip() {
+        use crate::models::capabilities::ReasoningMode;
+
+        let json = r#"{
+            "id": "anthropic-1",
+            "model": "claude-sonnet-4-7",
+            "display_name": "Sonnet",
+            "type": "text",
+            "provider": "anthropic",
+            "capabilities": {
+                "reasoning": {
+                    "kind": "budget_tokens",
+                    "min": 1024,
+                    "max": 64000
+                }
+            }
+        }"#;
+        let config: ModelConfig = serde_json::from_str(json).unwrap();
+        let caps = config.capabilities.clone().unwrap();
+        assert!(matches!(
+            caps.reasoning,
+            ReasoningMode::BudgetTokens { min: 1024, max: 64000 }
+        ));
+
+        let serialized = serde_json::to_string(&config).unwrap();
+        let reparsed: ModelConfig = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(reparsed.capabilities, config.capabilities);
+    }
+
+    #[test]
+    fn test_model_config_with_unsupported_capabilities_roundtrip() {
+        use crate::models::capabilities::ReasoningMode;
+
+        let json = r#"{
+            "id": "stt-1",
+            "model": "whisper-1",
+            "display_name": "Whisper",
+            "capabilities": { "reasoning": { "kind": "unsupported" } }
+        }"#;
+        let config: ModelConfig = serde_json::from_str(json).unwrap();
+        let caps = config.capabilities.clone().unwrap();
+        assert!(matches!(caps.reasoning, ReasoningMode::Unsupported));
+
+        let serialized = serde_json::to_string(&config).unwrap();
+        let reparsed: ModelConfig = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(reparsed.capabilities, config.capabilities);
     }
 
     #[test]

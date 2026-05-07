@@ -16,6 +16,7 @@ fn test_model(id: &str, api_key: &str) -> ModelConfig {
         parameters: None,
         context_window_size: None,
         api_mode: None,
+        capabilities: None,
         store: true,
     }
 }
@@ -33,6 +34,7 @@ fn test_stt_model(id: &str, api_key: &str) -> ModelConfig {
         parameters: None,
         context_window_size: None,
         api_mode: None,
+        capabilities: None,
         store: true,
     }
 }
