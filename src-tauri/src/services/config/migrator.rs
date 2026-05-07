@@ -1,6 +1,8 @@
 use serde_json::Value;
 
-use crate::models::settings::Settings;
+use crate::models::capabilities::{Effort, ModelCapabilities, ReasoningMode};
+use crate::models::settings::{Provider, Settings};
+use crate::services::ai::capabilities::OPENAI_EFFORT_MODELS;
 
 use super::defaults::{ensure_generation, ensure_parameters};
 use super::prompts::PromptKind;
@@ -77,6 +79,32 @@ pub(super) fn migrate_model_params(settings: &mut Settings) {
         if model.is_text() && model.parameters.is_none() {
             model.parameters = Some(Default::default());
         }
+    }
+}
+
+pub(super) fn migrate_explicit_capabilities(settings: &mut Settings) {
+    for model in &mut settings.models {
+        if model.capabilities.is_some() {
+            continue;
+        }
+        if model.provider.as_ref() != Some(&Provider::Openai) {
+            continue;
+        }
+        if !OPENAI_EFFORT_MODELS.contains(&model.model.as_str()) {
+            continue;
+        }
+        model.capabilities = Some(ModelCapabilities {
+            reasoning: ReasoningMode::Effort {
+                allowed: vec![
+                    Effort::None,
+                    Effort::Minimal,
+                    Effort::Low,
+                    Effort::Medium,
+                    Effort::High,
+                    Effort::XHigh,
+                ],
+            },
+        });
     }
 }
 
@@ -577,6 +605,75 @@ mod tests {
             ..Default::default()
         };
         sanitize_capabilities(&mut settings);
+        assert!(settings.models[0].capabilities.is_none());
+    }
+
+    #[test]
+    fn migrate_explicit_capabilities_fills_known_openai_models() {
+        let mut model = text_model_no_params("m1");
+        model.model = "gpt-5.4".into();
+        model.provider = Some(Provider::Openai);
+        let mut settings = Settings {
+            models: vec![model],
+            ..Default::default()
+        };
+        migrate_explicit_capabilities(&mut settings);
+        let caps = settings.models[0].capabilities.as_ref().expect("filled");
+        match &caps.reasoning {
+            crate::models::capabilities::ReasoningMode::Effort { allowed } => {
+                assert_eq!(allowed.len(), 6);
+            }
+            other => panic!("expected Effort, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn migrate_explicit_capabilities_skips_unknown_openai_models() {
+        let mut model = text_model_no_params("m1");
+        model.model = "MiniMax-M2-AWQ".into();
+        model.provider = Some(Provider::Openai);
+        let mut settings = Settings {
+            models: vec![model],
+            ..Default::default()
+        };
+        migrate_explicit_capabilities(&mut settings);
+        assert!(settings.models[0].capabilities.is_none());
+    }
+
+    #[test]
+    fn migrate_explicit_capabilities_is_idempotent() {
+        use crate::models::capabilities::{Effort, ModelCapabilities, ReasoningMode};
+        let mut model = text_model_no_params("m1");
+        model.model = "gpt-5.4".into();
+        model.provider = Some(Provider::Openai);
+        model.capabilities = Some(ModelCapabilities {
+            reasoning: ReasoningMode::Effort {
+                allowed: vec![Effort::Medium, Effort::High],
+            },
+        });
+        let mut settings = Settings {
+            models: vec![model],
+            ..Default::default()
+        };
+        migrate_explicit_capabilities(&mut settings);
+        match &settings.models[0].capabilities.as_ref().unwrap().reasoning {
+            crate::models::capabilities::ReasoningMode::Effort { allowed } => {
+                assert_eq!(allowed.len(), 2);
+            }
+            other => panic!("expected Effort, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn migrate_explicit_capabilities_skips_non_openai_providers() {
+        let mut model = text_model_no_params("m1");
+        model.model = "gpt-5.4".into();
+        model.provider = Some(Provider::Anthropic);
+        let mut settings = Settings {
+            models: vec![model],
+            ..Default::default()
+        };
+        migrate_explicit_capabilities(&mut settings);
         assert!(settings.models[0].capabilities.is_none());
     }
 
