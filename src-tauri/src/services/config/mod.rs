@@ -1,6 +1,7 @@
 mod defaults;
 mod loader;
 mod migrator;
+mod path;
 mod prompts;
 #[cfg(test)]
 mod tests;
@@ -12,7 +13,8 @@ use std::path::{Path, PathBuf};
 use crate::models::settings::{
     KeymapGroup, ModelConfig, NotificationSettings, Settings, SpeechToTextConfig,
 };
-use crate::services::env_resolve::resolve_env_refs;
+
+use path::resolve_config_relative;
 
 use defaults::{ensure_surface_defaults, validate};
 use loader::initialize_defaults;
@@ -369,11 +371,13 @@ impl ConfigService {
         let Some(raw) = self.settings.surfaces.speech_to_text.keyterms_file.as_deref() else {
             return Vec::new();
         };
-        let filename = resolve_env_refs(raw);
-        if filename.is_empty() {
-            return Vec::new();
-        }
-        let path = self.config_dir.join(filename);
+        let path = match resolve_config_relative(raw, &self.config_dir) {
+            Ok(p) => p,
+            Err(e) => {
+                log::warn!("invalid speech_to_text.keyterms_file '{raw}': {e}");
+                return Vec::new();
+            }
+        };
         let Ok(content) = std::fs::read_to_string(&path) else {
             return Vec::new();
         };

@@ -2,8 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::services::env_resolve::resolve_env_refs;
-
+use super::path::resolve_config_relative;
 use super::ConfigError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -107,40 +106,26 @@ impl<'a> PromptStore<'a> {
     }
 
     pub fn resolve(&self, raw_path: &str) -> Result<PathBuf, ConfigError> {
-        let resolved = resolve_env_refs(raw_path);
-        let trimmed = resolved.trim();
-        if trimmed.is_empty() {
-            return Err(ConfigError::InvalidSettings(
-                "prompt path is empty".to_string(),
-            ));
-        }
+        let path = resolve_config_relative(raw_path, self.config_dir).map_err(|e| match e {
+            ConfigError::InvalidSettings(msg) => {
+                ConfigError::InvalidSettings(format!("prompt {msg}"))
+            }
+            other => other,
+        })?;
 
-        let candidate = PathBuf::from(trimmed);
-        if candidate.is_absolute() {
-            return Err(ConfigError::InvalidSettings(format!(
-                "prompt path must be relative to config dir: '{trimmed}'"
-            )));
-        }
-        if candidate
-            .components()
-            .any(|c| matches!(c, std::path::Component::ParentDir))
-        {
-            return Err(ConfigError::InvalidSettings(format!(
-                "prompt path must not contain '..': '{trimmed}'"
-            )));
-        }
-        let ext_ok = candidate
+        let ext_ok = path
             .extension()
             .and_then(|e| e.to_str())
             .map(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("markdown"))
             .unwrap_or(false);
         if !ext_ok {
             return Err(ConfigError::InvalidSettings(format!(
-                "prompt path must end with .md or .markdown: '{trimmed}'"
+                "prompt path must end with .md or .markdown: '{}'",
+                path.display()
             )));
         }
 
-        Ok(self.config_dir.join(candidate))
+        Ok(path)
     }
 }
 

@@ -9,6 +9,8 @@ pub fn load_env(config_dir: &Path) {
         let _ = dotenvy::from_path_override(&env_path);
     }
     let _ = dotenvy::dotenv_override();
+
+    std::env::set_var("CONFIG_DIR", config_dir);
 }
 
 pub(super) fn initialize_defaults(

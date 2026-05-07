@@ -413,3 +413,58 @@ fn test_migrate_stt_only_legacy() {
     assert_eq!(s.surfaces.speech_to_text.model_id.as_deref(), Some("stt-1"));
     assert_eq!(s.surfaces.speech_to_text.language.as_deref(), Some("en"));
 }
+
+#[test]
+fn test_stt_keyterms_reads_relative_file() {
+    let dir = setup_test_dir();
+    fs::write(
+        dir.path().join("keyterms.txt"),
+        "Promptheus\n# comment\nTauri\n\n  rmcp  \n",
+    )
+    .unwrap();
+    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    service.settings_mut().surfaces.speech_to_text.keyterms_file =
+        Some("keyterms.txt".to_string());
+
+    let terms = service.stt_keyterms();
+    assert_eq!(terms, vec!["Promptheus", "Tauri", "rmcp"]);
+}
+
+#[test]
+fn test_stt_keyterms_rejects_absolute_path() {
+    let dir = setup_test_dir();
+    let outside = TempDir::new().unwrap();
+    let outside_file = outside.path().join("leak.txt");
+    fs::write(&outside_file, "Secret\n").unwrap();
+
+    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    service.settings_mut().surfaces.speech_to_text.keyterms_file =
+        Some(outside_file.to_string_lossy().into_owned());
+
+    assert!(service.stt_keyterms().is_empty());
+}
+
+#[test]
+fn test_stt_keyterms_rejects_parent_dir_traversal() {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    service.settings_mut().surfaces.speech_to_text.keyterms_file =
+        Some("../escape.txt".to_string());
+
+    assert!(service.stt_keyterms().is_empty());
+}
+
+#[test]
+fn test_stt_keyterms_resolves_config_dir_placeholder_to_relative() {
+    let dir = setup_test_dir();
+    fs::write(dir.path().join("keyterms.txt"), "Alpha\n").unwrap();
+
+    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    service.settings_mut().surfaces.speech_to_text.keyterms_file =
+        Some("${CONFIG_DIR}/keyterms.txt".to_string());
+
+    assert!(
+        service.stt_keyterms().is_empty(),
+        "${{CONFIG_DIR}} expands to absolute, which is rejected for config-relative fields"
+    );
+}

@@ -227,6 +227,21 @@ Because the app is tray-only with multiple short-lived windows, cross-window coo
 - Bundle identifier `com.promptheus.desktop` (reverse-domain). Drives macOS `~/Library/Application Support/<id>/` and Linux `~/.config/<id>/`. Renaming after release is painful — don't.
 - App-runtime configuration (user settings) is **not** stored via `tauri-plugin-store`. We use `services/config/` instead because the settings layer needs hot-reload on file change, schema migration on version bumps, and composition over multiple defaults files — capabilities the plugin doesn't offer. If you find yourself reaching for `tauri-plugin-store` for new settings, extend `services/config/` instead.
 
+#### Path resolution in settings
+
+Two contracts, one shared resolver. Picking the wrong one for a new field will silently break portability or open path-traversal holes — match the data shape, don't invent a third rule.
+
+- **Config-relative** (in-app data files the user manages alongside `settings.json`): resolved through `services/config/path.rs::resolve_config_relative`, which expands `${VAR}` references then enforces non-empty + non-absolute + no-`..` and joins to `app_config_dir`. Current fields: `prompt_base.*`, `surfaces.title_generation.prompt`, `surfaces.speech_to_text.prompt`, `surfaces.speech_to_text.keyterms_file`. `PromptStore::resolve` wraps this and additionally requires `.md`/`.markdown`. Add new data-file fields by going through this helper, not `config_dir.join(raw)` — the latter silently accepts absolute paths because of `PathBuf::join` semantics.
+- **Absolute / system-relative** (pointers to executables and dirs outside the app): MCP `command`, `args`, and `env` values. Resolved through `services/env_resolve::resolve_env_refs` only — no joining, no validation. The user owns absolute correctness. `command` additionally falls through `services/shell_env::resolve_command`, which does PATH lookup for bare names; `args` and env values do not.
+
+Placeholders supported in any field that goes through `resolve_env_refs` (which is both contracts):
+
+- `${VAR}` — any process env var (loaded from the user's shell + `<config_dir>/.env`).
+- `${CONFIG_DIR}` — the resolved `app_config_dir`. Set by `services/config/loader::load_env` after dotenv processing, so it is reliable and not user-overridable from `.env`. Useful in MCP `args`/`env` to point at config-bundled data without hardcoding `/Users/...`. **Has no effect in config-relative fields** — `${CONFIG_DIR}/foo.md` expands to an absolute path and is rejected; write `foo.md` instead.
+- `${HOME}` — provided by the OS on Unix. Not synthesized by the app, so on Windows callers get whatever the environment provides.
+
+Cwd is **not** part of either contract. Tauri inherits the launch cwd (Finder/launchd give `/`); MCP child processes inherit ours. Never write a relative path expecting `cwd`-relative resolution — there is no consistent cwd to be relative to.
+
 ### Dependency hygiene
 
 - `tauri` is pinned to an exact patch version — breaking changes happen at minor releases, and 2.x patches occasionally tighten internals our code touches via `unstable`/`macos-private-api` features.
