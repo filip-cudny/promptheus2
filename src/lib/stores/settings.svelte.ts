@@ -1,5 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 import { getSettings } from "$lib/services/settings";
+import { SURFACE_ORDER } from "$lib/constants/surfaces";
 import type { Settings, ModelConfig, SurfaceKind } from "$lib/types";
 
 let settings = $state.raw<Settings | null>(null);
@@ -26,6 +27,18 @@ const surfaceModelIds = $derived.by<Record<SurfaceKind, string | null>>(() => {
     title_generation: s.surfaces.title_generation.generation.model_id,
     speech_to_text: s.surfaces.speech_to_text.model_id,
   };
+});
+
+const surfacesByModel = $derived.by<Map<string, SurfaceKind[]>>(() => {
+  const map = new Map<string, SurfaceKind[]>();
+  for (const surface of SURFACE_ORDER) {
+    const modelId = surfaceModelIds[surface];
+    if (!modelId) continue;
+    const list = map.get(modelId) ?? [];
+    list.push(surface);
+    map.set(modelId, list);
+  }
+  return map;
 });
 
 async function refresh() {
@@ -66,16 +79,8 @@ function getModel(id: string | null): ModelConfig | null {
   return models.find((m) => m.id === id) ?? null;
 }
 
-function isModelReferencedBySurface(modelId: string): SurfaceKind | null {
-  const ids = surfaceModelIds;
-  const entries: [SurfaceKind, string | null][] = [
-    ["chat", ids.chat],
-    ["quick_actions", ids.quick_actions],
-    ["title_generation", ids.title_generation],
-    ["speech_to_text", ids.speech_to_text],
-  ];
-  const hit = entries.find(([, id]) => id === modelId);
-  return hit ? hit[0] : null;
+function getSurfacesForModel(modelId: string): SurfaceKind[] {
+  return surfacesByModel.get(modelId) ?? [];
 }
 
 export function getSettingsStore() {
@@ -95,10 +100,13 @@ export function getSettingsStore() {
     get surfaceModelIds() {
       return surfaceModelIds;
     },
+    get surfacesByModel() {
+      return surfacesByModel;
+    },
     init,
     refresh,
     destroy,
     getModel,
-    isModelReferencedBySurface,
+    getSurfacesForModel,
   };
 }

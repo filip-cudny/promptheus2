@@ -51,7 +51,7 @@
   <ModelList
     models={store.models}
     selectedId={selectedId}
-    surfaceModelIds={store.surfaceModelIds}
+    surfacesByModel={store.surfacesByModel}
     onSelect={handleSelect}
     onAdd={handleAdd}
   />
@@ -60,7 +60,7 @@
       {#key selectedModel.id}
         <ModelEditor
           model={selectedModel}
-          referencedSurface={store.isModelReferencedBySurface(selectedModel.id)}
+          surfaces={store.getSurfacesForModel(selectedModel.id)}
           debounceMs={store.settings?.number_input_debounce_ms ?? 200}
           onDeleted={() => {
             selectedId = null;

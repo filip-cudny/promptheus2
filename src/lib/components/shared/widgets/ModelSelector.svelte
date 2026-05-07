@@ -46,18 +46,16 @@
   );
 
   let currentCapabilities = $derived(capabilities ?? null);
-
-  let showReasoning = $derived(
-    currentCapabilities
-      ? currentCapabilities.reasoning.kind !== "unsupported"
-      : false,
+  let reasoningKind = $derived(
+    currentCapabilities?.reasoning.kind ?? "unsupported",
   );
+  let showReasoning = $derived(reasoningKind !== "unsupported");
 
   let availableLevels = $derived.by<ReasoningLevel[]>(() => {
     const reasoning = currentCapabilities?.reasoning;
-    if (!reasoning || reasoning.kind === "unsupported") return [];
-    if (reasoning.kind === "effort") return ["none", ...reasoning.allowed];
-    return ["none", "low", "medium", "high"];
+    if (!reasoning || reasoning.kind !== "effort") return [];
+    const allowed = reasoning.allowed as ReasoningLevel[];
+    return allowed.includes("none") ? allowed : ["none", ...allowed];
   });
 
   let currentLevel = $derived(
@@ -169,7 +167,7 @@
   }
 
   function selectReasoning(level: ReasoningLevel) {
-    onReasoningSelect(level === "none" ? null : level);
+    onReasoningSelect(level);
     closeAll();
   }
 
@@ -199,35 +197,37 @@
   </button>
 
   {#if showReasoning}
-    <div class="reasoning-wrapper">
-      <button
-        class="selector-chip reasoning-chip"
-        bind:this={reasoningChipEl}
-        onclick={toggleReasoningDropdown}
-        title="Reasoning level"
-      >
-        <Brain size={ICON_SIZE.sm} />
-        <span class="chip-label">{REASONING_LEVEL_LABELS[currentLevel]}</span>
-        <ChevronDown size={ICON_SIZE.sm} />
-      </button>
-      {#if reasoningDropdownOpen}
-        <div
-          class="dropdown reasoning-dropdown"
-          bind:this={reasoningDropdownEl}
-          style={reasoningDropdownStyle}
+    {#if reasoningKind === "effort"}
+      <div class="reasoning-wrapper">
+        <button
+          class="selector-chip reasoning-chip"
+          bind:this={reasoningChipEl}
+          onclick={toggleReasoningDropdown}
+          title="Reasoning level"
         >
-          {#each availableLevels as level}
-            <button
-              class="dropdown-item"
-              class:active={level === currentLevel}
-              onclick={() => selectReasoning(level)}
-            >
-              <span class="dropdown-label">{REASONING_LEVEL_LABELS[level]}</span>
-            </button>
-          {/each}
-        </div>
-      {/if}
-    </div>
+          <Brain size={ICON_SIZE.sm} />
+          <span class="chip-label">{REASONING_LEVEL_LABELS[currentLevel]}</span>
+          <ChevronDown size={ICON_SIZE.sm} />
+        </button>
+        {#if reasoningDropdownOpen}
+          <div
+            class="dropdown reasoning-dropdown"
+            bind:this={reasoningDropdownEl}
+            style={reasoningDropdownStyle}
+          >
+            {#each availableLevels as level}
+              <button
+                class="dropdown-item"
+                class:active={level === currentLevel}
+                onclick={() => selectReasoning(level)}
+              >
+                <span class="dropdown-label">{REASONING_LEVEL_LABELS[level]}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {/if}
   {/if}
 
   {#if modelDropdownOpen}

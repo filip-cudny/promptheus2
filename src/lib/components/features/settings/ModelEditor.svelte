@@ -2,6 +2,7 @@
   import { onDestroy, untrack } from "svelte";
   import { Eye, EyeOff, Copy, Trash2, CopyPlus } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import { formatSurfaceList } from "$lib/constants/surfaces";
   import EnvRefChip, { parseEnvRef } from "./EnvRefChip.svelte";
   import ParametersKnown from "./ParametersKnown.svelte";
   import ParametersCustom, {
@@ -30,17 +31,19 @@
 
   let {
     model,
-    referencedSurface,
+    surfaces,
     debounceMs,
     onDeleted,
     onDuplicated,
   }: {
     model: ModelConfig;
-    referencedSurface: SurfaceKind | null;
+    surfaces: SurfaceKind[];
     debounceMs: number;
     onDeleted: () => void;
     onDuplicated: (id: string) => void;
   } = $props();
+
+  const surfacesLabel = $derived(formatSurfaceList(surfaces));
 
   let draft = $state<ModelConfig>(untrack(() => structuredClone(model)));
   let customEntries = $state<CustomParamEntry[]>(
@@ -252,8 +255,8 @@
 <div class="model-editor">
   <header class="editor-header">
     <h1>{draft.display_name || "Untitled model"}</h1>
-    {#if referencedSurface}
-      <span class="badge">in use by {referencedSurface}</span>
+    {#if surfaces.length > 0}
+      <span class="badge">in use by {surfacesLabel}</span>
     {/if}
   </header>
 
@@ -471,9 +474,13 @@
         <div class="delete-confirm">
           <p>
             Delete <strong>{draft.display_name || "this model"}</strong>?
-            {#if referencedSurface}
+            {#if surfaces.length > 0}
               <br />
-              <span class="warn">It is currently in use by surface "{referencedSurface}".</span>
+              <span class="warn">
+                It is currently in use by
+                {surfaces.length === 1 ? "surface" : "surfaces"}
+                "{surfacesLabel}".
+              </span>
             {/if}
           </p>
           <div class="confirm-actions">
@@ -507,7 +514,7 @@
 
   .editor-header {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: var(--space-5);
   }
 
@@ -516,17 +523,19 @@
     font-weight: var(--font-weight-semibold);
     color: var(--text-primary);
     margin: var(--space-0);
+    line-height: 1.2;
   }
 
   .badge {
     font-size: var(--font-size-xs);
     padding: var(--space-1) var(--space-3);
-    background: var(--warning-bg-soft);
-    color: var(--warning);
-    border: 1px solid var(--warning-border);
+    background: var(--accent-bg-soft);
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
     border-radius: var(--radius-xl);
     text-transform: uppercase;
     letter-spacing: 0.4px;
+    line-height: 1.4;
   }
 
   .card {

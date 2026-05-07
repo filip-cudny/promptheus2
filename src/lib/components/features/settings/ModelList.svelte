@@ -1,55 +1,30 @@
 <script lang="ts">
   import { Plus, ChevronDown } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import { formatSurfaceList } from "$lib/constants/surfaces";
   import type { ModelConfig, ModelType, SurfaceKind } from "$lib/types";
   import Button from "$lib/components/shared/ui/Button.svelte";
 
   let {
     models,
     selectedId,
-    surfaceModelIds,
+    surfacesByModel,
     onSelect,
     onAdd,
   }: {
     models: ModelConfig[];
     selectedId: string | null;
-    surfaceModelIds: Record<SurfaceKind, string | null>;
+    surfacesByModel: Map<string, SurfaceKind[]>;
     onSelect: (id: string) => void;
     onAdd: (type: ModelType) => void;
   } = $props();
 
   let addMenuOpen = $state(false);
 
-  const SURFACE_ORDER: SurfaceKind[] = [
-    "chat",
-    "quick_actions",
-    "title_generation",
-    "speech_to_text",
-  ];
-
-  const SURFACE_LABELS: Record<SurfaceKind, string> = {
-    chat: "chat",
-    quick_actions: "quick actions",
-    title_generation: "title generation",
-    speech_to_text: "speech to text",
-  };
-
-  const surfacesByModel = $derived.by(() => {
-    const map = new Map<string, SurfaceKind[]>();
-    for (const surface of SURFACE_ORDER) {
-      const modelId = surfaceModelIds[surface];
-      if (!modelId) continue;
-      const list = map.get(modelId) ?? [];
-      list.push(surface);
-      map.set(modelId, list);
-    }
-    return map;
-  });
-
   function tooltipForModel(id: string): string {
-    const surfaces = surfacesByModel.get(id);
-    if (!surfaces || surfaces.length === 0) return "";
-    return `In use by ${surfaces.map((s) => SURFACE_LABELS[s]).join(", ")}`;
+    const list = surfacesByModel.get(id);
+    if (!list || list.length === 0) return "";
+    return `In use by ${formatSurfaceList(list)}`;
   }
 
   const groups = $derived.by(() => {

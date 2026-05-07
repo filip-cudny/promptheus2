@@ -106,15 +106,21 @@ API key fields accept literal secrets *or* `${VAR_NAME}` references. `EnvRefChip
 
 ### Surface references
 
-A model "in use by" a surface (chat / quick_actions / title_generation / speech_to_text) is highlighted in two places:
+A model "in use by" a surface (chat / quick_actions / title_generation / speech_to_text) is surfaced in three places, all sharing the same accent-coloured visual language:
 
-1. Accent-coloured status dot before the row name in `ModelList` (7 px, `var(--accent)`). Tooltip lists surfaces explicitly: `In use by chat, title generation`. The dot's surface mapping is derived locally in `ModelList` from the `surfaceModelIds` prop.
-2. `in use by <surface>` badge in the editor header.
-3. Warning in the delete confirm.
+1. Accent-coloured status dot (7 px, `var(--accent)`) before the row name in `ModelList`. Tooltip lists every binding: `In use by chat, title generation`.
+2. Pill badge in the editor header (`in use by chat, title generation`), `--accent-bg-soft` / `--accent` / `--accent-border` tokens. Header uses `align-items: center` so the pill is vertically centred against the heading.
+3. Warning sentence in the delete-confirm. This one keeps the `.warn` colour — destructive intent justifies the warning palette.
 
-The dot replaces an earlier yellow star — star semantics ("favorite / user preference") clashed with the actual meaning ("system binding"). Status-dot vocabulary aligns with IDE modified-file dots and online indicators. Do not reuse `--warning` colour here — that is reserved for issue states.
+Sources of truth:
 
-Use `store.isModelReferencedBySurface(id)` from the settings store when you need a boolean check elsewhere — never recompute the mapping ad hoc.
+- `store.surfacesByModel` — `Map<modelId, SurfaceKind[]>`, ordered per `SURFACE_ORDER`. Use this when iterating models (e.g. `ModelList`).
+- `store.getSurfacesForModel(id)` — `SurfaceKind[]` for a single model. Use this when you have one id (e.g. `ModelEditor` props).
+- `formatSurfaceList(surfaces)` from `$lib/constants/surfaces` — the canonical comma-joined human label.
+
+Never recompute the mapping ad hoc; both consumers must read from the store so the list, the editor badge, and the delete confirm stay in lockstep.
+
+The dot/badge replaced an earlier yellow star (in the list) and `--warning`-coloured pill (in the editor). Star semantics ("favorite / user preference") and warning amber ("issue / attention required") both clashed with the actual meaning here ("system binding"). `--warning` is reserved for issue states only.
 
 ### Reactivity gotchas (Svelte 5)
 
