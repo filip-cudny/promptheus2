@@ -14,7 +14,7 @@ use futures::Stream;
 use crate::models::message::ProcessedMessage;
 use crate::models::settings::{ApiMode, ModelConfig, ModelParameters, Provider};
 
-use self::capabilities::{ModelCapabilities, ReasoningMode};
+use self::capabilities::{resolve, ModelCapabilities, ReasoningMode};
 use self::openai::OpenAiProvider;
 use self::openai_responses::OpenAiResponsesProvider;
 use self::provider::{AiProvider, CompletionRequest, StreamChunk};
@@ -53,6 +53,7 @@ struct ProviderEntry {
     parameters: ModelParameters,
     provider_type: Provider,
     api_mode: ApiMode,
+    capabilities: ModelCapabilities,
 }
 
 struct AiServiceInner {
@@ -88,6 +89,7 @@ impl AiService {
                     };
                     match result {
                         Ok(provider) => {
+                            let capabilities = resolve(model);
                             providers.insert(
                                 model.id.clone(),
                                 ProviderEntry {
@@ -96,6 +98,7 @@ impl AiService {
                                     parameters: model.parameters.clone().unwrap_or_default(),
                                     provider_type,
                                     api_mode: api_mode.clone(),
+                                    capabilities,
                                 },
                             );
                         }
@@ -140,8 +143,7 @@ impl AiService {
         messages: Vec<ProcessedMessage>,
     ) -> Result<String, AiError> {
         let entry = self.get_provider(model_id)?;
-        let caps = entry.provider.capabilities(&entry.model_name);
-        let parameters = normalize_params(&entry.parameters, &caps, &entry.model_name);
+        let parameters = normalize_params(&entry.parameters, &entry.capabilities, &entry.model_name);
         let request = CompletionRequest {
             model: entry.model_name.clone(),
             messages,
@@ -164,8 +166,7 @@ impl AiService {
             Some(overrides) => merge_parameters(&entry.parameters, &overrides),
             None => entry.parameters.clone(),
         };
-        let caps = entry.provider.capabilities(&entry.model_name);
-        let parameters = normalize_params(&parameters, &caps, &entry.model_name);
+        let parameters = normalize_params(&parameters, &entry.capabilities, &entry.model_name);
 
         let mut tool_payloads: Vec<serde_json::Value> = match tools_override {
             Some(ref requested) => {
@@ -213,7 +214,7 @@ impl AiService {
 
     pub fn model_capabilities(&self, model_id: &str) -> Result<ModelCapabilities, AiError> {
         let entry = self.get_provider(model_id)?;
-        Ok(entry.provider.capabilities(&entry.model_name))
+        Ok(entry.capabilities.clone())
     }
 
     fn get_provider(&self, model_id: &str) -> Result<&ProviderEntry, AiError> {
