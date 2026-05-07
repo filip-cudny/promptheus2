@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Plus, ChevronDown, Star } from "lucide-svelte";
+  import { Plus, ChevronDown } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import type { ModelConfig, ModelType, SurfaceKind } from "$lib/types";
   import Button from "$lib/components/shared/ui/Button.svelte";
@@ -20,13 +20,37 @@
 
   let addMenuOpen = $state(false);
 
-  const referencedIds = $derived.by(() => {
-    const ids = new Set<string>();
-    Object.values(surfaceModelIds).forEach((v) => {
-      if (v) ids.add(v);
-    });
-    return ids;
+  const SURFACE_ORDER: SurfaceKind[] = [
+    "chat",
+    "quick_actions",
+    "title_generation",
+    "speech_to_text",
+  ];
+
+  const SURFACE_LABELS: Record<SurfaceKind, string> = {
+    chat: "chat",
+    quick_actions: "quick actions",
+    title_generation: "title generation",
+    speech_to_text: "speech to text",
+  };
+
+  const surfacesByModel = $derived.by(() => {
+    const map = new Map<string, SurfaceKind[]>();
+    for (const surface of SURFACE_ORDER) {
+      const modelId = surfaceModelIds[surface];
+      if (!modelId) continue;
+      const list = map.get(modelId) ?? [];
+      list.push(surface);
+      map.set(modelId, list);
+    }
+    return map;
   });
+
+  function tooltipForModel(id: string): string {
+    const surfaces = surfacesByModel.get(id);
+    if (!surfaces || surfaces.length === 0) return "";
+    return `In use by ${surfaces.map((s) => SURFACE_LABELS[s]).join(", ")}`;
+  }
 
   const groups = $derived.by(() => {
     const map = new Map<string, ModelConfig[]>();
@@ -105,12 +129,15 @@
           >
             <div class="row-main">
               <div class="row-name">
-                {model.display_name || "(unnamed)"}
-                {#if referencedIds.has(model.id)}
-                  <span class="default-icon" title="Referenced by a surface">
-                    <Star size={10} fill="currentColor" />
-                  </span>
+                {#if surfacesByModel.has(model.id)}
+                  <span
+                    class="status-dot"
+                    title={tooltipForModel(model.id)}
+                    aria-label={tooltipForModel(model.id)}
+                    role="img"
+                  ></span>
                 {/if}
+                {model.display_name || "(unnamed)"}
               </div>
               <div class="row-model">{model.model || "—"}</div>
             </div>
@@ -281,9 +308,13 @@
     white-space: nowrap;
   }
 
-  .default-icon {
-    color: var(--warning);
-    display: inline-flex;
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    flex-shrink: 0;
+    display: inline-block;
   }
 
   .row-model {

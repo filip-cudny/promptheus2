@@ -6,17 +6,25 @@ use tokio::sync::Mutex;
 use tokio_stream::StreamExt;
 
 use crate::models::ai::StreamEvent;
+use crate::models::capabilities::ModelCapabilities;
 use crate::models::message::ProcessedMessage;
-use crate::models::settings::Provider;
-use crate::services::ai::capabilities::{capabilities_for, ModelCapabilities};
 use crate::services::ai::AiService;
+use crate::services::config::ConfigService;
+use crate::services::ai::capabilities::resolve;
 
 #[tauri::command]
 pub async fn get_model_capabilities(
-    provider: Provider,
-    model: String,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+    model_id: String,
 ) -> crate::Result<ModelCapabilities> {
-    Ok(capabilities_for(&provider, &model))
+    let config = config.lock().await;
+    let model = config
+        .settings()
+        .models
+        .iter()
+        .find(|m| m.id == model_id)
+        .ok_or_else(|| crate::services::ai::AiError::ModelNotFound(model_id.clone()))?;
+    Ok(resolve(model))
 }
 
 #[tauri::command]

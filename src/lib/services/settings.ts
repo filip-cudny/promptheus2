@@ -7,6 +7,7 @@ import type {
   SurfaceKind,
   SpeechToTextConfig,
 } from "$lib/types";
+import { invalidateCapabilities } from "$lib/stores/capabilities.svelte";
 
 export async function getSettings(): Promise<Settings> {
   return invoke("get_settings");
@@ -68,11 +69,13 @@ export async function updateModel(
   modelId: string,
   config: ModelConfig,
 ): Promise<void> {
-  return invoke("update_model", { modelId, config });
+  await invoke("update_model", { modelId, config });
+  invalidateCapabilities(modelId);
 }
 
 export async function deleteModel(modelId: string): Promise<void> {
-  return invoke("delete_model", { modelId });
+  await invoke("delete_model", { modelId });
+  invalidateCapabilities(modelId);
 }
 
 export async function updateNotifications(

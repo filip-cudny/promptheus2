@@ -108,11 +108,13 @@ API key fields accept literal secrets *or* `${VAR_NAME}` references. `EnvRefChip
 
 A model "in use by" a surface (chat / quick_actions / title_generation / speech_to_text) is highlighted in two places:
 
-1. Yellow star (`Star`, `#d9b34a`) next to its row in `ModelList`.
+1. Accent-coloured status dot before the row name in `ModelList` (7 px, `var(--accent)`). Tooltip lists surfaces explicitly: `In use by chat, title generation`. The dot's surface mapping is derived locally in `ModelList` from the `surfaceModelIds` prop.
 2. `in use by <surface>` badge in the editor header.
 3. Warning in the delete confirm.
 
-Use `store.isModelReferencedBySurface(id)` from the settings store — never recompute the mapping in components.
+The dot replaces an earlier yellow star — star semantics ("favorite / user preference") clashed with the actual meaning ("system binding"). Status-dot vocabulary aligns with IDE modified-file dots and online indicators. Do not reuse `--warning` colour here — that is reserved for issue states.
+
+Use `store.isModelReferencedBySurface(id)` from the settings store when you need a boolean check elsewhere — never recompute the mapping ad hoc.
 
 ### Reactivity gotchas (Svelte 5)
 
