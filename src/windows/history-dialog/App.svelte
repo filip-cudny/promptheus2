@@ -163,10 +163,9 @@
   }
 
   $effect(() => {
-    pageResults;
     currentPage;
     if (entriesListEl) entriesListEl.scrollTop = 0;
-    if (scrolled) scrolled = false;
+    scrolled = false;
   });
 
   onMount(async () => {
@@ -284,8 +283,7 @@
   }
 
   .topbar {
-    position: sticky;
-    top: 0;
+    position: relative;
     z-index: var(--z-sticky);
     background: var(--surface-base);
     border-bottom: 1px solid var(--border-faint);
@@ -413,9 +411,6 @@
     background: var(--surface-base);
     border: 1px solid var(--border-faint);
     border-radius: var(--radius-xl);
-    max-width: 760px;
-    width: 100%;
-    margin-inline: auto;
   }
 
   .skeleton-icon {

@@ -195,17 +195,22 @@
   .metadata-grid {
     display: grid;
     grid-template-columns: auto 1fr;
-    gap: var(--space-1) var(--space-5);
+    gap: var(--space-3) var(--space-8);
     font-size: var(--font-size-sm);
+    align-items: baseline;
   }
 
   .meta-key {
-    color: var(--text-disabled);
+    color: var(--text-muted);
+    font-weight: var(--font-weight-regular);
+    letter-spacing: 0.1px;
   }
 
   .meta-value {
-    color: var(--text-muted);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
+    word-break: break-word;
   }
 
   .section-label {

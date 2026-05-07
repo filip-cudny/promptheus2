@@ -210,8 +210,6 @@
     display: flex;
     align-items: flex-start;
     gap: var(--space-4);
-    max-width: 760px;
-    margin-inline: auto;
   }
 
   .entry-icon {

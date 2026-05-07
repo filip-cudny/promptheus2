@@ -131,6 +131,23 @@
 
   const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
 
+  const contextFillRatio = $derived.by(() => {
+    if (contextWindowSize <= 0 || store.totalTokens <= 0) return 0;
+    return Math.min(store.totalTokens / contextWindowSize, 1);
+  });
+
+  const contextFillTone = $derived.by<"ok" | "warn" | "danger">(() => {
+    if (contextFillRatio >= 0.9) return "danger";
+    if (contextFillRatio >= 0.7) return "warn";
+    return "ok";
+  });
+
+  const contextFillTitle = $derived.by(() => {
+    if (contextWindowSize <= 0) return "Context tokens";
+    const percent = Math.round(contextFillRatio * 1000) / 10;
+    return `${formatTokenCount(store.totalTokens)} of ${formatTokenCount(contextWindowSize)} tokens (${percent}%)`;
+  });
+
   function onKeyDown(e: KeyboardEvent) { shiftHeld = e.shiftKey; }
   function onKeyUp(e: KeyboardEvent) { shiftHeld = e.shiftKey; }
 
@@ -250,7 +267,7 @@
 
     <div class="bar-right">
       {#if store.totalTokens > 0}
-        <span class="token-count" title="Context tokens">
+        <span class="token-count" data-tone={contextFillTone} title={contextFillTitle}>
           ~{formatTokenCount(store.totalTokens)}{#if contextWindowSize > 0}&nbsp;/ {formatTokenCount(contextWindowSize)}{/if}
         </span>
       {/if}
@@ -351,11 +368,23 @@
 
   .token-count {
     font-size: var(--font-size-sm);
-    color: var(--text-disabled);
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
     user-select: none;
     white-space: nowrap;
     margin-right: var(--space-1);
+    cursor: default;
+    transition: color var(--motion-default) var(--ease-default);
   }
+
+  .token-count[data-tone="warn"] {
+    color: var(--warning);
+  }
+
+  .token-count[data-tone="danger"] {
+    color: var(--danger);
+  }
+
 
   .bar-right {
     flex-shrink: 0;
