@@ -4,6 +4,7 @@ Top-level index of all `DOCS.md` files in the project. Updated incrementally as 
 
 ## Project Structure
 
+- [README.md](README.md) — landing, quick start, configuration, development commands
 - [src/DOCS.md](src/DOCS.md) — Svelte frontend: components, stores, services
 - [src-tauri/DOCS.md](src-tauri/DOCS.md) — Rust backend: commands, services, models
 - [src-tauri/src/models/DOCS.md](src-tauri/src/models/DOCS.md) — Data structures, serde conventions, settings schema

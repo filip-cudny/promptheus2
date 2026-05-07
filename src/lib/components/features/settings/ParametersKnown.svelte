@@ -1,11 +1,18 @@
 <script lang="ts">
-  import type { ModelParameters, KnownModelParameterKey } from "$lib/types";
+  import type {
+    KnownModelParameterKey,
+    ModelCapabilities,
+    ModelParameters,
+  } from "$lib/types";
+  import type { ReasoningLevel } from "$lib/constants/models";
 
   let {
     parameters,
+    capabilities = null,
     onChange,
   }: {
     parameters: ModelParameters | null;
+    capabilities?: ModelCapabilities | null;
     onChange: (key: KnownModelParameterKey, value: number | string | null) => void;
   } = $props();
 
@@ -25,7 +32,18 @@
     { key: "presence_penalty", label: "Presence penalty", min: -2, max: 2, step: 0.1, default: 0 },
   ];
 
-  const REASONING_OPTIONS = ["none", "low", "medium", "high"];
+  let reasoningKind = $derived(capabilities?.reasoning.kind ?? "unsupported");
+
+  let reasoningOptions = $derived.by<ReasoningLevel[]>(() => {
+    const reasoning = capabilities?.reasoning;
+    if (!reasoning || reasoning.kind !== "effort") return [];
+    const allowed = reasoning.allowed as ReasoningLevel[];
+    return allowed.includes("none") ? allowed : ["none", ...allowed];
+  });
+
+  let reasoningDefault = $derived<string>(
+    reasoningOptions.find((o) => o !== "none") ?? reasoningOptions[0] ?? "medium",
+  );
 
   function isOverridden(key: KnownModelParameterKey): boolean {
     if (!parameters) return false;
@@ -52,7 +70,7 @@
     if (isOverridden("reasoning_effort")) {
       onChange("reasoning_effort", null);
     } else {
-      onChange("reasoning_effort", "medium");
+      onChange("reasoning_effort", reasoningDefault);
     }
   }
 
@@ -129,9 +147,9 @@
     </div>
   {/if}
 
-  {#if true}
+  {#if reasoningKind === "effort"}
     {@const overridden = isOverridden("reasoning_effort")}
-    {@const value = getString("reasoning_effort", "medium")}
+    {@const value = getString("reasoning_effort", reasoningDefault)}
     <div class="param">
       <div class="param-header">
         <label>
@@ -150,7 +168,7 @@
           oninput={(e) => onChange("reasoning_effort", (e.target as HTMLInputElement).value)}
         />
         <datalist id="reasoning-options">
-          {#each REASONING_OPTIONS as opt}
+          {#each reasoningOptions as opt}
             <option value={opt}></option>
           {/each}
         </datalist>

@@ -16,6 +16,10 @@
     deleteModel,
     updateModel,
   } from "$lib/services/settings";
+  import {
+    prefetchCapabilities,
+    getCachedCapabilities,
+  } from "$lib/stores/capabilities.svelte";
   import { checkEnvVar } from "$lib/services/settingsDialog";
   import { generateId } from "$lib/utils/id";
   import {
@@ -250,6 +254,12 @@
 
   const showApiMode = $derived(draft.type === "text" && draft.provider === "openai");
   const isText = $derived(draft.type === "text");
+
+  $effect(() => {
+    prefetchCapabilities(model);
+  });
+
+  const resolvedCapabilities = $derived(getCachedCapabilities(model));
 </script>
 
 <div class="model-editor">
@@ -451,6 +461,7 @@
       <h4>Known</h4>
       <ParametersKnown
         parameters={draft.parameters}
+        capabilities={resolvedCapabilities}
         onChange={setKnownParameter}
       />
       <h4 class="custom-heading">Custom</h4>
