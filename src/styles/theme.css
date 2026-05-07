@@ -2,14 +2,14 @@
   color-scheme: dark;
 
   /* 4.1 surfaces */
-  --surface-base: #1e1e1e;
-  --surface-raised: #252525;
-  --surface-elevated: #2a2a2a;
+  --surface-base: #1d1e21;
+  --surface-raised: #252629;
+  --surface-elevated: #2a2b2f;
   --surface-sunken: #1a1a1a;
   --surface-overlay-faint: rgba(255, 255, 255, 0.04);
   --surface-overlay: rgba(255, 255, 255, 0.08);
   --surface-overlay-strong: rgba(255, 255, 255, 0.12);
-  --surface-scrim: rgba(0, 0, 0, 0.5);
+  --surface-scrim: rgba(0, 0, 0, 0.62);
 
   /* 4.2 borders */
   --border-faint: rgba(255, 255, 255, 0.06);
@@ -26,12 +26,13 @@
   --text-faint: rgba(255, 255, 255, 0.25);
 
   /* 4.4 accent */
-  --accent: #5b8dd9;
+  --accent: #6FA0E5;
+  --accent-vivid: #5093EE;
   --accent-fg: #ffffff;
-  --accent-bg-soft: rgba(91, 141, 217, 0.15);
-  --accent-bg: rgba(91, 141, 217, 0.35);
-  --accent-border: rgba(91, 141, 217, 0.50);
-  --accent-ring: rgba(91, 141, 217, 0.60);
+  --accent-bg-soft: rgba(111, 160, 229, 0.18);
+  --accent-bg: rgba(111, 160, 229, 0.35);
+  --accent-border: rgba(111, 160, 229, 0.50);
+  --accent-ring: rgba(111, 160, 229, 0.60);
 
   accent-color: var(--accent);
 
@@ -40,9 +41,12 @@
   --danger-bg-soft: rgba(217, 115, 115, 0.15);
   --danger-border: rgba(217, 115, 115, 0.35);
 
-  --success: #5cb85c;
-  --success-bg-soft: rgba(92, 184, 92, 0.15);
-  --success-border: rgba(92, 184, 92, 0.35);
+  --success: #62A878;
+  --success-bg-soft: rgba(98, 168, 120, 0.12);
+  --success-border: rgba(98, 168, 120, 0.28);
+
+  --tool-running-stripe: var(--accent);
+  --tool-done-stripe: transparent;
 
   --warning: #d4a843;
   --warning-bg-soft: rgba(212, 168, 67, 0.15);
@@ -129,16 +133,16 @@
   --opacity-pressed: 0.8;
 
   /* 4.14 floating surfaces */
-  --surface-floating-modal: #252525;
-  --surface-floating-modal-border: rgba(255, 255, 255, 0.08);
+  --surface-floating-modal: linear-gradient(180deg, #2c2d31 0%, #252629 100%);
+  --surface-floating-modal-border: rgba(255, 255, 255, 0.13);
   --surface-floating-modal-radius: 8px;
 
-  --surface-floating-popover: #252525;
+  --surface-floating-popover: #252629;
   --surface-floating-popover-border: rgba(255, 255, 255, 0.12);
   --surface-floating-popover-radius: 6px;
 
-  --surface-input-bar      : rgba(30, 30, 30, 0.75);
-  --surface-input-bar-solid: rgba(30, 30, 30, 0.95);
+  --surface-input-bar      : rgba(29, 30, 33, 0.75);
+  --surface-input-bar-solid: rgba(29, 30, 33, 0.95);
   --surface-side-drawer      : rgba(5, 5, 5, 0.3);
   --surface-side-drawer-solid: rgba(22, 22, 24, 0.92);
 
@@ -187,11 +191,15 @@
 
   /* accent */
   --accent        : #3b6dbf;
+  --accent-vivid  : #2d5fb3;
   --accent-fg     : #ffffff;
   --accent-bg-soft: rgba(59,109,191,0.10);
   --accent-bg     : rgba(59,109,191,0.25);
   --accent-border : rgba(59,109,191,0.40);
   --accent-ring   : rgba(59,109,191,0.50);
+
+  --tool-running-stripe: var(--accent);
+  --tool-done-stripe   : transparent;
 
   /* status */
   --danger         : #b84040;

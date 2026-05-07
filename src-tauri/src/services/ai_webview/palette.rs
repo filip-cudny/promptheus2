@@ -155,7 +155,7 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
         {
             use gtk::prelude::WidgetExt;
             if let Ok(gtk_win) = backdrop.gtk_window() {
-                gtk_win.set_opacity(0.55);
+                gtk_win.set_opacity(0.68);
             }
         }
     }

@@ -80,38 +80,29 @@
     border-radius: var(--radius-md);
     overflow: hidden;
     font-size: var(--font-size-base);
+    border-left: 3px solid var(--tool-done-stripe);
+    background: var(--surface-overlay-faint);
   }
 
   .tool-call-item.pending {
-    border-left: 3px solid var(--warning);
+    border-left-color: var(--warning);
     background: var(--warning-bg-soft);
     animation: pulse 2s ease-in-out infinite;
   }
 
   .tool-call-item.in-progress {
-    border-left: 3px solid var(--accent);
-    background: linear-gradient(
-      90deg,
-      var(--accent-bg-soft) 0%,
-      var(--accent-bg-soft) 50%,
-      var(--accent-bg-soft) 100%
-    );
-    background-size: 200% auto;
-    animation: shimmer 2s linear infinite;
+    border-left-color: var(--tool-running-stripe);
+    background: var(--accent-bg-soft);
   }
 
-  .tool-call-item.completed {
-    border-left: 3px solid var(--success-border);
-    background: var(--success-bg-soft);
-  }
-
+  .tool-call-item.completed,
   .tool-call-item.failed {
-    border-left: 3px solid var(--danger-border);
-    background: var(--danger-bg-soft);
+    border-left-color: var(--tool-done-stripe);
+    background: var(--surface-overlay-faint);
   }
 
   .tool-call-item.cancelled {
-    border-left: 3px solid var(--border-strong);
+    border-left-color: var(--tool-done-stripe);
     background: transparent;
   }
 
@@ -153,11 +144,6 @@
     .tool-call-item.pending {
       animation: none;
       background: var(--warning-bg-soft);
-    }
-
-    .tool-call-item.in-progress {
-      animation: none;
-      background: var(--accent-bg-soft);
     }
   }
 </style>

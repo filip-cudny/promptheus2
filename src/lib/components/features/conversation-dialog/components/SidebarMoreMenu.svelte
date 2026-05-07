@@ -83,7 +83,7 @@
     right: 0;
     margin-top: var(--space-1);
     min-width: 120px;
-    background: rgba(30, 30, 32, 0.98);
+    background: var(--surface-floating-popover);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-lg);
     padding: var(--space-2);

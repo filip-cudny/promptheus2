@@ -20,7 +20,7 @@ pub fn capabilities_for(provider: &Provider, model: &str) -> ModelCapabilities {
     }
 }
 
-const OPENAI_EFFORT_MODELS: &[&str] = &[
+pub const OPENAI_EFFORT_MODELS: &[&str] = &[
     "o1",
     "o1-mini",
     "o1-preview",

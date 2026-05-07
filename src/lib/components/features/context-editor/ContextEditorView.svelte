@@ -72,7 +72,7 @@
     flex-direction: column;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-xl);
-    background: rgba(30, 30, 30, 0.75);
+    background: var(--surface-input-bar);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
   }
