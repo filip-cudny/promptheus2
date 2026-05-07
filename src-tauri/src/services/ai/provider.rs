@@ -1,12 +1,14 @@
 use std::pin::Pin;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::Stream;
 
+use crate::models::capabilities::ModelCapabilities;
 use crate::models::message::ProcessedMessage;
 use crate::models::settings::ModelParameters;
 
-use super::capabilities::ModelCapabilities;
+use super::encoder::CapabilityEncoder;
 use super::AiError;
 
 pub struct CompletionRequest {
@@ -14,6 +16,8 @@ pub struct CompletionRequest {
     pub messages: Vec<ProcessedMessage>,
     pub parameters: ModelParameters,
     pub tool_payloads: Vec<serde_json::Value>,
+    pub capabilities: ModelCapabilities,
+    pub encoder: Arc<dyn CapabilityEncoder>,
 }
 
 pub struct StreamChunk {
@@ -50,8 +54,6 @@ pub struct TokenUsage {
 
 #[async_trait]
 pub trait AiProvider: Send + Sync {
-    fn capabilities(&self, model: &str) -> ModelCapabilities;
-
     async fn complete(&self, request: CompletionRequest) -> Result<String, AiError>;
 
     async fn complete_stream(

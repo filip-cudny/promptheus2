@@ -365,7 +365,8 @@ pub fn build_tool_loop_messages(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::ai::capabilities::ModelCapabilities;
+    use crate::models::capabilities::ModelCapabilities;
+    use crate::services::ai::encoder::OpenAiCompletionsEncoder;
     use crate::services::ai::provider::{AiProvider, CompletionRequest};
     use crate::services::execution::lifecycle::{ExecutionSnapshot, LiveExecution};
     use async_trait::async_trait;
@@ -385,10 +386,6 @@ mod tests {
 
     #[async_trait]
     impl AiProvider for FakeProvider {
-        fn capabilities(&self, _model: &str) -> ModelCapabilities {
-            ModelCapabilities::minimal()
-        }
-
         async fn complete(&self, _request: CompletionRequest) -> Result<String, AiError> {
             Ok(String::new())
         }
@@ -444,6 +441,8 @@ mod tests {
             messages: vec![],
             parameters: Default::default(),
             tool_payloads: vec![],
+            capabilities: ModelCapabilities::minimal(),
+            encoder: Arc::new(OpenAiCompletionsEncoder),
         };
         let stream = provider.complete_stream(request).await.unwrap();
 

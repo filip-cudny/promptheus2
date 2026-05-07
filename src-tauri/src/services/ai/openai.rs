@@ -9,11 +9,9 @@ use tokio_stream::StreamExt;
 
 use crate::models::settings::ModelConfig;
 
-use super::capabilities::{capabilities_for, ModelCapabilities};
 use super::provider::{AiProvider, CompletionRequest, StreamChunk, ToolCallEvent, TokenUsage};
 use super::sse::parse_sse_stream;
 use super::AiError;
-use crate::models::settings::Provider;
 
 pub struct OpenAiProvider {
     http_client: reqwest::Client,
@@ -90,12 +88,9 @@ fn build_request_body(
     if let Some(pp) = request.parameters.presence_penalty {
         obj.insert("presence_penalty".into(), serde_json::json!(pp));
     }
-    if let Some(ref re) = request.parameters.reasoning_effort {
-        let caps = capabilities_for(&Provider::Openai, &request.model);
-        if caps.accepts_effort(re) {
-            obj.insert("reasoning_effort".into(), serde_json::json!(re));
-        }
-    }
+    request
+        .encoder
+        .encode_reasoning(&request.capabilities, &request.parameters, obj);
 
     for (key, value) in &request.parameters.extra {
         obj.insert(key.clone(), value.clone());
@@ -301,10 +296,6 @@ fn process_chunk(state: &mut StreamState, chunk: ChatCompletionChunk) {
 
 #[async_trait]
 impl AiProvider for OpenAiProvider {
-    fn capabilities(&self, model: &str) -> ModelCapabilities {
-        capabilities_for(&Provider::Openai, model)
-    }
-
     async fn complete(&self, request: CompletionRequest) -> Result<String, AiError> {
         let url = format!("{}/chat/completions", self.base_url);
         let body = build_request_body(&request, false);

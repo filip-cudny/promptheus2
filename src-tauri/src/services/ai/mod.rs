@@ -1,4 +1,5 @@
 pub mod capabilities;
+pub mod encoder;
 pub mod openai;
 pub mod openai_responses;
 pub mod provider;
@@ -15,6 +16,7 @@ use crate::models::message::ProcessedMessage;
 use crate::models::settings::{ApiMode, ModelConfig, ModelParameters, Provider};
 
 use self::capabilities::{resolve, ModelCapabilities, ReasoningMode};
+use self::encoder::{CapabilityEncoder, OpenAiCompletionsEncoder, OpenAiResponsesEncoder};
 use self::openai::OpenAiProvider;
 use self::openai_responses::OpenAiResponsesProvider;
 use self::provider::{AiProvider, CompletionRequest, StreamChunk};
@@ -54,6 +56,7 @@ struct ProviderEntry {
     provider_type: Provider,
     api_mode: ApiMode,
     capabilities: ModelCapabilities,
+    encoder: Arc<dyn CapabilityEncoder>,
 }
 
 struct AiServiceInner {
@@ -87,6 +90,10 @@ impl AiService {
                         ApiMode::Responses => OpenAiResponsesProvider::new(model).map(|p| Box::new(p) as Box<dyn AiProvider>),
                         ApiMode::Completions => OpenAiProvider::new(model).map(|p| Box::new(p) as Box<dyn AiProvider>),
                     };
+                    let encoder: Arc<dyn CapabilityEncoder> = match api_mode {
+                        ApiMode::Responses => Arc::new(OpenAiResponsesEncoder),
+                        ApiMode::Completions => Arc::new(OpenAiCompletionsEncoder),
+                    };
                     match result {
                         Ok(provider) => {
                             let capabilities = resolve(model);
@@ -99,6 +106,7 @@ impl AiService {
                                     provider_type,
                                     api_mode: api_mode.clone(),
                                     capabilities,
+                                    encoder,
                                 },
                             );
                         }
@@ -149,6 +157,8 @@ impl AiService {
             messages,
             parameters,
             tool_payloads: vec![],
+            capabilities: entry.capabilities.clone(),
+            encoder: entry.encoder.clone(),
         };
         entry.provider.complete(request).await
     }
@@ -196,6 +206,8 @@ impl AiService {
             messages,
             parameters,
             tool_payloads,
+            capabilities: entry.capabilities.clone(),
+            encoder: entry.encoder.clone(),
         };
         entry.provider.complete_stream(request).await
     }
