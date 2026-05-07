@@ -5,6 +5,7 @@
   import { formatSurfaceList } from "$lib/constants/surfaces";
   import EnvRefChip, { parseEnvRef } from "./EnvRefChip.svelte";
   import ParametersKnown from "./ParametersKnown.svelte";
+  import CapabilitiesEditor from "./CapabilitiesEditor.svelte";
   import ParametersCustom, {
     entriesFromExtra,
     entriesToExtra,
@@ -26,6 +27,7 @@
     KNOWN_MODEL_PARAMETER_KEYS,
     type ApiMode,
     type KnownModelParameterKey,
+    type ModelCapabilities,
     type ModelConfig,
     type ModelParameters,
     type ModelType,
@@ -190,6 +192,11 @@
     scheduleSave(true);
   }
 
+  function setCapabilities(next: ModelCapabilities | null) {
+    draft.capabilities = next;
+    scheduleSave(true);
+  }
+
   $effect(() => {
     customEntries;
     if (saveTimer) clearTimeout(saveTimer);
@@ -259,7 +266,9 @@
     prefetchCapabilities(model);
   });
 
-  const resolvedCapabilities = $derived(getCachedCapabilities(model));
+  const resolvedCapabilities = $derived(
+    draft.capabilities ?? getCachedCapabilities(model),
+  );
 </script>
 
 <div class="model-editor">
@@ -454,6 +463,10 @@
           }}
         />
       </FormRow>
+      <CapabilitiesEditor
+        capabilities={draft.capabilities ?? null}
+        onChange={setCapabilities}
+      />
     </section>
 
     <section class="card">

@@ -1,3 +1,5 @@
+import type { ModelCapabilities } from "./ai";
+
 export * from "./ai";
 export * from "./menu";
 export * from "./execution";
@@ -86,6 +88,7 @@ export interface ModelConfig {
   parameters: ModelParameters | null;
   context_window_size: number | null;
   api_mode: ApiMode | null;
+  capabilities?: ModelCapabilities | null;
   store: boolean;
 }
 
