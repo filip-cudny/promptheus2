@@ -1,4 +1,5 @@
 pub mod ai;
+pub mod capabilities;
 pub mod context;
 pub mod execution;
 pub mod history;

@@ -1,64 +1,6 @@
-use serde::Serialize;
+pub use crate::models::capabilities::{Effort, ModelCapabilities, ReasoningMode};
 
 use crate::models::settings::Provider;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum Effort {
-    Low,
-    Medium,
-    High,
-}
-
-impl Effort {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Effort::Low => "low",
-            Effort::Medium => "medium",
-            Effort::High => "high",
-        }
-    }
-
-    pub fn parse(value: &str) -> Option<Self> {
-        match value {
-            "low" => Some(Effort::Low),
-            "medium" => Some(Effort::Medium),
-            "high" => Some(Effort::High),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-pub enum ReasoningMode {
-    Unsupported,
-    Effort { allowed: Vec<Effort> },
-    BudgetTokens { min: u32, max: u32 },
-    Toggle,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ModelCapabilities {
-    pub reasoning: ReasoningMode,
-}
-
-impl ModelCapabilities {
-    pub fn minimal() -> Self {
-        Self {
-            reasoning: ReasoningMode::Unsupported,
-        }
-    }
-
-    pub fn accepts_effort(&self, value: &str) -> bool {
-        match &self.reasoning {
-            ReasoningMode::Effort { allowed } => Effort::parse(value)
-                .map(|e| allowed.contains(&e))
-                .unwrap_or(false),
-            _ => false,
-        }
-    }
-}
 
 pub fn capabilities_for(provider: &Provider, model: &str) -> ModelCapabilities {
     match provider {
@@ -92,7 +34,14 @@ const OPENAI_EFFORT_MODELS: &[&str] = &[
 fn openai_capabilities(model: &str) -> ModelCapabilities {
     let reasoning = if OPENAI_EFFORT_MODELS.contains(&model) {
         ReasoningMode::Effort {
-            allowed: vec![Effort::Low, Effort::Medium, Effort::High],
+            allowed: vec![
+                Effort::None,
+                Effort::Minimal,
+                Effort::Low,
+                Effort::Medium,
+                Effort::High,
+                Effort::XHigh,
+            ],
         }
     } else {
         ReasoningMode::Unsupported
@@ -114,10 +63,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn openai_gpt5_supports_effort() {
+    fn openai_gpt5_supports_effort_full_range() {
         let caps = capabilities_for(&Provider::Openai, "gpt-5");
-        assert!(matches!(caps.reasoning, ReasoningMode::Effort { .. }));
+        let ReasoningMode::Effort { ref allowed } = caps.reasoning else {
+            panic!("expected Effort");
+        };
+        assert_eq!(
+            *allowed,
+            vec![
+                Effort::None,
+                Effort::Minimal,
+                Effort::Low,
+                Effort::Medium,
+                Effort::High,
+                Effort::XHigh,
+            ]
+        );
         assert!(caps.accepts_effort("medium"));
+        assert!(caps.accepts_effort("xhigh"));
+        assert!(caps.accepts_effort("minimal"));
     }
 
     #[test]
