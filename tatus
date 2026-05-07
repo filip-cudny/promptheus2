@@ -1,0 +1,1698 @@
+[33mcommit 39085fa41fa18d256edaeb385dc57651913bc7c5[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed May 6 18:08:34 2026 +0200
+
+    fix(conversation): resolve user node content before updating
+
+[33mcommit 27feb44a4f10b3f9ed46d5a527c7ea4f2deae688[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue May 5 22:33:27 2026 +0200
+
+    feat(settings): move prompts to files and add prompt editor
+
+[33mcommit f470a2303bc1a3f7028a6ff488a026c2065d9e62[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue May 5 21:16:03 2026 +0200
+
+    fix(palette): set platform attribute for command palette sizing
+
+[33mcommit c37e31140b5f909e43acadbd0fdb26bd5baec566[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon May 4 10:58:59 2026 +0200
+
+    feat(tauri): use fs plugin for text file writes
+
+[33mcommit 2d20f0b6befd4aa560dc3d753ac6276e4832b567[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon May 4 08:44:15 2026 +0200
+
+    refactor(services): split service modules into subdirectories
+
+[33mcommit 71bbc52d3d7cd37a1894ecff920d5bf9d3e8a338[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 23:47:03 2026 +0200
+
+    feat(events): add versioned payloads for app event listeners
+
+[33mcommit 009d8327888ef01c69a8cb43f5e0f622da9fc792[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 23:31:15 2026 +0200
+
+    refactor(commands): inject services into Tauri commands
+
+[33mcommit 0874b281822697f089c5e849e04d1e657b76c2e0[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 22:59:34 2026 +0200
+
+    refactor(tauri): extract app setup and command handler macro
+
+[33mcommit 62f4973655873481a23449a9a613909a2754afa1[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 22:47:02 2026 +0200
+
+    refactor(tauri): use crate result type in command handlers
+
+[33mcommit 90003133a80cabbfc1a489a79bb5d16d16f555ac[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 21:57:48 2026 +0200
+
+    refactor(settings-dialog): extract SettingsContent section switch
+    
+    Move the loading/error/section-switch body into
+    features/settings/SettingsContent.svelte. Window down to 40 lines —
+    sidebar + content composition only.
+
+[33mcommit 61d8135d349baf8f6d1f0bedbe5eb8b6b05d827a[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 21:57:04 2026 +0200
+
+    refactor(image-preview): extract view component and window driver
+    
+    Move <img> + fade view to ImagePreview and load/size/reposition/show/
+    hide IPC to useImagePreviewWindow driver. Window down to 12 lines.
+
+[33mcommit cc8118f41473ec56be04c717c82f6ab60848e1ff[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 21:56:11 2026 +0200
+
+    refactor(text-preview): extract view component and load driver
+    
+    Move toolbar + markdown/textarea body to TextPreviewView and pending-text
+    fetch + commit-and-hide IPC to useTextPreviewLoad driver. Window down to
+    37 lines.
+
+[33mcommit 0695b3107395218c18f9e4326f9afbb1063ad198[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 21:55:14 2026 +0200
+
+    refactor(context-editor): extract view component and load/save driver
+    
+    Move toolbar + image bar + view/edit body to ContextEditorView and
+    context get/set IPC to useContextLoadSave driver. Window down to 52
+    lines, owns only the editor-shell frame and Ctrl+Enter save shortcut.
+
+[33mcommit f39ad8d1b2c5908c04deb45265fac3441b46cd43[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 21:53:56 2026 +0200
+
+    refactor(notification): extract NotificationStack and drain driver
+    
+    Move sonner Toaster + global toast styles to NotificationStack and the
+    drain/measure/sync logic to useNotificationDrain driver. Window down to
+    33 lines, owns only console-attach, linux-class, and exposing
+    drainPending on window for backend re-trigger.
+
+[33mcommit 57c1f063bd4a382c70513902392a9b17e5541edb[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 21:52:45 2026 +0200
+
+    refactor(palette): extract Palette feature and IPC driver
+    
+    Move filter/render/keyboard logic into features/palette/Palette.svelte
+    and palette:show / focus / menu:reload-active listeners into the
+    usePaletteIpc driver. Window shrinks to 31 lines.
+
+[33mcommit 20ed347e170772ad2677c5f919d7abbed0fd4ca9[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 21:51:32 2026 +0200
+
+    refactor(history-dialog): extract pagination bar into history feature
+    
+    Move page-size buttons + page nav into features/history/HistoryPagination.svelte.
+
+[33mcommit a5a413e23d770875b3aedbcd8bb8b45eb47c9c57[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 21:50:37 2026 +0200
+
+    refactor(conversation-dialog): extract top buttons and IPC driver
+    
+    Move sidebar-toggle/new-chat overlay to ChatTopButtons.svelte and the
+    seven listen() calls to useConversationDialogIpc driver. Window keeps
+    lifecycle, keyboard shortcuts, and store wiring.
+
+[33mcommit 7a9d3610e4de156c4f38ec7609045d91618df6dd[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 21:49:14 2026 +0200
+
+    refactor(shell-toolbar): extract titlebar feature and window controls
+    
+    Move provider switcher, titlebar layout, and IPC/state machine out of
+    the window into features/shell-toolbar/. Extract the minimize/maximize/
+    close trio into shared/widgets/WindowControls.svelte for reuse in any
+    custom-titlebar window.
+    
+    Window now owns only IPC lifecycle, frame styles, and window-level
+    keyboard shortcuts (~110 lines, was 400).
+
+[33mcommit 690bae3c946bf44f1e12a97b9b86a25418e301c5[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 21:44:44 2026 +0200
+
+    refactor(context-editor): add variant/hideChipRow props to widget
+    
+    Replaces window-side `:global(.context-editor)` overrides with widget
+    props. Proves the widget-API rule before window restructure: when a
+    widget needs to look different in some context, that's a missing prop,
+    not a `:global` override.
+
+[33mcommit d873f6aac955988ecb92ab266a70f90b34ed6083[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 21:22:54 2026 +0200
+
+    refactor(components): reorganize shared and feature component paths
+
+[33mcommit 6e64b18d424ddd10d875359c2dbf6a5893771016[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun May 3 21:12:10 2026 +0200
+
+    feat(macos): add app menu and reload active action
+
+[33mcommit 2a26880d2d5350e20eb39e661344d0dd4d509e93[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 23:04:24 2026 +0200
+
+    fix(history-dialog): focus search input on mount
+
+[33mcommit 55a9b3281999958dd82bbb859b1a4138650748a5[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 22:20:34 2026 +0200
+
+    style(theme): replace hardcoded surface colors with tokens
+
+[33mcommit 2697cae3e6e7f355dd770686806fddddfd4fb5e2[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 22:16:04 2026 +0200
+
+    style(ui): standardize select styling and theme color scheme
+
+[33mcommit abf74046a3e80c63e9e590e4c7fab0e03c0276bb[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 22:09:57 2026 +0200
+
+    refactor(conversation-dialog): rename prompt components directory
+
+[33mcommit ef1a68a88b2cab1cda1f87698f2e960a5fe2727c[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 22:07:11 2026 +0200
+
+    feat(ui): add rail active style for menu items
+    
+    Update MenuItem with an `activeStyle` prop and apply the rail variant to
+    provider menu entries. Also rename several notification messages in
+    execution and speech commands.
+
+[33mcommit caebc2c995098d55c0e18c9acb42ceb89c829662[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 21:53:27 2026 +0200
+
+    refactor(prompt): extract prompt helpers into services and components
+
+[33mcommit f3373f7aa6e36eab2b21bd6da928ddaceafa3ed1[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 21:46:05 2026 +0200
+
+    refactor(prompt): extract prompt interaction drivers and services
+
+[33mcommit 723aed63700cf1bc525fb27535e7ba51b8a2713a[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 21:42:25 2026 +0200
+
+    refactor(prompt): extract sidebar UI into reusable components
+
+[33mcommit b4a32ec15a1c153086cd8ce6c69c363d20da6d41[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 21:39:05 2026 +0200
+
+    refactor(prompt): extract bubble and attachment components
+
+[33mcommit bd78756ce38b0242b2cd324f9186de3938a4f4eb[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 21:32:01 2026 +0200
+
+    refactor(ui): move window entry points under src/windows
+    
+    Rename window root components into per-window folders and update the
+    HTML entry scripts to load the new `src/windows/<name>/entry.ts` files.
+    
+    Update docs to describe the new window layout, and add
+    `--notification-fg-secondary` for notification descriptions.
+
+[33mcommit 6c26561bd9ee41abd3653e263b1e9dc8b13a52f3[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 21:12:49 2026 +0200
+
+    docs(context-menu): document layered component architecture
+
+[33mcommit 45ce85e09df1f3369f5fe04525d3f811225f7eea[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 21:10:52 2026 +0200
+
+    refactor(context-menu): extract menu data helpers into stores
+
+[33mcommit 7b32dac95f7ad729626b54242d2263a89d847770[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 21:06:29 2026 +0200
+
+    refactor(context-menu): extract panel, keyboard, blur, and positioning drivers
+
+[33mcommit 847933e7e7c3c0703f9fb45977d746118409074f[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 21:01:51 2026 +0200
+
+    refactor(context-menu): extract menu rows into components
+
+[33mcommit ba41807c843b932efcb49ef81d8abedba9fe261b[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 18:36:44 2026 +0200
+
+    feat(settings): persist theme in app settings
+
+[33mcommit 10ade9c9e4553051060a7c69ce437023039600c7[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 18:18:52 2026 +0200
+
+    feat(ui): add theme tokens and shared component primitives
+
+[33mcommit 26ebc0779b8eab17785b109928ed3b2507eed854[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri May 1 15:39:52 2026 +0200
+
+    refactor(conversation): centralize input focus handling
+
+[33mcommit 2ffb089adc0c2b557efa26f2de25d3c379986488[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 30 19:09:26 2026 +0200
+
+    fix(ui): focus input after palette closes and active provider clears
+
+[33mcommit d29250908c552549e0328b2fd388a1eef1d05962[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 30 19:03:15 2026 +0200
+
+    refactor(shortcuts): centralize keyboard shortcut matching
+
+[33mcommit b58e8050a326d46a612c4629edcf80459a830ebc[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 30 18:47:09 2026 +0200
+
+    refactor(ui): extract list navigation key handling
+
+[33mcommit 9920566eae6e412fc747a8c4d615aef9ed188c22[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 30 18:42:57 2026 +0200
+
+    feat(skills): store applied skill versions in history
+
+[33mcommit 4e083e654e9e41a6153c5793b0462e8816ba31ec[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 30 14:54:29 2026 +0200
+
+    feat(history): persist applied skills in conversation entries
+
+[33mcommit a87683d84df146c670686e8acec0ea7352dcd419[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 30 14:28:56 2026 +0200
+
+    refactor(ui): extract shared command palette shell
+
+[33mcommit 8c5fae9f6953c7b8e7dfeed354a5066112b08b92[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 30 00:04:06 2026 +0200
+
+    feat(history): add FTS5-backed search and ranking
+
+[33mcommit bdbeef48511ff86271c5cf946f1b44f0a7327c1e[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 29 23:46:05 2026 +0200
+
+    feat(ui): improve palette and history search previews
+
+[33mcommit 8c999c13325fdd18c595791e41db746699a6e30b[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 29 19:00:37 2026 +0200
+
+    feat(ui): position model dropdowns within the viewport
+    
+    Add fixed positioning for model and reasoning dropdowns, update their
+    placement on resize and scroll, and cap their height to available space.
+    Also pass model group data through the context menu and mark the Linux
+    context-menu window as a utility window.
+
+[33mcommit 1d329d5e83832f4f2c71a3e02027a863e53bdd7c[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 29 18:40:44 2026 +0200
+
+    feat(palette): move palette into dedicated webviews
+
+[33mcommit 4221b8ea4690e63a46581c93d9df67455c5ff920[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 29 00:26:31 2026 +0200
+
+    fix(history,ui): skip empty skill IDs/names and mute action icons in palette
+    
+    Skip history entries with empty skill_id or skill_name in skill counting.
+    Add muted style for action icons in the palette, adjusting opacity on
+    highlight. Add test for skipping empty skill fields.
+
+[33mcommit 7305b76034628543b30ad9ae39e50aa3336369c2[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 29 00:17:33 2026 +0200
+
+    feat(history): add skill and time range filters to history search
+    
+    Implement skill filter with multi-select UI and backend support, and add
+    time range presets (all, today, 7d, 30d) to filter history entries by
+    date. Update search store, toolbar, and types accordingly.
+
+[33mcommit b37cb74d11be1a5b340c9b31d03a953a71c278aa[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 29 00:00:22 2026 +0200
+
+    feat(history): add empty state component and highlight search matches
+    
+    Introduce HistoryEmptyState for contextual empty views in history dialog.
+    Highlight search matches in entry rows and input previews. Add utilities
+    for match highlighting and active filter formatting.
+
+[33mcommit 8c57d1ac85296d8c7f9fe71d4497c7d3c742dd99[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 28 23:21:30 2026 +0200
+
+    feat(history): add search, filtering, and toolbar to history dialog
+    
+    Implement history search with type/status filters, debounced queries,
+    and a new toolbar UI. Add keyboard shortcuts for search focus. Update
+    pagination and entry rendering to support filtered results.
+
+[33mcommit 8af78aef8f7b4db343de13b3f245b95315a681fb[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 28 23:16:03 2026 +0200
+
+    feat(history): add fuzzy search API with filtering and pagination
+
+[33mcommit d5b3256c981a71e57b24a9b15036c7451a9a5734[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 28 17:54:28 2026 +0200
+
+    feat(history): store rendered input and output content
+
+[33mcommit 9acea8f8b61f5d1154bbaad5547925fa50d3d7f4[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 28 16:57:04 2026 +0200
+
+    feat(conversation): przekazuj dane skill do nowego okna czatu
+
+[33mcommit 9abb6ed721b8a3f665f1f3ac84ba05901e83c34c[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 28 16:54:51 2026 +0200
+
+    docs(gotchas): add platform-specific workflow notes
+
+[33mcommit 3e4fb5a3a21add17e2776b4a12cfd6e6ec33978a[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 28 00:12:34 2026 +0200
+
+    fix(dock): handle dialog open rollback and improve dock visibility logic
+    
+    Call rollback_open if dialog window creation fails to maintain correct
+    dialog count and dock state. Refactor dock visibility changes into
+    apply_dock_visible with error logging.
+
+[33mcommit e8681b3b4149d8f9774546eb87340013ebb48af4[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 27 16:50:54 2026 +0200
+
+    feat(ai_webview): add multi-layer freeze prevention and cold-suspend
+    
+    Implement WebKit memory pressure settings (Linux), a watchdog for
+    unresponsive content processes with auto-reload and warning toast, and
+    cross-platform cold-suspend for idle webviews with automatic resume. Update
+    dependencies to enable required WebKit features.
+
+[33mcommit be7c1c9d4a8c368a1d46d9af663e1b6aa257277c[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 27 16:30:24 2026 +0200
+
+    feat(context-menu): show skill model and parameters in action tooltip
+    
+    Display model and parameter metadata for skill actions in the context menu.
+    Fetch metadata on demand and render entries below the tooltip. Update styles
+    for meta info and shortcut icons.
+
+[33mcommit 7c3a54e967d341730ccd451260cb44c4358d6ec8[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 27 16:07:04 2026 +0200
+
+    feat(ui): add contextual action menu for skills and unify menu styles
+    
+    - Add right-click action menu for skill items in context menu
+    - Replace inline action buttons with contextual menu
+    - Extract and apply MenuList component for consistent menu styling
+    - Update ProviderMenuList to use MenuList
+    - Add footer hint for voice input and actions
+    - Add detailed debug logging to ai_webview.rs for provider switching
+    - Minor FloatingPanel and dialog.rs adjustments for menu consistency
+
+[33mcommit a28cce2c108354b2e948ea40e45e7d889de812d2[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 27 00:28:15 2026 +0200
+
+    feat(chat): add provider selection and skill model support to dialog
+    
+    Introduce provider selection for new chat via context menu and support
+    passing skill model to conversation dialog initialization. Refactor
+    provider menu into a reusable component and update related commands and
+    stores to handle pending providers and skill models.
+
+[33mcommit 9254ce564ebf8d238090ac84393887c9dafc88be[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 26 19:54:27 2026 +0200
+
+    style(ui): adjust menu shadows, icon filters, and dropdown alignment
+
+[33mcommit 73f6147aacb8b6f0590594ccd4df538da946cf2f[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 26 19:54:19 2026 +0200
+
+    feat(ui): add provider icons to menu and toolbar
+    
+    Show provider-specific icons in the provider menu and toolbar using
+    host-based SVGs or images. Add url field to provider data and update
+    types accordingly.
+
+[33mcommit c29ba5529da5c3de64e0b512af32ea1d33655bfe[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 26 17:47:47 2026 +0200
+
+    feat(settings): make webview providers configurable in settings
+    
+    Replace hardcoded AI webview providers with a configurable
+    webview_providers array in settings. Add backend validation, settings
+    migration, and update frontend to use getWebviewProviders. Remove
+    ai_providers service and related types.
+
+[33mcommit 626e0d244d89845c217a7eee69aca5315e35ac1d[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 26 13:22:25 2026 +0200
+
+    feat(macos): enable native fullscreen arrows for custom titlebar windows
+    
+    Add enable_fullscreen_primary to set FullScreenPrimary collection behavior
+    on macOS when using a custom titlebar, restoring native fullscreen button
+    appearance.
+
+[33mcommit 3a89158da2c26874a22401a6f1f782026abd03be[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 26 13:17:49 2026 +0200
+
+    feat(menu): add non-activating context menu panel with blur grace on macOS
+    
+    Implement a custom NSPanel subclass for the context menu on macOS to
+    prevent app activation when showing the menu. Add show/hide/focus
+    commands for the panel and a 500ms blur grace period to avoid accidental
+    closure. Integrate tauri-plugin-single-instance.
+
+[33mcommit 7feea1112e98d5d140c01b6cee555562e7422b3c[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 25 18:07:54 2026 +0200
+
+    feat(ai_webview,ui): enable media permissions on Linux and adjust icon button styles
+
+[33mcommit f59cf526e1badabbdf81397ab31f5d703a1010d5[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 25 17:45:29 2026 +0200
+
+    feat(shell): add per-window event targeting and geometry seeding
+    
+    Route shell events to specific webviews using their labels as targets.
+    Seed new window geometry from source window when opening. Update
+    provider menu to track host window and emit events to correct toolbar.
+
+[33mcommit f71efdf43e51f12c6b28557de7e1935e59f3fab4[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 25 16:16:19 2026 +0200
+
+    feat(conversation): support multiple conversation dialogs and toolbar instances
+    
+    Allow opening multiple conversation-dialog windows, each with its own
+    toolbar. Refactor dialog and webview management to support dynamic labels
+    and remove the conversation_dialog service. Update Svelte apps to use the
+    current window label as HOST_LABEL. Enable "Open in new window" for the
+    Promptheus provider. Add Linux support for resizing undecorated windows.
+
+[33mcommit 2da9cf0dc43576b2136ab2125d25283c7ae28aa8[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 25 14:54:40 2026 +0200
+
+    feat(macos): make context menu a non-activating panel
+    
+    Convert the context menu window to a non-activating NSPanel on macOS so
+    it can become key without activating the app. Add macos_panel service
+    with helpers for panel conversion and keying. Update dependencies to
+    enable NSPanel support. Also set font and text color for dialog root.
+
+[33mcommit ddd6d3448a774fc23d9650025d792227c1fea693[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 25 01:10:07 2026 +0200
+
+    feat(macos): set window and webview background colors using tauri Color
+
+[33mcommit 2e901dd467efdfc679265c72b719cf73053df216[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 25 00:21:30 2026 +0200
+
+    feat(ui): add provider menu window and dropdown selection
+
+[33mcommit fbf427e8cca74ea7fd4790d6e39355c778a1b5ae[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri Apr 24 20:35:39 2026 +0200
+
+    feat(shell): add custom titlebar and command palette for conversation dialog
+    
+    Introduce a shell toolbar webview with provider tabs, window controls, and a
+    command palette (Ctrl/Cmd+P) for switching providers. Refactor window layout to
+    support a custom titlebar and update related backend logic and permissions.
+
+[33mcommit 373e1f0cb33e56bb0335e3977a4cdf0c1f5fa3b4[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri Apr 24 18:25:21 2026 +0200
+
+    feat(ui): add provider switcher with new window support to chat dialog
+    
+    Replace AI provider dropdown in ConversationDialogApp with a new
+    provider switcher component supporting "open in new window" for both
+    Promptheus and external providers. Add backend support for opening new
+    conversation dialog windows.
+
+[33mcommit 0a69feb18fcb7d5c022962f28b155dc213ada8c6[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri Apr 24 18:09:19 2026 +0200
+
+    feat(dialog): host conversation-dialog and provider webviews in single window
+    
+    Implement multi-webview hosting for conversation-dialog and provider views.
+    Add capability file audit to prevent IPC grants to provider webviews.
+    Update window management and geometry handling for hosted webviews.
+
+[33mcommit 7210b56a15a5c9f1b42efc102f22766b02ef202d[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri Apr 24 17:34:45 2026 +0200
+
+    feat(ai_webview): add AI provider webview integration with toolbar and menu
+    
+    Implement backend and frontend support for opening, switching, and managing
+    AI provider webviews, including a toolbar for provider selection and a
+    dropdown menu in the conversation dialog.
+
+[33mcommit 09b09a8aaad102c2a365ea9921712edab295c68b[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri Apr 24 00:00:01 2026 +0200
+
+    feat(settings): add settings dialog with model management UI
+
+[33mcommit 914c007d7142f92a4642dcc48d3203aa33f6a04d[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 23 23:40:40 2026 +0200
+
+    feat(dialog): add support for opening a new chat from context menu
+
+[33mcommit e7dad6b2427379019262dbe292e8891ef499cf26[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 23 23:38:23 2026 +0200
+
+    refactor(settings): move chat prompt fields to prompt_base section
+
+[33mcommit 9a5b1c0fb347ef982bb0b0419974a3360c695760[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 23 20:21:06 2026 +0200
+
+    refactor(settings): migrate to surface-based model config schema
+    
+    Replace flat model selection and parameters with a nested surfaces
+    structure in settings, update backend and frontend to use surface-based
+    APIs, and migrate legacy settings.json files automatically.
+
+[33mcommit 0904c457257e0b3e20d65ee42b7bd3246fd0ea68[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 23 20:05:05 2026 +0200
+
+    feat(text-preview): add copy button to toolbar and remove legacy env fields
+    
+    Add a copy-to-clipboard button to the text preview editor toolbar. Remove
+    legacy api_key_env and api_key_source fields and related migration logic.
+
+[33mcommit 66b36f0657ab5f7c85942e57f59d8896eb9126ee[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 23 16:03:34 2026 +0200
+
+    feat(ai): add model capabilities API and reasoning support detection
+    
+    Introduce a backend API to query model capabilities, including reasoning
+    modes, and update the frontend to use this API for determining available
+    reasoning levels. Remove hardcoded model lists and logic from the
+    frontend.
+
+[33mcommit 26252a93b6d4d6a92c93c6d5daf770feca11e468[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 22 19:07:18 2026 +0200
+
+    style(prompt): unify bubble and tool group styles, update ThinkingBlock UI
+
+[33mcommit 9d3ca8b32c7b7f0ff5944406e204adacb47dad54[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 22 18:48:18 2026 +0200
+
+    feat(text-preview): support multiple text preview windows
+    
+    Allow opening multiple text preview windows with unique labels based on
+    content. Refactor pending text handling to use a map keyed by window
+    label. Dynamically create text preview windows instead of predefining
+    them. Update geometry save/restore and pending text retrieval to be
+    label-aware. Update capabilities to match new window labels.
+
+[33mcommit 679fc17e7193586072c1c32c0b04db5676fee2ac[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 22 16:34:04 2026 +0200
+
+    feat(ui): improve notification toasts and Linux compatibility
+    
+    Refactor toast event handling, add Linux-specific class and styles,
+    adjust toast width, and update notification messages. Set
+    expand/gap props for Toaster and add tag_audio_events param to
+    transcription form.
+
+[33mcommit c753a2cfd1f2c9a9aa00e3b473a822054aa34cc4[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 22 00:10:53 2026 +0200
+
+    style(ui): adjust toast container offsets and positioning
+
+[33mcommit 596d96e6c1f2a8a19413f1c4990628866adf1b51[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 21 23:54:12 2026 +0200
+
+    feat(notification): migrate notification UI to Svelte with svelte-sonner
+
+[33mcommit 847f5b61df4a14778e518afb4042b0e85bb3d722[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 21 18:29:30 2026 +0200
+
+    refactor(ai): rewrite OpenAI stream chunk processing for clarity and testability
+
+[33mcommit 02ccf1bea97dd9030e980a7e73f5a8055bec525e[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 21 00:03:26 2026 +0200
+
+    chore: add MIT license and update tauri config schema path
+
+[33mcommit 9276a652f51b0e7c4049d4f6bc84cb7cce3bdfad[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 19 01:17:38 2026 +0200
+
+    feat(prompt): add Shift+Ctrl/Cmd+V to paste clipboard text or image
+
+[33mcommit 2b1fd0814b79c27ce4d5b4cd4626ca8270664a2d[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 20 21:55:06 2026 +0200
+
+    feat(settings): add launch at startup option with autostart integration
+
+[33mcommit bdf341bd25c2f227472b55949a1d9c93faa0e791[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 20 21:24:14 2026 +0200
+
+    fix(ui): adjust notification timing and transitions for Linux compatibility
+
+[33mcommit 7744f8f6b313283b58c33a4f54a4131cf2189d07[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 16 00:11:16 2026 +0200
+
+    feat(mac): add microphone entitlements and usage description for macOS
+
+[33mcommit 47906df6d79b451d14a7f684518d2eafd63df112[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri Apr 17 16:53:21 2026 +0200
+
+    feat(speech): add ElevenLabs STT provider and keyterms support
+
+[33mcommit 7e877b307237898e1495ecb3e6a533c061c0aac8[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 16 20:09:12 2026 +0200
+
+    refactor(settings): unify speech-to-text models with main models list
+    
+    Move speech_to_text_model to reference a model id of type 'stt' in models.
+    Remove SpeechToTextModel struct and related update_speech_model command.
+    Update config validation, migration, and all usages to use ModelConfig with
+    type 'stt'. Adjust tests, Svelte types, and settings service accordingly.
+
+[33mcommit d6aafa887bdd1b34a92d5724efe6b7cd09881c5d[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 16 20:05:12 2026 +0200
+
+    feat: improve skill parsing and window focus, sync input images and attachments
+    
+    - Add dialog::focus_window for better window focusing, use in text preview
+    - Update skill parsing to ignore unregistered skills, add related tests
+    - Sync input_images and input_text_attachments in conversation store
+    - Handle errors in openPreview in TextChipBar.svelte
+    - Add group: None in config and execution test models
+
+[33mcommit c54ae1a05cc8322e5550af3a267344972e460ee2[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 15 18:29:16 2026 +0200
+
+    refactor(prompt): redesign chat bubbles and remove CollapsibleSection usage
+
+[33mcommit 78c8165f7d9f1575deea9ed673d9f7a85bbc966f[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 14 22:53:12 2026 +0200
+
+    feat(prompt): enable editing and removing attachments in user bubbles
+    
+    Allow adding/removing text attachments and images to user messages via
+    paste and UI controls. Update store and components to support these
+    actions.
+
+[33mcommit 56f3fd9c207b373065b0b0371e6ad5c21ee1097f[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 14 21:57:29 2026 +0200
+
+    feat(speech): add language and prompt support to transcription
+    
+    Add `language` and `prompt` fields to speech-to-text model config and API
+    calls. Update settings and config service to support `stt_prompt` file.
+    Refactor input validation to use `hasUserContent` helper.
+
+[33mcommit 0b49fbf913a4afea4c062c9b09862b2d6396aec6[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 13 20:58:42 2026 +0200
+
+    feat(mcp): load shell env for MCP, emit mcp-ready, refresh tools in UI
+    
+    Add shell_env service to load and cache login shell environment. Resolve
+    MCP server commands using shell PATH. Emit "mcp-ready" event after MCP
+    startup and update InputArea to refresh MCP tools when this event fires.
+
+[33mcommit 5d3fce32d8d5ffac54857e9ad4531c815062e1f5[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 13 18:54:14 2026 +0200
+
+    fix(paste): prioritize plain text over images on paste
+    
+    Insert plain text immediately if present and only handle images if
+    there is no text in the clipboard. Adjust AttachmentChip badge size for
+    small variant.
+
+[33mcommit 0381acdabb83e631494770b963ac09d8b8b2bb42[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 12 20:13:14 2026 +0200
+
+    feat(prompt): add rename and delete for conversation tabs
+    
+    Implement context menu for renaming and deleting tabs in TabSidebar,
+    including confirmation dialog for deletion. Add backend support for
+    deleting history entries and update title with timestamp. Make
+    AssistantBubble and UserBubble text unselectable except for message
+    content.
+
+[33mcommit bf502fbcc450ad36c697ff4f2bd99561cf6dda67[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 12 18:29:25 2026 +0200
+
+    feat(ui): add model grouping and group headers to model selector
+    
+    Add optional group field to ModelConfig and update ModelSelector to
+    display models grouped by group or provider, with group headers in the
+    dropdown. Update context menu to initialize group as null. Remove check
+    icons from model and reasoning selectors. Refine tool chip and attach
+    menu styles and interactions.
+
+[33mcommit 8dcd1879fdf31b9f9dbc5dcc4f22c667ebef97da[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 12 17:59:07 2026 +0200
+
+    feat(ui): show per-turn and total query duration in conversation history
+    
+    Add query_duration to conversation nodes and display it in assistant
+    bubbles and history rows. Remove web search provider switch in input
+    area and menu; web search tools are now toggled directly.
+
+[33mcommit 487d1f550ff7570a1a4a795f0303c2ff2a23b9f8[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 12 11:58:51 2026 +0200
+
+    refactor(execution): move tool call result handling into async block
+    
+    Handle updating tool call status and sending events inside each async
+    task instead of after join_all. Update AppState to store mcp as Arc.
+    Change OpenAI response event logging to trace level. Fix ToolCallItem
+    elapsed time display order.
+
+[33mcommit 7bc3ecbbb6682c3c2646ee7fbbf44053b6d9e382[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 12 01:10:51 2026 +0200
+
+    feat(mcp): add configurable tool timeouts and update error handling
+    
+    - Allow per-tool and server-wide timeout configuration (default 180s)
+    - Update error messages to include timeout duration
+    - Adjust UI ToolChip and AttachMenu button sizing and hover behavior
+
+[33mcommit 9713f548dca26ff3db6adaae8b3426561abb16ec[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 12 01:01:11 2026 +0200
+
+    feat(prompt): add XML web search result rendering and tool selection UI
+    
+    - Add SearchResultsRenderer and XmlNodeRenderer for XML web search results
+    - Replace "builtin_web_search" with "web_search" throughout codebase
+    - Update AttachMenu and InputArea to support tool selection and chips
+    - Remove legacy MCP env_inherit config and related migration/tests
+    - Refactor MCP tool registry to use qualified tool names
+    - Update stores and execution logic for new tool selection model
+
+[33mcommit 4181770b6eea1244bee127dc8604616e9807c405[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 11 23:13:58 2026 +0200
+
+    fix(prompt): improve JsonNode expand logic and fix MarkdownRenderer prop
+
+[33mcommit ca147a7f3b75173e7d8a0b06fe64052a246ac0f2[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 11 23:05:45 2026 +0200
+
+    feat(prompt): add ToolResultRenderer with rich JSON and envelope display
+    
+    Introduce ToolResultRenderer.svelte to render tool results as envelope,
+    JSON, or markdown/text, and add JsonNode.svelte for interactive JSON
+    viewing. Update ToolCallItem to use the new renderer for results.
+
+[33mcommit f721338a7323f975bb412b3d83964588f5a6c8a5[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 11 23:05:04 2026 +0200
+
+    refactor(settings): migrate to unified api_key field with env var support
+    
+    Remove api_key_env and api_key_source in favor of api_key supporting
+    "${ENV_VAR}" syntax for environment variable resolution. Update config
+    migration, validation, and all usages to use the new approach. Add
+    toolResult types and parser utility.
+
+[33mcommit ec783d388053f441cf848a8af386c5d5816bac57[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 11 22:35:20 2026 +0200
+
+    feat(tools): add per-tab tool selection and persist selected tools in settings
+    
+    - Introduce `selected_tools` to settings and tab state for flexible tool enablement.
+    - Replace `web_search_enabled` and `web_search_provider` with `selected_tools` array.
+    - Update prompt execution and UI logic to use selected tools per tab.
+    - Add config and settings support for persisting selected tools.
+    - Add env_resolve service for resolving environment variable references.
+
+[33mcommit 5f4ddafbd514d1227c876199b6c2576600aa5329[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 11 20:53:10 2026 +0200
+
+    feat(prompt,settings): add web search provider switch and env inheritance
+    
+    Add UI to select between built-in and MCP web search providers. Support
+    env_inherit in MCP server config to inherit environment variables, with
+    precedence for explicit values. Rename "web_search" tool to
+    "builtin_web_search" throughout codebase. Add tests for env merging.
+
+[33mcommit 6bc1e4ac63954b443552766675220c6632c9060c[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 11 14:30:30 2026 +0200
+
+    feat(mcp): spawn registry asynchronously and add e2e echo tool test
+
+[33mcommit e9c0139c93449edcc6e15a60a139d7c1374d3584[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 11 02:38:44 2026 +0200
+
+    feat(fs): add write_text_file command and enable SVG export via dialog
+
+[33mcommit 0f73f94b345a408ca2f48aac2812a5765fd37ed1[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 11 02:25:23 2026 +0200
+
+    feat(markdown): add Mermaid diagram rendering and controls
+    
+    Add mermaid.js for diagram rendering in MarkdownRenderer. Support
+    toggle between SVG and source, copy/save SVG, and improve code block
+    actions. Refactor icon usage to lucide-static.
+
+[33mcommit 80fc8ddcee0b1ca07fdceefe6ff8e635869b9e5c[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 11 01:41:50 2026 +0200
+
+    fix(mcp): prevent duplicate tools when merging server tool lists
+
+[33mcommit 01978cf29ba25fa3242b62270ddd4352c8bc1a12[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 11 01:18:55 2026 +0200
+
+    feat(ai): add MCP tool call support and message serialization
+    
+    Integrate MCP tools into AI completion streams, execute tool calls in
+    conversation, and extend ProcessedMessage to support tool_calls and
+    tool_call_id fields. Add serialization tests and MCP tool payload
+    conversion for providers.
+
+[33mcommit 05bcd5671823e5352ad451764e7f8b95b168d874[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 11 00:43:01 2026 +0200
+
+    feat(mcp): add MCP client and registry with rmcp tool server support
+    
+    Introduce McpClient and McpRegistry for managing MCP tool servers via the
+    rmcp crate. Update settings to support mcp_servers configuration and
+    wire registry into AppState. Add tool call event variant for arguments.
+
+[33mcommit 796493ec176627ec0cbbca50a20e8ed1633cebe0[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 11 00:16:34 2026 +0200
+
+    style(notification): improve toast wrapping and dynamic height calculation
+
+[33mcommit 5144bbe6fb2b10804b9a3c0a8e88e4d2383cb13c[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 11 00:09:20 2026 +0200
+
+    fix: update notification messages and ensure node cloning in conversation store
+
+[33mcommit b3d6ddc2f200a0e138a22946afa607463518e5bc[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri Apr 10 23:28:55 2026 +0200
+
+    feat(conversation): add live execution cancellation and update tool call statuses
+    
+    Implement cancelLiveExecution API and update tool_calls status to
+    completed, failed, or cancelled when execution ends, errors, or is
+    stopped. Integrate cancellation into conversation store and backend.
+
+[33mcommit 0c34a829933fba2a1e8824498a6fab9e55b98133[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri Apr 10 16:08:37 2026 +0200
+
+    style(hotkey): remove trace logging for hotkey events
+
+[33mcommit eada1e430bc3644f7c02ae3a364c4fa5a3561b7a[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 9 23:30:46 2026 +0200
+
+    refactor(conversation): remove redundant token counting logic
+
+[33mcommit 0a283883e709695c911a69662877eb63fc5c1a8b[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 9 23:04:07 2026 +0200
+
+    feat(conversation): enable abort and edit of in-progress message execution
+    
+    Add abortExecution and editAndRegenerate methods to allow users to abort
+    an in-progress assistant response, edit their previous message, and
+    regenerate the response. Update UI to support this flow and display
+    regenerate action when applicable. Also improve code block language
+    labels in markdown rendering. Add expand animation to FloatingPanel.
+
+[33mcommit bd75096ad69b0c777d0768b7ed6e7dad7b17f4a7[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 9 21:08:45 2026 +0200
+
+    feat(hotkey_handler): add detailed logging for hotkey events and actions
+    
+    Add trace-level logs for hotkey events and actions with explicit log
+    targets. Update log configuration to enable trace for hotkey handler.
+    feat(prompt): focus input area on click outside controls
+    
+    Add click handler to focus the input area when clicking outside buttons,
+    menus, and other interactive elements.
+
+[33mcommit 96e37ebf4289c9f10f2d3baab145c525c0d9ae09[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 9 00:06:37 2026 +0200
+
+    feat(ui): add undo and redo support to SkillEditable input area
+    
+    Implement undo/redo with keyboard shortcuts and an internal undo stack.
+    Update InputArea to reset undo stack when text is set programmatically.
+
+[33mcommit 24fe70df8981b117a8c7b18ea2a815a5ea34bf75[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 8 20:22:27 2026 +0200
+
+    fix(prompt_execution): clone skill_display_name before passing to history
+
+[33mcommit b191714f3a541df7e3cc325e07bcefb05e51d77b[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 8 20:14:45 2026 +0200
+
+    feat(speech): add cooldown after transcription and warn on early retry
+
+[33mcommit 5ac2616b60393562b1ad59eb27a91d6c1534aeb7[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 8 19:57:38 2026 +0200
+
+    feat(ui): add FloatingPanel component and refactor context menu panels
+
+[33mcommit 14ce938d68dcee39a34f2e86930b81beb74cc128[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 8 01:04:00 2026 +0200
+
+    feat(prompt-execution): add skill execution cancellation and UI feedback
+    
+    - Implement cancel_skill_execution and get_executing_skill_id Tauri commands
+    - Track executing skill ID and expose it to the UI
+    - Allow cancelling running skill from context menu
+    - Show visual feedback for executing skills and disable conflicting actions
+    - Update PromptExecutionService to support cancellation via watch channel
+
+[33mcommit cc32c7bfd4033cdc963f89646dd6e24aa8d41b31[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 7 23:31:20 2026 +0200
+
+    feat(notification): add CSS padding and support RUST_LOG for log levels
+    
+    Add padding to notification container in HTML and remove window margin
+    from Rust positioning logic. Update log plugin to parse RUST_LOG env var
+    for dynamic log level configuration.
+
+[33mcommit 7420da72d80ea34153beb705e293c1339bdbf16d[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 7 22:40:17 2026 +0200
+
+    fix(ui): update fallback labels and tab title, use null for skill fields
+
+[33mcommit a0445c8504bed90af2007cb1a2f8d41a77d13d8c[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 7 22:35:02 2026 +0200
+
+    refactor: remove default "Chat" title from new conversation dialogs
+
+[33mcommit 71613023103e313055d387e292a35348c417b607[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 7 22:27:52 2026 +0200
+
+    refactor: derive contextWindowSize from active model and adjust token bar spacing
+
+[33mcommit 176a04361863c8c23bf8426cf7379db19eca1a17[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 7 22:01:06 2026 +0200
+
+    feat(tokenizer): include tool payloads in token counting
+    
+    Add toolNames parameter to count_conversation_tokens and serialize
+    resolved tool payloads into the text for token calculation. Update
+    conversation store to pass toolNames when web search is enabled. Also,
+    auto-generate conversation title after first message.
+
+[33mcommit 2bb297901c22eccc1d4efcd3af93c775d1b3040a[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 7 21:49:21 2026 +0200
+
+    feat(openai,tools,ui): add tool call streaming for OpenAI completions
+    
+    Implement streaming tool call events in OpenAI completions, update
+    ToolRegistry to support web search as a function tool, and enhance
+    ThinkingBlock UI to auto-scroll live reasoning content.
+
+[33mcommit e9772aed09d10155d7f14dd62a44cfaa93f3d1be[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 7 21:26:07 2026 +0200
+
+    feat(speech): require minimum recording length and improve clipboard handling
+    
+    Enforce a minimum recording duration before transcription, refactor clipboard service to use app handle, and add Linux clipboard subprocess fallback.
+
+[33mcommit a628c7e16501847adb140c1e78448c103e2cf41f[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Apr 7 01:15:20 2026 +0200
+
+    feat: add reconnect-to-execution and quick action model selection
+    
+    - Implement reconnect_to_execution backend command and frontend logic to restore in-progress executions after reload.
+    - Add quick_action_default_model setting and UI for selecting quick action model in context menu.
+    - Track and display assistant thinking duration in conversation nodes and UI.
+
+[33mcommit d9b1e575a451ecd6899ca1ebf5c8ef70c042940f[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 6 23:26:53 2026 +0200
+
+    fix(markdown): correct displayedText derivation for streaming state
+
+[33mcommit 39ffc1eddfb99fbf7cb244a07382cc33ae8e0115[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 6 23:15:57 2026 +0200
+
+    feat(history): add paginated conversation list and update sidebar loading
+
+[33mcommit c7a53adbf37b5f832d911c012c48b6118769e2dc[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 6 22:25:32 2026 +0200
+
+    feat(prompt): improve tool call UX and web search toggle
+    
+    Add animated tool call groups with summary, running state, and transitions.
+    Move web search toggle to a dedicated button. Show "Generating" indicator
+    when processing tool results. Update model selector chip width. Store
+    cancelled assistant nodes in history.
+
+[33mcommit d8a09f2fc111dd8d143ceae2e79c1d1e7b2db116[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 6 21:21:24 2026 +0200
+
+    feat(prompt): group tool calls and show web search queries in UI
+    
+    - Group consecutive tool calls in assistant bubbles for clearer display.
+    - Show web search queries as output in tool call details.
+    - Add @tauri-apps/plugin-opener and open links with it in MarkdownRenderer.
+    - Adjust token count and model selector layout in InputArea.
+
+[33mcommit bff45f2f10bf0d92e9cfbaa901b27339293051fa[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 6 20:16:58 2026 +0200
+
+    feat(prompt): add web search toggle to input area and conversation state
+    
+    Enable toggling web search as a tool per conversation tab. Update UI to
+    show a Web Search option in the attach menu when supported by the model,
+    and pass tool overrides through prompt execution and backend. Add
+    web_search_enabled to TabState and conversation store.
+
+[33mcommit 2ea773b7dbed2d0152fbbe63c4d4a210b6f4aa27[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 6 19:53:20 2026 +0200
+
+    feat(ai): add tool call event streaming and web search tool support
+    
+    Introduce tool call event streaming in prompt execution and OpenAI
+    Responses provider. Add built-in web search tool with registry and
+    model config support for enabled tools.
+
+[33mcommit 1a25f9055343f23b565d633a69a30dd5aad36a9b[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 6 19:41:43 2026 +0200
+
+    feat(tooling): add tool call approval, rejection, and retry support
+    
+    Implement ToolConfirmationService in backend and expose commands for
+    approving, rejecting, and retrying tool calls. Update conversation store
+    and UI to handle tool call actions.
+
+[33mcommit 890aa870d54f7d8e74722ff18d46145587a45a92[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 6 19:35:49 2026 +0200
+
+    feat(prompt): render tool call markers as interactive components
+    
+    Parse tool call markers in assistant messages and render corresponding
+    ToolCallItem components. Add ToolCallGroup component for grouped display.
+    Expose activeToolCalls in conversation store and pass to AssistantBubble.
+
+[33mcommit 714cb9104cea26bbae565936bd3f489ca2243a4b[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 6 19:31:17 2026 +0200
+
+    feat(prompt): add tool call event handling and ToolCallItem component
+    
+    Implement tool call event support in conversation store and services.
+    Add ToolCallItem.svelte for displaying tool call status and actions.
+
+[33mcommit f394a82c3e0f5f6201422594d701d57e0079a2e2[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 6 19:24:39 2026 +0200
+
+    feat(ai): add ToolCall type and tool call tracking to conversation state
+
+[33mcommit a7472ff7c16290dd171c07badb5fe5870ec8dd51[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 6 19:20:09 2026 +0200
+
+    feat(ai): add ToolCall types and events to StreamEvent enum
+
+[33mcommit f2c63f0775456cc46dbac050801faa7b7e1cee78[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 6 17:19:12 2026 +0200
+
+    feat(skill): support per-skill model and parameter overrides
+    
+    Add `model` and `parameters` fields to skill definitions, allowing
+    skills to specify model selection and custom parameter overrides. Pass
+    these overrides through to AI providers, merging with base parameters
+    and supporting arbitrary extra fields. Validate parameters against
+    provider support and log warnings for unsupported ones.
+
+[33mcommit 1349668d97b36b4bb7cc4615bf452c3a0312fe7e[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 6 16:41:59 2026 +0200
+
+    feat(conversation): add error and cancelled fields to assistant nodes
+    
+    Display error banners and cancelled hints in AssistantBubble. Update
+    types, serialization, and history to support error and cancelled state.
+
+[33mcommit 47f5e3b5ed478e2c45ac8fc6a99ab548748a7d06[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Apr 6 16:00:27 2026 +0200
+
+    feat(image-preview): support dynamic sizing and positioning
+    
+    Increase max preview size to 800px, scale images to fit, and position
+    window near cursor within monitor work area. Add get_image_preview_work_area command.
+
+[33mcommit e064c862b06b75be88b71fbb74b31a64e4f771e4[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 5 23:51:46 2026 +0200
+
+    feat(ui): constrain preview window position and update chip bar variant
+    
+    Constrain image and text preview windows to monitor work area using
+    find_monitor_at. Pass "small" variant to TextChipBar and ImageChipBar in
+    InputArea. Add variant prop to TextChipBar and forward to AttachmentChip.
+    Adjust attachment row to use horizontal scrolling. Update logging in
+    openai_responses to log lengths and event types at appropriate levels.
+
+[33mcommit 313d73cf0243e1f54f7962e1b9b54075c5d48445[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 5 23:38:05 2026 +0200
+
+    feat(prompt): add Shift+Ctrl/Cmd+V to paste clipboard text
+    
+    Enable pasting clipboard text with Shift+Ctrl/Cmd+V using Tauri invoke in
+    InputArea. Improve textarea auto-resize to maintain scroll position and
+    visibility within scrollable parents.
+
+[33mcommit 26b08a8f007e16acf417d1e97da9ff79fd7e0bc5[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 5 23:00:37 2026 +0200
+
+    feat(conversation): initialize tabs from settings and improve tab naming
+    
+    Tabs now use default model and reasoning effort from settings on creation.
+    Tab names are null until set, and "New chat" is shown only in the sidebar UI.
+    Conversation titles are generated only if the tab name is null.
+
+[33mcommit 0185d2d6c37a3a3f89a20d940c7fdae1afa9d572[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 5 21:55:18 2026 +0200
+
+    feat(ai,ui): add streaming and display of assistant "thinking" explanations
+    
+    - Extend backend and protocol to stream "thinking" deltas alongside output.
+    - Add UI block to show assistant's reasoning while streaming and after completion.
+    - Track and display "thinking" content in conversation state and bubbles.
+    - Update tab sidebar to show draft status and improve tab management.
+
+[33mcommit 1c126abf4744ccd7a2fa823da2030518e5ede551[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 5 18:19:35 2026 +0200
+
+    feat(history): add model_id and reasoning_effort to conversation entries
+
+[33mcommit 3cfe1b3a2193002631f93fe873e93dcaca3acd99[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 5 17:45:28 2026 +0200
+
+    feat(ui): add model selector with reasoning level to prompt and menu
+    
+    Add ModelSelector component for choosing model and reasoning level in
+    InputArea and context menu. Wire up per-tab model and reasoning state,
+    update prompt execution and settings accordingly. Extend menu and types
+    to support models section.
+
+[33mcommit f267e0470e2867036c79845da0360810939b6507[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Apr 5 00:20:46 2026 +0200
+
+    feat(history): migrate to SQLite-backed history with image support
+    
+    Replace in-memory history with a SQLite implementation. Add support for
+    storing and restoring images in conversation history entries. Update
+    history-related commands, types, and Svelte stores to use the new
+    structure.
+
+[33mcommit 089e563a3893d6315a47d7a0fcfc402d6debd429[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 4 23:05:46 2026 +0200
+
+    feat(ui): improve skill highlighting and autocomplete in input area
+    
+    Replace contenteditable with textarea + overlay for input, add fuzzy
+    matching for skill autocomplete, and enhance skill token highlighting
+    with partial matches. Update skill detection logic in backend and UI.
+
+[33mcommit 0b931cc3a59ba6332ef0130645be86bbe5125b09[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 4 21:49:07 2026 +0200
+
+    feat(ai): track and expose token usage for completions
+    
+    Add prompt_tokens and completion_tokens to StreamEvent and conversation
+    nodes. Update backend and frontend to propagate and display token usage
+    data, and add commands for token counting. Extend known context windows.
+
+[33mcommit db8d28c0960ff2d5ef6f58f7b4400a9b368b70c0[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sat Apr 4 13:30:31 2026 +0200
+
+    feat: add token counting and context window size support
+    
+    Integrate token counting for text and images using native tokenizers.
+    Display token counts and context window size in editors and input areas.
+    Refactor context_section to environment_section throughout codebase.
+
+[33mcommit bc3f1f713cc2bdc9e2e763af2af05775008257e8[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri Apr 3 23:15:17 2026 +0200
+
+    refactor: rename prompt to skill and prompt-dialog to conversation-dialog
+    
+    Update all code, types, and docs to use "skill" instead of "prompt" and
+    rename prompt-dialog files and commands to conversation-dialog.
+
+[33mcommit 9f702b31ce52514925bb9495ca32c9d1630ca602[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri Apr 3 22:45:08 2026 +0200
+
+    refactor(prompt): remove legacy prompt migration and related types
+
+[33mcommit 9c35622224bffec2fdd17f48aec33cc8ccec1b2e[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri Apr 3 22:23:13 2026 +0200
+
+    feat(conversation): move skill parsing and message building to backend
+    
+    Shift skill input parsing and conversation message construction from
+    frontend to Rust backend. Remove unused skillComposer utility and update
+    conversation store to use new backend commands for skill resolution and
+    conversation execution. Add types and commands for image and node data.
+
+[33mcommit f87355ed4b3c1f03375ba200cff3822f8a56cfec[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri Apr 3 22:10:30 2026 +0200
+
+    refactor(dialog): centralize dialog window logic and geometry handling
+    
+    Extract dialog window creation, focus, and geometry persistence into a
+    shared DialogConfig and dialog service. Update context editor, history,
+    and prompt dialogs to use the new abstraction. Add geometry restore/save
+    for text preview window.
+
+[33mcommit 1ddd44e6df650b0c0d8e525d10651e23ed7fa699[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri Apr 3 19:15:11 2026 +0200
+
+    feat(prompt): track and display recent apps in context section
+    
+    Add recent_apps to AppState and context template, update system prompt
+    generation to include recent apps, and show conversation history in the
+    sidebar instead of open tabs. Remove tab close buttons and tab count badge.
+
+[33mcommit 1c2fcd3c9d7b4145fd52889b6d6afa0232631829[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Fri Apr 3 00:53:46 2026 +0200
+
+    feat(context): include active app name in system prompt and context
+    
+    Add platform-specific detection of the frontmost application and store its
+    name in AppState. Pass active_app to system prompt and context section
+    template builders to populate the {{active_app}} placeholder.
+
+[33mcommit fe62fab2ddd987b9a8a057aa16a812b81d0436c5[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 2 23:45:00 2026 +0200
+
+    test(history): add None for resolved_context_section in test cases
+
+[33mcommit 62d514ada88d4503de1ffd6f7820987ca9acc01b[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 2 23:42:28 2026 +0200
+
+    feat(history): persist and restore resolved context section per tab
+    
+    Add resolved_context_section to conversation history data and ensure it
+    is saved and restored per tab. Update backend and store logic to support
+    seeding and releasing conversation context for each tab.
+
+[33mcommit 3509c68f28b8b2031d1ef52426278fb56759edf9[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 2 23:35:56 2026 +0200
+
+    feat(context): add persistent context section and about me support
+    
+    Introduce context_section and about_me templates, update system prompt
+    composition, and add conversation context caching with time refresh logic.
+    Update input format guide and image labeling for context images.
+
+[33mcommit c0ad2450b97087bc82a273dd5c8fc268a06c073d[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 2 23:04:59 2026 +0200
+
+    feat(prompt): improve skill input UX and tab handling
+    
+    - Add open-for-skill event to prompt dialog for skill-based tab creation
+    - Track pristine input per tab to detect clean state and reuse tabs
+    - Parse/display skill XML as slash commands in user bubbles and history
+    - Disable context menu items during speech transcription
+    - Show turn count and last activity in tab sidebar
+    - Refactor AI service to use Arc for thread safety
+    - Add is_transcribing state to speech service and context menu
+    - Fix InputArea shift key handling and SkillEditable highlighting
+    - Set HTTP timeouts for OpenAI and speech requests
+
+[33mcommit 97679d513a3f01ff44b8d674d3d06b91a58c59ca[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 2 02:10:06 2026 +0200
+
+    style(context-menu): update chat row selection and button styles
+
+[33mcommit e792a9bf0d8ba2b8e23f5fb0129b63f0ecededd0[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Thu Apr 2 01:59:27 2026 +0200
+
+    refactor(skills): centralize skills state in skills.svelte store and update usage
+
+[33mcommit 6ab6fe7770a712d25704ec429fbc1fdb1aa3f172[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 1 23:23:14 2026 +0200
+
+    feat(menu): add dedicated Chat section with voice input to context menu
+
+[33mcommit 81d91c7b2122ae65b1323e8e960c5f8bca2f218e[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 1 23:22:43 2026 +0200
+
+    feat: add conversation title generation and voice input dialog integration
+    
+    - Add conversation title model/prompt settings and title field to history
+    - Implement title generation using AI model on first user message
+    - Support updating history entry titles
+    - Enable voice input to open prompt dialog with initial text and auto-send
+    - Refactor context menu and prompt dialog UI for new conversation and voice input
+    - Centralize skill highlighting logic for user input
+
+[33mcommit 810e58e5b6d8844be9e27e0b96619a7bcd071130[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 1 18:51:33 2026 +0200
+
+    feat(history,ui,menu): add quick action history, improve context menu and editors
+    
+    - Add `quick_action` flag to history entries and only show quick actions in context menu
+    - Add copy button for transcriptions in history dialog
+    - Refine context menu window focus/positioning and suppress-close logic
+    - Unify context/image editor toolbars and improve image chip display
+    - Add context clear button and confirmation
+    - Fix parameter naming in history/services for consistency
+    - Improve notification stacking and window anchoring on Linux
+    - Update Tauri capabilities and Linux focus handling
+    - Various UI/UX tweaks in editors, context, and history rows
+
+[33mcommit e436cc1f2d3477bf99a78db2ecdbf549f7c43241[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 1 00:43:07 2026 +0200
+
+    feat(history): add execution history dialog with pagination and restore
+    
+    Add a new history dialog window displaying execution history with
+    pagination, entry details, and restore support. Integrate dialog opening
+    from context menu and persist window geometry and page size.
+
+[33mcommit 85b95251d142b54a13bcc8285a43c5816f77c9b2[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Wed Apr 1 00:25:40 2026 +0200
+
+    feat(ui): add persistent UI state, improved dialog/dock handling, and skill autocomplete
+    
+    - Add DockManager for dialog window tracking and macOS dock activation policy
+    - Add UiStateService for persistent UI state (window geometry, etc.)
+    - Add hide_dialog_window command and use it in image/text preview apps
+    - Add skill autocomplete and highlighting via SkillEditable component
+    - Refactor InputArea and UserBubble to use SkillEditable and attachment chips
+    - Improve context menu positioning and payload with work area info
+    - Rename is_conversation to is_multi_turn in history model and API
+    - Extract monitor utilities and update related commands
+    - Update context menu with last interaction open action and improved layout
+
+[33mcommit 23ba215e3cdb038bb57fe293de22fdb10f4be77d[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Mar 31 17:27:46 2026 +0200
+
+    fix(notification,menu,ui): popraw wyświetlanie i przezroczystość okien na Linuksie
+    
+    Dodaj ustawianie GTK window opacity dla powiadomień na Linuksie oraz popraw
+    parametry okien (focus, rozmiar, widoczność). Ulepsz przewijanie do
+    zaznaczonego elementu w menu kontekstowym i autouzupełnianiu. Dodaj brakujący
+    input do notification.html w konfiguracji Vite.
+
+[33mcommit a11175a94cccee033f007ba0b0dd73414bb09e13[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Mar 31 01:58:07 2026 +0200
+
+    feat: add input format guide and show Chat button in context menu
+    
+    Include input_format_guide.md in config, append its content to system prompts,
+    and add a Chat button to the prompts section of the context menu.
+
+[33mcommit 56fb744ebbf6c631e143e94958acbc72db03eb2a[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Mar 31 01:48:57 2026 +0200
+
+    feat(prompt): add text attachment support with preview window
+    
+    Enable pasting large text as attachments, display them as chips,
+    and provide a dedicated text preview/edit window. Update conversation
+    store, UI components, and backend commands to handle text attachments.
+
+[33mcommit 35eed2880ff1f4ae325f245c613ef1de6b1441e1[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Tue Mar 31 01:20:56 2026 +0200
+
+    feat(skills): migrate prompts to skills and add skill-based execution
+    
+    Replace prompt system with skill-based architecture. Prompts are migrated
+    to skills on startup. Add skill loading, listing, and execution logic in
+    Rust and Svelte. Update menu, input, and conversation handling to use
+    skills. Add slash command autocomplete for skills in input area.
+
+[33mcommit 6e3142cce6b25786ce014afaefcd42ef52bd4669[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Mar 30 19:46:47 2026 +0200
+
+    feat(ui): dodaj auto-rozszerzanie textarea i obsługę wklejania obrazów
+    
+    Textarea w polach wejściowych automatycznie dopasowuje wysokość do treści.
+    Obsługa wklejania obrazów działa zarówno z plików, jak i przez arboard.
+    Dodano przycisk info z opisem promptów w menu kontekstowym.
+    Poprawiono nawigację klawiaturą w menu kontekstowym.
+    Ujednolicono styl chipów i sekcji.
+
+[33mcommit ef663fb81f2fa0881ae24c3462cbe9c4c1405cbe[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Mar 30 18:35:10 2026 +0200
+
+    feat(context-menu): add numbered prompt shortcuts with shift for voice input
+    
+    Number keys now target only prompt items (not all navigable items),
+    support multi-digit input with 200ms debounce, shift+number for
+    speech recording, shifted chars (!@#$%^&*()), and visual number
+    prefixes on prompt items. Also enlarge speech-to-text mic icon.
+
+[33mcommit 309071093b7620ee6ce03365ca5314ee16f9722a[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Mar 30 18:06:55 2026 +0200
+
+    feat(ui): add Chip component and improve context and bubble editing
+    
+    - Introduce reusable Chip component for context and history chips
+    - Enable per-item removal for context text and images
+    - Refine textarea and editor styling for context and bubbles
+    - Add copy button to user bubble actions
+    - Update speech menu icon and state handling
+    - Adjust context save logic to use appendContext
+
+[33mcommit 9908098681bc6dbef4b1f4d7e32607a02f2e66b9[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Mar 30 01:33:02 2026 +0200
+
+    feat(context): improve error handling and allow window close
+    
+    Add error message display on save failure, snapshot state before save,
+    and log errors for clipboard image and context save. Allow window close
+    capability in Tauri config. Update context image functions to use
+    mediaType parameter.
+
+[33mcommit 1930b5c3262c23c317fb00bb60a511ff62aa593e[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Mon Mar 30 01:25:20 2026 +0200
+
+    feat(context): enable image removal and add voice input to context menu
+    
+    Allow users to remove individual images from context via the UI. Add a
+    voice input button to prompt items in the context menu, with recording
+    state handling and UI feedback. Refactor context handling to support
+    multiple images and update related components and tests.
+
+[33mcommit 2f46530d3ef38f58de1cd187a55b4c82049ee030[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Mar 29 23:54:39 2026 +0200
+
+    feat(ui): add image preview animation and improve image chip bar styling
+
+[33mcommit f418ce036be080c3020757a37e3ad83c1005e193[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Mar 29 23:35:20 2026 +0200
+
+    feat(speech): add speech-to-text menu item and prompt execution integration
+
+[33mcommit 8509a01844d1362820e474d64990998130ad647a[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Mar 29 23:21:32 2026 +0200
+
+    feat(speech): add speech-to-text service with audio recording and transcription
+
+[33mcommit 0a1621c19f753cefea46406d61f6e8cb179fd9ca[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Mar 29 21:35:49 2026 +0200
+
+    feat(ui): add floating image preview window using Tauri webview
+    
+    Introduce a dedicated image preview window with Svelte UI, launched from
+    ImageChipBar via a Tauri command. Removes inline preview popup and related
+    styles.
+
+[33mcommit e8d71e66b6ecd06e4704d8a89c36dbb4861da607[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Mar 29 21:29:19 2026 +0200
+
+    feat(ui): add clipboard image paste support and image preview popup
+    
+    Enable pasting images from clipboard in input areas using getClipboardImage.
+    Add image preview popup to ImageChipBar with updated styles and controls.
+
+[33mcommit 2b44fa512e4c1900c5a023e24b88006e9020b1a7[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Mar 29 21:17:25 2026 +0200
+
+    feat(tray): update tray icon and add custom tray_icon assets
+    
+    Replace tray icon with new image, add tray_icon.png/svg, update icon
+    loading in setup_tray, and enable tauri image-png feature.
+
+[33mcommit 379eb3b9a6d7136e886e13891536255c81036d53[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Mar 29 21:03:15 2026 +0200
+
+    feat(context): add context editor window and UI component
+    
+    Introduce a dedicated context editor window with a Svelte UI for editing
+    context text and images. Add ContextEditor component, context-editor
+    entrypoint, Tauri command, and menu integration. Refactor context menu
+    actions and update settings reload to refresh hotkeys.
+
+[33mcommit 976c2aea95713cbba7e2d909dba4c234ddc529fa[m
+Author: Filip Cudny <filip96zx@gmail.com>
+Date:   Sun Mar 29 20:11:35 2026 +0200
+
+    style(ui): update sidebar background and fix code block copy button hover

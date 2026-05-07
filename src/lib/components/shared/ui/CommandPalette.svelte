@@ -24,6 +24,20 @@
     body: Snippet;
     footer?: Snippet;
   } = $props();
+
+  let bodyEl: HTMLDivElement | undefined = $state();
+  let pinnedBodyH = $state<string | null>(null);
+
+  $effect(() => {
+    if (!open) pinnedBodyH = null;
+  });
+
+  function captureBodyHeight() {
+    if (pinnedBodyH !== null || !bodyEl) return;
+    const h = bodyEl.offsetHeight;
+    if (h < 1) return;
+    pinnedBodyH = `${h}px`;
+  }
 </script>
 
 {#if open}
@@ -49,13 +63,16 @@
         {placeholder}
         autocomplete="off"
         spellcheck="false"
+        onbeforeinput={captureBodyHeight}
       />
       {#if headerExtras}{@render headerExtras()}{/if}
     </div>
     <div
+      bind:this={bodyEl}
       class="palette-body"
       role="listbox"
-      style="--palette-body-h: {bodyMaxHeight}"
+      data-pinned={pinnedBodyH ? "" : undefined}
+      style="--palette-body-h: {bodyMaxHeight}; {pinnedBodyH ? `--palette-body-pin: ${pinnedBodyH};` : ''}"
     >
       {@render body()}
     </div>
@@ -144,8 +161,9 @@
     max-height: var(--palette-body-h);
   }
 
-  :global([data-platform="linux"]) .palette-modal.window-variant .palette-body {
-    height: var(--palette-body-h);
+  :global([data-platform="linux"]) .palette-modal.window-variant .palette-body[data-pinned] {
+    min-height: var(--palette-body-pin);
+    max-height: var(--palette-body-pin);
   }
 
   .palette-footer {
