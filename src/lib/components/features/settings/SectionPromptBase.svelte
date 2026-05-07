@@ -1,56 +1,75 @@
 <script lang="ts">
+  import SettingsSection from "./SettingsSection.svelte";
   import PromptEditor from "./PromptEditor.svelte";
+  import PromptTabs from "./PromptTabs.svelte";
+  import type { PromptKind } from "$lib/services/prompts";
+
+  type TabId = Extract<PromptKind, "system" | "about_me" | "environment" | "input_format">;
+
+  const TABS: ReadonlyArray<{ id: TabId; label: string; description: string }> = [
+    {
+      id: "system",
+      label: "System",
+      description: "Top-level instructions sent as the assistant's system role.",
+    },
+    {
+      id: "about_me",
+      label: "About me",
+      description: "Long-form context about you. Appended to every conversation's system message.",
+    },
+    {
+      id: "environment",
+      label: "Environment",
+      description:
+        "Per-conversation snapshot built when chat starts. Use placeholders for dynamic values.",
+    },
+    {
+      id: "input_format",
+      label: "Input format",
+      description:
+        "Tags and conventions the model should expect in user messages (context, pasted text, images, skills).",
+    },
+  ];
+
+  let active = $state<TabId>("system");
+  const activeTab = $derived(TABS.find((t) => t.id === active) ?? TABS[0]);
 </script>
 
-<div class="section-prompt-base">
-  <header class="section-head">
-    <h2>Prompt Base</h2>
-    <p class="hint">Templates that build the system message of every chat conversation.</p>
-  </header>
-
-  <PromptEditor
-    kind="system"
-    description="Top-level instructions sent as the assistant's system role."
-  />
-  <PromptEditor
-    kind="about_me"
-    description="Long-form context about you. Appended to every conversation's system message."
-  />
-  <PromptEditor
-    kind="environment"
-    description="Per-conversation snapshot built when chat starts. Use placeholders for dynamic values."
-  />
-  <PromptEditor
-    kind="input_format"
-    description="Tags and conventions the model should expect in user messages (context, pasted text, images, skills)."
-  />
-</div>
+<SettingsSection
+  title="Prompt Base"
+  hint="Templates that build the system message of every chat conversation."
+>
+  {#snippet body()}
+    <div class="prompt-base-body">
+      <PromptTabs tabs={TABS.map((t) => ({ id: t.id, label: t.label }))} bind:active />
+      <div class="editor-wrap" class:wide={activeTab.id === "environment"}>
+        {#key activeTab.id}
+          <PromptEditor kind={activeTab.id} description={activeTab.description} />
+        {/key}
+      </div>
+    </div>
+  {/snippet}
+</SettingsSection>
 
 <style>
-  .section-prompt-base {
-    padding: var(--space-8);
+  .prompt-base-body {
     display: flex;
     flex-direction: column;
-    gap: var(--space-8);
-    overflow-y: auto;
+    gap: var(--space-6);
+    flex: 1;
+    min-height: 0;
   }
 
-  .section-head {
+  .editor-wrap {
+    flex: 1;
+    min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    width: 100%;
+    max-width: 760px;
   }
 
-  h2 {
-    margin: 0;
-    font-size: var(--font-size-lg);
-    font-weight: var(--font-weight-semibold);
-    color: var(--text-primary);
-  }
-
-  .hint {
-    margin: 0;
-    font-size: var(--font-size-sm);
-    color: var(--text-muted);
+  .editor-wrap.wide {
+    max-width: 960px;
   }
 </style>

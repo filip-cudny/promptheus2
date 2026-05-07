@@ -4,6 +4,7 @@ import type {
   SkillCount,
   TimeRangePreset,
 } from "$lib/types/historySearch";
+import type { HistorySearchStore } from "$lib/stores/historySearch.svelte";
 
 export function formatActiveFilters(s: {
   query: string;
@@ -26,6 +27,63 @@ export function formatActiveFilters(s: {
   }
   if (s.timeRange !== "all") parts.push(`Time: ${timeRangeLabel(s.timeRange)}`);
   return parts.join(" · ");
+}
+
+export interface ActiveFilterChip {
+  key: string;
+  label: string;
+  remove: () => void;
+}
+
+export function getActiveFilterChips(s: HistorySearchStore): ActiveFilterChip[] {
+  const chips: ActiveFilterChip[] = [];
+  if (s.query.trim()) {
+    chips.push({
+      key: "query",
+      label: `“${s.query.trim()}”`,
+      remove: () => {
+        s.query = "";
+      },
+    });
+  }
+  if (s.typeFilter !== "all") {
+    chips.push({
+      key: "type",
+      label: typeLabel(s.typeFilter),
+      remove: () => {
+        s.typeFilter = "all";
+      },
+    });
+  }
+  if (s.statusFilter !== "all") {
+    chips.push({
+      key: "status",
+      label: capitalize(s.statusFilter),
+      remove: () => {
+        s.statusFilter = "all";
+      },
+    });
+  }
+  for (const id of s.skillFilter) {
+    const name = s.availableSkills.find((x) => x.skill_id === id)?.skill_name ?? id;
+    chips.push({
+      key: `skill-${id}`,
+      label: name,
+      remove: () => {
+        s.toggleSkill(id);
+      },
+    });
+  }
+  if (s.timeRange !== "all") {
+    chips.push({
+      key: "time",
+      label: timeRangeLabel(s.timeRange),
+      remove: () => {
+        s.timeRange = "all";
+      },
+    });
+  }
+  return chips;
 }
 
 export function timeRangeLabel(t: TimeRangePreset): string {

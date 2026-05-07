@@ -46,7 +46,9 @@
 
     const anchorRect = anchorEl.getBoundingClientRect();
     const panelHeight = panelEl.offsetHeight;
+    const panelWidth = panelEl.offsetWidth;
     const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
 
     const spaceBelow = viewportHeight - anchorRect.bottom;
 
@@ -62,7 +64,8 @@
     top = Math.max(4, Math.min(top, viewportHeight - panelHeight - 4));
 
     if (fitContent) {
-      const left = Math.max(4, anchorRect.left);
+      const maxLeft = Math.max(4, viewportWidth - panelWidth - 4);
+      const left = Math.max(4, Math.min(anchorRect.left, maxLeft));
       style = `top: ${top}px; left: ${left}px; right: auto; width: max-content;`;
     } else {
       style = `top: ${top}px`;

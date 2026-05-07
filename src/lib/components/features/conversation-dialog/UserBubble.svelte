@@ -162,8 +162,7 @@
 
   .user-bubble {
     padding: var(--space-7) var(--space-10);
-    background: var(--accent-bg-soft);
-    border: 1px solid var(--accent-border);
+    background: var(--user-bubble-bg);
     border-radius: var(--radius-2xl);
     box-sizing: border-box;
     user-select: none;

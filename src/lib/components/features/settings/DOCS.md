@@ -10,12 +10,13 @@ Design principles are codified in [`migration/settings-ux.md`](../../../../../mi
 settings/
 ├── SettingsSidebar.svelte         # Left nav, exports SettingsSection union + SIDEBAR_ITEMS
 ├── SettingsContent.svelte         # Routes activeSection → Section component
+├── SettingsSection.svelte         # Shared shell (title + hint + actions / scrollable body / optional footer)
 ├── SectionModels.svelte           # Models section: list pane + editor pane
 ├── SectionAppearance.svelte       # Theme toggle
-├── SectionPromptBase.svelte       # System / about_me / environment / input_format prompts
-├── SectionSurfacePrompts.svelte   # Title generation + STT bias prompts
-├── PromptEditor.svelte            # Per-prompt editor (load/edit/autosave + Cmd+S)
-├── EnvPlaceholdersPanel.svelte    # Side panel of {{date}}/{{time}}/... chips for environment.md
+├── SectionPromptBase.svelte       # System / about_me / environment / input_format prompts (tabbed)
+├── SectionSurfacePrompts.svelte   # Title generation + STT bias prompts (tabbed)
+├── PromptEditor.svelte            # Per-prompt editor (load/edit/autosave + Cmd+S, no Save button)
+├── EnvPlaceholdersPopover.svelte  # On-demand popover of {{date}}/{{time}}/... chips for environment.md
 ├── ModelList.svelte               # Grouped model list, "Add" split-button (text/STT)
 ├── ModelEditor.svelte             # Single-model form: basic / connection / capabilities / parameters / danger
 ├── ParametersKnown.svelte         # Sliders + toggles for OpenAI-style known params
@@ -39,7 +40,7 @@ Surrounding pieces (not in this dir):
 3. Read state from `getSettingsStore()` — never `invoke("get_settings")` directly from a component.
 4. Write through `$lib/services/settings.ts` helpers; the store auto-refreshes on the backend's `settings-changed` event.
 
-Disabled sidebar items render with `tooltip: "Coming soon"` and are not clickable. Order in `SIDEBAR_ITEMS` is the user's mental model (General → Models → … → Advanced last), not alphabetical.
+Disabled sidebar items group under a "Coming soon" heading at the bottom of the nav (rendered smaller and faded), so the enabled section reads as a clean menu. Order in `SIDEBAR_ITEMS` is the user's mental model (General → Models → … → Advanced last), not alphabetical — the sidebar partitions by `enabled` while preserving that order. Active item is marked with a 2px left border in `--accent`, never a filled background, so the accent only signals "you are here" (the same single-accent rule as the conversation window: blue ≡ user/marker, never decoration).
 
 ### Persistence — auto-save with debounce
 
@@ -130,9 +131,17 @@ The dot/badge replaced an earlier yellow star (in the list) and `--warning`-colo
 
 ### Prompt editor
 
-`PromptEditor.svelte` is the single component for any prompt slot. It loads via `getPrompt(kind)`, autosaves on change with an 800 ms debounce, and supports `Cmd/Ctrl+S` for explicit save. The path field is read-only display (custom paths require manual JSON edit).
+`PromptEditor.svelte` is the single component for any prompt slot. It loads via `getPrompt(kind)`, autosaves on change with an 800 ms debounce, and supports `Cmd/Ctrl+S` to flush immediately. There is no Save button — the only persistence affordance is a single status dot in the title row (idle / dirty / saving / saved / error) plus a transient "saved" stamp that fades after a successful write. The file path is hidden behind a small `…` overflow next to the title (custom paths require manual JSON edit).
 
-Only `kind: "environment"` shows the side `EnvPlaceholdersPanel`. Clicking a chip inserts the token at the cursor in the textarea. Other prompts get a description that says they are sent verbatim — no placeholder substitution happens for them.
+Only `kind: "environment"` shows the placeholders affordance: a `{ }` icon button in the title row opens an `EnvPlaceholdersPopover` anchored to the button. Clicking a chip inserts the token at the cursor in the textarea and closes the popover. Other prompts get a description that says they are sent verbatim — no placeholder substitution happens for them.
+
+### Section shells & tabbed prompts
+
+`SettingsSection.svelte` is a shared scaffold every section can use: optional title + hint + actions header (with a thin `--border-faint` divider), a scrollable padded body, and an optional sticky footer. Use it for sections that have a "page" feel (`SectionPromptBase`, `SectionSurfacePrompts`); the models section keeps its own list+editor split layout but should still match `SettingsSection`'s padding rhythm where possible.
+
+`SectionPromptBase` and `SectionSurfacePrompts` use a tab strip in the section header — only one `PromptEditor` is mounted at a time and fills the available height. This replaces the old "stacked card-soup" layout where every prompt rendered a full-bordered card stacked vertically. Tabs are uppercase-tracked labels, active tab uses a 2px bottom border in `--accent` (mirrors the sidebar's left-border marker, single-accent rule).
+
+Editor body width is capped: `--prompt-editor-max-width` (760px for prose-style prompts, 960px for environment with its placeholders popover) keeps long prompts readable. Always prefer wrapping the editor in this max-width rather than letting the textarea fill arbitrary window sizes.
 
 Save flow goes through `$lib/services/prompts.ts` → backend `save_prompt` Tauri command → `ConfigService::write_prompt` → `PromptStore` (atomic tempfile + rename). Backend emits `prompt-changed` Tauri event after each save.
 

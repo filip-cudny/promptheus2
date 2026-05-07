@@ -38,6 +38,9 @@
 
   let { active = $bindable<SettingsSection>("models") }: { active: SettingsSection } = $props();
 
+  const enabledItems = SIDEBAR_ITEMS.filter((i) => i.enabled);
+  const comingSoonItems = SIDEBAR_ITEMS.filter((i) => !i.enabled);
+
   function select(item: SidebarItem) {
     if (!item.enabled) return;
     active = item.id;
@@ -47,20 +50,34 @@
 <Sidebar>
   <div class="sidebar-inner">
     <h1 class="sidebar-title">Settings</h1>
+
     <nav>
-      {#each SIDEBAR_ITEMS as item (item.id)}
+      {#each enabledItems as item (item.id)}
         <button
           class="sidebar-item"
           class:active={active === item.id}
-          class:disabled={!item.enabled}
-          title={item.enabled ? undefined : "Coming soon"}
-          disabled={!item.enabled}
           onclick={() => select(item)}
         >
           {item.label}
         </button>
       {/each}
     </nav>
+
+    {#if comingSoonItems.length > 0}
+      <div class="group-label">Coming soon</div>
+      <nav class="coming-soon">
+        {#each comingSoonItems as item (item.id)}
+          <button
+            class="sidebar-item disabled"
+            title="Coming soon"
+            disabled
+            onclick={() => select(item)}
+          >
+            <span class="label">{item.label}</span>
+          </button>
+        {/each}
+      </nav>
+    {/if}
   </div>
 </Sidebar>
 
@@ -76,11 +93,10 @@
 
   .sidebar-title {
     margin: var(--space-0) var(--space-8) var(--space-6);
-    font-size: var(--font-size-sm);
+    font-size: var(--font-size-base);
     font-weight: var(--font-weight-semibold);
-    letter-spacing: 0.6px;
-    text-transform: uppercase;
-    color: var(--text-disabled);
+    letter-spacing: 0;
+    color: var(--text-secondary);
   }
 
   nav {
@@ -89,29 +105,50 @@
   }
 
   .sidebar-item {
+    position: relative;
     display: block;
     width: 100%;
     text-align: left;
     padding: 7px var(--space-8);
     background: transparent;
     border: none;
+    border-left: 2px solid transparent;
     color: var(--text-secondary);
     font: inherit;
     font-size: var(--font-size-base);
     cursor: pointer;
+    transition: background var(--motion-fast) var(--ease-default),
+      color var(--motion-fast) var(--ease-default),
+      border-color var(--motion-fast) var(--ease-default);
   }
 
   .sidebar-item:hover:not(.disabled):not(.active) {
     background: var(--surface-overlay-faint);
+    color: var(--text-primary);
   }
 
   .sidebar-item.active {
-    background: var(--accent-bg-soft);
-    color: var(--accent);
+    background: var(--surface-overlay-faint);
+    color: var(--text-primary);
+    border-left-color: var(--accent);
   }
 
   .sidebar-item.disabled {
     color: var(--text-faint);
     cursor: default;
+    padding-block: 5px;
+  }
+
+  .group-label {
+    margin: var(--space-4) var(--space-8) var(--space-2);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: var(--tracking-label);
+    color: var(--text-faint);
+  }
+
+  .coming-soon .sidebar-item {
+    font-size: var(--font-size-sm);
   }
 </style>

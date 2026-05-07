@@ -122,85 +122,96 @@
   onclick={() => { if (!isTranscription) onOpen(entry); }}
   title={!entry.success && entry.error ? `Error: ${entry.error}` : isTranscription ? "" : "Open conversation"}
 >
-  <div class="entry-icon" class:icon-chat={isChat} class:icon-quick={!isChat}>
-    {#if isChat}
-      <MessagesSquare size={ICON_SIZE.md} />
-    {:else if entry.entry_type === "speech"}
-      <Mic size={ICON_SIZE.md} />
-    {:else}
-      <MessageSquare size={ICON_SIZE.md} />
-    {/if}
-    {#if !entry.success}
-      <span class="error-badge">
-        <CircleAlert size={ICON_SIZE.sm} />
-      </span>
-    {/if}
-  </div>
-
-  <div class="entry-body">
-    <div class="entry-header">
-      <span class="prompt-name">{@html highlightFor(displayName, matches, ["title", "skill_name"])}</span>
-      {#if turnCount}
-        <span class="turn-count">({turnCount} turns)</span>
-      {/if}
-      {#if totalDuration != null}
-        <span class="duration">{formatDuration(totalDuration)}</span>
-      {/if}
-      <span class="timestamp">{formatTimestamp(entry)}</span>
-      {#if isTranscription}
-        <button class="copy-btn" class:copied onclick={copyToClipboard} title="Copy transcription">
-          {#if copied}
-            <Check size={ICON_SIZE.md} />
-          {:else}
-            <Copy size={ICON_SIZE.md} />
-          {/if}
-        </button>
+  <div class="row-content">
+    <div class="entry-icon" class:icon-chat={isChat} class:icon-quick={!isChat} class:icon-error={!entry.success}>
+      {#if !entry.success}
+        <CircleAlert size={ICON_SIZE.md} />
+      {:else if isChat}
+        <MessagesSquare size={ICON_SIZE.md} />
+      {:else if entry.entry_type === "speech"}
+        <Mic size={ICON_SIZE.md} />
       {:else}
-        <span class="open-icon">
-          <SquareArrowOutUpRight size={ICON_SIZE.md} />
-        </span>
+        <MessageSquare size={ICON_SIZE.md} />
       {/if}
     </div>
-    {#if inputPreview.text}
-      <div class="input-preview">{@html highlightFor(inputPreview.text, inputPreview.matches, ["input_content"])}</div>
-    {/if}
-    {#if hasOutputMatch && outputPreview.text}
-      <div class="output-preview">
-        <span class="output-preview-icon"><CornerDownRight size={ICON_SIZE.sm} /></span>
-        <span class="output-preview-text">{@html highlightFor(outputPreview.text, outputPreview.matches, ["output_content"])}</span>
+
+    <div class="entry-body">
+      <div class="entry-header">
+        <span class="prompt-name">{@html highlightFor(displayName, matches, ["title", "skill_name"])}</span>
+        {#if turnCount}
+          <span class="turn-count">({turnCount} turns)</span>
+        {/if}
+        {#if totalDuration != null}
+          <span class="duration">{formatDuration(totalDuration)}</span>
+        {/if}
+        <span class="timestamp">{formatTimestamp(entry)}</span>
+        {#if isTranscription}
+          <button class="copy-btn" class:copied onclick={copyToClipboard} title="Copy transcription">
+            {#if copied}
+              <Check size={ICON_SIZE.md} />
+            {:else}
+              <Copy size={ICON_SIZE.md} />
+            {/if}
+          </button>
+        {:else}
+          <span class="open-icon">
+            <SquareArrowOutUpRight size={ICON_SIZE.md} />
+          </span>
+        {/if}
       </div>
-    {/if}
+      {#if inputPreview.text}
+        <div class="input-preview">{@html highlightFor(inputPreview.text, inputPreview.matches, ["input_content"])}</div>
+      {/if}
+      {#if hasOutputMatch && outputPreview.text}
+        <div class="output-preview">
+          <span class="output-preview-icon"><CornerDownRight size={ICON_SIZE.sm} /></span>
+          <span class="output-preview-text">{@html highlightFor(outputPreview.text, outputPreview.matches, ["output_content"])}</span>
+        </div>
+      {/if}
+    </div>
   </div>
 </button>
 
 <style>
   .entry-row {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--space-4);
+    position: relative;
+    display: block;
     padding: var(--space-4) var(--space-6);
-    background: var(--surface-elevated);
-    border: 1px solid var(--border-hard);
+    background: var(--surface-base);
+    border: 1px solid var(--border-faint);
     border-radius: var(--radius-xl);
     color: var(--text-primary);
     cursor: pointer;
     width: 100%;
     text-align: left;
     font: inherit;
+    transition:
+      background var(--motion-fast) var(--ease-default),
+      border-color var(--motion-fast) var(--ease-default),
+      box-shadow var(--motion-fast) var(--ease-default);
   }
 
   .entry-row:hover {
-    background: var(--surface-elevated);
+    background: var(--surface-overlay-faint);
     border-color: var(--border-default);
   }
 
-  .entry-row.error {
-    background: var(--danger-bg-soft);
-    border-color: var(--danger-border);
+  .entry-row:focus {
+    outline: none;
   }
 
-  .entry-row.error:hover {
-    background: var(--danger-bg-soft);
+  .entry-row:focus-visible {
+    background: var(--surface-overlay-faint);
+    border-color: var(--accent-border);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+
+  .row-content {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-4);
+    max-width: 760px;
+    margin-inline: auto;
   }
 
   .entry-icon {
@@ -209,20 +220,15 @@
     gap: var(--space-2);
     flex-shrink: 0;
     margin-top: var(--space-1);
-  }
-
-  .icon-chat {
     color: var(--text-disabled);
   }
 
   .icon-quick {
-    color: var(--accent);
+    color: var(--text-secondary);
   }
 
-  .error-badge {
+  .icon-error {
     color: var(--danger);
-    display: flex;
-    align-items: center;
   }
 
   .entry-body {

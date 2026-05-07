@@ -33,6 +33,7 @@
   --accent-bg: rgba(111, 160, 229, 0.35);
   --accent-border: rgba(111, 160, 229, 0.50);
   --accent-ring: rgba(111, 160, 229, 0.60);
+  --user-bubble-bg: rgba(111, 160, 229, 0.07);
 
   accent-color: var(--accent);
 
@@ -197,6 +198,7 @@
   --accent-bg     : rgba(59,109,191,0.25);
   --accent-border : rgba(59,109,191,0.40);
   --accent-ring   : rgba(59,109,191,0.50);
+  --user-bubble-bg: rgba(59,109,191,0.06);
 
   --tool-running-stripe: var(--accent);
   --tool-done-stripe   : transparent;

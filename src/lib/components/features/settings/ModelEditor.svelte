@@ -250,9 +250,9 @@
   ];
 
   const API_MODE_OPTIONS: { value: ApiMode | ""; label: string }[] = [
-    { value: "", label: "Auto" },
-    { value: "responses", label: "Responses" },
-    { value: "completions", label: "Completions" },
+    { value: "", label: "Auto (Responses API)" },
+    { value: "responses", label: "Responses (/v1/responses)" },
+    { value: "completions", label: "Chat Completions (/v1/chat/completions)" },
   ];
 
   const baseUrlPlaceholder = $derived(
@@ -423,6 +423,13 @@
             <option value={opt.value}>{opt.label}</option>
           {/each}
         </select>
+        <p class="helper">
+          Which OpenAI-compatible endpoint to call. <strong>Auto</strong> uses the newer Responses API
+          (<code>/v1/responses</code>) — required for built-in tools like web search and reasoning
+          summaries on GPT-5/o-series. Switch to <strong>Chat Completions</strong> if the Base URL
+          points to a provider that only implements <code>/v1/chat/completions</code> (most
+          OpenAI-compatible gateways: OpenRouter, vLLM, Ollama, Together, etc.).
+        </p>
       </div>
     {/if}
 
@@ -696,6 +703,21 @@
     font-size: var(--font-size-sm);
     color: var(--text-disabled);
     margin-top: var(--space-1);
+    line-height: 1.5;
+  }
+
+  .helper code {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    padding: 0 4px;
+    background: var(--surface-overlay-faint);
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+  }
+
+  .helper strong {
+    color: var(--text-secondary);
+    font-weight: var(--font-weight-semibold);
   }
 
   .danger-row {
