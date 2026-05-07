@@ -63,6 +63,41 @@ impl ModelCapabilities {
         Self::default()
     }
 
+    pub fn validate(&self) -> Result<(), String> {
+        match &self.reasoning {
+            ReasoningMode::Effort { allowed } => {
+                if allowed.is_empty() {
+                    return Err("reasoning.effort.allowed must not be empty".into());
+                }
+                let mut seen = std::collections::HashSet::new();
+                for level in allowed {
+                    if !seen.insert(*level) {
+                        return Err(format!(
+                            "reasoning.effort.allowed contains duplicate '{}'",
+                            level.as_str()
+                        ));
+                    }
+                }
+                Ok(())
+            }
+            ReasoningMode::BudgetTokens { min, max } => {
+                if *min == 0 {
+                    return Err("reasoning.budget_tokens.min must be > 0".into());
+                }
+                if *max == 0 {
+                    return Err("reasoning.budget_tokens.max must be > 0".into());
+                }
+                if min > max {
+                    return Err(format!(
+                        "reasoning.budget_tokens: min ({min}) must be <= max ({max})"
+                    ));
+                }
+                Ok(())
+            }
+            ReasoningMode::Unsupported | ReasoningMode::Toggle => Ok(()),
+        }
+    }
+
     pub fn accepts_effort(&self, value: &str) -> bool {
         match &self.reasoning {
             ReasoningMode::Effort { allowed } => {
@@ -148,5 +183,74 @@ mod tests {
         let caps = ModelCapabilities::minimal();
         assert!(!caps.accepts_effort("none"));
         assert!(!caps.accepts_effort("medium"));
+    }
+
+    #[test]
+    fn validate_effort_rejects_empty_allowed() {
+        let caps = ModelCapabilities {
+            reasoning: ReasoningMode::Effort { allowed: vec![] },
+        };
+        let err = caps.validate().unwrap_err();
+        assert!(err.contains("must not be empty"));
+    }
+
+    #[test]
+    fn validate_effort_rejects_duplicates() {
+        let caps = ModelCapabilities {
+            reasoning: ReasoningMode::Effort {
+                allowed: vec![Effort::Low, Effort::Medium, Effort::Low],
+            },
+        };
+        let err = caps.validate().unwrap_err();
+        assert!(err.contains("duplicate"));
+    }
+
+    #[test]
+    fn validate_budget_rejects_min_gt_max() {
+        let caps = ModelCapabilities {
+            reasoning: ReasoningMode::BudgetTokens { min: 64_000, max: 1024 },
+        };
+        let err = caps.validate().unwrap_err();
+        assert!(err.contains("min"));
+        assert!(err.contains("max"));
+    }
+
+    #[test]
+    fn validate_budget_rejects_zero() {
+        let caps = ModelCapabilities {
+            reasoning: ReasoningMode::BudgetTokens { min: 0, max: 64_000 },
+        };
+        assert!(caps.validate().is_err());
+        let caps = ModelCapabilities {
+            reasoning: ReasoningMode::BudgetTokens { min: 1024, max: 0 },
+        };
+        assert!(caps.validate().is_err());
+    }
+
+    #[test]
+    fn validate_passes_for_unsupported_and_toggle() {
+        assert!(ModelCapabilities::minimal().validate().is_ok());
+        assert!(ModelCapabilities {
+            reasoning: ReasoningMode::Toggle,
+        }
+        .validate()
+        .is_ok());
+    }
+
+    #[test]
+    fn validate_passes_for_full_effort_set() {
+        let caps = ModelCapabilities {
+            reasoning: ReasoningMode::Effort {
+                allowed: vec![
+                    Effort::None,
+                    Effort::Minimal,
+                    Effort::Low,
+                    Effort::Medium,
+                    Effort::High,
+                    Effort::XHigh,
+                ],
+            },
+        };
+        assert!(caps.validate().is_ok());
     }
 }

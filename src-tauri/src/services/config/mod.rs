@@ -16,7 +16,10 @@ use crate::services::env_resolve::resolve_env_refs;
 
 use defaults::{ensure_surface_defaults, validate};
 use loader::initialize_defaults;
-use migrator::{migrate_model_params, parse_and_migrate, InlinePromptWrite, LegacyFlatMdRename};
+use migrator::{
+    migrate_model_params, parse_and_migrate, sanitize_capabilities, InlinePromptWrite,
+    LegacyFlatMdRename,
+};
 
 pub use loader::load_env;
 
@@ -66,6 +69,7 @@ impl ConfigService {
         ensure_prompt_defaults(config_dir, &settings);
 
         migrate_model_params(&mut settings);
+        sanitize_capabilities(&mut settings);
         ensure_surface_defaults(&mut settings);
 
         validate(&settings)?;
@@ -105,6 +109,7 @@ impl ConfigService {
         ensure_prompt_defaults(&self.config_dir, &settings);
 
         migrate_model_params(&mut settings);
+        sanitize_capabilities(&mut settings);
         ensure_surface_defaults(&mut settings);
 
         validate(&settings)?;

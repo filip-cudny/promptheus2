@@ -80,6 +80,22 @@ pub(super) fn migrate_model_params(settings: &mut Settings) {
     }
 }
 
+pub(super) fn sanitize_capabilities(settings: &mut Settings) {
+    for model in &mut settings.models {
+        let Some(ref caps) = model.capabilities else {
+            continue;
+        };
+        if let Err(reason) = caps.validate() {
+            log::warn!(
+                "model '{}' (id={}): ignoring invalid capabilities — {reason}",
+                model.display_name,
+                model.id
+            );
+            model.capabilities = None;
+        }
+    }
+}
+
 fn has_legacy_fields(obj: &serde_json::Map<String, Value>) -> bool {
     const LEGACY_KEYS: &[&str] = &[
         "default_model",
@@ -532,6 +548,53 @@ mod tests {
         };
         migrate_model_params(&mut settings);
         assert!(settings.models[0].parameters.is_some());
+    }
+
+    #[test]
+    fn sanitize_capabilities_zeroes_invalid_effort_empty() {
+        use crate::models::capabilities::{ModelCapabilities, ReasoningMode};
+        let mut model = text_model_no_params("m1");
+        model.capabilities = Some(ModelCapabilities {
+            reasoning: ReasoningMode::Effort { allowed: vec![] },
+        });
+        let mut settings = Settings {
+            models: vec![model],
+            ..Default::default()
+        };
+        sanitize_capabilities(&mut settings);
+        assert!(settings.models[0].capabilities.is_none());
+    }
+
+    #[test]
+    fn sanitize_capabilities_zeroes_invalid_budget_min_gt_max() {
+        use crate::models::capabilities::{ModelCapabilities, ReasoningMode};
+        let mut model = text_model_no_params("m1");
+        model.capabilities = Some(ModelCapabilities {
+            reasoning: ReasoningMode::BudgetTokens { min: 100_000, max: 1024 },
+        });
+        let mut settings = Settings {
+            models: vec![model],
+            ..Default::default()
+        };
+        sanitize_capabilities(&mut settings);
+        assert!(settings.models[0].capabilities.is_none());
+    }
+
+    #[test]
+    fn sanitize_capabilities_keeps_valid_declarations() {
+        use crate::models::capabilities::{Effort, ModelCapabilities, ReasoningMode};
+        let mut model = text_model_no_params("m1");
+        model.capabilities = Some(ModelCapabilities {
+            reasoning: ReasoningMode::Effort {
+                allowed: vec![Effort::None, Effort::Medium, Effort::High],
+            },
+        });
+        let mut settings = Settings {
+            models: vec![model],
+            ..Default::default()
+        };
+        sanitize_capabilities(&mut settings);
+        assert!(settings.models[0].capabilities.is_some());
     }
 
     #[test]
