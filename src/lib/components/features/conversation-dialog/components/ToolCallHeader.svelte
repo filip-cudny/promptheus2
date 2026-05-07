@@ -7,7 +7,6 @@
     FilePen,
     Link,
     Wrench,
-    Loader2,
     Clock,
     Check,
     X,
@@ -42,7 +41,6 @@
 
   const ToolIcon = $derived(TOOL_ICONS[toolCall.tool_type] ?? Wrench);
   const isPending = $derived(toolCall.status === "pending");
-  const isInProgress = $derived(toolCall.status === "in_progress");
   const isCompleted = $derived(toolCall.status === "completed");
   const isFailed = $derived(toolCall.status === "failed");
   const isCancelled = $derived(toolCall.status === "cancelled");
@@ -69,8 +67,6 @@
   <span class="tool-status">
     {#if isPending}
       <Clock size={ICON_SIZE.sm} />
-    {:else if isInProgress}
-      <span class="spinner"><Loader2 size={ICON_SIZE.sm} /></span>
     {:else if isCompleted}
       <Check size={ICON_SIZE.sm} />
     {:else if isFailed}
@@ -146,16 +142,5 @@
     display: flex;
     flex-shrink: 0;
     color: var(--text-disabled);
-  }
-
-  .spinner {
-    display: flex;
-    animation: spin 1s linear infinite;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .spinner {
-      animation: none;
-    }
   }
 </style>
