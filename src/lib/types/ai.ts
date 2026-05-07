@@ -1,4 +1,4 @@
-export type Effort = "low" | "medium" | "high";
+export type Effort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
 export type ReasoningMode =
   | { kind: "unsupported" }
