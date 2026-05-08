@@ -353,7 +353,7 @@ impl SkillExecutor {
         let _ = notifications.notify(
             "prompt_execution_success",
             NotificationLevel::Success,
-            format!("{skill_display_name} ran"),
+            skill_display_name.to_string(),
             Some(format!(
                 "{model_display_name} · {:.1}s · copied to clipboard",
                 elapsed.as_secs_f64()
