@@ -233,6 +233,8 @@ impl SkillExecutor {
             &skill,
             &input_content,
             context,
+            active_app,
+            recent_apps,
         );
 
         let ai = ai.clone();
