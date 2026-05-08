@@ -17,6 +17,7 @@ use crate::services::execution::system_prompt::resolve_environment_section_templ
 use crate::services::execution::PromptExecutionService;
 use crate::services::mcp::McpRegistry;
 use crate::services::notification::NotificationService;
+use crate::services::placeholder_registry::PlaceholderContext;
 use crate::services::recent_apps::RecentAppsState;
 use crate::services::skill::SkillService;
 use crate::services::skill_message;
@@ -106,10 +107,10 @@ pub async fn resolve_environment_section(
 ) -> crate::Result<String> {
     let active_app = recent_apps.active().await;
     let recent_apps_display = recent_apps.display().await;
+    let ctx = PlaceholderContext::with_apps(active_app, recent_apps_display);
     Ok(resolve_environment_section_template(
         &*config.lock().await,
-        &active_app,
-        &recent_apps_display,
+        &ctx,
     ))
 }
 

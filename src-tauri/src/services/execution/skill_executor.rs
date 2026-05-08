@@ -10,6 +10,7 @@ use uuid::Uuid;
 use super::parameters::merge_optional_parameters;
 use super::stream::run_stream_loop;
 use super::system_prompt::build_system_prompt_base;
+use crate::services::placeholder_registry::PlaceholderContext;
 use crate::models::ai::StreamEvent;
 use crate::models::history::SerializedConversationNode;
 use crate::models::message::{AppliedSkill, ProcessedMessage};
@@ -227,14 +228,14 @@ impl SkillExecutor {
             },
         };
 
-        let system_prompt = build_system_prompt_base(config, None, active_app, recent_apps);
+        let placeholder_ctx = PlaceholderContext::with_apps(active_app, recent_apps);
+        let system_prompt = build_system_prompt_base(config, None, &placeholder_ctx);
         let messages = skill_message::prepare_skill_messages(
             &system_prompt,
             &skill,
             &input_content,
             context,
-            active_app,
-            recent_apps,
+            &placeholder_ctx,
         );
 
         let ai = ai.clone();

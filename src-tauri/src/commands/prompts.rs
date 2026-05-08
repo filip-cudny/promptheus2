@@ -5,6 +5,8 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 use crate::services::config::{ConfigService, PromptKind};
+use crate::services::placeholder_registry::{list, PlaceholderContext, PlaceholderInfo};
+use crate::services::recent_apps::RecentAppsState;
 
 #[derive(Serialize)]
 pub struct PromptDoc {
@@ -13,14 +15,6 @@ pub struct PromptDoc {
     pub path: String,
     pub content: String,
     pub supports_env_placeholders: bool,
-}
-
-#[derive(Serialize)]
-pub struct EnvPlaceholder {
-    pub token: &'static str,
-    pub label: &'static str,
-    pub description: &'static str,
-    pub example: String,
 }
 
 #[tauri::command]
@@ -57,46 +51,12 @@ pub async fn save_prompt(
 }
 
 #[tauri::command]
-pub fn get_environment_placeholders() -> Vec<EnvPlaceholder> {
-    let now = chrono::Local::now();
-    vec![
-        EnvPlaceholder {
-            token: "{{date}}",
-            label: "Date",
-            description: "Local date in YYYY-MM-DD format.",
-            example: now.format("%Y-%m-%d").to_string(),
-        },
-        EnvPlaceholder {
-            token: "{{time}}",
-            label: "Time",
-            description: "Local time in HH:MM (24h) format.",
-            example: now.format("%H:%M").to_string(),
-        },
-        EnvPlaceholder {
-            token: "{{timezone}}",
-            label: "Timezone",
-            description: "System timezone abbreviation.",
-            example: now.format("%Z").to_string(),
-        },
-        EnvPlaceholder {
-            token: "{{os}}",
-            label: "OS",
-            description: "Operating system identifier (linux, macos, windows).",
-            example: std::env::consts::OS.to_string(),
-        },
-        EnvPlaceholder {
-            token: "{{active_app}}",
-            label: "Active app",
-            description: "Foreground application at the moment the conversation started.",
-            example: "Firefox".to_string(),
-        },
-        EnvPlaceholder {
-            token: "{{recent_apps}}",
-            label: "Recent apps",
-            description: "Comma-separated list of recently focused applications.",
-            example: "Firefox, VS Code, Slack".to_string(),
-        },
-    ]
+pub async fn get_environment_placeholders(
+    recent_apps: State<'_, Arc<RecentAppsState>>,
+) -> crate::Result<Vec<PlaceholderInfo>> {
+    let active_app = recent_apps.active().await;
+    let recent = recent_apps.display().await;
+    Ok(list(&PlaceholderContext::with_apps(active_app, recent)))
 }
 
 fn build_prompt_doc(config: &ConfigService, kind: PromptKind) -> PromptDoc {

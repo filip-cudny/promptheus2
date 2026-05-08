@@ -7,7 +7,4 @@ pub mod system_prompt;
 pub mod types;
 
 pub use lifecycle::{ExecutionError, PromptExecutionService};
-pub use system_prompt::{
-    build_system_prompt_base, resolve_environment_section_template,
-    substitute_environment_placeholders,
-};
+pub use system_prompt::{build_system_prompt_base, resolve_environment_section_template};

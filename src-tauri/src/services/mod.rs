@@ -18,6 +18,7 @@ pub mod menu_coordinator;
 pub mod monitor;
 pub mod notification;
 pub mod placeholder;
+pub mod placeholder_registry;
 pub mod hotkeys;
 #[cfg(target_os = "macos")]
 pub mod macos_panel;

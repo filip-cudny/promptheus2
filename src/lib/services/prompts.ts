@@ -18,6 +18,7 @@ export interface PromptDoc {
 
 export interface EnvPlaceholder {
   token: string;
+  name: string;
   label: string;
   description: string;
   example: string;

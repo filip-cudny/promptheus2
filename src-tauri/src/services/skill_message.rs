@@ -9,17 +9,15 @@ use crate::models::message::{
 };
 use crate::models::skill::Skill;
 use crate::services::context::ContextManagerService;
-use crate::services::execution::substitute_environment_placeholders;
+use crate::services::placeholder_registry::{substitute, PlaceholderContext};
 use crate::services::skill::{SkillError, SkillService};
 
 pub fn compose_skill_user_message(
     skill: &Skill,
     input: &str,
-    active_app: &str,
-    recent_apps: &str,
+    ctx: &PlaceholderContext,
 ) -> String {
-    let resolved_body =
-        substitute_environment_placeholders(&skill.body, active_app, recent_apps);
+    let resolved_body = substitute(&skill.body, ctx);
     format!(
         "<skill name=\"{}\">\n{}\n</skill>\n\n<input>\n{}\n</input>",
         skill.name, resolved_body, input
@@ -91,8 +89,7 @@ pub fn prepare_skill_messages(
     skill: &Skill,
     input: &str,
     context: &ContextManagerService,
-    active_app: &str,
-    recent_apps: &str,
+    ctx: &PlaceholderContext,
 ) -> Vec<ProcessedMessage> {
     let mut messages = Vec::new();
 
@@ -110,7 +107,7 @@ pub fn prepare_skill_messages(
         tool_call_id: None,
     });
 
-    let user_text = compose_skill_user_message(skill, input, active_app, recent_apps);
+    let user_text = compose_skill_user_message(skill, input, ctx);
 
     if context.has_images() {
         let mut parts = Vec::new();
@@ -427,7 +424,7 @@ mod tests {
     #[test]
     fn compose_single_skill_message() {
         let skill = test_skill("translate-english", "Translate to English.");
-        let result = compose_skill_user_message(&skill, "Cześć!", "", "");
+        let result = compose_skill_user_message(&skill, "Cześć!", &PlaceholderContext::empty());
         assert!(result.contains("<skill name=\"translate-english\">"));
         assert!(result.contains("Translate to English."));
         assert!(result.contains("</skill>"));
@@ -443,7 +440,8 @@ mod tests {
             "You are running on {{os}} in {{active_app}}.",
         );
         let input = "User typed {{os}} literally — should stay as-is.";
-        let result = compose_skill_user_message(&skill, input, "Firefox", "Firefox, VS Code");
+        let ctx = PlaceholderContext::with_apps("Firefox", "Firefox, VS Code");
+        let result = compose_skill_user_message(&skill, input, &ctx);
 
         assert!(result.contains(&format!("running on {} in Firefox", std::env::consts::OS)));
         assert!(!result.contains("{{os}} in"));
@@ -491,8 +489,13 @@ mod tests {
     fn prepare_messages_without_context() {
         let skill = test_skill("test", "Test body.");
         let context = ContextManagerService::new();
-        let messages =
-            prepare_skill_messages("You are helpful.", &skill, "input text", &context, "", "");
+        let messages = prepare_skill_messages(
+            "You are helpful.",
+            &skill,
+            "input text",
+            &context,
+            &PlaceholderContext::empty(),
+        );
 
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, "system");
@@ -517,8 +520,13 @@ mod tests {
         let skill = test_skill("test", "Test body.");
         let mut context = ContextManagerService::new();
         context.set_context("background info".into());
-        let messages =
-            prepare_skill_messages("You are helpful.", &skill, "input", &context, "", "");
+        let messages = prepare_skill_messages(
+            "You are helpful.",
+            &skill,
+            "input",
+            &context,
+            &PlaceholderContext::empty(),
+        );
 
         if let MessageContent::Text(ref text) = messages[0].content {
             assert!(text.contains("You are helpful."));
@@ -534,7 +542,13 @@ mod tests {
         let skill = test_skill("test", "Test body.");
         let mut context = ContextManagerService::new();
         context.append_context_image("abc123".into(), "image/png".into());
-        let messages = prepare_skill_messages("System.", &skill, "input", &context, "", "");
+        let messages = prepare_skill_messages(
+            "System.",
+            &skill,
+            "input",
+            &context,
+            &PlaceholderContext::empty(),
+        );
 
         assert_eq!(messages.len(), 2);
         match &messages[1].content {

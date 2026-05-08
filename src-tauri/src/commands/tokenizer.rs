@@ -11,6 +11,7 @@ use crate::models::settings::Provider;
 use crate::services::ai::tools::ToolRegistry;
 use crate::services::config::ConfigService;
 use crate::services::conversation_context::ConversationContextCache;
+use crate::services::placeholder_registry::PlaceholderContext;
 use crate::services::recent_apps::RecentAppsState;
 use crate::services::skill::SkillService;
 use crate::services::skill_message;
@@ -182,26 +183,19 @@ pub async fn count_conversation_tokens(
         String::new()
     };
 
+    let placeholder_ctx =
+        PlaceholderContext::with_apps(active_app.clone(), recent_apps_display.clone());
+
     let resolved_env = {
         let cache = conversation_context.lock().await;
         cache
             .get(&tab_id)
             .map(|s| s.to_string())
-            .unwrap_or_else(|| {
-                resolve_environment_section_template(
-                    &config_guard,
-                    &active_app,
-                    &recent_apps_display,
-                )
-            })
+            .unwrap_or_else(|| resolve_environment_section_template(&config_guard, &placeholder_ctx))
     };
 
-    let system_content = build_system_prompt_base(
-        &config_guard,
-        Some(&resolved_env),
-        &active_app,
-        &recent_apps_display,
-    );
+    let system_content =
+        build_system_prompt_base(&config_guard, Some(&resolved_env), &placeholder_ctx);
     drop(config_guard);
 
     let system_message = ProcessedMessage {
