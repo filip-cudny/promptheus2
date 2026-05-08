@@ -160,3 +160,33 @@ export interface Skill extends SkillSummary {
   body: string;
 }
 
+export interface SkillFull {
+  name: string;
+  display_name: string;
+  description: string | null;
+  model: string | null;
+  parameters: Record<string, unknown> | null;
+  body: string;
+  file_path: string;
+}
+
+export interface SkillFrontmatter {
+  name: string;
+  display_name?: string | null;
+  description?: string | null;
+  model?: string | null;
+  parameters?: Record<string, unknown> | null;
+}
+
+export interface SlugValidation {
+  ok: boolean;
+  error: string | null;
+}
+
+export type ImportConflictMode = "reject" | "rename_suffix" | "overwrite";
+
+export interface ExportedSkill {
+  filename: string;
+  content: string;
+}
+

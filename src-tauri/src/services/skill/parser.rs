@@ -46,7 +46,7 @@ pub(super) fn parse_skill_file(path: &Path, dir_name: &str) -> Result<Skill, Ski
     })
 }
 
-pub(super) fn split_frontmatter(content: &str) -> Option<(&str, &str)> {
+pub fn split_frontmatter(content: &str) -> Option<(&str, &str)> {
     let trimmed = content.trim_start();
     if !trimmed.starts_with("---") {
         return None;

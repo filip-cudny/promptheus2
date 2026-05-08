@@ -1,23 +1,32 @@
 use crate::services::config::ConfigService;
 
-pub fn resolve_environment_section_template(
-    config: &ConfigService,
+pub fn substitute_environment_placeholders(
+    text: &str,
     active_app: &str,
     recent_apps: &str,
 ) -> String {
-    let template = config.environment_section_template();
-    if template.is_empty() {
+    if text.is_empty() {
         return String::new();
     }
-
     let now = chrono::Local::now();
-    template
-        .replace("{{date}}", &now.format("%Y-%m-%d").to_string())
+    text.replace("{{date}}", &now.format("%Y-%m-%d").to_string())
         .replace("{{time}}", &now.format("%H:%M").to_string())
         .replace("{{timezone}}", &now.format("%Z").to_string())
         .replace("{{os}}", std::env::consts::OS)
         .replace("{{active_app}}", active_app)
         .replace("{{recent_apps}}", recent_apps)
+}
+
+pub fn resolve_environment_section_template(
+    config: &ConfigService,
+    active_app: &str,
+    recent_apps: &str,
+) -> String {
+    substitute_environment_placeholders(
+        &config.environment_section_template(),
+        active_app,
+        recent_apps,
+    )
 }
 
 pub fn build_system_prompt_base(

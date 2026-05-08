@@ -49,14 +49,16 @@ pub async fn run_skill_stream(
     let prepared = {
         let mut prompt_execution = prompt_execution.lock().await;
         let config_guard = config.lock().await;
-        let skill_service_guard = skill_service.lock().await;
+        let mut skill_service_guard = skill_service.lock().await;
+        let history_guard = history.lock().await;
         let ai_guard = ai.lock().await;
         let context_guard = context.lock().await;
         SkillExecutor::prepare(
             &mut prompt_execution,
             &config_guard,
             &clipboard,
-            &skill_service_guard,
+            &mut skill_service_guard,
+            history_guard.conn(),
             &ai_guard,
             &context_guard,
             &active_app,
@@ -166,7 +168,8 @@ impl SkillExecutor {
         prompt_execution: &mut PromptExecutionService,
         config: &ConfigService,
         clipboard: &ClipboardService,
-        skill_service: &SkillService,
+        skill_service: &mut SkillService,
+        history_conn: &rusqlite::Connection,
         ai: &AiService,
         context: &ContextManagerService,
         active_app: &str,
@@ -177,6 +180,14 @@ impl SkillExecutor {
         let (execution_id, cancel_rx) =
             prompt_execution.start_skill_execution(skill_name.to_string())?;
 
+        let skill_version_id = match skill_service.ensure_version(skill_name, history_conn) {
+            Ok(id) => id,
+            Err(e) => {
+                prompt_execution.finish_skill_execution();
+                return Err(Error::from(e));
+            }
+        };
+
         let skill = match skill_message::resolve_skill_or_err(skill_service, skill_name) {
             Ok(s) => s,
             Err(e) => {
@@ -185,16 +196,6 @@ impl SkillExecutor {
             }
         };
         let skill_display_name = skill.display_name.clone();
-        let skill_version_id = match skill.skill_version_id {
-            Some(id) => id,
-            None => {
-                prompt_execution.finish_skill_execution();
-                return Err(Error::Other(format!(
-                    "Skill '{}' is missing a registered version",
-                    skill_name
-                )));
-            }
-        };
 
         let model_id = match PromptExecutionService::resolve_quick_action_model(
             config,
@@ -482,7 +483,6 @@ mod tests {
 
         let db_dir = TempDir::new().unwrap();
         let database = Database::open(db_dir.path()).unwrap();
-        skill_service.sync_versions(database.conn()).unwrap();
 
         let ai = AiService::new(&config.settings().models);
         let context = ContextManagerService::new();
@@ -492,7 +492,8 @@ mod tests {
             &mut svc,
             &config,
             &clipboard,
-            &skill_service,
+            &mut skill_service,
+            database.conn(),
             &ai,
             &context,
             "",

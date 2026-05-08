@@ -11,6 +11,7 @@
   import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
+  import HighlightedTextarea from "$lib/components/shared/ui/HighlightedTextarea.svelte";
   import EnvPlaceholdersPopover from "./EnvPlaceholdersPopover.svelte";
 
   let {
@@ -27,7 +28,6 @@
   let content = $state("");
   let savedContent = $state("");
   let textarea = $state<HTMLTextAreaElement | undefined>(undefined);
-  let highlightLayer = $state<HTMLPreElement | undefined>(undefined);
   let placeholdersBtn = $state<HTMLButtonElement | undefined>(undefined);
   let placeholdersOpen = $state(false);
 
@@ -37,36 +37,9 @@
 
   const PLACEHOLDER_RE = /\{\{[^{}\n]+\}\}/g;
 
-  const highlighted = $derived(buildHighlighted(content, doc?.supports_env_placeholders ?? false));
-
-  function escapeHtml(s: string): string {
-    return s
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-  }
-
-  function buildHighlighted(text: string, decorate: boolean): string {
-    const padded = text.endsWith("\n") ? text + " " : text;
-    if (!decorate) return escapeHtml(padded);
-    let out = "";
-    let lastIndex = 0;
-    PLACEHOLDER_RE.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = PLACEHOLDER_RE.exec(padded)) !== null) {
-      out += escapeHtml(padded.slice(lastIndex, m.index));
-      out += `<span class="placeholder-token">${escapeHtml(m[0])}</span>`;
-      lastIndex = m.index + m[0].length;
-    }
-    out += escapeHtml(padded.slice(lastIndex));
-    return out;
-  }
-
-  function syncScroll() {
-    if (!textarea || !highlightLayer) return;
-    highlightLayer.scrollTop = textarea.scrollTop;
-    highlightLayer.scrollLeft = textarea.scrollLeft;
-  }
+  const highlightPattern = $derived(
+    doc?.supports_env_placeholders ? PLACEHOLDER_RE : undefined,
+  );
 
   onMount(() => {
     void load();
@@ -156,21 +129,13 @@
   </header>
 
   <div class="editor-pane">
-    <div class="editor-frame" class:disabled={!doc}>
-      <pre
-        class="highlight-layer"
-        bind:this={highlightLayer}
-        aria-hidden="true">{@html highlighted}</pre>
-      <textarea
-        bind:this={textarea}
-        bind:value={content}
-        onscroll={syncScroll}
-        spellcheck="false"
-        rows="14"
-        placeholder={doc ? "" : "Loading…"}
-        disabled={!doc}
-      ></textarea>
-    </div>
+    <HighlightedTextarea
+      bind:value={content}
+      {highlightPattern}
+      placeholder={doc ? "" : "Loading…"}
+      disabled={!doc}
+      onTextareaRef={(el) => (textarea = el)}
+    />
   </div>
 
   {#if doc?.supports_env_placeholders}
@@ -304,75 +269,5 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
-  }
-
-  .editor-frame {
-    position: relative;
-    flex: 1;
-    min-height: 320px;
-    background: var(--surface-elevated);
-    border: 1px solid var(--border-faint);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-    transition: border-color var(--motion-fast) var(--ease-default);
-  }
-
-  .editor-frame:focus-within {
-    border-color: var(--accent-border);
-  }
-
-  .editor-frame.disabled {
-    opacity: var(--opacity-disabled);
-  }
-
-  .highlight-layer,
-  .editor-frame textarea {
-    position: absolute;
-    inset: 0;
-    margin: 0;
-    padding: var(--space-4);
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-    line-height: 1.6;
-    white-space: pre-wrap;
-    overflow-wrap: break-word;
-    word-break: break-word;
-    tab-size: 2;
-    border: none;
-    background: transparent;
-    box-sizing: border-box;
-  }
-
-  .highlight-layer {
-    pointer-events: none;
-    color: var(--text-primary);
-    overflow: auto;
-    scrollbar-width: none;
-  }
-
-  .highlight-layer::-webkit-scrollbar {
-    display: none;
-  }
-
-  .editor-frame textarea {
-    color: transparent;
-    caret-color: var(--text-primary);
-    resize: none;
-    outline: none;
-    overflow: auto;
-  }
-
-  .editor-frame textarea::selection {
-    background: var(--accent-bg);
-    color: transparent;
-  }
-
-  .highlight-layer :global(.placeholder-token) {
-    color: var(--accent);
-    background: var(--accent-bg-soft);
-    border-radius: 2px;
-    box-shadow: 0 0 0 1px var(--accent-bg-soft);
-    -webkit-box-decoration-break: clone;
-    box-decoration-break: clone;
   }
 </style>

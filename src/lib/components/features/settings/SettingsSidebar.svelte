@@ -27,7 +27,7 @@
     { id: "notifications", label: "Notifications", enabled: false },
     { id: "appearance", label: "Appearance", enabled: true },
     { id: "shortcuts", label: "Shortcuts", enabled: false },
-    { id: "skills", label: "Skills", enabled: false },
+    { id: "skills", label: "Skills", enabled: true },
     { id: "mcp_servers", label: "MCP Servers", enabled: false },
     { id: "advanced", label: "Advanced", enabled: false },
   ];
