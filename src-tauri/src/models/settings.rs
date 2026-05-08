@@ -61,11 +61,14 @@ pub struct Settings {
     #[serde(default)]
     pub notifications: NotificationSettings,
 
-    #[serde(default = "default_debounce_ms")]
-    pub number_input_debounce_ms: u32,
+    #[serde(default = "default_autosave_debounce_ms")]
+    pub autosave_debounce_ms: u32,
 
     #[serde(default)]
     pub models: Vec<ModelConfig>,
+
+    #[serde(default)]
+    pub preferred_name: String,
 
     #[serde(default)]
     pub prompt_base: PromptBase,
@@ -155,8 +158,8 @@ pub struct PromptBase {
     #[serde(default = "default_system_path")]
     pub system: String,
 
-    #[serde(default = "default_about_me_path")]
-    pub about_me: String,
+    #[serde(default = "default_about_you_path")]
+    pub about_you: String,
 
     #[serde(default = "default_environment_path")]
     pub environment: String,
@@ -169,7 +172,7 @@ impl Default for PromptBase {
     fn default() -> Self {
         Self {
             system: default_system_path(),
-            about_me: default_about_me_path(),
+            about_you: default_about_you_path(),
             environment: default_environment_path(),
             input_format: default_input_format_path(),
         }
@@ -441,8 +444,8 @@ fn default_system_path() -> String {
     "prompts/base/system.md".to_string()
 }
 
-fn default_about_me_path() -> String {
-    "prompts/base/about_me.md".to_string()
+fn default_about_you_path() -> String {
+    "prompts/base/about_you.md".to_string()
 }
 
 fn default_environment_path() -> String {
@@ -457,8 +460,8 @@ fn default_title_generation_path() -> String {
     "prompts/surfaces/title_generation.md".to_string()
 }
 
-fn default_debounce_ms() -> u32 {
-    200
+fn default_autosave_debounce_ms() -> u32 {
+    1000
 }
 
 fn default_recent_apps_count() -> usize {
@@ -479,8 +482,9 @@ impl Default for Settings {
             theme: default_theme(),
             menu_section_order: default_menu_section_order(),
             notifications: NotificationSettings::default(),
-            number_input_debounce_ms: 200,
+            autosave_debounce_ms: 1000,
             models: Vec::new(),
+            preferred_name: String::new(),
             prompt_base: PromptBase::default(),
             surfaces: Surfaces::default(),
             keymaps: Vec::new(),
@@ -543,13 +547,14 @@ mod tests {
         assert!(settings.show_tray_icon);
         assert!(!settings.debug_mode);
         assert_eq!(settings.code_theme, "paraiso-dark");
-        assert_eq!(settings.number_input_debounce_ms, 200);
+        assert_eq!(settings.autosave_debounce_ms, 1000);
         assert_eq!(settings.menu_section_order.len(), 6);
         assert!(settings.models.is_empty());
         assert_eq!(settings.prompt_base.system, "prompts/base/system.md");
-        assert_eq!(settings.prompt_base.about_me, "prompts/base/about_me.md");
+        assert_eq!(settings.prompt_base.about_you, "prompts/base/about_you.md");
         assert_eq!(settings.prompt_base.environment, "prompts/base/environment.md");
         assert_eq!(settings.prompt_base.input_format, "prompts/base/input_format.md");
+        assert!(settings.preferred_name.is_empty());
     }
 
     #[test]
@@ -559,7 +564,7 @@ mod tests {
         assert!(!settings.launch_at_startup);
         assert!(!settings.debug_mode);
         assert_eq!(settings.code_theme, "paraiso-dark");
-        assert_eq!(settings.number_input_debounce_ms, 200);
+        assert_eq!(settings.autosave_debounce_ms, 1000);
         assert!(settings.models.is_empty());
     }
 

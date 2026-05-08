@@ -21,12 +21,6 @@
 
   let addMenuOpen = $state(false);
 
-  function tooltipForModel(id: string): string {
-    const list = surfacesByModel.get(id);
-    if (!list || list.length === 0) return "";
-    return `In use by ${formatSurfaceList(list)}`;
-  }
-
   const groups = $derived.by(() => {
     const map = new Map<string, ModelConfig[]>();
     for (const m of models) {
@@ -97,24 +91,18 @@
       {#each groups as [groupName, groupModels] (groupName)}
         <div class="group-label">{groupName}</div>
         {#each groupModels as model (model.id)}
+          {@const surfaces = surfacesByModel.get(model.id) ?? []}
           <button
             class="row"
             class:active={model.id === selectedId}
             onclick={() => onSelect(model.id)}
           >
             <div class="row-main">
-              <div class="row-name">
-                {#if surfacesByModel.has(model.id)}
-                  <span
-                    class="status-dot"
-                    title={tooltipForModel(model.id)}
-                    aria-label={tooltipForModel(model.id)}
-                    role="img"
-                  ></span>
-                {/if}
-                {model.display_name || "(unnamed)"}
-              </div>
+              <div class="row-name">{model.display_name || "(unnamed)"}</div>
               <div class="row-model">{model.model || "—"}</div>
+              {#if surfaces.length > 0}
+                <div class="row-surfaces">in use by {formatSurfaceList(surfaces)}</div>
+              {/if}
             </div>
             <div class="row-chips">
               <span class="chip type-chip" data-type={model.type}>
@@ -275,27 +263,24 @@
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-semibold);
     color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--accent);
-    flex-shrink: 0;
-    display: inline-block;
   }
 
   .row-model {
     font-size: var(--font-size-sm);
     color: var(--text-muted);
     margin-top: 1px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .row-surfaces {
+    font-size: var(--font-size-xs);
+    color: var(--accent);
+    margin-top: 2px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

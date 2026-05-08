@@ -6,6 +6,7 @@
   import { openConversationDialogNewWindow } from "$lib/services/conversationDialog";
   import { PROMPTHEUS_PROVIDER_ID, openPalette } from "$lib/services/shellToolbar";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
+  import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
   import Titlebar from "$lib/components/features/shell-toolbar/Titlebar.svelte";
   import { useShellToolbar } from "$lib/components/features/shell-toolbar/drivers/useShellToolbar.svelte";
 
@@ -71,8 +72,11 @@
     }
   }
 
+  let detachEdgeResizeCursor: (() => void) | null = null;
+
   onMount(async () => {
     window.addEventListener("keydown", handleGlobalKeydown);
+    detachEdgeResizeCursor = attachEdgeResizeCursor("toolbar");
     await toolbar.init();
     try {
       isMaximized = await getCurrentWindow().isMaximized();
@@ -87,6 +91,10 @@
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleGlobalKeydown);
+    if (detachEdgeResizeCursor) {
+      detachEdgeResizeCursor();
+      detachEdgeResizeCursor = null;
+    }
     toolbar.destroy();
   });
 </script>

@@ -61,7 +61,7 @@
         <ModelEditor
           model={selectedModel}
           surfaces={store.getSurfacesForModel(selectedModel.id)}
-          debounceMs={store.settings?.number_input_debounce_ms ?? 200}
+          debounceMs={store.settings?.autosave_debounce_ms ?? 1000}
           onDeleted={() => {
             selectedId = null;
           }}

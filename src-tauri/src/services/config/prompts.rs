@@ -9,7 +9,7 @@ use super::ConfigError;
 #[serde(rename_all = "snake_case")]
 pub enum PromptKind {
     System,
-    AboutMe,
+    AboutYou,
     Environment,
     InputFormat,
     TitleGeneration,
@@ -19,7 +19,7 @@ pub enum PromptKind {
 impl PromptKind {
     pub const ALL: [PromptKind; 6] = [
         PromptKind::System,
-        PromptKind::AboutMe,
+        PromptKind::AboutYou,
         PromptKind::Environment,
         PromptKind::InputFormat,
         PromptKind::TitleGeneration,
@@ -29,7 +29,7 @@ impl PromptKind {
     pub fn default_path(&self) -> &'static str {
         match self {
             PromptKind::System => "prompts/base/system.md",
-            PromptKind::AboutMe => "prompts/base/about_me.md",
+            PromptKind::AboutYou => "prompts/base/about_you.md",
             PromptKind::Environment => "prompts/base/environment.md",
             PromptKind::InputFormat => "prompts/base/input_format.md",
             PromptKind::TitleGeneration => "prompts/surfaces/title_generation.md",
@@ -40,7 +40,7 @@ impl PromptKind {
     pub fn label(&self) -> &'static str {
         match self {
             PromptKind::System => "System prompt",
-            PromptKind::AboutMe => "About me",
+            PromptKind::AboutYou => "About you",
             PromptKind::Environment => "Environment section",
             PromptKind::InputFormat => "Input format guide",
             PromptKind::TitleGeneration => "Conversation title",
@@ -55,7 +55,7 @@ impl PromptKind {
     pub fn default_content(&self) -> &'static str {
         match self {
             PromptKind::System => include_str!("../../../resources/prompts/base/system.md"),
-            PromptKind::AboutMe => include_str!("../../../resources/prompts/base/about_me.md"),
+            PromptKind::AboutYou => include_str!("../../../resources/prompts/base/about_you.md"),
             PromptKind::Environment => {
                 include_str!("../../../resources/prompts/base/environment.md")
             }

@@ -1,5 +1,3 @@
-# About Me
-
 My name is [Your Name]. Based in [Your Location].
 
 - **Domains & competencies**: [Your areas of expertise, e.g. software engineering, data science, product management, etc.]

@@ -92,39 +92,39 @@ pub async fn update_surface_enabled_tools(
 #[tauri::command]
 pub async fn update_speech_to_text_config(
     app: AppHandle,
-    config: State<'_, Arc<Mutex<ConfigService>>>,
-    config_value: SpeechToTextConfig,
+    config_svc: State<'_, Arc<Mutex<ConfigService>>>,
+    config: SpeechToTextConfig,
 ) -> crate::Result<()> {
-    let mut config = config.lock().await;
-    config.update_speech_to_text(config_value);
-    save_and_emit(&config, &app)
+    let mut svc = config_svc.lock().await;
+    svc.update_speech_to_text(config);
+    save_and_emit(&svc, &app)
 }
 
 #[tauri::command]
 pub async fn add_model(
     app: AppHandle,
-    config: State<'_, Arc<Mutex<ConfigService>>>,
+    config_svc: State<'_, Arc<Mutex<ConfigService>>>,
     ai: State<'_, Arc<Mutex<AiService>>>,
-    config_value: ModelConfig,
+    config: ModelConfig,
 ) -> crate::Result<()> {
-    let mut config = config.lock().await;
-    config.add_model(config_value);
-    rebuild_ai(&config, &mut *ai.lock().await);
-    save_and_emit(&config, &app)
+    let mut svc = config_svc.lock().await;
+    svc.add_model(config);
+    rebuild_ai(&svc, &mut *ai.lock().await);
+    save_and_emit(&svc, &app)
 }
 
 #[tauri::command]
 pub async fn update_model(
     app: AppHandle,
-    config: State<'_, Arc<Mutex<ConfigService>>>,
+    config_svc: State<'_, Arc<Mutex<ConfigService>>>,
     ai: State<'_, Arc<Mutex<AiService>>>,
     model_id: String,
-    config_value: ModelConfig,
+    config: ModelConfig,
 ) -> crate::Result<()> {
-    let mut config = config.lock().await;
-    config.update_model(&model_id, config_value);
-    rebuild_ai(&config, &mut *ai.lock().await);
-    save_and_emit(&config, &app)
+    let mut svc = config_svc.lock().await;
+    svc.update_model(&model_id, config);
+    rebuild_ai(&svc, &mut *ai.lock().await);
+    save_and_emit(&svc, &app)
 }
 
 #[tauri::command]
@@ -143,12 +143,12 @@ pub async fn delete_model(
 #[tauri::command]
 pub async fn update_notifications(
     app: AppHandle,
-    config: State<'_, Arc<Mutex<ConfigService>>>,
-    config_value: NotificationSettings,
+    config_svc: State<'_, Arc<Mutex<ConfigService>>>,
+    config: NotificationSettings,
 ) -> crate::Result<()> {
-    let mut config = config.lock().await;
-    config.update_notifications(config_value);
-    save_and_emit(&config, &app)
+    let mut svc = config_svc.lock().await;
+    svc.update_notifications(config);
+    save_and_emit(&svc, &app)
 }
 
 #[tauri::command]

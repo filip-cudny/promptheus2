@@ -229,6 +229,18 @@ pub async fn show_context_menu_panel(app: tauri::AppHandle) -> crate::Result<()>
     #[cfg(not(target_os = "macos"))]
     {
         win.show()?;
+        #[cfg(target_os = "linux")]
+        {
+            use gtk::prelude::WidgetExt;
+            if let Ok(gtk_win) = win.gtk_window() {
+                gtk_win.set_opacity(0.99);
+            } else {
+                log::warn!(
+                    target: "app_lib::commands::menu",
+                    "show_context_menu_panel: gtk_window() failed; rounded corners may render as a gray square",
+                );
+            }
+        }
         Ok(())
     }
 }

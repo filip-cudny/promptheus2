@@ -37,7 +37,7 @@
   "number_input_debounce_ms": 200,
   "prompt_base": {
     "system": "prompts/base/system.md",
-    "about_me": "prompts/base/about_me.md",
+    "about_you": "prompts/base/about_you.md",
     "environment": "prompts/base/environment.md",
     "input_format": "prompts/base/input_format.md"
   },

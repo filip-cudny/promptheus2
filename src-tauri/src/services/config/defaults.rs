@@ -101,9 +101,9 @@ pub(super) fn validate(settings: &Settings) -> Result<(), ConfigError> {
         }
     }
 
-    if settings.number_input_debounce_ms > 10000 {
+    if settings.autosave_debounce_ms > 10000 {
         return Err(ConfigError::InvalidSettings(
-            "number_input_debounce_ms must be between 0 and 10000 milliseconds".to_string(),
+            "autosave_debounce_ms must be between 0 and 10000 milliseconds".to_string(),
         ));
     }
 

@@ -1,5 +1,3 @@
-# Input Format Guide
-
 User messages may contain structured tags. Interpret them as follows:
 
 ## Context

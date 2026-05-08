@@ -17,6 +17,7 @@
   import { openPalette, reloadActiveInHost } from "$lib/services/shellToolbar";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
   import { focusConversationInput } from "$lib/utils/conversationFocus";
+  import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
   import { initTheme } from "$lib/stores/theme.svelte";
   import type { ModelConfig } from "$lib/types";
 
@@ -181,10 +182,13 @@
     onContextChanged: () => autoShowContextIfNeeded(),
   });
 
+  let detachEdgeResizeCursor: (() => void) | null = null;
+
   onMount(async () => {
     initTheme();
     window.addEventListener("keydown", handleGlobalKeydown);
     window.addEventListener("focus", handleWindowFocus);
+    detachEdgeResizeCursor = attachEdgeResizeCursor("content");
     skillsStore.init();
     await store.initFromSettings();
     loadModelInfo();
@@ -230,6 +234,10 @@
   onDestroy(() => {
     window.removeEventListener("keydown", handleGlobalKeydown);
     window.removeEventListener("focus", handleWindowFocus);
+    if (detachEdgeResizeCursor) {
+      detachEdgeResizeCursor();
+      detachEdgeResizeCursor = null;
+    }
     ipc.destroy();
     store.destroy();
   });

@@ -19,8 +19,8 @@ use path::resolve_config_relative;
 use defaults::{ensure_surface_defaults, validate};
 use loader::initialize_defaults;
 use migrator::{
-    migrate_explicit_capabilities, migrate_model_params, parse_and_migrate, sanitize_capabilities,
-    InlinePromptWrite, LegacyFlatMdRename,
+    migrate_explicit_capabilities, migrate_model_params, parse_and_migrate,
+    replace_legacy_system_default, sanitize_capabilities, InlinePromptWrite, LegacyFlatMdRename,
 };
 
 pub use loader::load_env;
@@ -46,6 +46,8 @@ pub enum SurfaceKind {
     SpeechToText,
 }
 
+const MAX_PREFERRED_NAME_LEN: usize = 60;
+
 #[derive(Debug)]
 pub struct ConfigService {
     settings: Settings,
@@ -69,6 +71,7 @@ impl ConfigService {
         apply_legacy_flat_md_renames(config_dir, &outcome.legacy_flat_md_renames);
         rewrite_legacy_default_paths(config_dir, &mut settings);
         ensure_prompt_defaults(config_dir, &settings);
+        replace_legacy_system_default(config_dir, &settings.prompt_base.system);
 
         migrate_model_params(&mut settings);
         sanitize_capabilities(&mut settings);
@@ -110,6 +113,7 @@ impl ConfigService {
         apply_legacy_flat_md_renames(&self.config_dir, &outcome.legacy_flat_md_renames);
         rewrite_legacy_default_paths(&self.config_dir, &mut settings);
         ensure_prompt_defaults(&self.config_dir, &settings);
+        replace_legacy_system_default(&self.config_dir, &settings.prompt_base.system);
 
         migrate_model_params(&mut settings);
         sanitize_capabilities(&mut settings);
@@ -153,9 +157,16 @@ impl ConfigService {
                     self.settings.theme = v.to_string();
                 }
             }
-            "number_input_debounce_ms" => {
+            "autosave_debounce_ms" => {
                 if let Some(v) = value.as_u64() {
-                    self.settings.number_input_debounce_ms = v as u32;
+                    self.settings.autosave_debounce_ms = v as u32;
+                }
+            }
+            "preferred_name" => {
+                if let Some(v) = value.as_str() {
+                    let trimmed = v.trim();
+                    let clamped: String = trimmed.chars().take(MAX_PREFERRED_NAME_LEN).collect();
+                    self.settings.preferred_name = clamped;
                 }
             }
             _ => {}
@@ -304,7 +315,7 @@ impl ConfigService {
     pub fn prompt_path(&self, kind: PromptKind) -> Option<&str> {
         match kind {
             PromptKind::System => Some(&self.settings.prompt_base.system),
-            PromptKind::AboutMe => Some(&self.settings.prompt_base.about_me),
+            PromptKind::AboutYou => Some(&self.settings.prompt_base.about_you),
             PromptKind::Environment => Some(&self.settings.prompt_base.environment),
             PromptKind::InputFormat => Some(&self.settings.prompt_base.input_format),
             PromptKind::TitleGeneration => Some(&self.settings.surfaces.title_generation.prompt),
@@ -347,8 +358,12 @@ impl ConfigService {
         self.read_prompt(PromptKind::InputFormat)
     }
 
-    pub fn about_me(&self) -> String {
-        self.read_prompt(PromptKind::AboutMe)
+    pub fn about_you(&self) -> String {
+        self.read_prompt(PromptKind::AboutYou)
+    }
+
+    pub fn preferred_name(&self) -> &str {
+        &self.settings.preferred_name
     }
 
     pub fn environment_section_template(&self) -> String {
@@ -427,28 +442,28 @@ fn apply_inline_prompts(
 }
 
 fn rewrite_legacy_default_paths(config_dir: &Path, settings: &mut Settings) {
-    let rewrites: [(&mut String, &str, &str); 3] = [
+    let rewrites: [(&mut String, &[&str], &str); 3] = [
         (
-            &mut settings.prompt_base.about_me,
-            "about_me.md",
-            "prompts/base/about_me.md",
+            &mut settings.prompt_base.about_you,
+            &["about_me.md", "prompts/base/about_me.md"],
+            "prompts/base/about_you.md",
         ),
         (
             &mut settings.prompt_base.environment,
-            "environment_section.md",
+            &["environment_section.md"],
             "prompts/base/environment.md",
         ),
         (
             &mut settings.prompt_base.input_format,
-            "input_format_guide.md",
+            &["input_format_guide.md"],
             "prompts/base/input_format.md",
         ),
     ];
-    for (field, legacy, new_path) in rewrites {
-        if field == legacy && config_dir.join(new_path).exists() {
+    for (field, legacy_paths, new_path) in rewrites {
+        if legacy_paths.iter().any(|p| field == *p) && config_dir.join(new_path).exists() {
             log::info!(
                 "rewriting legacy default prompt path '{}' -> '{}'",
-                legacy,
+                field,
                 new_path
             );
             *field = new_path.to_string();
@@ -491,7 +506,7 @@ fn ensure_prompt_defaults(config_dir: &Path, settings: &Settings) {
     let store = PromptStore::new(config_dir);
     let entries: [(PromptKind, Option<&str>); 6] = [
         (PromptKind::System, Some(settings.prompt_base.system.as_str())),
-        (PromptKind::AboutMe, Some(settings.prompt_base.about_me.as_str())),
+        (PromptKind::AboutYou, Some(settings.prompt_base.about_you.as_str())),
         (
             PromptKind::Environment,
             Some(settings.prompt_base.environment.as_str()),

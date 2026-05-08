@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, untrack } from "svelte";
+  import { onDestroy, onMount, untrack } from "svelte";
   import { Eye, EyeOff, Copy, Trash2, CopyPlus } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { formatSurfaceList } from "$lib/constants/surfaces";
@@ -12,6 +12,8 @@
     type CustomParamEntry,
   } from "./ParametersCustom.svelte";
   import FormRow from "$lib/components/shared/ui/FormRow.svelte";
+  import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
+  import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
   import {
     addModel,
     deleteModel,
@@ -63,15 +65,24 @@
   let confirmDelete = $state(false);
   let copiedId = $state(false);
 
-  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  const tracker = useSaveTracker({ debounceMs: untrack(() => debounceMs) });
+
+  onMount(() => {
+    tracker.attachKeyboard(window);
+    tracker.attachBeforeUnload(window);
+  });
+
+  let suppressCustomEntriesSave = true;
 
   $effect(() => {
     const m = model;
     untrack(() => {
+      if (tracker.dirty || tracker.saving || tracker.hasPending) return;
       draft = structuredClone(m);
       customEntries = entriesFromExtra(extraOf(m.parameters));
       customErrors = {};
       validationErrors = {};
+      suppressCustomEntriesSave = true;
     });
   });
 
@@ -93,7 +104,7 @@
   });
 
   onDestroy(() => {
-    if (saveTimer) clearTimeout(saveTimer);
+    tracker.destroy();
   });
 
   function extraOf(params: ModelParameters | null | undefined): Record<string, unknown> {
@@ -162,19 +173,14 @@
       ...draft,
       parameters,
     };
-    try {
-      await updateModel(model.id, config);
-    } catch (e) {
-      console.error("update_model failed", e);
-    }
+    await updateModel(model.id, config);
   }
 
   function scheduleSave(immediate: boolean) {
-    if (saveTimer) clearTimeout(saveTimer);
     if (immediate) {
-      persist();
+      void tracker.flush(persist);
     } else {
-      saveTimer = setTimeout(persist, debounceMs);
+      tracker.scheduleSave(persist);
     }
   }
 
@@ -199,17 +205,18 @@
 
   $effect(() => {
     customEntries;
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(persist, debounceMs);
+    if (suppressCustomEntriesSave) {
+      suppressCustomEntriesSave = false;
+      return;
+    }
+    tracker.scheduleSave(persist);
   });
 
   async function handleDelete() {
-    try {
+    const ok = await tracker.flush(async () => {
       await deleteModel(model.id);
-      onDeleted();
-    } catch (e) {
-      console.error("delete_model failed", e);
-    }
+    });
+    if (ok) onDeleted();
   }
 
   async function handleDuplicate() {
@@ -218,12 +225,10 @@
       id: generateId(),
       display_name: `${draft.display_name || "Untitled"} (copy)`,
     };
-    try {
+    const ok = await tracker.flush(async () => {
       await addModel(copy);
-      onDuplicated(copy.id);
-    } catch (e) {
-      console.error("duplicate failed", e);
-    }
+    });
+    if (ok) onDuplicated(copy.id);
   }
 
   async function copyId() {
@@ -273,6 +278,7 @@
 <div class="model-editor">
   <header class="editor-header">
     <h1>{draft.display_name || "Untitled model"}</h1>
+    <SaveStatusIndicator {tracker} />
     {#if surfaces.length > 0}
       <span class="badge">in use by {surfacesLabel}</span>
     {/if}

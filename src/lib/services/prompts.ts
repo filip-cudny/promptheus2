@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 
 export type PromptKind =
   | "system"
-  | "about_me"
+  | "about_you"
   | "environment"
   | "input_format"
   | "title_generation"

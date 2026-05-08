@@ -52,7 +52,11 @@ win.show()?;
 }
 ```
 
-Symptom of getting this wrong: a window meant to dim the background appears as a fully opaque solid color block.
+Symptoms of getting this wrong:
+- A window meant to dim the background appears as a fully opaque solid color block.
+- A window with `border-radius` on its inner shell shows a gray/black square outside the rounded corners (the compositor draws the full rectangular X11 window opaque, so the alpha channel of the rounded shape is never composed).
+
+Use a value just below 1.0 (e.g. `0.99`) when the window is meant to look fully opaque but still needs the corners punched out — `1.0` may cause GTK to clear the atom on some setups, putting you back into the same opaque-square state.
 
 ## When to load this file
 

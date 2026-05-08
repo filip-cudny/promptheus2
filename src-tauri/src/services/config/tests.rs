@@ -258,7 +258,7 @@ fn test_migrates_legacy_schema() {
     assert_eq!(s.prompt_base.system, "prompts/base/system.md");
     let migrated_system = fs::read_to_string(dir.path().join("prompts/base/system.md")).unwrap();
     assert_eq!(migrated_system, "Custom system");
-    assert_eq!(s.prompt_base.about_me, "about_me.md");
+    assert_eq!(s.prompt_base.about_you, "about_me.md");
     assert_eq!(s.prompt_base.environment, "environment_section.md");
     assert_eq!(s.prompt_base.input_format, "prompts/base/input_format.md");
     assert_eq!(s.surfaces.quick_actions.generation.model_id.as_deref(), Some("model-b"));
@@ -325,7 +325,7 @@ fn test_migrate_chat_prompt_fields_into_prompt_base() {
     assert_eq!(s.prompt_base.system, "prompts/base/system.md");
     let migrated_system = fs::read_to_string(dir.path().join("prompts/base/system.md")).unwrap();
     assert_eq!(migrated_system, "Custom system");
-    assert_eq!(s.prompt_base.about_me, "about_me.md");
+    assert_eq!(s.prompt_base.about_you, "about_me.md");
     assert_eq!(s.prompt_base.environment, "environment_section.md");
     assert_eq!(s.surfaces.chat.generation.model_id.as_deref(), Some("m1"));
 
@@ -338,6 +338,7 @@ fn test_migrate_chat_prompt_fields_into_prompt_base() {
     let prompt_base = saved_json["prompt_base"].as_object().unwrap();
     assert_eq!(prompt_base["system"], "prompts/base/system.md");
     assert!(!prompt_base.contains_key("system_prompt"));
+    assert!(!prompt_base.contains_key("about_me"));
     assert!(!prompt_base.contains_key("environment_section"));
 }
 
@@ -345,7 +346,7 @@ fn test_migrate_chat_prompt_fields_into_prompt_base() {
 fn test_rewrite_legacy_default_path_when_new_file_present() {
     let dir = TempDir::new().unwrap();
     fs::create_dir_all(dir.path().join("prompts/base")).unwrap();
-    fs::write(dir.path().join("prompts/base/about_me.md"), "real content").unwrap();
+    fs::write(dir.path().join("prompts/base/about_you.md"), "real content").unwrap();
     fs::write(dir.path().join("about_me.md"), "stale template").unwrap();
     let legacy = r#"{
         "prompt_base": {
@@ -366,11 +367,11 @@ fn test_rewrite_legacy_default_path_when_new_file_present() {
     fs::write(dir.path().join("settings.json"), legacy).unwrap();
     let service = ConfigService::load(dir.path(), None).expect("load");
     assert_eq!(
-        service.settings().prompt_base.about_me,
-        "prompts/base/about_me.md",
+        service.settings().prompt_base.about_you,
+        "prompts/base/about_you.md",
         "legacy default path should be rewritten when canonical file exists"
     );
-    assert_eq!(service.read_prompt(PromptKind::AboutMe), "real content");
+    assert_eq!(service.read_prompt(PromptKind::AboutYou), "real content");
 }
 
 #[test]
@@ -390,11 +391,157 @@ fn test_legacy_default_path_preserved_when_no_canonical_file() {
     fs::write(dir.path().join("settings.json"), legacy).unwrap();
     let service = ConfigService::load(dir.path(), None).expect("load");
     assert_eq!(
-        service.settings().prompt_base.about_me,
-        "prompts/base/about_me.md",
+        service.settings().prompt_base.about_you,
+        "prompts/base/about_you.md",
         "rename should move flat about_me.md to canonical path"
     );
-    assert_eq!(service.read_prompt(PromptKind::AboutMe), "user content");
+    assert_eq!(service.read_prompt(PromptKind::AboutYou), "user content");
+}
+
+#[test]
+fn test_migrates_about_me_key_to_about_you_in_prompt_base() {
+    let dir = TempDir::new().unwrap();
+    fs::create_dir_all(dir.path().join("prompts/base")).unwrap();
+    fs::write(
+        dir.path().join("prompts/base/about_me.md"),
+        "user content",
+    )
+    .unwrap();
+    let legacy = r#"{
+        "prompt_base": {
+            "system": "prompts/base/system.md",
+            "about_me": "prompts/base/about_me.md",
+            "environment": "prompts/base/environment.md",
+            "input_format": "prompts/base/input_format.md"
+        },
+        "surfaces": {
+            "chat": { "generation": { "model_id": "m1" } },
+            "title_generation": { "prompt": "prompts/surfaces/title_generation.md" },
+            "speech_to_text": { "prompt": "prompts/surfaces/speech_to_text.md" }
+        },
+        "models": [
+            { "id": "m1", "type": "text", "model": "gpt-4", "display_name": "T", "provider": "openai", "api_key": "${OPENAI_API_KEY}" }
+        ]
+    }"#;
+    fs::write(dir.path().join("settings.json"), legacy).unwrap();
+    let service = ConfigService::load(dir.path(), None).expect("load");
+    assert_eq!(
+        service.settings().prompt_base.about_you,
+        "prompts/base/about_you.md"
+    );
+
+    let saved = fs::read_to_string(dir.path().join("settings.json")).unwrap();
+    let saved_json: serde_json::Value = serde_json::from_str(&saved).unwrap();
+    let pb = saved_json["prompt_base"].as_object().unwrap();
+    assert!(!pb.contains_key("about_me"));
+    assert_eq!(pb["about_you"], "prompts/base/about_you.md");
+}
+
+#[test]
+fn test_renames_legacy_nested_about_me_md_file() {
+    let dir = TempDir::new().unwrap();
+    fs::create_dir_all(dir.path().join("prompts/base")).unwrap();
+    fs::write(
+        dir.path().join("prompts/base/about_me.md"),
+        "user-edited content",
+    )
+    .unwrap();
+    let legacy = r#"{
+        "prompt_base": {
+            "system": "prompts/base/system.md",
+            "about_me": "prompts/base/about_me.md",
+            "environment": "prompts/base/environment.md",
+            "input_format": "prompts/base/input_format.md"
+        },
+        "surfaces": {
+            "chat": { "generation": { "model_id": "m1" } },
+            "title_generation": { "prompt": "prompts/surfaces/title_generation.md" },
+            "speech_to_text": { "prompt": "prompts/surfaces/speech_to_text.md" }
+        },
+        "models": [
+            { "id": "m1", "type": "text", "model": "gpt-4", "display_name": "T", "provider": "openai", "api_key": "${OPENAI_API_KEY}" }
+        ]
+    }"#;
+    fs::write(dir.path().join("settings.json"), legacy).unwrap();
+    let service = ConfigService::load(dir.path(), None).expect("load");
+
+    assert!(!dir.path().join("prompts/base/about_me.md").exists());
+    assert!(dir.path().join("prompts/base/about_you.md").exists());
+    assert_eq!(
+        service.read_prompt(PromptKind::AboutYou),
+        "user-edited content"
+    );
+}
+
+#[test]
+fn test_replaces_legacy_system_prompt_default() {
+    let dir = setup_test_dir();
+    fs::create_dir_all(dir.path().join("prompts/base")).unwrap();
+    fs::write(
+        dir.path().join("prompts/base/system.md"),
+        "You are a helpful assistant.\n",
+    )
+    .unwrap();
+    let service = ConfigService::load(dir.path(), None).expect("load");
+    let content = service.read_prompt(PromptKind::System);
+    assert_ne!(content, "You are a helpful assistant.\n");
+    assert!(content.contains("candid"));
+}
+
+#[test]
+fn test_does_not_replace_user_edited_system_prompt() {
+    let dir = setup_test_dir();
+    fs::create_dir_all(dir.path().join("prompts/base")).unwrap();
+    fs::write(
+        dir.path().join("prompts/base/system.md"),
+        "You are a helpful assistant. Answer in haiku.\n",
+    )
+    .unwrap();
+    let service = ConfigService::load(dir.path(), None).expect("load");
+    assert_eq!(
+        service.read_prompt(PromptKind::System),
+        "You are a helpful assistant. Answer in haiku.\n"
+    );
+}
+
+#[test]
+fn test_preferred_name_defaults_to_empty_for_legacy_settings() {
+    let dir = TempDir::new().unwrap();
+    let legacy = r#"{
+        "prompt_base": {
+            "system": "prompts/base/system.md",
+            "about_you": "prompts/base/about_you.md",
+            "environment": "prompts/base/environment.md",
+            "input_format": "prompts/base/input_format.md"
+        },
+        "surfaces": {
+            "chat": { "generation": { "model_id": "m1" } },
+            "title_generation": { "prompt": "prompts/surfaces/title_generation.md" },
+            "speech_to_text": { "prompt": "prompts/surfaces/speech_to_text.md" }
+        },
+        "models": [
+            { "id": "m1", "type": "text", "model": "gpt-4", "display_name": "T", "provider": "openai", "api_key": "${OPENAI_API_KEY}" }
+        ]
+    }"#;
+    fs::write(dir.path().join("settings.json"), legacy).unwrap();
+    let service = ConfigService::load(dir.path(), None).expect("load");
+    assert_eq!(service.preferred_name(), "");
+}
+
+#[test]
+fn test_update_setting_preferred_name_trims_and_clamps() {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path(), None).expect("load");
+
+    service.update_setting(
+        "preferred_name",
+        serde_json::Value::String("  Filip  ".to_string()),
+    );
+    assert_eq!(service.preferred_name(), "Filip");
+
+    let long = "x".repeat(200);
+    service.update_setting("preferred_name", serde_json::Value::String(long));
+    assert_eq!(service.preferred_name().chars().count(), 60);
 }
 
 #[test]

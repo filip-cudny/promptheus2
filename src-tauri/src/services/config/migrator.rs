@@ -30,7 +30,11 @@ pub(super) struct LegacyFlatMdRename {
 const LEGACY_FLAT_MD_RENAMES: &[LegacyFlatMdRename] = &[
     LegacyFlatMdRename {
         old_relative: "about_me.md",
-        new_relative: "prompts/base/about_me.md",
+        new_relative: "prompts/base/about_you.md",
+    },
+    LegacyFlatMdRename {
+        old_relative: "prompts/base/about_me.md",
+        new_relative: "prompts/base/about_you.md",
     },
     LegacyFlatMdRename {
         old_relative: "environment_section.md",
@@ -41,6 +45,8 @@ const LEGACY_FLAT_MD_RENAMES: &[LegacyFlatMdRename] = &[
         new_relative: "prompts/base/input_format.md",
     },
 ];
+
+const LEGACY_SYSTEM_PROMPT_DEFAULT: &str = "You are a helpful assistant.\n";
 
 pub(super) fn parse_and_migrate(content: &str) -> Result<MigrationOutcome, ConfigError> {
     let raw: Value = serde_json::from_str(content)?;
@@ -72,6 +78,34 @@ pub(super) fn parse_and_migrate(content: &str) -> Result<MigrationOutcome, Confi
         inline_prompts,
         legacy_flat_md_renames: LEGACY_FLAT_MD_RENAMES.to_vec(),
     })
+}
+
+pub(super) fn replace_legacy_system_default(config_dir: &std::path::Path, system_path: &str) {
+    use super::prompts::PromptStore;
+    let store = PromptStore::new(config_dir);
+    let resolved = match store.resolve(system_path) {
+        Ok(p) => p,
+        Err(e) => {
+            log::warn!("skipping legacy system prompt detection for '{system_path}': {e}");
+            return;
+        }
+    };
+    if !resolved.exists() {
+        return;
+    }
+    let Ok(current) = std::fs::read_to_string(&resolved) else {
+        return;
+    };
+    if current != LEGACY_SYSTEM_PROMPT_DEFAULT {
+        return;
+    }
+    if let Err(e) = store.write(system_path, PromptKind::System.default_content()) {
+        log::warn!(
+            "failed to replace legacy system prompt default at '{system_path}': {e}"
+        );
+        return;
+    }
+    log::info!("replaced legacy system prompt default at '{system_path}'");
 }
 
 pub(super) fn migrate_model_params(settings: &mut Settings) {
@@ -157,13 +191,16 @@ fn has_chat_prompt_base_fields(obj: &serde_json::Map<String, Value>) -> bool {
 
 fn prompts_need_migration(obj: &serde_json::Map<String, Value>) -> bool {
     if let Some(pb) = obj.get("prompt_base").and_then(|v| v.as_object()) {
-        if pb.contains_key("system_prompt") || pb.contains_key("environment_section") {
+        if pb.contains_key("system_prompt")
+            || pb.contains_key("environment_section")
+            || pb.contains_key("about_me")
+        {
             return true;
         }
         if !pb.contains_key("input_format") {
             return true;
         }
-        for key in ["system", "about_me", "environment", "input_format"] {
+        for key in ["system", "about_you", "environment", "input_format"] {
             if let Some(v) = pb.get(key) {
                 if value_is_inline_prompt(v) {
                     return true;
@@ -357,14 +394,20 @@ fn migrate_legacy_json(mut raw: Value) -> Value {
         }
     }
 
+    if let Some(v) = prompt_base.remove("about_me") {
+        if !prompt_base.contains_key("about_you") {
+            prompt_base.insert("about_you".to_string(), v);
+        }
+    }
+
     if !prompt_base.contains_key("system") {
         if let Some(v) = system_prompt {
             prompt_base.insert("system".to_string(), v);
         }
     }
-    if !prompt_base.contains_key("about_me") {
+    if !prompt_base.contains_key("about_you") {
         if let Some(v) = about_me {
-            prompt_base.insert("about_me".to_string(), v);
+            prompt_base.insert("about_you".to_string(), v);
         }
     }
     if !prompt_base.contains_key("environment") {
@@ -404,7 +447,7 @@ fn migrate_prompt_paths(raw: &mut Value, inline_prompts: &mut Vec<InlinePromptWr
         .or_insert_with(|| Value::Object(Default::default()));
     if let Some(pb) = prompt_base.as_object_mut() {
         normalize_prompt_field(pb, "system", PromptKind::System, inline_prompts);
-        normalize_prompt_field(pb, "about_me", PromptKind::AboutMe, inline_prompts);
+        normalize_prompt_field(pb, "about_you", PromptKind::AboutYou, inline_prompts);
         normalize_prompt_field(pb, "environment", PromptKind::Environment, inline_prompts);
         normalize_prompt_field(
             pb,
@@ -858,7 +901,7 @@ mod tests {
     #[test]
     fn preserves_path_like_prompt_value() {
         let json = r#"{
-            "prompt_base": { "system": "prompts/base/system.md", "about_me": "prompts/base/about_me.md", "environment": "prompts/base/environment.md", "input_format": "prompts/base/input_format.md" },
+            "prompt_base": { "system": "prompts/base/system.md", "about_you": "prompts/base/about_you.md", "environment": "prompts/base/environment.md", "input_format": "prompts/base/input_format.md" },
             "surfaces": {
                 "chat": { "generation": { "model_id": "m1" } },
                 "title_generation": { "prompt": "prompts/surfaces/title_generation.md" },
@@ -935,7 +978,7 @@ mod tests {
         let json = r#"{
             "prompt_base": {
                 "system": "prompts/base/system.md",
-                "about_me": "prompts/base/about_me.md",
+                "about_you": "prompts/base/about_you.md",
                 "environment": "prompts/base/environment.md"
             },
             "surfaces": {

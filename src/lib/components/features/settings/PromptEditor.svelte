@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { Braces, Check, AlertCircle } from "lucide-svelte";
+  import { onMount, onDestroy } from "svelte";
+  import { Braces } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import {
     getPrompt,
@@ -8,10 +8,10 @@
     type PromptDoc,
     type PromptKind,
   } from "$lib/services/prompts";
+  import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
+  import { getSettingsStore } from "$lib/stores/settings.svelte";
+  import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import EnvPlaceholdersPopover from "./EnvPlaceholdersPopover.svelte";
-
-  const AUTOSAVE_DEBOUNCE_MS = 800;
-  const SAVED_BADGE_TTL_MS = 2500;
 
   let {
     kind,
@@ -21,6 +21,8 @@
     description?: string;
   } = $props();
 
+  const settingsStore = getSettingsStore();
+
   let doc = $state<PromptDoc | null>(null);
   let content = $state("");
   let savedContent = $state("");
@@ -28,12 +30,10 @@
   let highlightLayer = $state<HTMLPreElement | undefined>(undefined);
   let placeholdersBtn = $state<HTMLButtonElement | undefined>(undefined);
   let placeholdersOpen = $state(false);
-  let saving = $state(false);
-  let error = $state<string | null>(null);
-  let lastSavedAt = $state<number | null>(null);
-  let now = $state(Date.now());
-  let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
-  let nowTimer: ReturnType<typeof setInterval> | null = null;
+
+  const tracker = useSaveTracker({
+    debounceMs: settingsStore.settings?.autosave_debounce_ms ?? 1000,
+  });
 
   const PLACEHOLDER_RE = /\{\{[^{}\n]+\}\}/g;
 
@@ -68,20 +68,14 @@
     highlightLayer.scrollLeft = textarea.scrollLeft;
   }
 
-  let dirty = $derived(content !== savedContent);
-  let recentlySaved = $derived(
-    !dirty && lastSavedAt !== null && now - lastSavedAt < SAVED_BADGE_TTL_MS,
-  );
-
   onMount(() => {
     void load();
-    nowTimer = setInterval(() => {
-      now = Date.now();
-    }, 500);
-    return () => {
-      if (nowTimer) clearInterval(nowTimer);
-      if (autosaveTimer) clearTimeout(autosaveTimer);
-    };
+    tracker.attachKeyboard(window);
+    tracker.attachBeforeUnload(window);
+  });
+
+  onDestroy(() => {
+    tracker.destroy();
   });
 
   async function load() {
@@ -91,44 +85,26 @@
       content = fetched.content;
       savedContent = fetched.content;
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      tracker.setError(e instanceof Error ? e.message : String(e));
     }
   }
 
   $effect(() => {
     if (!doc) return;
     const _track = content;
-    if (autosaveTimer) clearTimeout(autosaveTimer);
-    if (!dirty) return;
-    autosaveTimer = setTimeout(() => {
-      void save();
-    }, AUTOSAVE_DEBOUNCE_MS);
+    if (content === savedContent) {
+      tracker.cancel();
+      return;
+    }
+    tracker.scheduleSave(persist);
   });
 
-  async function save() {
+  async function persist() {
     if (!doc) return;
-    if (saving) return;
     if (content === savedContent) return;
-    saving = true;
-    error = null;
     const snapshot = content;
-    try {
-      await savePrompt(kind, snapshot);
-      savedContent = snapshot;
-      lastSavedAt = Date.now();
-      now = Date.now();
-    } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
-    } finally {
-      saving = false;
-    }
-  }
-
-  function handleKeydown(e: KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
-      e.preventDefault();
-      void save();
-    }
+    await savePrompt(kind, snapshot);
+    savedContent = snapshot;
   }
 
   function insertAtCursor(token: string) {
@@ -144,48 +120,13 @@
       textarea.setSelectionRange(pos, pos);
     });
   }
-
-  function dotTooltip(): string {
-    if (error) return `Failed to save: ${error}`;
-    if (saving) return "Saving…";
-    if (dirty) return "Unsaved — autosaving (⌘S to flush)";
-    if (lastSavedAt) return `Saved ${formatAgo(now - lastSavedAt)} ago — autosaves on edit`;
-    return "Autosaves on edit (⌘S to flush)";
-  }
-
-  function formatAgo(ms: number): string {
-    const s = Math.max(0, Math.floor(ms / 1000));
-    if (s < 60) return `${s}s`;
-    const m = Math.floor(s / 60);
-    if (m < 60) return `${m}m`;
-    const h = Math.floor(m / 60);
-    return `${h}h`;
-  }
 </script>
 
 <section class="prompt-editor">
   <header class="head">
     <div class="title-row">
       <h3 class="title">{doc?.label ?? "…"}</h3>
-      <span
-        class="status-dot"
-        class:dirty
-        class:saving
-        class:saved={recentlySaved}
-        class:err={error}
-        title={dotTooltip()}
-        aria-label={dotTooltip()}
-      ></span>
-      {#if recentlySaved && lastSavedAt !== null}
-        <span class="saved-stamp" aria-hidden="true">
-          <Check size={10} /> saved
-        </span>
-      {/if}
-      {#if error}
-        <span class="err-stamp" title={error}>
-          <AlertCircle size={10} /> save failed
-        </span>
-      {/if}
+      <SaveStatusIndicator {tracker} />
 
       <div class="head-actions">
         {#if doc?.supports_env_placeholders}
@@ -223,7 +164,6 @@
       <textarea
         bind:this={textarea}
         bind:value={content}
-        onkeydown={handleKeydown}
         onscroll={syncScroll}
         spellcheck="false"
         rows="14"
@@ -272,61 +212,6 @@
     font-size: var(--font-size-base);
     font-weight: var(--font-weight-semibold);
     color: var(--text-primary);
-  }
-
-  .status-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--text-faint);
-    transition: background var(--motion-fast) var(--ease-default),
-      transform var(--motion-fast) var(--ease-default);
-    cursor: help;
-  }
-
-  .status-dot.dirty {
-    background: var(--accent);
-  }
-
-  .status-dot.saving {
-    background: var(--accent);
-    animation: pulse 1.2s ease-in-out infinite;
-  }
-
-  .status-dot.saved {
-    background: var(--success);
-  }
-
-  .status-dot.err {
-    background: var(--danger);
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 0.55; }
-    50% { opacity: 1; }
-  }
-
-  .saved-stamp,
-  .err-stamp {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    font-size: var(--font-size-xs);
-    color: var(--text-muted);
-    animation: fade-in var(--motion-default) var(--ease-default);
-  }
-
-  .saved-stamp {
-    color: var(--success);
-  }
-
-  .err-stamp {
-    color: var(--danger);
-  }
-
-  @keyframes fade-in {
-    from { opacity: 0; transform: translateY(-2px); }
-    to { opacity: 1; transform: translateY(0); }
   }
 
   .head-actions {

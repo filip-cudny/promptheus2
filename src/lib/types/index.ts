@@ -15,10 +15,10 @@ export interface Settings {
   code_theme: string;
   theme: string;
   menu_section_order: string[];
-  description_generator: DescriptionGenerator;
   notifications: NotificationSettings;
-  number_input_debounce_ms: number;
+  autosave_debounce_ms: number;
   models: ModelConfig[];
+  preferred_name: string;
   prompt_base: PromptBase;
   surfaces: Surfaces;
   keymaps: KeymapGroup[];
@@ -34,9 +34,10 @@ export interface WebviewProvider {
 }
 
 export interface PromptBase {
-  system_prompt: string;
-  about_me: string | null;
-  environment_section: string | null;
+  system: string;
+  about_you: string;
+  environment: string;
+  input_format: string;
 }
 
 export interface Surfaces {
@@ -159,8 +160,3 @@ export interface Skill extends SkillSummary {
   body: string;
 }
 
-export interface DescriptionGenerator {
-  model: string;
-  system_prompt: string | null;
-  prompt: string | null;
-}
