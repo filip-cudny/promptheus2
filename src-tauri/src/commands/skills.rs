@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use log::info;
@@ -11,6 +10,7 @@ use crate::models::skill::{
     SlugValidation,
 };
 use crate::services::config::ConfigService;
+use crate::services::execution::substitute_environment_placeholders;
 use crate::services::skill::{validate_slug, SkillError, SkillService};
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
@@ -397,21 +397,8 @@ pub async fn preview_skill_message(
     skill_name: Option<String>,
 ) -> crate::Result<String> {
     let name = skill_name.unwrap_or_else(|| "preview".to_string());
-    let now = chrono::Local::now();
-    let substitutions: HashMap<&str, String> = HashMap::from([
-        ("{{date}}", now.format("%Y-%m-%d").to_string()),
-        ("{{time}}", now.format("%H:%M").to_string()),
-        ("{{timezone}}", now.format("%Z").to_string()),
-        ("{{os}}", std::env::consts::OS.to_string()),
-        ("{{active_app}}", "(preview)".to_string()),
-        ("{{recent_apps}}", "(preview)".to_string()),
-    ]);
-
-    let mut rendered_body = body;
-    for (token, value) in substitutions.iter() {
-        rendered_body = rendered_body.replace(token, value);
-    }
-
+    let rendered_body =
+        substitute_environment_placeholders(&body, "(preview)", "(preview)");
     info!("composing skill preview for '{name}'");
     Ok(format!(
         "<skill name=\"{name}\">\n{rendered_body}\n</skill>\n\n<input>\n{sample_input}\n</input>"

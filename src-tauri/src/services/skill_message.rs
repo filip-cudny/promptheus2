@@ -437,6 +437,20 @@ mod tests {
     }
 
     #[test]
+    fn compose_substitutes_body_placeholders_but_leaves_input_alone() {
+        let skill = test_skill(
+            "context-aware",
+            "You are running on {{os}} in {{active_app}}.",
+        );
+        let input = "User typed {{os}} literally — should stay as-is.";
+        let result = compose_skill_user_message(&skill, input, "Firefox", "Firefox, VS Code");
+
+        assert!(result.contains(&format!("running on {} in Firefox", std::env::consts::OS)));
+        assert!(!result.contains("{{os}} in"));
+        assert!(result.contains("typed {{os}} literally"));
+    }
+
+    #[test]
     fn compose_multi_skill_from_snapshot() {
         let skills = vec![
             AppliedSkill {
@@ -477,7 +491,8 @@ mod tests {
     fn prepare_messages_without_context() {
         let skill = test_skill("test", "Test body.");
         let context = ContextManagerService::new();
-        let messages = prepare_skill_messages("You are helpful.", &skill, "input text", &context);
+        let messages =
+            prepare_skill_messages("You are helpful.", &skill, "input text", &context, "", "");
 
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].role, "system");
@@ -502,7 +517,8 @@ mod tests {
         let skill = test_skill("test", "Test body.");
         let mut context = ContextManagerService::new();
         context.set_context("background info".into());
-        let messages = prepare_skill_messages("You are helpful.", &skill, "input", &context);
+        let messages =
+            prepare_skill_messages("You are helpful.", &skill, "input", &context, "", "");
 
         if let MessageContent::Text(ref text) = messages[0].content {
             assert!(text.contains("You are helpful."));
@@ -518,7 +534,7 @@ mod tests {
         let skill = test_skill("test", "Test body.");
         let mut context = ContextManagerService::new();
         context.append_context_image("abc123".into(), "image/png".into());
-        let messages = prepare_skill_messages("System.", &skill, "input", &context);
+        let messages = prepare_skill_messages("System.", &skill, "input", &context, "", "");
 
         assert_eq!(messages.len(), 2);
         match &messages[1].content {
