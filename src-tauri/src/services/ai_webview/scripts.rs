@@ -18,11 +18,13 @@ pub(super) fn initialization_script(provider: &WebviewProvider) -> String {
             g.providerId = {provider_id_json};
             g.routerSentinel = {sentinel_json};
             {palette}
+            {external_links}
         }})();
         "#,
         provider_id_json = provider_id_json,
         sentinel_json = sentinel_json,
         palette = PALETTE_KEYBIND_JS,
+        external_links = EXTERNAL_LINKS_JS,
         dark_mode = DARK_MODE_JS,
     )
 }
@@ -30,8 +32,13 @@ pub(super) fn initialization_script(provider: &WebviewProvider) -> String {
 pub(super) fn reinject_script() -> String {
     r#"
     (function() {
-        if (!window.__promptheus || !window.__promptheus.ensurePaletteKeybind) return;
-        window.__promptheus.ensurePaletteKeybind();
+        if (!window.__promptheus) return;
+        if (window.__promptheus.ensurePaletteKeybind) {
+            window.__promptheus.ensurePaletteKeybind();
+        }
+        if (window.__promptheus.ensureExternalLinks) {
+            window.__promptheus.ensureExternalLinks();
+        }
     })();
     "#
     .to_string()
@@ -96,6 +103,56 @@ g.ensurePaletteKeybind = ensurePaletteKeybind;
 ensurePaletteKeybind();
 "##;
 
+const EXTERNAL_LINKS_JS: &str = r##"
+const origOpen = window.open ? window.open.bind(window) : null;
+
+function isCrossOrigin(targetUrl) {
+    try {
+        const u = new URL(targetUrl, location.href);
+        if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+        return u.host !== location.host;
+    } catch (_) {
+        return false;
+    }
+}
+
+function externalClick(e) {
+    if (e.defaultPrevented) return;
+    if (e.button === 2) return;
+    const a = e.target && e.target.closest && e.target.closest("a[href]");
+    if (!a) return;
+    const href = a.href;
+    if (!href) return;
+    const isBlank = a.target === "_blank";
+    const cross = isCrossOrigin(href);
+    if (!isBlank && !cross) return;
+    e.preventDefault();
+    e.stopPropagation();
+    sendRouter({ kind: "open_external", url: href });
+}
+
+function patchedOpen(url, target, features) {
+    try {
+        if (typeof url === "string" && isCrossOrigin(url)) {
+            sendRouter({ kind: "open_external", url: new URL(url, location.href).href });
+            return null;
+        }
+    } catch (_) {}
+    return origOpen ? origOpen(url, target, features) : null;
+}
+
+function ensureExternalLinks() {
+    if (g.__externalLinksInstalled) return;
+    g.__externalLinksInstalled = true;
+    document.addEventListener("click", externalClick, true);
+    document.addEventListener("auxclick", externalClick, true);
+    if (origOpen) window.open = patchedOpen;
+}
+
+g.ensureExternalLinks = ensureExternalLinks;
+ensureExternalLinks();
+"##;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,5 +190,14 @@ mod tests {
         let js = reinject_script();
         assert!(js.contains("if (!window.__promptheus"));
         assert!(js.contains("ensurePaletteKeybind"));
+        assert!(js.contains("ensureExternalLinks"));
+    }
+
+    #[test]
+    fn initialization_script_includes_external_links_shim() {
+        let js = initialization_script(&provider());
+        assert!(js.contains("ensureExternalLinks"));
+        assert!(js.contains("open_external"));
+        assert!(js.contains("auxclick"));
     }
 }

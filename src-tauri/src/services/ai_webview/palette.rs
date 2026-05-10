@@ -8,6 +8,7 @@ use crate::models::settings::WebviewProvider;
 use crate::services::config::ConfigService;
 use crate::services::dialog::{focus_window, shell_toolbar_label_for, TOOLBAR_HEIGHT};
 
+use super::external_links::open_external_url;
 use super::lifecycle::{host_window_for_webview, CONVERSATION_DIALOG_LABEL};
 use super::provider_swap::{hosted_swap_to_conversation_dialog, hosted_swap_to_provider};
 use super::AiWebviewState;
@@ -19,6 +20,7 @@ pub(super) const PROMPTHEUS_PROVIDER_ID: &str = "promptheus";
 #[derive(Debug)]
 pub(super) enum RouterMessage {
     OpenPalette,
+    OpenExternal { url: String },
 }
 
 pub(super) fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
@@ -29,6 +31,13 @@ pub(super) fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
     let kind = params.remove("kind")?;
     match kind.as_str() {
         "open_palette" => Some(RouterMessage::OpenPalette),
+        "open_external" => {
+            let url = params.remove("url")?;
+            if url.is_empty() {
+                return None;
+            }
+            Some(RouterMessage::OpenExternal { url })
+        }
         _ => None,
     }
 }
@@ -57,6 +66,9 @@ pub(super) async fn handle_router_message(
                     "swap_to_palette failed: {e}",
                 );
             }
+        }
+        RouterMessage::OpenExternal { url } => {
+            open_external_url(app, &url);
         }
     }
 }
@@ -356,6 +368,38 @@ mod tests {
     #[test]
     fn parse_router_message_empty_query() {
         let url = tauri::Url::parse("https://promptheus-ai-webview-router.invalid/?").unwrap();
+        assert!(parse_router_message(&url).is_none());
+    }
+
+    #[test]
+    fn parse_router_message_open_external() {
+        let url = tauri::Url::parse(
+            "https://promptheus-ai-webview-router.invalid/?kind=open_external&url=https%3A%2F%2Fexample.com%2Fpath",
+        )
+        .unwrap();
+        match parse_router_message(&url) {
+            Some(RouterMessage::OpenExternal { url }) => {
+                assert_eq!(url, "https://example.com/path");
+            }
+            other => panic!("expected OpenExternal, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parse_router_message_open_external_missing_url() {
+        let url = tauri::Url::parse(
+            "https://promptheus-ai-webview-router.invalid/?kind=open_external",
+        )
+        .unwrap();
+        assert!(parse_router_message(&url).is_none());
+    }
+
+    #[test]
+    fn parse_router_message_open_external_empty_url() {
+        let url = tauri::Url::parse(
+            "https://promptheus-ai-webview-router.invalid/?kind=open_external&url=",
+        )
+        .unwrap();
         assert!(parse_router_message(&url).is_none());
     }
 }

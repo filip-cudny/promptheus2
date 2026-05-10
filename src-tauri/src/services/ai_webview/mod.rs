@@ -1,4 +1,5 @@
 mod cold_suspend;
+mod external_links;
 mod lifecycle;
 mod palette;
 mod provider_swap;

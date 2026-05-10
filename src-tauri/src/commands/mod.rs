@@ -169,6 +169,8 @@ macro_rules! handlers {
             // === speech ===
             $crate::commands::speech::toggle_speech_recording,
             $crate::commands::speech::get_recording_state,
+            $crate::commands::speech::get_stt_keyterms,
+            $crate::commands::speech::save_stt_keyterms,
             // === text_preview ===
             $crate::commands::text_preview::open_text_preview,
             $crate::commands::text_preview::get_pending_text,

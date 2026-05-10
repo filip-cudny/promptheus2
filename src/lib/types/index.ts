@@ -74,6 +74,13 @@ export interface SpeechToTextConfig {
   prompt: string | null;
 }
 
+export interface SttKeytermsDoc {
+  path: string;
+  content: string;
+  exists: boolean;
+  term_count: number;
+}
+
 export type ModelType = "text" | "stt";
 export type ApiMode = "responses" | "completions";
 

@@ -14,7 +14,8 @@ settings/
 ├── SectionModels.svelte           # Models section: list pane + editor pane
 ├── SectionAppearance.svelte       # Theme toggle
 ├── SectionPromptBase.svelte       # Preferred name field + System / about_you / environment / input_format prompts (tabbed)
-├── SectionSurfacePrompts.svelte   # Title generation + STT bias prompts (tabbed)
+├── SectionSurfacePrompts.svelte   # Title generation + STT prompt + STT keyterms (tabbed)
+├── SttKeytermsEditor.svelte       # STT keyterms file editor (chip view + raw text fallback)
 ├── PromptEditor.svelte            # Per-prompt editor (load/edit/autosave + Cmd+S, no Save button)
 ├── EnvPlaceholdersPopover.svelte  # On-demand popover of {{date}}/{{time}}/... chips for environment.md
 ├── ModelList.svelte               # Grouped model list, "Add" split-button (text/STT)

@@ -8,7 +8,7 @@ use crate::models::history::HistoryEntryType;
 use crate::models::speech::{
     SpeechRecordingStartedEvent, SpeechRecordingStoppedEvent, SpeechTranscriptionError,
 };
-use crate::services::config::ConfigService;
+use crate::services::config::{ConfigService, KeytermsDoc};
 use crate::services::notification::{NotificationLevel, NotificationService};
 use crate::services::speech::{self, SpeechError, SpeechService};
 use crate::services::sqlite_history::SqliteHistoryService;
@@ -342,4 +342,29 @@ pub async fn get_recording_state(
         is_transcribing: s.is_transcribing(),
         action_id: s.recording_action_id().map(String::from),
     })
+}
+
+#[tauri::command]
+pub async fn get_stt_keyterms(
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+) -> crate::Result<KeytermsDoc> {
+    let svc = config.lock().await;
+    Ok(svc.read_stt_keyterms_file()?)
+}
+
+#[tauri::command]
+pub async fn save_stt_keyterms(
+    app: AppHandle,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+    content: String,
+) -> crate::Result<KeytermsDoc> {
+    let mut svc = config.lock().await;
+    let path_was_unset = svc.settings().surfaces.speech_to_text.keyterms_file.is_none();
+    let doc = svc.write_stt_keyterms_file(&content)?;
+    if path_was_unset {
+        svc.save()?;
+        let _ = app.emit("settings-changed", serde_json::json!({}));
+    }
+    let _ = app.emit("stt-keyterms-changed", ());
+    Ok(doc)
 }

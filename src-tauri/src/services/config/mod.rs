@@ -396,17 +396,90 @@ impl ConfigService {
         let Ok(content) = std::fs::read_to_string(&path) else {
             return Vec::new();
         };
-        content
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty() && !line.starts_with('#'))
-            .map(str::to_string)
-            .collect()
+        parse_keyterms(&content)
+    }
+
+    pub fn stt_keyterms_path_or_default(&self) -> &str {
+        self.settings
+            .surfaces
+            .speech_to_text
+            .keyterms_file
+            .as_deref()
+            .unwrap_or(DEFAULT_STT_KEYTERMS_PATH)
+    }
+
+    pub fn read_stt_keyterms_file(&self) -> Result<KeytermsDoc, ConfigError> {
+        let path = self.stt_keyterms_path_or_default().to_string();
+        let resolved = resolve_config_relative(&path, &self.config_dir)?;
+        let content = std::fs::read_to_string(&resolved).unwrap_or_default();
+        let exists = resolved.exists();
+        let term_count = parse_keyterms(&content).len();
+        Ok(KeytermsDoc {
+            path,
+            content,
+            exists,
+            term_count,
+        })
+    }
+
+    pub fn write_stt_keyterms_file(
+        &mut self,
+        content: &str,
+    ) -> Result<KeytermsDoc, ConfigError> {
+        let path = self.stt_keyterms_path_or_default().to_string();
+        let resolved = resolve_config_relative(&path, &self.config_dir)?;
+        if let Some(parent) = resolved.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        write_keyterms_atomic(&resolved, content)?;
+        if self.settings.surfaces.speech_to_text.keyterms_file.is_none() {
+            self.settings.surfaces.speech_to_text.keyterms_file = Some(path.clone());
+        }
+        let term_count = parse_keyterms(content).len();
+        Ok(KeytermsDoc {
+            path,
+            content: content.to_string(),
+            exists: true,
+            term_count,
+        })
     }
 
     pub fn config_dir(&self) -> &Path {
         &self.config_dir
     }
+}
+
+const DEFAULT_STT_KEYTERMS_PATH: &str = "data/keyterms.txt";
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct KeytermsDoc {
+    pub path: String,
+    pub content: String,
+    pub exists: bool,
+    pub term_count: usize,
+}
+
+fn parse_keyterms(content: &str) -> Vec<String> {
+    content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(str::to_string)
+        .collect()
+}
+
+fn write_keyterms_atomic(path: &Path, content: &str) -> Result<(), ConfigError> {
+    let parent = path.parent().ok_or_else(|| {
+        ConfigError::InvalidSettings(format!("path has no parent: {}", path.display()))
+    })?;
+    let file_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("keyterms.txt");
+    let tmp = parent.join(format!(".{file_name}.tmp"));
+    std::fs::write(&tmp, content)?;
+    std::fs::rename(&tmp, path)?;
+    Ok(())
 }
 
 fn apply_inline_prompts(

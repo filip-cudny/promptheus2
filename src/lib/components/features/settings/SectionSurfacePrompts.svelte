@@ -2,9 +2,11 @@
   import SettingsSection from "./SettingsSection.svelte";
   import PromptEditor from "./PromptEditor.svelte";
   import PromptTabs from "./PromptTabs.svelte";
+  import SttKeytermsEditor from "./SttKeytermsEditor.svelte";
   import type { PromptKind } from "$lib/services/prompts";
 
-  type TabId = Extract<PromptKind, "title_generation" | "speech_to_text">;
+  type PromptTabId = Extract<PromptKind, "title_generation" | "speech_to_text">;
+  type TabId = PromptTabId | "stt_keyterms";
 
   const TABS: ReadonlyArray<{ id: TabId; label: string; description: string }> = [
     {
@@ -14,8 +16,14 @@
     },
     {
       id: "speech_to_text",
-      label: "Speech-to-text",
+      label: "STT prompt",
       description: "Optional bias prompt for the speech-to-text model. Leave empty to disable.",
+    },
+    {
+      id: "stt_keyterms",
+      label: "STT keyterms",
+      description:
+        "Domain words to bias transcription — names, jargon, brands, acronyms. One term per line.",
     },
   ];
 
@@ -25,14 +33,21 @@
 
 <SettingsSection
   title="Surface prompts"
-  hint="Per-feature prompts used outside the main chat surface."
+  hint="Per-feature prompts and biases used outside the main chat surface."
 >
   {#snippet body()}
     <div class="surface-prompts-body">
       <PromptTabs tabs={TABS.map((t) => ({ id: t.id, label: t.label }))} bind:active />
       <div class="editor-wrap">
         {#key activeTab.id}
-          <PromptEditor kind={activeTab.id} description={activeTab.description} />
+          {#if activeTab.id === "stt_keyterms"}
+            <SttKeytermsEditor description={activeTab.description} />
+          {:else}
+            <PromptEditor
+              kind={activeTab.id as PromptTabId}
+              description={activeTab.description}
+            />
+          {/if}
         {/key}
       </div>
     </div>
