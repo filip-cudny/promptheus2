@@ -40,6 +40,7 @@
   import ChatRow from "./components/ChatRow.svelte";
   import SettingsToggleRow from "./components/SettingsToggleRow.svelte";
   import FooterHint from "./components/FooterHint.svelte";
+  import ProviderMenuFooterHint from "./components/ProviderMenuFooterHint.svelte";
   import SkillActionMenu from "./components/SkillActionMenu.svelte";
   import SettingsPanel from "./components/SettingsPanel.svelte";
   import { useFloatingPanelMutex } from "./drivers/useFloatingPanelMutex.svelte";
@@ -234,6 +235,7 @@
             expand
             onSelect={(id) => { void pickChatProvider(id); }}
           />
+          <ProviderMenuFooterHint />
         </FloatingPanel>
       {/if}
       {#if section.sectionId === "skills"}
