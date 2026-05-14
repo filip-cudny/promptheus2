@@ -31,6 +31,14 @@ export async function closePalette(
   await invoke("close_palette", { hostLabel, selectedProviderId });
 }
 
+export async function focusWindowByLabel(label: string): Promise<void> {
+  await invoke("focus_window_by_label", { label });
+}
+
+export async function setWindowTitle(hostLabel: string, title: string): Promise<void> {
+  await invoke("set_window_title", { hostLabel, title });
+}
+
 export async function showProviderMenu(
   hostLabel: string,
   anchorX: number,

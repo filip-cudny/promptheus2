@@ -179,6 +179,7 @@ pub(super) async fn hosted_swap_to_provider(
 
         let app_for_nav = app.clone();
         let nav_webview_label = child_label.clone();
+        let title_webview_label = child_label.clone();
 
         let builder = WebviewBuilder::new(&child_label, WebviewUrl::External(content_url))
             .auto_resize()
@@ -210,6 +211,11 @@ pub(super) async fn hosted_swap_to_provider(
                     }
                 }
                 false
+            })
+            .on_document_title_changed(move |webview, title| {
+                if let Some(state) = webview.app_handle().try_state::<AiWebviewState>() {
+                    state.set_page_title(&title_webview_label, &title);
+                }
             })
             .on_page_load(move |webview, payload| {
                 if payload.event() == PageLoadEvent::Finished {

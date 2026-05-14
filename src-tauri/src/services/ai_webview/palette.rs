@@ -1,17 +1,34 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use serde::Serialize;
 use tauri::{Emitter, LogicalPosition, LogicalSize, Manager};
 use tokio::sync::Mutex;
 
 use crate::models::settings::WebviewProvider;
 use crate::services::config::ConfigService;
-use crate::services::dialog::{focus_window, shell_toolbar_label_for, TOOLBAR_HEIGHT};
+use crate::services::dialog::{
+    focus_window, is_conversation_dialog_host, is_shell_toolbar_label, shell_toolbar_label_for,
+    TOOLBAR_HEIGHT,
+};
 
 use super::external_links::open_external_url;
 use super::lifecycle::{host_window_for_webview, CONVERSATION_DIALOG_LABEL};
 use super::provider_swap::{hosted_swap_to_conversation_dialog, hosted_swap_to_provider};
 use super::AiWebviewState;
+
+const AI_WEBVIEW_PREFIX: &str = "ai-webview-";
+
+#[derive(Serialize, Clone)]
+pub(super) struct PaletteWindowEntry {
+    pub host_label: String,
+    pub kind: String,
+    pub provider_id: Option<String>,
+    pub provider_name: Option<String>,
+    pub provider_url: Option<String>,
+    pub title: String,
+    pub is_current: bool,
+}
 
 const PALETTE_LABEL: &str = "palette";
 const PALETTE_BACKDROP_LABEL: &str = "palette-backdrop";
@@ -172,10 +189,16 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
         }
     }
 
+    let windows = collect_open_windows(app, host_label, state.inner(), &providers);
+    let current_title =
+        current_window_title(state.inner(), host_label, &active_label, &providers);
+
     let payload = serde_json::json!({
         "host_label": host_label,
         "active_id": active_provider_id,
         "providers": providers,
+        "windows": windows,
+        "current_title": current_title,
     });
     if let Err(e) = app.emit_to(PALETTE_LABEL, "palette:show", payload) {
         log::warn!(
@@ -336,6 +359,129 @@ pub async fn lookup_webview_provider(
         .settings()
         .find_webview_provider(id)
         .cloned()
+}
+
+fn host_is_listable(label: &str) -> bool {
+    if label == PALETTE_LABEL || label == PALETTE_BACKDROP_LABEL {
+        return false;
+    }
+    if is_shell_toolbar_label(label) {
+        return false;
+    }
+    is_conversation_dialog_host(label) || label.starts_with(AI_WEBVIEW_PREFIX)
+}
+
+fn provider_for_webview_label(
+    state: &AiWebviewState,
+    providers: &[WebviewProvider],
+    webview_label: &str,
+) -> Option<WebviewProvider> {
+    let provider_id = state.current_provider_for(webview_label)?;
+    providers.iter().find(|p| p.id == provider_id).cloned()
+}
+
+fn collect_open_windows(
+    app: &tauri::AppHandle,
+    current_host: &str,
+    state: &AiWebviewState,
+    providers: &[WebviewProvider],
+) -> Vec<PaletteWindowEntry> {
+    let mut entries: Vec<(PaletteWindowEntry, std::time::Instant)> = Vec::new();
+    let fallback_origin = std::time::Instant::now()
+        - std::time::Duration::from_secs(60 * 60 * 24 * 365);
+
+    let all_windows = app.windows();
+    log::debug!(
+        target: "app_lib::services::ai_webview",
+        "collect_open_windows: current={current_host} all_window_labels={:?}",
+        all_windows.keys().collect::<Vec<_>>(),
+    );
+
+    for (label, _) in all_windows {
+        if !host_is_listable(&label) {
+            continue;
+        }
+
+        let is_current = label == current_host;
+        let active_label = state
+            .get_active(&label)
+            .unwrap_or_else(|| label.clone());
+        let mut entry = window_entry_for(state, providers, &label, &active_label);
+        entry.is_current = is_current;
+        let last_focus = if is_current {
+            std::time::Instant::now()
+        } else {
+            state.host_focus_at(&label).unwrap_or(fallback_origin)
+        };
+        entries.push((entry, last_focus));
+    }
+
+    log::debug!(
+        target: "app_lib::services::ai_webview",
+        "collect_open_windows: produced {} entries",
+        entries.len(),
+    );
+
+    entries.sort_by(|a, b| b.1.cmp(&a.1));
+    entries.truncate(8);
+    entries.into_iter().map(|(e, _)| e).collect()
+}
+
+fn window_entry_for(
+    state: &AiWebviewState,
+    providers: &[WebviewProvider],
+    host_label: &str,
+    active_webview_label: &str,
+) -> PaletteWindowEntry {
+    let is_promptheus_active = is_conversation_dialog_host(host_label)
+        && active_webview_label == host_label;
+
+    if is_promptheus_active {
+        let title = state
+            .host_title_for(host_label)
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| "Promptheus".to_string());
+        return PaletteWindowEntry {
+            host_label: host_label.to_string(),
+            kind: "promptheus".to_string(),
+            provider_id: None,
+            provider_name: None,
+            provider_url: None,
+            title,
+            is_current: false,
+        };
+    }
+
+    let provider = provider_for_webview_label(state, providers, active_webview_label);
+    let provider_name = provider.as_ref().map(|p| p.name.clone());
+    let provider_url = provider.as_ref().map(|p| p.url.clone());
+    let provider_id = provider.as_ref().map(|p| p.id.clone());
+
+    let title = state
+        .page_title_for(active_webview_label)
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| provider_name.clone())
+        .unwrap_or_else(|| "Untitled".to_string());
+
+    PaletteWindowEntry {
+        host_label: host_label.to_string(),
+        kind: "ai_provider".to_string(),
+        provider_id,
+        provider_name,
+        provider_url,
+        title,
+        is_current: false,
+    }
+}
+
+fn current_window_title(
+    state: &AiWebviewState,
+    host_label: &str,
+    active_webview_label: &str,
+    providers: &[WebviewProvider],
+) -> String {
+    let entry = window_entry_for(state, providers, host_label, active_webview_label);
+    entry.title
 }
 
 #[cfg(test)]

@@ -393,6 +393,7 @@ pub async fn open_or_focus(
     let resize_app = app.clone();
     let resize_custom_titlebar = custom_titlebar;
 
+    let focus_label = config.label.clone();
     window.on_window_event(move |event| match event {
         WindowEvent::CloseRequested { .. } => {
             save_geometry(&app_handle, &label, &geometry_key);
@@ -411,8 +412,17 @@ pub async fn open_or_focus(
             let logical_h = size.height as f64 / scale;
             apply_layout(&host, resize_custom_titlebar, logical_w, logical_h);
         }
+        WindowEvent::Focused(true) => {
+            if let Some(state) = resize_app.try_state::<ai_webview::AiWebviewState>() {
+                state.touch_host_focus(&focus_label);
+            }
+        }
         _ => {}
     });
+
+    if let Some(state) = app.try_state::<ai_webview::AiWebviewState>() {
+        state.touch_host_focus(&config.label);
+    }
 
     Ok((win, true))
 }

@@ -229,6 +229,7 @@ async fn open_window(
     let label_owned = label.to_string();
     let app_for_nav = app.clone();
     let label_for_nav = label_owned.clone();
+    let label_for_title = label_owned.clone();
 
     let mut builder =
         WebviewWindowBuilder::new(app, &label_owned, WebviewUrl::External(content_url))
@@ -259,6 +260,11 @@ async fn open_window(
                     }
                 }
                 false
+            })
+            .on_document_title_changed(move |window, title| {
+                if let Some(state) = window.app_handle().try_state::<AiWebviewState>() {
+                    state.set_page_title(&label_for_title, &title);
+                }
             })
             .on_page_load(move |webview, payload| {
                 if payload.event() == PageLoadEvent::Finished {
@@ -299,10 +305,18 @@ async fn open_window(
             let dock = app_handle.state::<DockManager>();
             dock.dialog_closed(&app_handle);
         }
+        WindowEvent::Focused(true) => {
+            if let Some(state) = app_handle.try_state::<AiWebviewState>() {
+                state.touch_host_focus(&label_for_event);
+            }
+        }
         _ => {}
     });
 
     focus_window(&win)?;
+    if let Some(state) = app.try_state::<AiWebviewState>() {
+        state.touch_host_focus(&label_owned);
+    }
 
     log::info!(
         target: "app_lib::services::ai_webview",

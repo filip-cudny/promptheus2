@@ -32,6 +32,9 @@ pub struct AiWebviewState {
     pending_provider: StdMutex<HashMap<String, String>>,
     last_active: StdMutex<HashMap<String, Instant>>,
     suspended: StdMutex<HashMap<String, String>>,
+    host_focus: StdMutex<HashMap<String, Instant>>,
+    page_titles: StdMutex<HashMap<String, String>>,
+    host_titles: StdMutex<HashMap<String, String>>,
 }
 
 impl AiWebviewState {
@@ -87,12 +90,18 @@ impl AiWebviewState {
         self.hosted.lock().unwrap().remove(host_label);
         self.active_webview.lock().unwrap().remove(host_label);
         self.palette_open.lock().unwrap().remove(host_label);
+        self.host_focus.lock().unwrap().remove(host_label);
+        self.host_titles.lock().unwrap().remove(host_label);
         let prefix = format!("{host_label}::");
         self.last_active
             .lock()
             .unwrap()
             .retain(|k, _| !k.starts_with(&prefix) && k != host_label);
         self.suspended
+            .lock()
+            .unwrap()
+            .retain(|k, _| !k.starts_with(&prefix) && k != host_label);
+        self.page_titles
             .lock()
             .unwrap()
             .retain(|k, _| !k.starts_with(&prefix) && k != host_label);
@@ -209,6 +218,43 @@ impl AiWebviewState {
             map.insert(host_label.to_string(), false);
         }
         was_open
+    }
+
+    pub fn touch_host_focus(&self, host_label: &str) {
+        self.host_focus
+            .lock()
+            .unwrap()
+            .insert(host_label.to_string(), Instant::now());
+    }
+
+    pub(super) fn host_focus_at(&self, host_label: &str) -> Option<Instant> {
+        self.host_focus.lock().unwrap().get(host_label).copied()
+    }
+
+    pub fn set_page_title(&self, webview_label: &str, title: &str) {
+        self.page_titles
+            .lock()
+            .unwrap()
+            .insert(webview_label.to_string(), title.to_string());
+    }
+
+    pub(super) fn page_title_for(&self, webview_label: &str) -> Option<String> {
+        self.page_titles
+            .lock()
+            .unwrap()
+            .get(webview_label)
+            .cloned()
+    }
+
+    pub fn set_host_title(&self, host_label: &str, title: &str) {
+        self.host_titles
+            .lock()
+            .unwrap()
+            .insert(host_label.to_string(), title.to_string());
+    }
+
+    pub(super) fn host_title_for(&self, host_label: &str) -> Option<String> {
+        self.host_titles.lock().unwrap().get(host_label).cloned()
     }
 }
 

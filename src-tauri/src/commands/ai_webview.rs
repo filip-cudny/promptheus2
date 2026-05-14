@@ -6,6 +6,7 @@ use tokio::sync::Mutex;
 use crate::models::settings::WebviewProvider;
 use crate::services::ai_webview;
 use crate::services::config::ConfigService;
+use crate::services::dialog::focus_host_window;
 use crate::Error;
 
 async fn require_provider(
@@ -193,4 +194,32 @@ pub async fn close_palette(
     ai_webview::swap_from_palette(&app, &host_label, selected_provider_id)
         .await
         .map_err(Error::Other)
+}
+
+#[tauri::command]
+pub fn focus_window_by_label(app: tauri::AppHandle, label: String) -> crate::Result<()> {
+    log::info!(
+        target: "app_lib::commands::ai_webview",
+        "focus_window_by_label label={label}",
+    );
+    if app.get_window(&label).is_none() {
+        return Err(Error::Other(format!("no window: {label}")));
+    }
+    focus_host_window(&app, &label).map_err(Error::Other)
+}
+
+#[tauri::command]
+pub fn set_window_title(
+    app: tauri::AppHandle,
+    host_label: String,
+    title: String,
+) -> crate::Result<()> {
+    log::trace!(
+        target: "app_lib::commands::ai_webview",
+        "set_window_title host={host_label} title={title:?}",
+    );
+    if let Some(state) = app.try_state::<ai_webview::AiWebviewState>() {
+        state.set_host_title(&host_label, &title);
+    }
+    Ok(())
 }

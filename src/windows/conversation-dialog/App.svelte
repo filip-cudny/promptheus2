@@ -14,7 +14,7 @@
   import InputArea from "$lib/components/features/conversation-dialog/InputArea.svelte";
   import TabSidebar from "$lib/components/features/conversation-dialog/TabSidebar.svelte";
   import { useConversationDialogIpc } from "$lib/components/features/conversation-dialog/drivers/useConversationDialogIpc.svelte";
-  import { openPalette, reloadActiveInHost } from "$lib/services/shellToolbar";
+  import { openPalette, reloadActiveInHost, setWindowTitle } from "$lib/services/shellToolbar";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
   import { focusConversationInput } from "$lib/utils/conversationFocus";
   import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
@@ -61,6 +61,17 @@
     const activeModel = models.find((m) => m.id === activeModelId);
     if (!activeModel) return 0;
     return getContextWindowSize(activeModel.model, activeModel.context_window_size);
+  });
+
+  let activeTabTitle = $derived(
+    store.tabs.find((t) => t.tab_id === store.activeTabId)?.tab_name ?? "",
+  );
+
+  $effect(() => {
+    const title = activeTabTitle;
+    setWindowTitle(HOST_LABEL, title).catch((err) => {
+      console.error("set_window_title failed", err);
+    });
   });
 
   async function handleGlobalKeydown(e: KeyboardEvent) {

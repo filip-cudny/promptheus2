@@ -47,6 +47,8 @@ macro_rules! handlers {
             $crate::commands::ai_webview::reload_active_in_host,
             $crate::commands::ai_webview::open_palette,
             $crate::commands::ai_webview::close_palette,
+            $crate::commands::ai_webview::focus_window_by_label,
+            $crate::commands::ai_webview::set_window_title,
             // === clipboard ===
             $crate::commands::clipboard::get_clipboard_text,
             $crate::commands::clipboard::set_clipboard_text,

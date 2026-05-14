@@ -26,9 +26,12 @@
   visible={ipc.visible}
   activeId={ipc.activeId}
   webviewProviders={ipc.webviewProviders}
+  openWindows={ipc.openWindows}
+  currentTitle={ipc.currentTitle}
   bind:inputRef={inputEl}
   onDismiss={(selectedId) => ipc.dismiss(selectedId)}
   onReloadActive={() => ipc.reloadActive()}
+  onFocusWindow={(label) => ipc.focusWindow(label)}
 />
 
 <style>
