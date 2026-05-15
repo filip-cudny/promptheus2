@@ -145,9 +145,19 @@ pub struct ResolveSkillInputResult {
 #[tauri::command]
 pub async fn resolve_skill_input(
     skill_service: State<'_, Arc<Mutex<SkillService>>>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     text: String,
 ) -> crate::Result<ResolveSkillInputResult> {
-    let skill_service = skill_service.lock().await;
+    let mut skill_service = skill_service.lock().await;
+    let history = history.lock().await;
+    for name in skill_message::referenced_skill_names(&text) {
+        let needs_version = skill_service
+            .get_skill(&name)
+            .is_some_and(|s| s.skill_version_id.is_none());
+        if needs_version {
+            let _ = skill_service.ensure_version(&name, history.conn());
+        }
+    }
     let result = skill_message::resolve_skill_input(&skill_service, &text);
     Ok(ResolveSkillInputResult {
         had_skills: result.had_skills,

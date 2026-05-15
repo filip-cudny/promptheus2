@@ -216,6 +216,16 @@ pub fn has_skill_references(text: &str) -> bool {
     SKILL_TOKEN_RE.is_match(text)
 }
 
+pub fn referenced_skill_names(text: &str) -> Vec<String> {
+    let mut names: Vec<String> = SKILL_TOKEN_RE
+        .captures_iter(text)
+        .map(|caps| caps.get(1).unwrap().as_str()[1..].to_string())
+        .collect();
+    names.sort();
+    names.dedup();
+    names
+}
+
 pub struct ResolveSkillResult {
     pub had_skills: bool,
     pub applied_skills: Vec<AppliedSkill>,
