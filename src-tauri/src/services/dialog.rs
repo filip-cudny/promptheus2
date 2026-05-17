@@ -529,38 +529,11 @@ pub async fn seed_geometry_from(
 pub fn focus_window(win: &tauri::WebviewWindow) -> Result<(), String> {
     let label = win.label().to_string();
     log::debug!(target: "app_lib::services::dialog", "focus_window({label}): ENTER");
+
     #[cfg(target_os = "linux")]
     {
-        use gtk::glib::object::Cast;
-        use gtk::prelude::GtkWindowExt;
-        use gtk::prelude::WidgetExt;
-
-        let t0 = std::time::Instant::now();
-        if let Ok(gtk_win) = win.gtk_window() {
-            log::debug!(
-                target: "app_lib::services::dialog",
-                "focus_window({label}): gtk_window OK in {:?}",
-                t0.elapsed(),
-            );
-            if let Some(gdk_win) = gtk_win.window() {
-                if let Ok(x11_win) = gdk_win.downcast::<gdkx11::X11Window>() {
-                    let t1 = std::time::Instant::now();
-                    let timestamp = gdkx11::functions::x11_get_server_time(&x11_win);
-                    log::debug!(
-                        target: "app_lib::services::dialog",
-                        "focus_window({label}): x11_get_server_time={timestamp} in {:?}",
-                        t1.elapsed(),
-                    );
-                    let t2 = std::time::Instant::now();
-                    gtk_win.present_with_time(timestamp);
-                    log::debug!(
-                        target: "app_lib::services::dialog",
-                        "focus_window({label}): present_with_time done in {:?}",
-                        t2.elapsed(),
-                    );
-                    return Ok(());
-                }
-            }
+        if let Some(res) = present_via_main_thread(win, &label, "focus_window") {
+            return res;
         }
     }
 
@@ -569,45 +542,102 @@ pub fn focus_window(win: &tauri::WebviewWindow) -> Result<(), String> {
 
 pub fn focus_host_window(app: &tauri::AppHandle, label: &str) -> Result<(), String> {
     log::debug!(target: "app_lib::services::dialog", "focus_host_window({label}): ENTER");
+
+    let Some(win) = app.get_window(label) else {
+        return Err(format!("no window: {label}"));
+    };
+
     #[cfg(target_os = "linux")]
     {
-        use gtk::glib::object::Cast;
-        use gtk::prelude::GtkWindowExt;
-        use gtk::prelude::WidgetExt;
-
-        if let Some(win) = app.get_window(label) {
-            let t0 = std::time::Instant::now();
-            if let Ok(gtk_win) = win.gtk_window() {
-                log::debug!(
-                    target: "app_lib::services::dialog",
-                    "focus_host_window({label}): gtk_window OK in {:?}",
-                    t0.elapsed(),
-                );
-                if let Some(gdk_win) = gtk_win.window() {
-                    if let Ok(x11_win) = gdk_win.downcast::<gdkx11::X11Window>() {
-                        let t1 = std::time::Instant::now();
-                        let timestamp = gdkx11::functions::x11_get_server_time(&x11_win);
-                        log::debug!(
-                            target: "app_lib::services::dialog",
-                            "focus_host_window({label}): x11_get_server_time={timestamp} in {:?}",
-                            t1.elapsed(),
-                        );
-                        let t2 = std::time::Instant::now();
-                        gtk_win.present_with_time(timestamp);
-                        log::debug!(
-                            target: "app_lib::services::dialog",
-                            "focus_host_window({label}): present_with_time done in {:?}",
-                            t2.elapsed(),
-                        );
-                        return Ok(());
-                    }
-                }
+        if let Some(webview) = app.get_webview_window(label) {
+            if let Some(res) = present_via_main_thread(&webview, label, "focus_host_window") {
+                return res;
             }
         }
     }
 
-    if let Some(win) = app.get_window(label) {
-        return win.set_focus().map_err(|e| e.to_string());
+    win.set_focus().map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "linux")]
+const MAIN_THREAD_PRESENT_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
+
+#[cfg(target_os = "linux")]
+fn present_via_main_thread(
+    win: &tauri::WebviewWindow,
+    label: &str,
+    caller: &'static str,
+) -> Option<Result<(), String>> {
+    let app = win.app_handle().clone();
+    let win_clone = win.clone();
+    let label_for_main = label.to_string();
+    let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+
+    let dispatch = app.run_on_main_thread(move || {
+        let result = present_on_main(&win_clone, &label_for_main, caller);
+        let _ = tx.send(result);
+    });
+
+    if let Err(e) = dispatch {
+        log::warn!(
+            target: "app_lib::services::dialog",
+            "{caller}({label}): run_on_main_thread dispatch failed: {e}",
+        );
+        return None;
     }
-    Err(format!("no window: {label}"))
+
+    match rx.recv_timeout(MAIN_THREAD_PRESENT_TIMEOUT) {
+        Ok(res) => Some(res),
+        Err(_) => {
+            log::warn!(
+                target: "app_lib::services::dialog",
+                "{caller}({label}): main-thread present timed out after {:?}, falling back to set_focus",
+                MAIN_THREAD_PRESENT_TIMEOUT,
+            );
+            None
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn present_on_main(
+    win: &tauri::WebviewWindow,
+    label: &str,
+    caller: &'static str,
+) -> Result<(), String> {
+    use gtk::glib::object::Cast;
+    use gtk::prelude::GtkWindowExt;
+    use gtk::prelude::WidgetExt;
+
+    let t0 = std::time::Instant::now();
+    let gtk_win = win.gtk_window().map_err(|e| e.to_string())?;
+    log::debug!(
+        target: "app_lib::services::dialog",
+        "{caller}({label}): gtk_window OK in {:?}",
+        t0.elapsed(),
+    );
+
+    let Some(gdk_win) = gtk_win.window() else {
+        return Err("no gdk window".to_string());
+    };
+    let Ok(x11_win) = gdk_win.downcast::<gdkx11::X11Window>() else {
+        return Err("not an x11 window".to_string());
+    };
+
+    let t1 = std::time::Instant::now();
+    let timestamp = gdkx11::functions::x11_get_server_time(&x11_win);
+    log::debug!(
+        target: "app_lib::services::dialog",
+        "{caller}({label}): x11_get_server_time={timestamp} in {:?}",
+        t1.elapsed(),
+    );
+
+    let t2 = std::time::Instant::now();
+    gtk_win.present_with_time(timestamp);
+    log::debug!(
+        target: "app_lib::services::dialog",
+        "{caller}({label}): present_with_time done in {:?}",
+        t2.elapsed(),
+    );
+    Ok(())
 }
