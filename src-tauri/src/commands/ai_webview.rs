@@ -196,7 +196,7 @@ pub async fn close_palette(
         .map_err(Error::Other)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn focus_window_by_label(app: tauri::AppHandle, label: String) -> crate::Result<()> {
     log::info!(
         target: "app_lib::commands::ai_webview",

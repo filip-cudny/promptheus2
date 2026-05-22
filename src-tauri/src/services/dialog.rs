@@ -568,6 +568,14 @@ fn present_via_main_thread(
     label: &str,
     caller: &'static str,
 ) -> Option<Result<(), String>> {
+    if gtk::glib::MainContext::default().is_owner() {
+        log::debug!(
+            target: "app_lib::services::dialog",
+            "{caller}({label}): already on main thread, presenting inline",
+        );
+        return Some(present_on_main(win, label, caller));
+    }
+
     let app = win.app_handle().clone();
     let win_clone = win.clone();
     let label_for_main = label.to_string();
