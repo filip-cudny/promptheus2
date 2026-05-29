@@ -74,21 +74,15 @@ pub async fn toggle_speech_recording(
             return Ok(());
         }
 
-        if !s.is_recording() && s.is_on_cooldown() {
-            log::debug!("toggle_speech_recording: ignored, cooldown active");
-            let notification_settings =
-                config_state.lock().await.settings().notifications.clone();
-            let _ = notifications.notify(
-                "speech_recording_start",
-                NotificationLevel::Warning,
-                "Cooldown active",
-                Some("Try again in a moment"),
-                &notification_settings,
-            );
-            return Ok(());
-        }
-
         was_recording = s.is_recording();
+
+        if !was_recording {
+            if s.is_debouncing() {
+                log::debug!("toggle_speech_recording: ignored, debounced");
+                return Ok(());
+            }
+            s.mark_toggle();
+        }
 
         if was_recording {
             let audio = s.stop_recording_raw()?;
@@ -141,7 +135,6 @@ pub async fn toggle_speech_recording(
         );
         let mut s = speech_state.lock().await;
         s.set_transcribing(false);
-        s.mark_transcription_finished();
         s.set_pending_prompt(None, None);
         return Ok(());
     }
@@ -154,7 +147,6 @@ pub async fn toggle_speech_recording(
         Err(e) => {
             let mut s = speech_state.lock().await;
             s.set_transcribing(false);
-            s.mark_transcription_finished();
             s.set_pending_prompt(None, None);
             return Err(e.into());
         }
@@ -188,7 +180,6 @@ pub async fn toggle_speech_recording(
                 drop(config_guard);
                 let mut s = speech_state.lock().await;
                 s.set_transcribing(false);
-                s.mark_transcription_finished();
                 s.set_pending_prompt(None, None);
                 return Err(Error::Speech(SpeechError::ApiKeyMissing));
             }
@@ -261,7 +252,6 @@ pub async fn toggle_speech_recording(
 
                 let mut s = speech_inner.lock().await;
                 s.set_transcribing(false);
-                s.mark_transcription_finished();
             }
             Err(SpeechError::NoSpeechDetected) => {
                 let _ = app_clone.emit(
@@ -297,7 +287,6 @@ pub async fn toggle_speech_recording(
                 );
 
                 s.set_transcribing(false);
-                s.mark_transcription_finished();
             }
             Err(e) => {
                 let message = e.to_string();
@@ -324,7 +313,6 @@ pub async fn toggle_speech_recording(
                 );
 
                 s.set_transcribing(false);
-                s.mark_transcription_finished();
             }
         }
     });

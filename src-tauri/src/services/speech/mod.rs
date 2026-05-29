@@ -12,6 +12,8 @@ use recorder::{find_input_device, negotiate_sample_rate};
 pub use recorder::encode_wav;
 pub use transcriber::{transcribe, SttOptions};
 
+const TOGGLE_DEBOUNCE_MS: u128 = 250;
+
 #[derive(Debug, thiserror::Error)]
 pub enum SpeechError {
     #[error("Already recording")]
@@ -45,7 +47,7 @@ pub struct SpeechService {
     audio_buffer: Arc<Mutex<Vec<i16>>>,
     sample_rate: u32,
     stop_sender: Option<mpsc::Sender<()>>,
-    last_transcription_finished: Option<Instant>,
+    last_toggle: Option<Instant>,
 }
 
 impl SpeechService {
@@ -59,7 +61,7 @@ impl SpeechService {
             audio_buffer: Arc::new(Mutex::new(Vec::new())),
             sample_rate: 16000,
             stop_sender: None,
-            last_transcription_finished: None,
+            last_toggle: None,
         }
     }
 
@@ -164,18 +166,14 @@ impl SpeechService {
         (self.pending_skill_id.take(), self.pending_skill_name.take())
     }
 
-    pub fn mark_transcription_finished(&mut self) {
-        self.last_transcription_finished = Some(Instant::now());
+    pub fn mark_toggle(&mut self) {
+        self.last_toggle = Some(Instant::now());
     }
 
-    pub fn is_on_cooldown(&self) -> bool {
-        self.last_transcription_finished
-            .map(|t| t.elapsed().as_secs_f64() < 2.0)
+    pub fn is_debouncing(&self) -> bool {
+        self.last_toggle
+            .map(|t| t.elapsed().as_millis() < TOGGLE_DEBOUNCE_MS)
             .unwrap_or(false)
-    }
-
-    pub fn clear_cooldown(&mut self) {
-        self.last_transcription_finished = None;
     }
 }
 
@@ -198,24 +196,16 @@ mod tests {
     }
 
     #[test]
-    fn cooldown_inactive_on_new_service() {
+    fn not_debouncing_on_new_service() {
         let service = SpeechService::new();
-        assert!(!service.is_on_cooldown());
+        assert!(!service.is_debouncing());
     }
 
     #[test]
-    fn cooldown_active_after_transcription_finished() {
+    fn debouncing_right_after_toggle() {
         let mut service = SpeechService::new();
-        service.mark_transcription_finished();
-        assert!(service.is_on_cooldown());
-    }
-
-    #[test]
-    fn cooldown_cleared_explicitly() {
-        let mut service = SpeechService::new();
-        service.mark_transcription_finished();
-        service.clear_cooldown();
-        assert!(!service.is_on_cooldown());
+        service.mark_toggle();
+        assert!(service.is_debouncing());
     }
 
     #[test]
