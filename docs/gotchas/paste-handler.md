@@ -38,12 +38,45 @@ async function handleKeydown(e: KeyboardEvent) {
 - **Mac pastes nothing on Cmd+Shift+V**: the gate dropped the manual branch entirely. Fix: keep the `isMac` branch with the `arboard` invoke.
 - **Mac pastes a "text attachment" instead of inline raw text**: `skipTextAttachment` not propagated. The manual macOS branch already inserts directly via `execCommand`, so this only matters for the Linux native-paste path — verify `handleEditablePaste` is called with `skipTextAttachment: shiftHeld`.
 
+## Image paste into AI webviews (Claude.ai / ChatGPT) — WebKitGTK workaround
+
+Separate problem from the native dialog: pasting an **image** into a hosted external
+webview (`*::ai-webview-*`) silently does nothing on Linux, while text pastes fine.
+
+**Cause.** On WebKitGTK the legacy synchronous paste path delivers an **empty
+`DataTransfer`** for images — the page's `paste` handler sees `types=[] items=[] files=[]`
+(WebKit bug 218519). The site's own image-paste code reads `e.clipboardData.files`, gets
+nothing, and aborts. The system `libwebkit2gtk` 2.52.x carries the upstream fix yet the
+embedded wry webview still delivers nothing on this path. The **async** Clipboard API is
+unaffected: `navigator.clipboard.read()` returns the `image/png` correctly.
+
+**Fix** (injected script, `services/ai_webview/scripts.rs → CLIPBOARD_IMAGE_PASTE_JS`):
+a capture-phase `paste` listener detects an empty payload (no `files` **and** no `text/*`
+type — i.e. an image WebKit dropped), reads the image via `navigator.clipboard.read()`,
+builds a `File` + `DataTransfer`, and re-dispatches a synthetic `paste` `ClipboardEvent`
+with populated `clipboardData` to the editor — hitting the same handler path that works on
+Chrome/Firefox. Site-agnostic (works for Claude and ChatGPT).
+
+**Guards — do not remove:**
+- Skip when `e.clipboardData.files.length > 0` (image already delivered, e.g. macOS/Windows).
+- Skip when any `text/*` type is present (normal text paste — leave it alone).
+- The synthetic event carries `files`, so the listener short-circuits on it (no loop).
+
+**Why this does not reintroduce the X11 arboard deadlock:** the read happens on the JS
+side via WebKit's own clipboard pipeline — no `arboard`, no sync Tauri command, no X11
+`SelectionRequest` from the GTK main thread. This is exactly the "Cleaner alternative" in
+[tauri-command-threading.md](tauri-command-threading.md). Requires
+`enable_clipboard_access()` on the webview builders and allowing
+`WebKitClipboardPermissionRequest` in the `permission-request` handler
+(`services/ai_webview/lifecycle.rs`), since `clipboard.read()` needs permission.
+
 ## When to load this file
 
 - Touching `InputArea.svelte → handleKeydown` or its paste/keydown logic.
 - Touching `src/lib/utils/paste.ts` (`handleEditablePaste`, `getImageFromPasteEvent`).
 - Touching any Tauri clipboard command (`get_clipboard_text`, `get_clipboard_image`, `set_clipboard_text`).
-- Investigating any "paste freezes" or "paste does nothing" report.
+- Touching `services/ai_webview/scripts.rs` paste injection or the `permission-request` handler in `lifecycle.rs`.
+- Investigating "image paste does nothing in Claude/ChatGPT webview" or any "paste freezes" / "paste does nothing" report.
 
 ## Related
 

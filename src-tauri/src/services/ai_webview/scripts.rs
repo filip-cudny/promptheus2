@@ -19,12 +19,14 @@ pub(super) fn initialization_script(provider: &WebviewProvider) -> String {
             g.routerSentinel = {sentinel_json};
             {palette}
             {external_links}
+            {clipboard_image_paste}
         }})();
         "#,
         provider_id_json = provider_id_json,
         sentinel_json = sentinel_json,
         palette = PALETTE_KEYBIND_JS,
         external_links = EXTERNAL_LINKS_JS,
+        clipboard_image_paste = CLIPBOARD_IMAGE_PASTE_JS,
         dark_mode = DARK_MODE_JS,
     )
 }
@@ -38,6 +40,9 @@ pub(super) fn reinject_script() -> String {
         }
         if (window.__promptheus.ensureExternalLinks) {
             window.__promptheus.ensureExternalLinks();
+        }
+        if (window.__promptheus.ensureClipboardImagePaste) {
+            window.__promptheus.ensureClipboardImagePaste();
         }
     })();
     "#
@@ -153,6 +158,58 @@ g.ensureExternalLinks = ensureExternalLinks;
 ensureExternalLinks();
 "##;
 
+const CLIPBOARD_IMAGE_PASTE_JS: &str = r##"
+function reportDiag(detail) {
+    setTimeout(function() { sendRouter({ kind: "diag", detail: detail }); }, 0);
+}
+
+function dispatchImagePaste(target, file) {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    const evt = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+    (target || document.activeElement || document.body).dispatchEvent(evt);
+}
+
+function clipboardImagePaste(e) {
+    const dt = e.clipboardData;
+    if (dt && dt.files && dt.files.length > 0) return;
+    const types = dt ? Array.prototype.slice.call(dt.types || []) : [];
+    if (types.some(function(t) { return t.indexOf("text/") === 0; })) return;
+    if (!(navigator.clipboard && navigator.clipboard.read)) return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const target = e.target;
+
+    navigator.clipboard.read().then(function(clipItems) {
+        for (let i = 0; i < clipItems.length; i++) {
+            const ci = clipItems[i];
+            const imgType = ci.types.find(function(t) { return t.indexOf("image/") === 0; });
+            if (!imgType) continue;
+            ci.getType(imgType).then(function(blob) {
+                const file = new File([blob], "pasted-image", { type: blob.type });
+                dispatchImagePaste(target, file);
+                reportDiag("clipboard image injected type=" + blob.type + " size=" + blob.size);
+            }).catch(function(err) {
+                reportDiag("clipboard image getType failed: " + (err && err.message));
+            });
+            return;
+        }
+    }).catch(function(err) {
+        reportDiag("clipboard read failed: " + (err && err.name) + " " + (err && err.message));
+    });
+}
+
+function ensureClipboardImagePaste() {
+    if (g.__clipboardImagePasteInstalled) return;
+    g.__clipboardImagePasteInstalled = true;
+    document.addEventListener("paste", clipboardImagePaste, true);
+}
+
+g.ensureClipboardImagePaste = ensureClipboardImagePaste;
+ensureClipboardImagePaste();
+"##;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,5 +256,19 @@ mod tests {
         assert!(js.contains("ensureExternalLinks"));
         assert!(js.contains("open_external"));
         assert!(js.contains("auxclick"));
+    }
+
+    #[test]
+    fn initialization_script_includes_clipboard_image_paste() {
+        let js = initialization_script(&provider());
+        assert!(js.contains("ensureClipboardImagePaste"));
+        assert!(js.contains("navigator.clipboard.read"));
+        assert!(js.contains("ClipboardEvent"));
+    }
+
+    #[test]
+    fn reinject_script_reinstalls_clipboard_image_paste() {
+        let js = reinject_script();
+        assert!(js.contains("ensureClipboardImagePaste"));
     }
 }

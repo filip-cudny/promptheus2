@@ -237,6 +237,7 @@ async fn open_window(
             .inner_size(width, height)
             .resizable(true)
             .background_color(AI_WEBVIEW_BG)
+            .enable_clipboard_access()
             .initialization_script(&init_script)
             .on_navigation(move |url| {
                 if !url.as_str().starts_with(ROUTER_SENTINEL) {
@@ -388,8 +389,17 @@ fn install_media_permissions(
         settings.set_enable_webrtc(true);
     }
 
-    wk.connect_permission_request(|_, req| {
+    let label_for_perm = webview_label.clone();
+    wk.connect_permission_request(move |_, req| {
+        let is_clipboard = req.type_().name() == "WebKitClipboardPermissionRequest";
         if req.is::<UserMediaPermissionRequest>() || req.is::<DeviceInfoPermissionRequest>() {
+            req.allow();
+            true
+        } else if is_clipboard {
+            log::debug!(
+                target: "app_lib::services::ai_webview",
+                "granting clipboard read permission: webview={label_for_perm}",
+            );
             req.allow();
             true
         } else {

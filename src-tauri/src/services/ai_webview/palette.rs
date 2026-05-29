@@ -38,6 +38,7 @@ pub(super) const PROMPTHEUS_PROVIDER_ID: &str = "promptheus";
 pub(super) enum RouterMessage {
     OpenPalette,
     OpenExternal { url: String },
+    Diag { detail: String },
 }
 
 pub(super) fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
@@ -55,6 +56,9 @@ pub(super) fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
             }
             Some(RouterMessage::OpenExternal { url })
         }
+        "diag" => Some(RouterMessage::Diag {
+            detail: params.remove("detail").unwrap_or_default(),
+        }),
         _ => None,
     }
 }
@@ -86,6 +90,12 @@ pub(super) async fn handle_router_message(
         }
         RouterMessage::OpenExternal { url } => {
             open_external_url(app, &url);
+        }
+        RouterMessage::Diag { detail } => {
+            log::debug!(
+                target: "app_lib::services::ai_webview",
+                "ai webview diag on {webview_label}: {detail}",
+            );
         }
     }
 }
