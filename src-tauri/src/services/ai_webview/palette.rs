@@ -6,6 +6,7 @@ use tauri::{Emitter, LogicalPosition, LogicalSize, Manager};
 use tokio::sync::Mutex;
 
 use crate::models::settings::WebviewProvider;
+use crate::services::clipboard::ClipboardService;
 use crate::services::config::ConfigService;
 use crate::services::dialog::{
     focus_window, is_conversation_dialog_host, is_shell_toolbar_label, shell_toolbar_label_for,
@@ -38,7 +39,7 @@ pub(super) const PROMPTHEUS_PROVIDER_ID: &str = "promptheus";
 pub(super) enum RouterMessage {
     OpenPalette,
     OpenExternal { url: String },
-    Diag { detail: String },
+    RequestPasteText,
 }
 
 pub(super) fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
@@ -56,9 +57,7 @@ pub(super) fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
             }
             Some(RouterMessage::OpenExternal { url })
         }
-        "diag" => Some(RouterMessage::Diag {
-            detail: params.remove("detail").unwrap_or_default(),
-        }),
+        "request_paste_text" => Some(RouterMessage::RequestPasteText),
         _ => None,
     }
 }
@@ -91,12 +90,46 @@ pub(super) async fn handle_router_message(
         RouterMessage::OpenExternal { url } => {
             open_external_url(app, &url);
         }
-        RouterMessage::Diag { detail } => {
+        RouterMessage::RequestPasteText => {
+            deliver_clipboard_text_to_webview(app, webview_label);
+        }
+    }
+}
+
+fn deliver_clipboard_text_to_webview(app: &tauri::AppHandle, webview_label: &str) {
+    let Some(clipboard) = app.try_state::<ClipboardService>() else {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "request_paste_text: clipboard service missing",
+        );
+        return;
+    };
+    let text = match clipboard.get_text_raw() {
+        Ok(text) => text,
+        Err(e) => {
             log::debug!(
                 target: "app_lib::services::ai_webview",
-                "ai webview diag on {webview_label}: {detail}",
+                "request_paste_text: clipboard read failed on {webview_label}: {e}",
             );
+            return;
         }
+    };
+    let Some(webview) = app.get_webview(webview_label) else {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "request_paste_text: webview {webview_label} not found",
+        );
+        return;
+    };
+    let payload = serde_json::to_string(&text).unwrap_or_else(|_| "\"\"".to_string());
+    let script = format!(
+        "window.__promptheus && window.__promptheus.__deliverPasteText && window.__promptheus.__deliverPasteText({payload});"
+    );
+    if let Err(e) = webview.eval(&script) {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "request_paste_text: deliver eval failed on {webview_label}: {e}",
+        );
     }
 }
 
@@ -525,6 +558,18 @@ mod tests {
     fn parse_router_message_empty_query() {
         let url = tauri::Url::parse("https://promptheus-ai-webview-router.invalid/?").unwrap();
         assert!(parse_router_message(&url).is_none());
+    }
+
+    #[test]
+    fn parse_router_message_request_paste_text() {
+        let url = tauri::Url::parse(
+            "https://promptheus-ai-webview-router.invalid/?kind=request_paste_text",
+        )
+        .unwrap();
+        assert!(matches!(
+            parse_router_message(&url),
+            Some(RouterMessage::RequestPasteText)
+        ));
     }
 
     #[test]

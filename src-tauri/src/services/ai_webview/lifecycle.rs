@@ -389,17 +389,8 @@ fn install_media_permissions(
         settings.set_enable_webrtc(true);
     }
 
-    let label_for_perm = webview_label.clone();
     wk.connect_permission_request(move |_, req| {
-        let is_clipboard = req.type_().name() == "WebKitClipboardPermissionRequest";
         if req.is::<UserMediaPermissionRequest>() || req.is::<DeviceInfoPermissionRequest>() {
-            req.allow();
-            true
-        } else if is_clipboard {
-            log::debug!(
-                target: "app_lib::services::ai_webview",
-                "granting clipboard read permission: webview={label_for_perm}",
-            );
             req.allow();
             true
         } else {

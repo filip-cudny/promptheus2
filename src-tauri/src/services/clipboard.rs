@@ -29,19 +29,19 @@ impl ClipboardService {
     }
 
     pub fn get_text(&self) -> Result<String, ClipboardError> {
-        let mut clipboard = arboard::Clipboard::new()
-            .map_err(|e| ClipboardError::Access(e.to_string()))?;
-
-        let text = clipboard
-            .get_text()
-            .map_err(|e| ClipboardError::Unavailable(e.to_string()))?;
-
-        let trimmed = text.trim().to_string();
+        let trimmed = self.get_text_raw()?.trim().to_string();
         if trimmed.is_empty() {
             return Err(ClipboardError::Unavailable("clipboard is empty".into()));
         }
-
         Ok(trimmed)
+    }
+
+    pub fn get_text_raw(&self) -> Result<String, ClipboardError> {
+        let mut clipboard = arboard::Clipboard::new()
+            .map_err(|e| ClipboardError::Access(e.to_string()))?;
+        clipboard
+            .get_text()
+            .map_err(|e| ClipboardError::Unavailable(e.to_string()))
     }
 
     pub fn set_text(&self, content: &str) -> Result<(), ClipboardError> {

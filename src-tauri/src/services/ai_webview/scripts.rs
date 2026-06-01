@@ -19,14 +19,14 @@ pub(super) fn initialization_script(provider: &WebviewProvider) -> String {
             g.routerSentinel = {sentinel_json};
             {palette}
             {external_links}
-            {clipboard_image_paste}
+            {clipboard_paste_fallback}
         }})();
         "#,
         provider_id_json = provider_id_json,
         sentinel_json = sentinel_json,
         palette = PALETTE_KEYBIND_JS,
         external_links = EXTERNAL_LINKS_JS,
-        clipboard_image_paste = CLIPBOARD_IMAGE_PASTE_JS,
+        clipboard_paste_fallback = CLIPBOARD_PASTE_FALLBACK_JS,
         dark_mode = DARK_MODE_JS,
     )
 }
@@ -41,8 +41,8 @@ pub(super) fn reinject_script() -> String {
         if (window.__promptheus.ensureExternalLinks) {
             window.__promptheus.ensureExternalLinks();
         }
-        if (window.__promptheus.ensureClipboardImagePaste) {
-            window.__promptheus.ensureClipboardImagePaste();
+        if (window.__promptheus.ensureClipboardPasteFallback) {
+            window.__promptheus.ensureClipboardPasteFallback();
         }
     })();
     "#
@@ -158,19 +158,36 @@ g.ensureExternalLinks = ensureExternalLinks;
 ensureExternalLinks();
 "##;
 
-const CLIPBOARD_IMAGE_PASTE_JS: &str = r##"
-function reportDiag(detail) {
-    setTimeout(function() { sendRouter({ kind: "diag", detail: detail }); }, 0);
-}
-
-function dispatchImagePaste(target, file) {
-    const dt = new DataTransfer();
-    dt.items.add(file);
+const CLIPBOARD_PASTE_FALLBACK_JS: &str = r##"
+function dispatchSyntheticPaste(target, dt) {
     const evt = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
     (target || document.activeElement || document.body).dispatchEvent(evt);
 }
 
-function clipboardImagePaste(e) {
+function injectImage(target, blob) {
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], "pasted-image", { type: blob.type }));
+    dispatchSyntheticPaste(target, dt);
+}
+
+function injectText(target, text) {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", text);
+    dispatchSyntheticPaste(target, dt);
+}
+
+g.__deliverPasteText = function(text) {
+    const target = g.__pasteTarget || document.activeElement || document.body;
+    g.__pasteTarget = null;
+    if (text) injectText(target, text);
+};
+
+function requestHostText(target) {
+    g.__pasteTarget = target;
+    sendRouter({ kind: "request_paste_text" });
+}
+
+function clipboardPasteFallback(e) {
     const dt = e.clipboardData;
     if (dt && dt.files && dt.files.length > 0) return;
     const types = dt ? Array.prototype.slice.call(dt.types || []) : [];
@@ -185,29 +202,25 @@ function clipboardImagePaste(e) {
         for (let i = 0; i < clipItems.length; i++) {
             const ci = clipItems[i];
             const imgType = ci.types.find(function(t) { return t.indexOf("image/") === 0; });
-            if (!imgType) continue;
-            ci.getType(imgType).then(function(blob) {
-                const file = new File([blob], "pasted-image", { type: blob.type });
-                dispatchImagePaste(target, file);
-                reportDiag("clipboard image injected type=" + blob.type + " size=" + blob.size);
-            }).catch(function(err) {
-                reportDiag("clipboard image getType failed: " + (err && err.message));
-            });
-            return;
+            if (imgType) {
+                ci.getType(imgType).then(function(blob) { injectImage(target, blob); }).catch(function() {});
+                return;
+            }
         }
-    }).catch(function(err) {
-        reportDiag("clipboard read failed: " + (err && err.name) + " " + (err && err.message));
+        requestHostText(target);
+    }).catch(function() {
+        requestHostText(target);
     });
 }
 
-function ensureClipboardImagePaste() {
-    if (g.__clipboardImagePasteInstalled) return;
-    g.__clipboardImagePasteInstalled = true;
-    document.addEventListener("paste", clipboardImagePaste, true);
+function ensureClipboardPasteFallback() {
+    if (g.__clipboardPasteFallbackInstalled) return;
+    g.__clipboardPasteFallbackInstalled = true;
+    document.addEventListener("paste", clipboardPasteFallback, true);
 }
 
-g.ensureClipboardImagePaste = ensureClipboardImagePaste;
-ensureClipboardImagePaste();
+g.ensureClipboardPasteFallback = ensureClipboardPasteFallback;
+ensureClipboardPasteFallback();
 "##;
 
 #[cfg(test)]
@@ -259,16 +272,18 @@ mod tests {
     }
 
     #[test]
-    fn initialization_script_includes_clipboard_image_paste() {
+    fn initialization_script_includes_clipboard_paste_fallback() {
         let js = initialization_script(&provider());
-        assert!(js.contains("ensureClipboardImagePaste"));
+        assert!(js.contains("ensureClipboardPasteFallback"));
         assert!(js.contains("navigator.clipboard.read"));
         assert!(js.contains("ClipboardEvent"));
+        assert!(js.contains("request_paste_text"));
+        assert!(js.contains("__deliverPasteText"));
     }
 
     #[test]
-    fn reinject_script_reinstalls_clipboard_image_paste() {
+    fn reinject_script_reinstalls_clipboard_paste_fallback() {
         let js = reinject_script();
-        assert!(js.contains("ensureClipboardImagePaste"));
+        assert!(js.contains("ensureClipboardPasteFallback"));
     }
 }
