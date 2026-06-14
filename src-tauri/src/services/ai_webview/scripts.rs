@@ -170,10 +170,34 @@ function injectImage(target, blob) {
     dispatchSyntheticPaste(target, dt);
 }
 
+function insertTextIntoEditable(el, text) {
+    if (!el) return;
+    const tag = el.tagName;
+    if (tag === "TEXTAREA" || tag === "INPUT") {
+        try {
+            const start = el.selectionStart != null ? el.selectionStart : el.value.length;
+            const end = el.selectionEnd != null ? el.selectionEnd : el.value.length;
+            if (typeof el.setRangeText === "function") {
+                el.setRangeText(text, start, end, "end");
+            } else {
+                el.value = el.value.slice(0, start) + text + el.value.slice(end);
+            }
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+        } catch (_) {}
+        return;
+    }
+    if (el.isContentEditable) {
+        document.execCommand("insertText", false, text);
+    }
+}
+
 function injectText(target, text) {
     const dt = new DataTransfer();
     dt.setData("text/plain", text);
-    dispatchSyntheticPaste(target, dt);
+    const el = target || document.activeElement || document.body;
+    const evt = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+    const notConsumed = el.dispatchEvent(evt);
+    if (notConsumed) insertTextIntoEditable(el, text);
 }
 
 g.__deliverPasteText = function(text) {

@@ -185,6 +185,7 @@ pub(super) async fn hosted_swap_to_provider(
             .auto_resize()
             .background_color(AI_WEBVIEW_BG)
             .enable_clipboard_access()
+            .disable_drag_drop_handler()
             .initialization_script(&init_script)
             .on_navigation(move |url| {
                 if !url.as_str().starts_with(ROUTER_SENTINEL) {

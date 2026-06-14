@@ -74,6 +74,19 @@ type), then:
 Both paths end in a synthetic `paste` `ClipboardEvent` hitting the same handler path that
 works on Chrome/Firefox. Site-agnostic (works for Claude and ChatGPT).
 
+**Native `<textarea>`/`<input>` targets need a manual insert.** A re-dispatched synthetic
+`ClipboardEvent` is `isTrusted=false`, so the browser performs **no default paste action** —
+text only lands if the page has its own JS `paste` handler that reads `clipboardData` and
+inserts (e.g. Claude's ProseMirror chat input, which also `preventDefault`s). Plain native
+fields with no handler (Claude **project-creation** page: goal / custom-instructions) get
+nothing from the synthetic event. Symptom: `Ctrl+V` does nothing on the project page while
+`Ctrl+Shift+V` works (WebKitGTK's paste-as-plain-text path delivers a populated `text/plain`
+DataTransfer, so the `text/*` guard bails and the native trusted paste runs). Fix in
+`injectText`: dispatch the synthetic paste, and if `dispatchEvent` returns `true` (no handler
+called `preventDefault`), manually insert via `setRangeText`+`input` event (input/textarea) or
+`execCommand("insertText")` (contenteditable). The cancelled-by-handler case (ProseMirror)
+skips the manual insert, so no double paste.
+
 **Guards — do not remove:**
 - Skip when `e.clipboardData.files.length > 0` (image already delivered, e.g. macOS/Windows).
 - Skip when any `text/*` type is present (normal text paste — leave it alone).
