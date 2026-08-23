@@ -56,6 +56,7 @@ pub async fn toggle_speech_recording(
     let was_recording;
     let raw_audio;
     let started_action_id;
+    let started_session;
 
     {
         let mut s = speech_state.lock().await;
@@ -89,10 +90,12 @@ pub async fn toggle_speech_recording(
             s.set_transcribing(true);
             started_action_id = None;
             raw_audio = Some(audio);
+            started_session = None;
         } else {
             raw_audio = None;
             s.start_recording(action_id.clone())?;
             started_action_id = action_id;
+            started_session = Some(s.session());
         }
     }
 
@@ -103,7 +106,14 @@ pub async fn toggle_speech_recording(
                 action_id: started_action_id,
             },
         );
-        let notification_settings = config_state.lock().await.settings().notifications.clone();
+        let (notification_settings, shortcut_hint) = {
+            let guard = config_state.lock().await;
+            let settings = guard.settings();
+            (
+                settings.notifications.clone(),
+                crate::services::hotkeys::shortcut_for_action(settings, "speech_to_text_toggle"),
+            )
+        };
         let _ = notifications.notify(
             "speech_recording_start",
             NotificationLevel::Info,
@@ -111,6 +121,14 @@ pub async fn toggle_speech_recording(
             Some("Click Speech to Text again to stop."),
             &notification_settings,
         );
+        if let Some(session) = started_session {
+            speech::reminder::spawn(
+                app.clone(),
+                session,
+                notification_settings.recording_reminder.clone(),
+                shortcut_hint,
+            );
+        }
         return Ok(());
     }
 

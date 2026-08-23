@@ -133,6 +133,14 @@ export interface NotificationSettings {
   background_colors: NotificationColors;
   monochromatic_notification_icons: boolean;
   opacity: number | null;
+  recording_reminder: RecordingReminderSettings;
+}
+
+export interface RecordingReminderSettings {
+  enabled: boolean;
+  silence_after_secs: number;
+  silence_window_secs: number;
+  max_interval_secs: number;
 }
 
 export interface NotificationEvents {

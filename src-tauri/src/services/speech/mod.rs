@@ -1,4 +1,5 @@
 mod recorder;
+pub mod reminder;
 mod transcriber;
 
 use std::sync::mpsc;
@@ -48,6 +49,8 @@ pub struct SpeechService {
     sample_rate: u32,
     stop_sender: Option<mpsc::Sender<()>>,
     last_toggle: Option<Instant>,
+    session: u64,
+    started_at: Option<Instant>,
 }
 
 impl SpeechService {
@@ -62,6 +65,8 @@ impl SpeechService {
             sample_rate: 16000,
             stop_sender: None,
             last_toggle: None,
+            session: 0,
+            started_at: None,
         }
     }
 
@@ -116,6 +121,8 @@ impl SpeechService {
         self.is_recording = true;
         self.recording_action_id = action_id;
         self.stop_sender = Some(stop_tx);
+        self.session = self.session.wrapping_add(1);
+        self.started_at = Some(Instant::now());
 
         Ok(sample_rate)
     }
@@ -137,12 +144,27 @@ impl SpeechService {
         let sample_rate = self.sample_rate;
         self.is_recording = false;
         self.recording_action_id = None;
+        self.started_at = None;
 
         Ok((samples, sample_rate))
     }
 
     pub fn is_recording(&self) -> bool {
         self.is_recording
+    }
+
+    /// Monotonic id of the current recording, used by background tasks to tell
+    /// whether the session they were started for is still the active one.
+    pub fn session(&self) -> u64 {
+        self.session
+    }
+
+    pub fn started_at(&self) -> Option<Instant> {
+        self.started_at
+    }
+
+    pub fn audio_buffer(&self) -> Arc<Mutex<Vec<i16>>> {
+        Arc::clone(&self.audio_buffer)
     }
 
     pub fn is_transcribing(&self) -> bool {

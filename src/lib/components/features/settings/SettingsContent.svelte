@@ -6,6 +6,7 @@
   import SectionPromptBase from "./SectionPromptBase.svelte";
   import SectionSurfacePrompts from "./SectionSurfacePrompts.svelte";
   import SectionSkills from "./SectionSkills.svelte";
+  import SectionNotifications from "./SectionNotifications.svelte";
 
   let { activeSection }: { activeSection: SettingsSection } = $props();
 
@@ -25,6 +26,8 @@
     <SectionPromptBase />
   {:else if activeSection === "surface_prompts"}
     <SectionSurfacePrompts />
+  {:else if activeSection === "notifications"}
+    <SectionNotifications />
   {:else if activeSection === "appearance"}
     <SectionAppearance />
   {:else if activeSection === "skills"}

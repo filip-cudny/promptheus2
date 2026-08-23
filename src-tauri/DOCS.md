@@ -160,6 +160,7 @@ Default to commands. Reach for `app.emit*` only for true one-to-many notificatio
 - Tauri ships with `tokio` via `tauri::async_runtime`. Use it; don't pull a second runtime.
 - `#[tauri::command] async fn` runs on a tokio task. `State<'_, T>` requires the explicit lifetime — that's not optional in async commands.
 - Long-running background work (watchers, pollers): spawn with `tauri::async_runtime::spawn` from `setup::background`, not from inside a command.
+- **Session-scoped tasks are the exception** — work that only lives as long as one user-triggered session is spawned from the command that starts the session (e.g. `services/speech/reminder.rs`, spawned by `commands/speech.rs`). Cancel them with a monotonic generation counter on the owning service (`SpeechService::session()`) rather than a cancellation channel: each tick re-checks `is_recording() && session() == captured`, so a stop, a restart, or a service reset all retire the task with no extra plumbing.
 - When a command both holds a `Mutex<Service>` lock and iterates a long-lived stream, clone the cheap inner handle (typically `Arc<Provider>`), drop the guard, then iterate. Keeps the service responsive. See `commands/ai.rs` for the pattern.
 
 ### Models

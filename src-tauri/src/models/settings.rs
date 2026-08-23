@@ -375,6 +375,30 @@ pub struct NotificationSettings {
 
     #[serde(default)]
     pub opacity: Option<f64>,
+
+    #[serde(default)]
+    pub recording_reminder: RecordingReminderSettings,
+}
+
+/// Periodic warning shown while a speech recording is still running, so an
+/// accidental or forgotten recording does not keep capturing audio unnoticed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecordingReminderSettings {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+
+    /// Minimum recording length before a silence-triggered reminder may fire.
+    #[serde(default = "default_silence_after_secs")]
+    pub silence_after_secs: u64,
+
+    /// How long the microphone must stay quiet to count as "stopped dictating".
+    #[serde(default = "default_silence_window_secs")]
+    pub silence_window_secs: u64,
+
+    /// Hard ceiling: fire regardless of silence once this much time passed
+    /// since the recording started or since the previous reminder.
+    #[serde(default = "default_max_interval_secs")]
+    pub max_interval_secs: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -419,6 +443,18 @@ pub struct NotificationColors {
 
 fn default_true() -> bool {
     true
+}
+
+fn default_silence_after_secs() -> u64 {
+    60
+}
+
+fn default_silence_window_secs() -> u64 {
+    8
+}
+
+fn default_max_interval_secs() -> u64 {
+    180
 }
 
 fn default_code_theme() -> String {
@@ -503,6 +539,18 @@ impl Default for NotificationSettings {
             background_colors: NotificationColors::default(),
             monochromatic_notification_icons: true,
             opacity: None,
+            recording_reminder: RecordingReminderSettings::default(),
+        }
+    }
+}
+
+impl Default for RecordingReminderSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            silence_after_secs: default_silence_after_secs(),
+            silence_window_secs: default_silence_window_secs(),
+            max_interval_secs: default_max_interval_secs(),
         }
     }
 }
@@ -566,6 +614,19 @@ mod tests {
         assert_eq!(settings.code_theme, "paraiso-dark");
         assert_eq!(settings.autosave_debounce_ms, 1000);
         assert!(settings.models.is_empty());
+    }
+
+    #[test]
+    fn recording_reminder_defaults_when_absent_from_config() {
+        let settings: Settings =
+            serde_json::from_str(r#"{ "notifications": { "monochromatic_notification_icons": false } }"#)
+                .expect("legacy notification config should deserialize");
+
+        let reminder = settings.notifications.recording_reminder;
+        assert!(reminder.enabled);
+        assert_eq!(reminder.silence_after_secs, 60);
+        assert_eq!(reminder.silence_window_secs, 8);
+        assert_eq!(reminder.max_interval_secs, 180);
     }
 
     #[test]

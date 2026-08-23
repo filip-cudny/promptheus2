@@ -32,7 +32,13 @@
       "info": "#FFFFFF",
       "warning": "#FFFFFF"
     },
-    "monochromatic_notification_icons": true
+    "monochromatic_notification_icons": true,
+    "recording_reminder": {
+      "enabled": true,
+      "silence_after_secs": 60,
+      "silence_window_secs": 8,
+      "max_interval_secs": 180
+    }
   },
   "number_input_debounce_ms": 200,
   "prompt_base": {

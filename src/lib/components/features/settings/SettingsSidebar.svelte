@@ -24,7 +24,7 @@
     { id: "prompt_base", label: "Prompt Base", enabled: true },
     { id: "surface_prompts", label: "Surface Prompts", enabled: true },
     { id: "surfaces", label: "Surfaces", enabled: false },
-    { id: "notifications", label: "Notifications", enabled: false },
+    { id: "notifications", label: "Notifications", enabled: true },
     { id: "appearance", label: "Appearance", enabled: true },
     { id: "shortcuts", label: "Shortcuts", enabled: false },
     { id: "skills", label: "Skills", enabled: true },

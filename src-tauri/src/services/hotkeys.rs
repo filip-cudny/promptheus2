@@ -95,6 +95,15 @@ fn get_active_bindings_for_os(settings: &Settings, os: &str) -> Vec<(String, Str
     bindings
 }
 
+/// Human-readable shortcut currently bound to an action, e.g. "Shift+F1",
+/// so user-facing hints stay correct after a rebind.
+pub fn shortcut_for_action(settings: &Settings, action: &str) -> Option<String> {
+    get_active_bindings(settings)
+        .into_iter()
+        .find(|(_, bound)| bound == action)
+        .map(|(shortcut, _)| shortcut)
+}
+
 #[cfg(desktop)]
 pub fn reload_shortcuts(app: &tauri::AppHandle, settings: &Settings) {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
@@ -460,6 +469,26 @@ mod tests {
 
         let bindings = get_active_bindings_for_os(&settings, "linux");
         assert_eq!(bindings.len(), 3);
+    }
+
+    #[test]
+    fn shortcut_for_action_returns_bound_shortcut() {
+        let settings = Settings {
+            keymaps: vec![KeymapGroup {
+                context: format!("os == {}", std::env::consts::OS),
+                bindings: HashMap::from([(
+                    "shift+f1".to_string(),
+                    "speech_to_text_toggle".to_string(),
+                )]),
+            }],
+            ..Default::default()
+        };
+
+        assert_eq!(
+            shortcut_for_action(&settings, "speech_to_text_toggle"),
+            Some("Shift+F1".to_string())
+        );
+        assert_eq!(shortcut_for_action(&settings, "clear_context"), None);
     }
 
     #[test]

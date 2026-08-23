@@ -218,7 +218,7 @@
 
   function handleInputAreaClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
-    if (target.closest("button, .attach-menu, .model-selector, .autocomplete-dropdown, .context-section, .attachment-row")) return;
+    if (target.closest("button, .attach-menu, .model-selector, .autocomplete-dropdown, .context-inline, .attachment-row")) return;
     skillEditable?.focus();
   }
 
