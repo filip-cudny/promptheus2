@@ -66,7 +66,7 @@
     if (fitContent) {
       const maxLeft = Math.max(4, viewportWidth - panelWidth - 4);
       const left = Math.max(4, Math.min(anchorRect.left, maxLeft));
-      style = `top: ${top}px; left: ${left}px; right: auto; width: max-content;`;
+      style = `top: ${top}px; left: ${left}px;`;
     } else {
       style = `top: ${top}px`;
     }
@@ -93,6 +93,8 @@
     class:expand-down={animating && expandDirection === "down"}
     class:expand-up={animating && expandDirection === "up"}
     class:flush={isFlush}
+    class:fit={fitContent}
+    class:armed
     bind:this={panelEl}
     {style}
     onanimationend={handleAnimationEnd}
@@ -131,6 +133,15 @@
     padding: var(--space-4) var(--space-6);
     box-shadow: var(--shadow-md);
     box-sizing: border-box;
+  }
+
+  .floating-panel.fit {
+    right: auto;
+    width: max-content;
+  }
+
+  .floating-panel:not(.armed) {
+    visibility: hidden;
   }
 
   .floating-panel.flush {
