@@ -84,6 +84,10 @@ export async function updateNotifications(
   return invoke("update_notifications", { config });
 }
 
+export async function updateHistoryRetention(days: number): Promise<void> {
+  return invoke("update_history_retention", { days });
+}
+
 export async function updateKeymaps(keymaps: KeymapGroup[]): Promise<void> {
   return invoke("update_keymaps", { keymaps });
 }

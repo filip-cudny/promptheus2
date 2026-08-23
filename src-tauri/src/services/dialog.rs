@@ -112,7 +112,7 @@ pub fn attach_undecorated_resize_handler(webview: &tauri::Webview) {
     let label = webview.label().to_string();
     if let Err(e) = webview.with_webview(move |pv| {
         use gtk::gdk::{EventMask, WindowEdge};
-        use gtk::glib::object::Cast;
+        
         use gtk::glib::Propagation;
         use gtk::prelude::{GtkWindowExt, WidgetExt, WidgetExtManual};
 

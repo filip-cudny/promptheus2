@@ -13,6 +13,7 @@ use crate::models::history::{
 };
 use crate::models::message::ImageData;
 use crate::services::database::Database;
+use serde::Serialize;
 use crate::services::history_search::{HistoryStatusFilter, HistoryTypeFilter};
 
 use codec::{
@@ -28,14 +29,28 @@ pub enum HistoryError {
     Database(#[from] rusqlite::Error),
 }
 
+const VACUUM_MIN_RECLAIMABLE_BYTES: u64 = 100 * 1024 * 1024;
+const VACUUM_MIN_FREELIST_RATIO: f64 = 0.25;
+
+#[derive(Debug, Clone, Copy, Serialize)]
+pub struct HistoryStorageStats {
+    pub database_bytes: u64,
+    pub reclaimable_bytes: u64,
+}
+
 pub struct SqliteHistoryService {
     db: Database,
-    max_entries: usize,
+    retention_days: u32,
 }
 
 impl SqliteHistoryService {
-    pub fn new(db: Database, max_entries: usize) -> Self {
-        Self { db, max_entries }
+    /// `retention_days` of `0` disables pruning and keeps history forever.
+    pub fn new(db: Database, retention_days: u32) -> Self {
+        Self { db, retention_days }
+    }
+
+    pub fn set_retention_days(&mut self, retention_days: u32) {
+        self.retention_days = retention_days;
     }
 
     pub fn add_entry(
@@ -80,7 +95,6 @@ impl SqliteHistoryService {
             return None;
         }
 
-        self.enforce_max_entries();
         Some(id)
     }
 
@@ -143,7 +157,6 @@ impl SqliteHistoryService {
         self.insert_images(&tx, &id, &images);
 
         tx.commit().unwrap();
-        self.enforce_max_entries();
         id
     }
 
@@ -482,13 +495,82 @@ impl SqliteHistoryService {
         }
     }
 
-    fn enforce_max_entries(&self) {
-        let _ = self.db.conn().execute(
-            "DELETE FROM conversations WHERE id NOT IN (
-                SELECT id FROM conversations ORDER BY COALESCE(updated_at, created_at) DESC, rowid DESC LIMIT ?1
-            )",
-            [self.max_entries as i64],
+    fn pragma_u64(&self, name: &str) -> u64 {
+        self.db
+            .conn()
+            .query_row(&format!("PRAGMA {}", name), [], |row| row.get::<_, i64>(0))
+            .map(|v| v.max(0) as u64)
+            .unwrap_or(0)
+    }
+
+    pub fn storage_stats(&self) -> HistoryStorageStats {
+        let page_size = self.pragma_u64("page_size");
+        let page_count = self.pragma_u64("page_count");
+        let freelist_count = self.pragma_u64("freelist_count");
+        HistoryStorageStats {
+            database_bytes: page_count * page_size,
+            reclaimable_bytes: freelist_count * page_size,
+        }
+    }
+
+    pub fn checkpoint_wal(&self) {
+        if let Err(e) = self
+            .db
+            .conn()
+            .query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))
+        {
+            log::warn!("wal checkpoint failed: {}", e);
+        }
+    }
+
+    pub fn vacuum(&self) -> Result<HistoryStorageStats, HistoryError> {
+        let before = self.storage_stats();
+        self.db.conn().execute_batch("VACUUM")?;
+        self.checkpoint_wal();
+        let after = self.storage_stats();
+        log::info!(
+            "history database vacuumed: {} -> {} bytes",
+            before.database_bytes,
+            after.database_bytes
         );
+        Ok(after)
+    }
+
+    fn is_worth_vacuuming(&self) -> bool {
+        let page_count = self.pragma_u64("page_count");
+        if page_count == 0 {
+            return false;
+        }
+        let freelist_count = self.pragma_u64("freelist_count");
+        let reclaimable = freelist_count * self.pragma_u64("page_size");
+        reclaimable > VACUUM_MIN_RECLAIMABLE_BYTES
+            && (freelist_count as f64 / page_count as f64) > VACUUM_MIN_FREELIST_RATIO
+    }
+
+    pub fn compact_after_bulk_delete(&self) -> bool {
+        self.checkpoint_wal();
+        if !self.is_worth_vacuuming() {
+            return false;
+        }
+        self.vacuum().is_ok()
+    }
+
+    pub fn enforce_retention(&self) -> usize {
+        if self.retention_days == 0 {
+            return 0;
+        }
+        let cutoff = format!("-{} days", self.retention_days);
+        match self.db.conn().execute(
+            "DELETE FROM conversations
+             WHERE COALESCE(updated_at, created_at) < datetime('now', 'localtime', ?1)",
+            [cutoff],
+        ) {
+            Ok(deleted) => deleted,
+            Err(e) => {
+                log::error!("history retention sweep failed: {}", e);
+                0
+            }
+        }
     }
 
     fn generate_id() -> String {

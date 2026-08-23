@@ -35,7 +35,7 @@ pub fn manage(
     app.manage(services::ai_webview::AiWebviewState::default());
 
     let skills_dir = config_dir.join("skills");
-    let mut skill_service = SkillService::load(
+    let skill_service = SkillService::load(
         &skills_dir,
         Some(resource_dir),
         &config_service.settings().skills_order,
@@ -79,7 +79,16 @@ pub fn manage(
     skill_service
         .prune_missing_skills(database.conn())
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
-    let history_service = SqliteHistoryService::new(database, 1000);
+    let retention_days = config_service.settings().history_retention_days;
+    let history_service = SqliteHistoryService::new(database, retention_days);
+    let pruned = history_service.enforce_retention();
+    if pruned > 0 {
+        log::info!(
+            "history retention: pruned {} entries older than {} days",
+            pruned,
+            retention_days
+        );
+    }
     let image_storage = ImageStorage::new(&app_data_dir);
     image_storage
         .initialize()

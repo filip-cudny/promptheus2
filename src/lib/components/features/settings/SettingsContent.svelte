@@ -7,6 +7,7 @@
   import SectionSurfacePrompts from "./SectionSurfacePrompts.svelte";
   import SectionSkills from "./SectionSkills.svelte";
   import SectionNotifications from "./SectionNotifications.svelte";
+  import SectionHistory from "./SectionHistory.svelte";
 
   let { activeSection }: { activeSection: SettingsSection } = $props();
 
@@ -32,6 +33,8 @@
     <SectionAppearance />
   {:else if activeSection === "skills"}
     <SectionSkills />
+  {:else if activeSection === "history"}
+    <SectionHistory />
   {:else}
     <div class="placeholder">This section is not yet implemented.</div>
   {/if}

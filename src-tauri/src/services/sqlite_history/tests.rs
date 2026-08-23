@@ -6,7 +6,33 @@ fn make_db() -> Database {
 }
 
 fn make_svc() -> SqliteHistoryService {
-    SqliteHistoryService::new(make_db(), 1000)
+    SqliteHistoryService::new(make_db(), 0)
+}
+
+fn backdate(svc: &SqliteHistoryService, entry_id: &str, days: u32) {
+    svc.conn()
+        .execute(
+            "UPDATE conversations
+             SET created_at = datetime('now', 'localtime', ?2), updated_at = NULL
+             WHERE id = ?1",
+            rusqlite::params![entry_id, format!("-{} days", days)],
+        )
+        .unwrap();
+}
+
+fn add_plain(svc: &SqliteHistoryService, text: &str) -> String {
+    svc.add_entry(
+        text.into(),
+        HistoryEntryType::Text,
+        None,
+        None,
+        true,
+        None,
+        false,
+        None,
+        false,
+    )
+    .unwrap()
 }
 
 fn make_nodes(user_text: &str, assistant_text: &str) -> Vec<SerializedConversationNode> {
@@ -157,22 +183,60 @@ fn update_nonexistent_entry_fails() {
 }
 
 #[test]
-fn max_entries_enforcement() {
-    let svc = SqliteHistoryService::new(make_db(), 3);
-    for i in 0..5 {
-        svc.add_entry(
-            format!("entry-{}", i),
-            HistoryEntryType::Text,
-            None,
-            None,
-            true,
-            None,
-            false,
-            None,
-            false,
-        );
-    }
-    assert_eq!(svc.entry_count(), 3);
+fn retention_prunes_only_entries_past_cutoff() {
+    let svc = SqliteHistoryService::new(make_db(), 30);
+    let stale = add_plain(&svc, "stale");
+    let borderline = add_plain(&svc, "borderline");
+    add_plain(&svc, "fresh");
+    backdate(&svc, &stale, 60);
+    backdate(&svc, &borderline, 29);
+
+    assert_eq!(svc.enforce_retention(), 1);
+    assert_eq!(svc.entry_count(), 2);
+    assert!(svc.get_entry_by_id(&stale).is_none());
+    assert!(svc.get_entry_by_id(&borderline).is_some());
+}
+
+#[test]
+fn retention_disabled_keeps_everything() {
+    let svc = SqliteHistoryService::new(make_db(), 0);
+    let ancient = add_plain(&svc, "ancient");
+    backdate(&svc, &ancient, 3000);
+
+    assert_eq!(svc.enforce_retention(), 0);
+    assert_eq!(svc.entry_count(), 1);
+}
+
+#[test]
+fn retention_respects_updated_at_over_created_at() {
+    let svc = SqliteHistoryService::new(make_db(), 30);
+    let touched = add_plain(&svc, "touched");
+    svc.conn()
+        .execute(
+            "UPDATE conversations
+             SET created_at = datetime('now', 'localtime', '-90 days'),
+                 updated_at = datetime('now', 'localtime', '-1 days')
+             WHERE id = ?1",
+            rusqlite::params![touched],
+        )
+        .unwrap();
+
+    assert_eq!(svc.enforce_retention(), 0);
+    assert!(svc.get_entry_by_id(&touched).is_some());
+}
+
+#[test]
+fn adding_an_entry_does_not_trigger_a_sweep() {
+    let mut svc = SqliteHistoryService::new(make_db(), 30);
+    let stale = add_plain(&svc, "stale");
+    backdate(&svc, &stale, 60);
+
+    add_plain(&svc, "fresh");
+    assert_eq!(svc.entry_count(), 2);
+
+    svc.set_retention_days(30);
+    assert_eq!(svc.enforce_retention(), 1);
+    assert_eq!(svc.entry_count(), 1);
 }
 
 #[test]
@@ -323,4 +387,32 @@ fn quick_action_query() {
 
     let last_quick = svc.get_last_quick_action(HistoryEntryType::Text).unwrap();
     assert_eq!(last_quick.input_content, "quick");
+}
+
+#[test]
+fn vacuum_reclaims_free_pages_after_bulk_delete() {
+    let svc = SqliteHistoryService::new(make_db(), 0);
+    for i in 0..200 {
+        add_plain(&svc, &format!("{}-{}", i, "x".repeat(4096)));
+    }
+    let filled = svc.storage_stats();
+    svc.clear();
+
+    let before = svc.storage_stats();
+    assert!(before.reclaimable_bytes > 0);
+    assert_eq!(svc.entry_count(), 0);
+
+    let after = svc.vacuum().unwrap();
+    assert_eq!(after.reclaimable_bytes, 0);
+    assert!(after.database_bytes < filled.database_bytes);
+}
+
+#[test]
+fn compact_after_bulk_delete_skips_small_databases() {
+    let svc = SqliteHistoryService::new(make_db(), 0);
+    let stale = add_plain(&svc, "stale");
+    backdate(&svc, &stale, 60);
+    svc.clear();
+
+    assert!(!svc.compact_after_bulk_delete());
 }

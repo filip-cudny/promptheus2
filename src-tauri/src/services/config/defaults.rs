@@ -107,6 +107,12 @@ pub(super) fn validate(settings: &Settings) -> Result<(), ConfigError> {
         ));
     }
 
+    if settings.history_retention_days > 3650 {
+        return Err(ConfigError::InvalidSettings(
+            "history_retention_days must be between 0 and 3650 days (0 = keep forever)".to_string(),
+        ));
+    }
+
     if let Some(ref stt_id) = settings.surfaces.speech_to_text.model_id {
         match settings.models.iter().find(|m| &m.id == stt_id) {
             None => {

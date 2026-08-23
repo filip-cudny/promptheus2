@@ -2,7 +2,7 @@
 name = "promptheus-tauri"
 version = "0.1.0"
 description = "Promptheus desktop application"
-authors = ["you"]
+authors = ["Filip Cudny"]
 edition = "2021"
 
 [lib]

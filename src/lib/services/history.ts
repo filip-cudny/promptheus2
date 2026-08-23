@@ -5,6 +5,7 @@ import type {
   ImagePayload,
   SerializedConversationNode,
   LastInteractionData,
+  HistoryStorageStats,
 } from "$lib/types";
 
 export async function getHistory(): Promise<HistoryEntry[]> {
@@ -82,6 +83,14 @@ export async function deleteHistoryEntry(
   entryId: string,
 ): Promise<void> {
   return invoke("delete_history_entry", { entryId });
+}
+
+export async function getHistoryStorageStats(): Promise<HistoryStorageStats> {
+  return invoke("get_history_storage_stats");
+}
+
+export async function compactHistoryDatabase(): Promise<HistoryStorageStats> {
+  return invoke("compact_history_database");
 }
 
 export async function clearHistory(): Promise<void> {

@@ -162,6 +162,11 @@ impl ConfigService {
                     self.settings.autosave_debounce_ms = v as u32;
                 }
             }
+            "history_retention_days" => {
+                if let Some(v) = value.as_u64() {
+                    self.settings.history_retention_days = v.min(3650) as u32;
+                }
+            }
             "preferred_name" => {
                 if let Some(v) = value.as_str() {
                     let trimmed = v.trim();
@@ -290,6 +295,10 @@ impl ConfigService {
 
     pub fn update_notifications(&mut self, config: NotificationSettings) {
         self.settings.notifications = config;
+    }
+
+    pub fn update_history_retention(&mut self, days: u32) {
+        self.settings.history_retention_days = days.min(3650);
     }
 
     pub fn resolve_stt_model(&self) -> Option<&ModelConfig> {

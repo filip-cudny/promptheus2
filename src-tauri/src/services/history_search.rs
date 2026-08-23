@@ -579,7 +579,7 @@ mod tests {
 
     fn make_history(entries: Vec<HistoryEntry>) -> SqliteHistoryService {
         let db = Database::open_in_memory().unwrap();
-        let svc = SqliteHistoryService::new(db, 10_000);
+        let svc = SqliteHistoryService::new(db, 0);
         for e in entries {
             insert_raw(&svc, e);
         }

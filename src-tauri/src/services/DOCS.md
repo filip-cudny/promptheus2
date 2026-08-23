@@ -132,13 +132,13 @@ Persistent history storage via SQLite. Database file at `{app_data_dir}/history.
 
 **No internal locking**: plain struct with `Database`. Thread safety provided by `Arc<Mutex<SqliteHistoryService>>` at the state-management layer.
 
-**Constructor**: `SqliteHistoryService::new(database, max_entries)` — takes ownership of a `Database` instance.
+**Constructor**: `SqliteHistoryService::new(database, retention_days)` — takes ownership of a `Database` instance. `retention_days` comes from `Settings::history_retention_days`.
 
 **ID generation**: UUID v4 via `uuid::Uuid::new_v4()`.
 
 **Timestamp format**: `chrono::Local::now().format("%Y-%m-%d %H:%M:%S")`.
 
-**Max entries enforcement**: after each insert, deletes rows not in the top N by recency.
+**Retention**: time-based, not count-based — there is no cap on the number of entries. `enforce_retention()` deletes rows whose `COALESCE(updated_at, created_at)` is older than `datetime('now', 'localtime', '-N days')`; `retention_days == 0` disables it entirely (the default). `'localtime'` is mandatory because timestamps are written as `chrono::Local`; comparing against UTC `now` would prune fresh entries at positive offsets. The sweep is **not** on the insert path — it runs once at startup (`setup/state.rs`) and again from the `update_history_retention` command when the user changes the setting. Deletes cascade to `conversation_images` and are mirrored into `conversations_fts` by the `conversations_fts_ad` trigger.
 
 **Sorting**: `get_history()` returns entries ordered by `COALESCE(updated_at, created_at) DESC, rowid DESC`.
 
@@ -150,7 +150,9 @@ Persistent history storage via SQLite. Database file at `{app_data_dir}/history.
 
 **Summary builders**: `build_input_summary` and `build_output_summary` derive summaries from nodes (last user/assistant content, truncated to 200 chars, with "+N more" suffix for multi-turn).
 
-**Methods**: `new`, `add_entry`, `add_conversation_entry`, `update_conversation_entry`, `get_history`, `get_entry_by_id`, `get_last_item_by_type`, `get_last_quick_action`, `get_conversation_data`, `update_entry_title`, `clear`, `entry_count`.
+**Compaction**: `DELETE` never shrinks the SQLite file — freed pages land on the freelist and the database is in WAL mode, so a bulk delete also inflates `history.db-wal`. `compact_after_bulk_delete()` runs after any bulk delete (retention change, `clear_history`): first `PRAGMA wal_checkpoint(TRUNCATE)` (cheap, no exclusive lock), then `VACUUM` only if `reclaimable > 100 MB` **and** `freelist_count / page_count > 0.25` — the conjunction avoids vacuuming a tiny database on ratio alone, or a multi-GB one where 100 MB is noise. `vacuum()` is also exposed unconditionally through the `compact_history_database` command for the manual "Compact database" button. `VACUUM` needs ~2× the database size on disk and holds an exclusive lock, so it never runs on the startup sweep or on the insert path. Both commands wrap the blocking work in `tokio::task::block_in_place` (lock is acquired with `.await` first — nesting `block_on` inside a runtime thread would panic). `storage_stats()` reports `page_count * page_size` and `freelist_count * page_size` — all three pragmas are database-header reads (O(1)), so the settings UI can refresh them on every `history-changed` event for free. Deliberately excludes an entry count: `SELECT COUNT(*)` is a full scan and `history-changed` fires on every prompt execution.
+
+**Methods**: `new`, `set_retention_days`, `enforce_retention`, `storage_stats`, `checkpoint_wal`, `vacuum`, `compact_after_bulk_delete`, `add_entry`, `add_conversation_entry`, `update_conversation_entry`, `get_history`, `get_entry_by_id`, `get_last_item_by_type`, `get_last_quick_action`, `get_conversation_data`, `update_entry_title`, `clear`, `entry_count`.
 
 **Error enum**: `HistoryError` with variants `EntryNotFound(String)` and `Database(rusqlite::Error)`.
 

@@ -17,6 +17,7 @@ export interface Settings {
   menu_section_order: string[];
   notifications: NotificationSettings;
   autosave_debounce_ms: number;
+  history_retention_days: number;
   models: ModelConfig[];
   preferred_name: string;
   prompt_base: PromptBase;
@@ -25,6 +26,11 @@ export interface Settings {
   recent_apps_count: number;
   skills_order: string[];
   webview_providers: WebviewProvider[];
+}
+
+export interface HistoryStorageStats {
+  database_bytes: number;
+  reclaimable_bytes: number;
 }
 
 export interface WebviewProvider {

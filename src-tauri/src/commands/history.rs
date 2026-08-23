@@ -12,7 +12,7 @@ use crate::services::clipboard::ClipboardService;
 use crate::services::conversation_context::ConversationContextCache;
 use crate::services::history_events::emit_history_changed;
 use crate::services::history_search::{HistorySearch, SearchQuery, SearchResponse};
-use crate::services::sqlite_history::SqliteHistoryService;
+use crate::services::sqlite_history::{HistoryStorageStats, SqliteHistoryService};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SkillCount {
@@ -186,8 +186,30 @@ pub async fn clear_history(
     app: AppHandle,
     history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
 ) -> crate::Result<()> {
-    history.lock().await.clear();
+    {
+        let history = history.lock().await;
+        tokio::task::block_in_place(|| {
+            history.clear();
+            history.compact_after_bulk_delete();
+        });
+    }
     emit_history_changed(&app, None, None)
+}
+
+#[tauri::command]
+pub async fn get_history_storage_stats(
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
+) -> crate::Result<HistoryStorageStats> {
+    Ok(history.lock().await.storage_stats())
+}
+
+#[tauri::command]
+pub async fn compact_history_database(
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
+) -> crate::Result<HistoryStorageStats> {
+    let history = history.lock().await;
+    let stats = tokio::task::block_in_place(|| history.vacuum())?;
+    Ok(stats)
 }
 
 #[tauri::command]

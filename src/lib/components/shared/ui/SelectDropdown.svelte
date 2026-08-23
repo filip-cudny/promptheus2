@@ -8,11 +8,13 @@
     options,
     ariaLabel,
     activeWhenNot,
+    onchange,
   }: {
     value: T;
     options: ReadonlyArray<{ value: T; label: string }>;
     ariaLabel: string;
     activeWhenNot?: T;
+    onchange?: (value: T) => void;
   } = $props();
 
   let triggerEl = $state<HTMLButtonElement | undefined>();
@@ -37,6 +39,7 @@
     value = next;
     open = false;
     triggerEl?.focus();
+    onchange?.(next);
   }
 
   function handleKeydown(e: KeyboardEvent) {

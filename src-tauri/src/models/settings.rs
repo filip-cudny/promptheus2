@@ -64,6 +64,10 @@ pub struct Settings {
     #[serde(default = "default_autosave_debounce_ms")]
     pub autosave_debounce_ms: u32,
 
+    /// Days of history to keep. `0` keeps everything forever.
+    #[serde(default)]
+    pub history_retention_days: u32,
+
     #[serde(default)]
     pub models: Vec<ModelConfig>,
 
@@ -519,6 +523,7 @@ impl Default for Settings {
             menu_section_order: default_menu_section_order(),
             notifications: NotificationSettings::default(),
             autosave_debounce_ms: 1000,
+            history_retention_days: 0,
             models: Vec::new(),
             preferred_name: String::new(),
             prompt_base: PromptBase::default(),
@@ -596,6 +601,7 @@ mod tests {
         assert!(!settings.debug_mode);
         assert_eq!(settings.code_theme, "paraiso-dark");
         assert_eq!(settings.autosave_debounce_ms, 1000);
+        assert_eq!(settings.history_retention_days, 0);
         assert_eq!(settings.menu_section_order.len(), 6);
         assert!(settings.models.is_empty());
         assert_eq!(settings.prompt_base.system, "prompts/base/system.md");
@@ -613,6 +619,7 @@ mod tests {
         assert!(!settings.debug_mode);
         assert_eq!(settings.code_theme, "paraiso-dark");
         assert_eq!(settings.autosave_debounce_ms, 1000);
+        assert_eq!(settings.history_retention_days, 0);
         assert!(settings.models.is_empty());
     }
 

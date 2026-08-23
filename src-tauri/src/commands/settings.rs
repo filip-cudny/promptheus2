@@ -10,6 +10,8 @@ use crate::models::settings::{
 };
 use crate::services::ai::AiService;
 use crate::services::config::{ConfigService, SurfaceKind};
+use crate::services::history_events::emit_history_changed;
+use crate::services::sqlite_history::SqliteHistoryService;
 
 static SETTINGS_VERSION: AtomicU64 = AtomicU64::new(0);
 
@@ -149,6 +151,43 @@ pub async fn update_notifications(
     let mut svc = config_svc.lock().await;
     svc.update_notifications(config);
     save_and_emit(&svc, &app)
+}
+
+#[tauri::command]
+pub async fn update_history_retention(
+    app: AppHandle,
+    config_svc: State<'_, Arc<Mutex<ConfigService>>>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
+    days: u32,
+) -> crate::Result<()> {
+    {
+        let mut svc = config_svc.lock().await;
+        svc.update_history_retention(days);
+        save_and_emit(&svc, &app)?;
+    }
+
+    let pruned = {
+        let mut history = history.lock().await;
+        tokio::task::block_in_place(|| {
+            history.set_retention_days(days);
+            let pruned = history.enforce_retention();
+            if pruned > 0 {
+                history.compact_after_bulk_delete();
+            }
+            pruned
+        })
+    };
+
+    log::info!(
+        "history retention set to {} days, pruned {} entries",
+        days,
+        pruned
+    );
+
+    if pruned > 0 {
+        emit_history_changed(&app, None, None)?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

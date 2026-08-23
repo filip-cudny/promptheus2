@@ -7,6 +7,7 @@
     | "surfaces"
     | "notifications"
     | "appearance"
+    | "history"
     | "shortcuts"
     | "skills"
     | "mcp_servers"
@@ -26,6 +27,7 @@
     { id: "surfaces", label: "Surfaces", enabled: false },
     { id: "notifications", label: "Notifications", enabled: true },
     { id: "appearance", label: "Appearance", enabled: true },
+    { id: "history", label: "History", enabled: true },
     { id: "shortcuts", label: "Shortcuts", enabled: false },
     { id: "skills", label: "Skills", enabled: true },
     { id: "mcp_servers", label: "MCP Servers", enabled: false },
