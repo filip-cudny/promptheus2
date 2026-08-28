@@ -86,10 +86,11 @@
   });
 
   $effect(() => {
-    if (tracker.dirty || tracker.saving || tracker.hasPending) return;
+    const next = skill;
     untrack(() => {
-      draft = buildDraft(skill);
-      customEntries = entriesFromExtra(extraOf(skill.parameters));
+      if (tracker.dirty || tracker.saving || tracker.hasPending) return;
+      draft = buildDraft(next);
+      customEntries = entriesFromExtra(extraOf(next.parameters));
       customErrors = {};
       suppressCustomSave = true;
     });
@@ -191,7 +192,11 @@
     }
   }
 
-  function setKnownParameter(key: KnownModelParameterKey, value: number | string | null) {
+  function setKnownParameter(
+    key: KnownModelParameterKey,
+    value: number | string | null,
+    immediate = true,
+  ) {
     const params: ModelParameters =
       draft.parameters ?? {
         temperature: null,
@@ -202,7 +207,7 @@
         reasoning_effort: null,
       };
     draft.parameters = { ...params, [key]: value as never };
-    scheduleSave(true);
+    scheduleSave(immediate);
   }
 
   $effect(() => {
@@ -241,15 +246,15 @@
       i += 1;
       if (i > 50) return;
     }
-    const ok = await tracker.flush(async () => {
+    await tracker.runAction(async () => {
       const created = await duplicateSkill(skill.name, candidate);
       onSelectSkill(created.name);
     });
-    if (!ok) return;
   }
 
   async function handleDelete() {
-    const ok = await tracker.flush(async () => {
+    tracker.cancel();
+    const ok = await tracker.runAction(async () => {
       await deleteSkill(skill.name);
     });
     if (ok) onDeleted();
@@ -289,6 +294,22 @@
     const found = settingsStore.models.find((m) => m.id === inheritedModelId);
     return found ? found.display_name : inheritedModelId;
   });
+
+  const pinnedModelConfig = $derived(
+    draft.model ? settingsStore.models.find((m) => m.id === draft.model) ?? null : null,
+  );
+
+  const unlistedModelId = $derived(
+    draft.model && !textModels.some((m) => m.id === draft.model) ? draft.model : null,
+  );
+
+  const unlistedModelReason = $derived<string | null>(
+    !unlistedModelId
+      ? null
+      : pinnedModelConfig
+        ? "is not a text model"
+        : "no longer exists",
+  );
 
   const effectiveModelConfig = $derived.by(() => {
     const id = draft.model ?? inheritedModelId;
@@ -373,11 +394,24 @@
         <option value="">
           Inherit (Quick Actions: {inheritedModelLabel})
         </option>
+        {#if unlistedModelId}
+          <option value={unlistedModelId}>
+            {unlistedModelId} — {unlistedModelReason}
+          </option>
+        {/if}
         {#each textModels as m (m.id)}
-          <option value={m.id}>{m.display_name}</option>
+          <option value={m.id}>
+            {m.display_name}{m.id === inheritedModelId ? " (pinned — same as Quick Actions)" : ""}
+          </option>
         {/each}
       </select>
     </FormRow>
+    {#if unlistedModelId}
+      <p class="helper warn-text">
+        This skill is pinned to <code>{unlistedModelId}</code>, which {unlistedModelReason} —
+        <code>/{skill.name}</code> will fail to run. Pick another model or switch back to Inherit.
+      </p>
+    {/if}
     <p class="helper">
       Skills without a model use the Quick Actions surface model. Pick one explicitly to pin a
       skill (e.g. a longer-context model for <code>process-with-context</code>).
@@ -394,6 +428,7 @@
     <ParametersKnown
       parameters={draft.parameters}
       capabilities={resolvedCapabilities}
+      inherited={inheritedSurfaceParams}
       onChange={setKnownParameter}
     />
     <h4 class="custom-heading">Custom</h4>
@@ -608,6 +643,10 @@
     color: var(--text-disabled);
     margin: 0;
     line-height: 1.5;
+  }
+
+  .helper.warn-text {
+    color: var(--warning);
   }
 
   .helper code {

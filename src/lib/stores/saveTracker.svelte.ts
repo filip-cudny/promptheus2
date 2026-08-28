@@ -20,8 +20,9 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
   let lastSavedAt = $state<number | null>(null);
   let now = $state(Date.now());
 
-  let pending: PersistFn | null = null;
-  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let pending = $state.raw<PersistFn | null>(null);
+  let saveTimer = $state.raw<ReturnType<typeof setTimeout> | null>(null);
+  let inflight: Promise<boolean> | null = null;
   let nowTimer: ReturnType<typeof setInterval> | null = null;
   let detachKeyboard: (() => void) | null = null;
   let detachBeforeUnload: (() => void) | null = null;
@@ -89,24 +90,59 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
       clearTimeout(saveTimer);
       saveTimer = null;
     }
-    if (fn) pending = fn;
-    if (!pending) return !error;
+    if (fn) {
+      pending = fn;
+      if (!dirty) dirty = true;
+    }
+    if (!pending) {
+      if (inflight) return await inflight;
+      return error === null;
+    }
     return await runPersist();
   }
 
+  /**
+   * Runs a one-off action (delete, duplicate, …) through the tracker. Unlike
+   * `flush(fn)` the action is never queued behind — or replaced by — an
+   * autosave: pending edits are persisted first, then the action runs and its
+   * result is reported truthfully.
+   */
+  async function runAction(fn: PersistFn): Promise<boolean> {
+    if (!(await flush())) return false;
+    while (inflight) await inflight;
+    saving = true;
+    error = null;
+    ensureNowTimer();
+    return await execute(fn);
+  }
+
   async function runPersist(): Promise<boolean> {
-    if (saving) return !error;
-    if (!pending) return !error;
+    while (inflight) await inflight;
+    if (!pending) return error === null;
     const fn = pending;
     pending = null;
     saving = true;
     error = null;
     ensureNowTimer();
+    return await execute(fn);
+  }
+
+  async function execute(fn: PersistFn): Promise<boolean> {
+    const run = persistOnce(fn);
+    inflight = run;
+    try {
+      return await run;
+    } finally {
+      if (inflight === run) inflight = null;
+    }
+  }
+
+  async function persistOnce(fn: PersistFn): Promise<boolean> {
     try {
       await fn();
-      dirty = false;
       lastSavedAt = Date.now();
-      now = Date.now();
+      now = lastSavedAt;
+      if (!pending && !saveTimer) dirty = false;
       return true;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -156,6 +192,7 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
       clearTimeout(saveTimer);
       saveTimer = null;
     }
+    if (pending) void runPersist();
     if (nowTimer) {
       clearInterval(nowTimer);
       nowTimer = null;
@@ -168,7 +205,6 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
       detachBeforeUnload();
       detachBeforeUnload = null;
     }
-    pending = null;
   }
 
   return {
@@ -203,6 +239,7 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
     scheduleSave,
     cancel,
     flush,
+    runAction,
     attachKeyboard,
     attachBeforeUnload,
     clearError,

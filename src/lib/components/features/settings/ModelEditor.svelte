@@ -184,7 +184,11 @@
     }
   }
 
-  function setKnownParameter(key: KnownModelParameterKey, value: number | string | null) {
+  function setKnownParameter(
+    key: KnownModelParameterKey,
+    value: number | string | null,
+    immediate = true,
+  ) {
     const params: ModelParameters =
       draft.parameters ?? {
         temperature: null,
@@ -195,7 +199,7 @@
         reasoning_effort: null,
       };
     draft.parameters = { ...params, [key]: value as never };
-    scheduleSave(true);
+    scheduleSave(immediate);
   }
 
   function setCapabilities(next: ModelCapabilities | null) {

@@ -50,9 +50,9 @@ No Save/Cancel buttons. Every input persists on change:
 
 - **Text inputs** (display name, model id, base URL, API key, group, custom param values) — debounced via `scheduleSave(false)`. Debounce is `store.settings.autosave_debounce_ms` (default 1000ms). This is the single source of truth for every autosave debounce in the app — `ModelEditor`, `PromptEditor`, and any future autosave site read it from here. 1000ms is tuned to fire only when the user has actually paused (typical inter-word gap is 250–400ms; 200ms fires mid-sentence).
 - **Discrete controls** (segmented buttons, selects, checkboxes, slider toggles) — `scheduleSave(true)` = persist immediately, no debounce.
-- **Range sliders** — fire on every `oninput`; rely on the user releasing the slider for the final value. The known-parameter override checkbox is the gate: unchecking it sends `null` to drop the override entirely.
+- **Range sliders and number inputs** — fire on every `oninput` and must debounce. `ParametersKnown` passes `immediate: false` as the third argument of its `onChange` callback for these; the checkbox and the reasoning-effort select pass nothing and stay immediate. Saving a slider drag immediately would write the skill/model file once per animation frame, each write emitting a change event and a full store refresh. The known-parameter override checkbox is the gate: unchecking it sends `null` to drop the override entirely.
 
-Save state is owned by `useSaveTracker()` (`$lib/stores/saveTracker.svelte.ts`) — a small rune-based state machine that owns the debounce timer, the reentrancy guard, the `now`-tick interval driving the saved-stamp expiry, and a single try/catch that captures errors. It exposes `state` (`idle | dirty | saving | saved | error`), `tooltip`, and `error`, plus `scheduleSave(persistFn)`, `flush()`, `cancel()`, `attachKeyboard()`, `attachBeforeUnload()`, and `destroy()`. `<SaveStatusIndicator {tracker} />` (in `$lib/components/shared/widgets/`) is the pure presentational counterpart — 6 px dot + transient "✓ saved" / "⚠ save failed" stamp + tooltip.
+Save state is owned by `useSaveTracker()` (`$lib/stores/saveTracker.svelte.ts`) — a small rune-based state machine that owns the debounce timer, the reentrancy guard, the `now`-tick interval driving the saved-stamp expiry, and a single try/catch that captures errors. It exposes `state` (`idle | dirty | saving | saved | error`), `tooltip`, and `error`, plus `scheduleSave(persistFn)`, `flush()`, `runAction(fn)`, `cancel()`, `attachKeyboard()`, `attachBeforeUnload()`, and `destroy()`. `<SaveStatusIndicator {tracker} />` (in `$lib/components/shared/widgets/`) is the pure presentational counterpart — 6 px dot + transient "✓ saved" / "⚠ save failed" stamp + tooltip.
 
 The pattern in `ModelEditor.svelte`:
 
@@ -71,7 +71,11 @@ function scheduleSave(immediate: boolean) {
 }
 ```
 
-`tracker.destroy()` must run on unmount to clear timers and detach window listeners. The persist function should *throw* on failure — never swallow to `console.error`; the tracker captures the error and surfaces it through the indicator. Discrete actions that aren't auto-saves (delete, duplicate) can also go through `tracker.flush(fn)` which returns `true`/`false` — the calling code branches on the boolean to decide whether to advance UI (e.g., switching selection after a successful delete).
+`tracker.destroy()` must run on unmount to clear timers and detach window listeners; it also fires the pending debounced save before tearing down, because unmount is a normal way to leave an editor (switching sidebar section, or picking another skill through the `{#key}` block) and a 1000 ms debounce is easy to beat.
+
+Saves are **queued, never dropped**. A save arriving while another is in flight waits for it and then runs — the earlier `if (saving) return` guard silently discarded the newer edit while still reporting success, so the last change before a rapid second edit was lost. `dirty` only clears when nothing is queued behind the save that just finished.
+
+Discrete actions that aren't auto-saves (delete, duplicate) go through `tracker.runAction(fn)`, not `flush(fn)`: it persists pending edits first, then runs the action, and its `true`/`false` reflects the action itself. `flush(fn)` only queues `fn` as the next autosave — a concurrent edit can replace it, so an action passed to `flush` may never run while still returning `true`. Callers branch on the boolean to decide whether to advance UI (e.g., switching selection after a successful delete).
 
 The indicator is mounted at the section/editor header — one indicator per save target. Tabbed prompt sections (`SectionPromptBase`, `SectionSurfacePrompts`) keep per-editor dots so the tab the user is on tracks its own document; promoting them to section-level would lie about which document is dirty.
 
@@ -80,6 +84,8 @@ The indicator is mounted at the section/editor header — one indicator per save
 `ModelEditor` clones the incoming `model` prop into a local `$state` `draft` and edits the draft. A `$effect(() => { const m = model; untrack(() => { draft = structuredClone(m); ... }) })` resets the draft when the parent swaps to a different model. The parent uses `{#key selectedModel.id}` so switching models fully remounts the editor, which combined with `untrack` prevents stale-draft leaks across selections.
 
 `structuredClone` (not spread) — required because `parameters` is nested.
+
+`SkillEditor` mirrors the same shape for the `skill` prop. The `{#key}` remount is a convenience (it resets local UI state like `confirmDelete`), never the mechanism that loads fresh data — the sync effect must do that on its own, see "Reactivity gotchas".
 
 ### Validation
 
@@ -110,7 +116,19 @@ If the action affects other state (e.g., a model referenced by a surface), surfa
 
 ### "Override or use default" pattern
 
-`ParametersKnown.svelte` shows each param with a leading checkbox. Unchecked = inherit provider default (sends `null`); checked = enable the slider/input pre-filled with a sensible default (e.g., `temperature: 0.7`). This keeps the form short and makes "I haven't touched this" visually distinct from "I set it to 0".
+`ParametersKnown.svelte` shows each param with a leading checkbox. Unchecked = inherit (sends `null`); checked = enable the slider/input pre-filled with a value. This keeps the form short and makes "I haven't touched this" visually distinct from "I set it to 0".
+
+Pass the `inherited` prop (the surface parameters the editor falls back to — for skills, `surfaces.quick_actions.generation.parameters`) whenever there is a real inheritance chain. It drives two things: an `inherits <value>` caption next to every unchecked param, and the prefill used when the box is checked. Checking a box must not silently change the effective value — prefilling `reasoning_effort` with the first allowed level (`minimal` for OpenAI effort models) while the surface inherits `medium` is a silent downgrade the user never asked for. Static defaults (`temperature: 0.7`, `max_tokens: 4096`) are the fallback when nothing is inherited.
+
+Reasoning effort is a `<select>`, not an `<input list>` + `<datalist>`. Browsers filter datalist suggestions against the field's current text, so a field already holding `medium` offers exactly one suggestion and looks broken; free text also meant every keystroke fired an immediate save of a half-typed level. The row also renders when the value is set but the model reports no effort support (deleted model, capabilities changed) — with a warning — so a stored value can never become invisible and unremovable.
+
+### Missing or unlisted model references
+
+A skill pins a model by id and nothing rewrites that id when the model is deleted, so the editor must handle "the pinned id resolves to nothing". `SkillEditor` renders a synthetic `<option>` for such an id (`<id> — no longer exists` / `— is not a text model`) plus a `warn-text` helper line. Without it the `<select>` has no matching option, silently renders blank, and the skill looks like it inherits while `resolve_quick_action_model` fails at run time (a pinned id never falls back to the Quick Actions model — that's deliberate, an unrunnable skill should say so rather than quietly run on a different model).
+
+The same id also yields no capabilities, so anything capability-gated must degrade to "show the stored value with a warning" rather than disappearing — see the reasoning-effort row in `ParametersKnown`.
+
+The inherit option and an explicit pin to the same model read almost identically, so the option list marks the model that is currently the Quick Actions one.
 
 ### Env var references
 
@@ -139,7 +157,7 @@ The list caption replaced a 7 px accent dot before the row name. The dot collide
 ### Reactivity gotchas (Svelte 5)
 
 - Top-level state (`let x = $state(...)`) and effects in this directory follow Svelte 5 runes mode.
-- When mirroring a prop into local `$state`, wrap the assignment in `untrack(() => …)` inside `$effect` so writes to the draft don't re-trigger the effect.
+- When mirroring a prop into local `$state`, read the prop **outside** `untrack` and put everything else — including the `tracker.dirty / saving / hasPending` guard — inside it (`ModelEditor.svelte` is the reference). The prop must be the only dependency, so the effect re-syncs when fresh data arrives and never at any other time. `SkillEditor` had this inverted: `skill` was read inside `untrack` and the tracker flags outside, so the effect re-ran the moment a save finished — restoring the *pre-save* prop over the value just entered, because the store refresh (event → `list_skills_full`) lands later — and never re-ran when the refreshed prop finally arrived. Symptoms were "the value only shows up the second time I select the skill", checkboxes bouncing back after one click, and edits reverting and then being written back to disk by the next autosave.
 - `$effect` that watches an array (e.g., `customEntries`) and fires a debounced save: reference the array first (`customEntries;`) before the timer logic — that's what registers the dependency.
 
 ### Prompt editor

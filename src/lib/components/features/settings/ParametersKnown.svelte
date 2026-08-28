@@ -4,16 +4,26 @@
     ModelCapabilities,
     ModelParameters,
   } from "$lib/types";
-  import type { ReasoningLevel } from "$lib/constants/models";
+  import {
+    REASONING_LEVELS,
+    REASONING_LEVEL_LABELS,
+    type ReasoningLevel,
+  } from "$lib/constants/models";
 
   let {
     parameters,
     capabilities = null,
+    inherited = null,
     onChange,
   }: {
     parameters: ModelParameters | null;
     capabilities?: ModelCapabilities | null;
-    onChange: (key: KnownModelParameterKey, value: number | string | null) => void;
+    inherited?: ModelParameters | null;
+    onChange: (
+      key: KnownModelParameterKey,
+      value: number | string | null,
+      immediate?: boolean,
+    ) => void;
   } = $props();
 
   type Slider = {
@@ -32,29 +42,46 @@
     { key: "presence_penalty", label: "Presence penalty", min: -2, max: 2, step: 0.1, default: 0 },
   ];
 
-  let reasoningKind = $derived(capabilities?.reasoning.kind ?? "unsupported");
+  let effortSupported = $derived(capabilities?.reasoning.kind === "effort");
 
   let reasoningOptions = $derived.by<ReasoningLevel[]>(() => {
     const reasoning = capabilities?.reasoning;
-    if (!reasoning || reasoning.kind !== "effort") return [];
-    const allowed = reasoning.allowed as ReasoningLevel[];
+    const allowed =
+      reasoning?.kind === "effort"
+        ? (reasoning.allowed as ReasoningLevel[])
+        : [...REASONING_LEVELS];
     return allowed.includes("none") ? allowed : ["none", ...allowed];
   });
 
-  let reasoningDefault = $derived<string>(
-    reasoningOptions.find((o) => o !== "none") ?? reasoningOptions[0] ?? "medium",
+  let inheritedEffort = $derived<string | null>(
+    typeof inherited?.reasoning_effort === "string" && inherited.reasoning_effort.length > 0
+      ? inherited.reasoning_effort
+      : null,
   );
+
+  let reasoningDefault = $derived.by<string>(() => {
+    if (inheritedEffort && reasoningOptions.includes(inheritedEffort as ReasoningLevel)) {
+      return inheritedEffort;
+    }
+    if (reasoningOptions.includes("medium")) return "medium";
+    return reasoningOptions.find((o) => o !== "none") ?? reasoningOptions[0] ?? "medium";
+  });
 
   function isOverridden(key: KnownModelParameterKey): boolean {
     if (!parameters) return false;
     return parameters[key] !== null && parameters[key] !== undefined;
   }
 
+  function inheritedNumber(key: KnownModelParameterKey): number | null {
+    const v = inherited?.[key];
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  }
+
   function toggleSliderOverride(slider: Slider) {
     if (isOverridden(slider.key)) {
       onChange(slider.key, null);
     } else {
-      onChange(slider.key, slider.default);
+      onChange(slider.key, inheritedNumber(slider.key) ?? slider.default);
     }
   }
 
@@ -62,7 +89,7 @@
     if (isOverridden("max_tokens")) {
       onChange("max_tokens", null);
     } else {
-      onChange("max_tokens", 4096);
+      onChange("max_tokens", inheritedNumber("max_tokens") ?? 4096);
     }
   }
 
@@ -81,7 +108,11 @@
 
   function getString(key: KnownModelParameterKey, fallback: string): string {
     const v = parameters?.[key];
-    return typeof v === "string" ? v : fallback;
+    return typeof v === "string" && v.length > 0 ? v : fallback;
+  }
+
+  function effortLabel(value: string): string {
+    return REASONING_LEVEL_LABELS[value as ReasoningLevel] ?? value;
   }
 </script>
 
@@ -101,6 +132,8 @@
         </label>
         {#if overridden}
           <span class="value">{value.toFixed(2)}</span>
+        {:else if inheritedNumber(slider.key) !== null}
+          <span class="inherit-hint">inherits {inheritedNumber(slider.key)}</span>
         {/if}
       </div>
       {#if overridden}
@@ -110,7 +143,8 @@
           max={slider.max}
           step={slider.step}
           {value}
-          oninput={(e) => onChange(slider.key, Number((e.target as HTMLInputElement).value))}
+          oninput={(e) =>
+            onChange(slider.key, Number((e.target as HTMLInputElement).value), false)}
         />
         <div class="range-meta">
           <span>{slider.min}</span>
@@ -132,6 +166,9 @@
           />
           <span>Max tokens</span>
         </label>
+        {#if !overridden && inheritedNumber("max_tokens") !== null}
+          <span class="inherit-hint">inherits {inheritedNumber("max_tokens")}</span>
+        {/if}
       </div>
       {#if overridden}
         <input
@@ -140,14 +177,14 @@
           value={getNumber("max_tokens", 4096)}
           oninput={(e) => {
             const n = Number((e.target as HTMLInputElement).value);
-            onChange("max_tokens", Number.isFinite(n) && n >= 1 ? n : 1);
+            onChange("max_tokens", Number.isFinite(n) && n >= 1 ? n : 1, false);
           }}
         />
       {/if}
     </div>
   {/if}
 
-  {#if reasoningKind === "effort"}
+  {#if effortSupported || isOverridden("reasoning_effort")}
     {@const overridden = isOverridden("reasoning_effort")}
     {@const value = getString("reasoning_effort", reasoningDefault)}
     <div class="param">
@@ -160,18 +197,29 @@
           />
           <span>Reasoning effort</span>
         </label>
+        {#if !overridden && inheritedEffort}
+          <span class="inherit-hint">inherits {effortLabel(inheritedEffort)}</span>
+        {/if}
       </div>
       {#if overridden}
-        <input
-          list="reasoning-options"
+        <select
           {value}
-          oninput={(e) => onChange("reasoning_effort", (e.target as HTMLInputElement).value)}
-        />
-        <datalist id="reasoning-options">
-          {#each reasoningOptions as opt}
-            <option value={opt}></option>
+          onchange={(e) =>
+            onChange("reasoning_effort", (e.currentTarget as HTMLSelectElement).value)}
+        >
+          {#if !reasoningOptions.includes(value as ReasoningLevel)}
+            <option value={value}>{effortLabel(value)} — not accepted by this model</option>
+          {/if}
+          {#each reasoningOptions as opt (opt)}
+            <option value={opt}>{effortLabel(opt)}</option>
           {/each}
-        </datalist>
+        </select>
+        {#if !effortSupported}
+          <p class="param-warn">
+            The effective model does not advertise reasoning effort — this value is dropped
+            when the request is built. Uncheck to remove it from the file.
+          </p>
+        {/if}
       {/if}
     </div>
   {/if}
@@ -212,12 +260,24 @@
     color: var(--text-muted);
   }
 
+  .inherit-hint {
+    font-size: var(--font-size-xs);
+    color: var(--text-disabled);
+  }
+
+  .param-warn {
+    font-size: var(--font-size-sm);
+    color: var(--warning);
+    margin: 0;
+    line-height: 1.5;
+  }
+
   input[type="range"] {
     width: 100%;
   }
 
   input[type="number"],
-  input[list] {
+  select {
     width: 100%;
     padding: 5px var(--space-4);
     background: var(--surface-sunken);
