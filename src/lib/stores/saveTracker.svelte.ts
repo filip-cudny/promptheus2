@@ -1,3 +1,5 @@
+import { untrack } from "svelte";
+
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
 export interface SaveTrackerOptions {
@@ -20,12 +22,17 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
   let lastSavedAt = $state<number | null>(null);
   let now = $state(Date.now());
 
-  let pending = $state.raw<PersistFn | null>(null);
-  let saveTimer = $state.raw<ReturnType<typeof setTimeout> | null>(null);
+  let pending: PersistFn | null = null;
+  let saveTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingFlag = $state(false);
   let inflight: Promise<boolean> | null = null;
   let nowTimer: ReturnType<typeof setInterval> | null = null;
   let detachKeyboard: (() => void) | null = null;
   let detachBeforeUnload: (() => void) | null = null;
+
+  function syncPendingFlag() {
+    pendingFlag = pending !== null || saveTimer !== null;
+  }
 
   function ensureNowTimer() {
     if (nowTimer) return;
@@ -61,44 +68,61 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
   });
 
   function markDirty() {
-    if (!dirty) dirty = true;
-    ensureNowTimer();
+    untrack(() => {
+      dirty = true;
+      ensureNowTimer();
+    });
   }
 
   function scheduleSave(fn: PersistFn) {
-    pending = fn;
-    if (!dirty) dirty = true;
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      saveTimer = null;
-      void runPersist();
-    }, debounceMs);
-    ensureNowTimer();
+    untrack(() => {
+      pending = fn;
+      dirty = true;
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(() => {
+        saveTimer = null;
+        syncPendingFlag();
+        void runPersist();
+      }, debounceMs);
+      syncPendingFlag();
+      ensureNowTimer();
+    });
   }
 
   function cancel() {
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-    }
-    pending = null;
-    if (!saving) dirty = false;
+    untrack(() => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      pending = null;
+      syncPendingFlag();
+      if (!saving) dirty = false;
+    });
   }
 
   async function flush(fn?: PersistFn): Promise<boolean> {
-    if (saveTimer) {
-      clearTimeout(saveTimer);
-      saveTimer = null;
-    }
-    if (fn) {
-      pending = fn;
-      if (!dirty) dirty = true;
-    }
-    if (!pending) {
+    const hasWork = untrack(() => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+      }
+      if (fn) {
+        pending = fn;
+        dirty = true;
+      }
+      syncPendingFlag();
+      return pending !== null;
+    });
+    if (!hasWork) {
       if (inflight) return await inflight;
-      return error === null;
+      return isClean();
     }
     return await runPersist();
+  }
+
+  function isClean(): boolean {
+    return untrack(() => error === null);
   }
 
   /**
@@ -110,21 +134,29 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
   async function runAction(fn: PersistFn): Promise<boolean> {
     if (!(await flush())) return false;
     while (inflight) await inflight;
-    saving = true;
-    error = null;
-    ensureNowTimer();
+    beginSave();
     return await execute(fn);
   }
 
   async function runPersist(): Promise<boolean> {
     while (inflight) await inflight;
-    if (!pending) return error === null;
-    const fn = pending;
-    pending = null;
-    saving = true;
-    error = null;
-    ensureNowTimer();
+    const fn = untrack(() => {
+      const next = pending;
+      pending = null;
+      syncPendingFlag();
+      return next;
+    });
+    if (!fn) return isClean();
+    beginSave();
     return await execute(fn);
+  }
+
+  function beginSave() {
+    untrack(() => {
+      saving = true;
+      error = null;
+      ensureNowTimer();
+    });
   }
 
   async function execute(fn: PersistFn): Promise<boolean> {
@@ -139,7 +171,7 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
 
   async function persistOnce(fn: PersistFn): Promise<boolean> {
     try {
-      await fn();
+      await untrack(() => fn());
       lastSavedAt = Date.now();
       now = lastSavedAt;
       if (!pending && !saveTimer) dirty = false;
@@ -233,7 +265,7 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
       return debounceMs;
     },
     get hasPending() {
-      return pending !== null || saveTimer !== null;
+      return pendingFlag;
     },
     markDirty,
     scheduleSave,
