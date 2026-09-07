@@ -8,6 +8,7 @@
     | "notifications"
     | "appearance"
     | "history"
+    | "speech"
     | "shortcuts"
     | "skills"
     | "mcp_servers"
@@ -28,6 +29,7 @@
     { id: "notifications", label: "Notifications", enabled: true },
     { id: "appearance", label: "Appearance", enabled: true },
     { id: "history", label: "History", enabled: true },
+    { id: "speech", label: "Speech", enabled: true },
     { id: "shortcuts", label: "Shortcuts", enabled: false },
     { id: "skills", label: "Skills", enabled: true },
     { id: "mcp_servers", label: "MCP Servers", enabled: false },

@@ -26,6 +26,7 @@
   } from "$lib/services/context";
   import { openContextEditor } from "$lib/services/contextEditor";
   import { copyHistoryContent } from "$lib/services/history";
+  import { retryTranscription } from "$lib/services/speech";
   import { openHistoryDialog } from "$lib/services/historyDialog";
   import { openSettingsWindow } from "$lib/services/settingsDialog";
   import { PROMPTHEUS_PROVIDER_ID } from "$lib/services/shellToolbar";
@@ -176,6 +177,11 @@
     await openHistoryDialog();
   }
 
+  async function handleRetryTranscription(entryId: string) {
+    await retryTranscription(entryId);
+    await menu.refreshItems();
+  }
+
   onMount(async () => {
     await menu.init();
     unlistenProviders = await providersStore.init();
@@ -293,6 +299,7 @@
             onCopyContent={handleCopyHistoryContent}
             onOpenLastInteraction={handleOpenLastInteraction}
             onOpenHistory={handleOpenHistory}
+            onRetryTranscription={handleRetryTranscription}
           />
         {:else}
           {@const executingThis = item.item_type === "skill" && isExecutingSkill(item)}

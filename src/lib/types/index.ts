@@ -78,6 +78,17 @@ export interface SpeechToTextConfig {
   keyterms_file: string | null;
   no_verbatim: boolean | null;
   prompt: string | null;
+  auto_retry_attempts: number;
+  audio_retention_hours: number;
+  keep_audio_on_success: boolean;
+}
+
+export interface AudioClipInfo {
+  has_audio: boolean;
+  expires_at: string | null;
+  duration_secs: number | null;
+  bytes: number | null;
+  is_retrying: boolean;
 }
 
 export interface SttKeytermsDoc {
@@ -156,6 +167,7 @@ export interface NotificationEvents {
   speech_recording_start: boolean;
   speech_recording_stop: boolean;
   speech_transcription_success: boolean;
+  speech_transcription_retry: boolean;
   context_saved: boolean;
   context_set: boolean;
   context_append: boolean;

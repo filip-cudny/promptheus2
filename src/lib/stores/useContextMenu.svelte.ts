@@ -21,6 +21,7 @@ import {
   isRecordingChat,
   toggleChatRecording,
   openDialogForItem,
+  refreshItems,
   init,
   destroy,
 } from "$lib/stores/contextMenu.svelte";
@@ -67,6 +68,7 @@ export function useContextMenu() {
     handleNumberInput,
     toggleChatRecording,
     openDialogForItem,
+    refreshItems,
     init,
     destroy,
   };

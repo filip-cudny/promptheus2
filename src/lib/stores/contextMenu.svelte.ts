@@ -36,6 +36,7 @@ let unlistenHistoryChanged: (() => void) | null = null;
 let unlistenRecordingStopped: (() => void) | null = null;
 let unlistenTranscriptionComplete: (() => void) | null = null;
 let unlistenSpeechError: (() => void) | null = null;
+let unlistenSpeechRetry: (() => void) | null = null;
 
 const NUMBER_DEBOUNCE_MS = 200;
 
@@ -468,6 +469,9 @@ async function init() {
     clearRecordingState();
     refreshItems();
   });
+  unlistenSpeechRetry = await listen("speech-transcription-retry", () => {
+    refreshItems();
+  });
 
   const prefetched = await invoke<MenuItem[]>("get_context_menu_items");
   _items = prefetched;
@@ -501,6 +505,10 @@ function destroy() {
   if (unlistenSpeechError) {
     unlistenSpeechError();
     unlistenSpeechError = null;
+  }
+  if (unlistenSpeechRetry) {
+    unlistenSpeechRetry();
+    unlistenSpeechRetry = null;
   }
 }
 
@@ -548,6 +556,7 @@ export {
   isRecordingChat,
   toggleChatRecording,
   openDialogForItem,
+  refreshItems,
   init,
   destroy,
 };

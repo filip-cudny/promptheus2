@@ -42,6 +42,7 @@ pub fn run(app: &mut tauri::App) -> std::result::Result<(), Box<dyn std::error::
     setup::state::manage(app, &config_dir, &resource_dir, config_service)?;
     setup::background::spawn_heartbeat(app.handle().clone());
     setup::background::spawn_ai_webview_cold_suspend(app.handle().clone());
+    setup::background::spawn_audio_clip_sweeper(app.handle().clone());
 
     Ok(())
 }

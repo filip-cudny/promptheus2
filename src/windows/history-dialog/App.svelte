@@ -5,7 +5,17 @@
   import { getHistorySearchStore } from "$lib/stores/historySearch.svelte";
   import { openConversationDialog } from "$lib/services/conversationDialog";
   import { getUiState, setUiState } from "$lib/services/uiState";
-  import type { HistoryEntry } from "$lib/types";
+  import type { AudioClipInfo, HistoryEntry } from "$lib/types";
+  import {
+    discardAudioClip,
+    exportAudioClip,
+    getAudioClipInfo,
+    retryTranscription,
+    type TranscriptionErrorEvent,
+    type TranscriptionRetryEvent,
+  } from "$lib/services/speech";
+  import { listen } from "@tauri-apps/api/event";
+  import { error as logError } from "@tauri-apps/plugin-log";
   import HistoryEntryRow from "$lib/components/features/history/HistoryEntryRow.svelte";
   import HistoryEmptyState from "$lib/components/features/history/HistoryEmptyState.svelte";
   import HistoryToolbar from "$lib/components/features/history/HistoryToolbar.svelte";
@@ -24,6 +34,10 @@
     pageSize: () => pageSize,
     currentPage: () => currentPage,
   });
+
+  let audioClips = $state<Record<string, AudioClipInfo>>({});
+  let retryingIds = $state<Set<string>>(new Set());
+  let unlistenSpeech: Array<() => void> = [];
 
   let searchInput = $state<HTMLInputElement | null>(null);
   let entriesListEl = $state<HTMLDivElement | null>(null);
@@ -75,6 +89,62 @@
     searchStore.refresh();
     searchStore.refreshSkills();
   });
+
+  function mayHaveAudio(entry: HistoryEntry): boolean {
+    return entry.entry_type === "speech";
+  }
+
+  async function loadAudioClip(entryId: string) {
+    try {
+      const info = await getAudioClipInfo(entryId);
+      audioClips = { ...audioClips, [entryId]: info };
+      if (info.is_retrying) markRetrying(entryId, true);
+    } catch (e) {
+      logError(`get_audio_clip_info failed for ${entryId}: ${e}`);
+    }
+  }
+
+  function markRetrying(entryId: string, active: boolean) {
+    const next = new Set(retryingIds);
+    if (active) next.add(entryId);
+    else next.delete(entryId);
+    retryingIds = next;
+  }
+
+  $effect(() => {
+    for (const result of pageResults) {
+      if (!mayHaveAudio(result.entry)) continue;
+      if (result.entry.id in audioClips) continue;
+      void loadAudioClip(result.entry.id);
+    }
+  });
+
+  async function handleRetry(entry: HistoryEntry) {
+    markRetrying(entry.id, true);
+    try {
+      await retryTranscription(entry.id);
+    } catch (e) {
+      markRetrying(entry.id, false);
+      logError(`retry_transcription failed for ${entry.id}: ${e}`);
+    }
+  }
+
+  async function handleExportAudio(entry: HistoryEntry) {
+    try {
+      await exportAudioClip(entry.id, `voice-note-${entry.id.slice(0, 8)}.wav`);
+    } catch (e) {
+      logError(`export_audio_clip failed for ${entry.id}: ${e}`);
+    }
+  }
+
+  async function handleDiscardAudio(entry: HistoryEntry) {
+    try {
+      await discardAudioClip(entry.id);
+    } catch (e) {
+      logError(`discard_audio_clip failed for ${entry.id}: ${e}`);
+    }
+    await loadAudioClip(entry.id);
+  }
 
   function getRowButtons(): HTMLButtonElement[] {
     if (!entriesListEl) return [];
@@ -176,10 +246,30 @@
     }
     window.addEventListener("keydown", handleWindowKeydown);
     searchInput?.focus();
+
+    unlistenSpeech = await Promise.all([
+      listen<TranscriptionRetryEvent>("speech-transcription-retry", (event) => {
+        const entryId = event.payload.entry_id;
+        if (entryId) markRetrying(entryId, true);
+      }),
+      listen<TranscriptionErrorEvent>("speech-transcription-error", (event) => {
+        const entryId = event.payload.entry_id;
+        if (!entryId) return;
+        markRetrying(entryId, false);
+        void loadAudioClip(entryId);
+      }),
+      listen<{ entry_id: string | null }>("speech-transcription-complete", (event) => {
+        const entryId = event.payload.entry_id;
+        if (!entryId) return;
+        markRetrying(entryId, false);
+        void loadAudioClip(entryId);
+      }),
+    ]);
   });
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleWindowKeydown);
+    for (const unlisten of unlistenSpeech) unlisten();
     store.destroy();
   });
 
@@ -244,8 +334,13 @@
         <HistoryEntryRow
           entry={result.entry}
           matches={result.matches}
+          audioClip={audioClips[result.entry.id] ?? null}
+          retrying={retryingIds.has(result.entry.id)}
           onOpen={handleOpen}
           oncopy={(content) => navigator.clipboard.writeText(content)}
+          onRetry={handleRetry}
+          onExportAudio={handleExportAudio}
+          onDiscardAudio={handleDiscardAudio}
         />
       {/each}
       {#if emptyVariant}

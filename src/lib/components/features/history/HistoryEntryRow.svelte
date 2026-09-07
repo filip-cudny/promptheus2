@@ -1,16 +1,41 @@
 <script lang="ts">
-  import { Mic, MessageSquare, MessagesSquare, CircleAlert, SquareArrowOutUpRight, Copy, Check, CornerDownRight } from "lucide-svelte";
+  import {
+    Mic,
+    MessageSquare,
+    MessagesSquare,
+    CircleAlert,
+    SquareArrowOutUpRight,
+    Copy,
+    Check,
+    CornerDownRight,
+    RotateCcw,
+    Download,
+    Trash2,
+    LoaderCircle,
+  } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { highlightFor, truncateAroundMatch } from "$lib/utils/highlightMatches";
-  import type { HistoryEntry } from "$lib/types";
+  import type { AudioClipInfo, HistoryEntry } from "$lib/types";
   import type { FieldMatch } from "$lib/types/historySearch";
 
-  let { entry, matches = [], onOpen, oncopy }: {
+  let { entry, matches = [], audioClip = null, retrying = false, onOpen, oncopy, onRetry, onExportAudio, onDiscardAudio }: {
     entry: HistoryEntry;
     matches?: FieldMatch[];
+    audioClip?: AudioClipInfo | null;
+    retrying?: boolean;
     onOpen: (entry: HistoryEntry) => void;
     oncopy: (content: string) => void;
+    onRetry?: (entry: HistoryEntry) => void;
+    onExportAudio?: (entry: HistoryEntry) => void;
+    onDiscardAudio?: (entry: HistoryEntry) => void;
   } = $props();
+
+  let isFailedTranscription = $derived(
+    entry.entry_type === "speech" && !entry.success,
+  );
+  let hasAudio = $derived(audioClip?.has_audio === true);
+  let showAudioActions = $derived(isFailedTranscription || hasAudio);
+  let audioExpiry = $derived(formatExpiry(audioClip?.expires_at ?? null));
 
   let isChat = $derived(!entry.quick_action);
   let isTranscription = $derived(
@@ -100,6 +125,18 @@
     return s > 0 ? `${m}m ${s}s` : `${m}m`;
   }
 
+  function formatExpiry(expiresAt: string | null): string | null {
+    if (!expiresAt) return null;
+    const expires = new Date(expiresAt.replace(" ", "T")).getTime();
+    if (isNaN(expires)) return null;
+    const remainingMin = Math.floor((expires - Date.now()) / 60000);
+    if (remainingMin <= 0) return null;
+    if (remainingMin < 60) return `${remainingMin}m left`;
+    const hours = Math.floor(remainingMin / 60);
+    const minutes = remainingMin % 60;
+    return minutes > 0 ? `${hours}h ${minutes}m left` : `${hours}h left`;
+  }
+
   function formatTimestamp(entry: HistoryEntry): string {
     const raw = entry.updated_at ?? entry.created_at ?? entry.timestamp;
     const date = new Date(raw);
@@ -115,6 +152,7 @@
   }
 </script>
 
+<div class="entry-row-group">
 <button
   class="entry-row"
   class:error={!entry.success}
@@ -172,7 +210,102 @@
   </div>
 </button>
 
+  {#if showAudioActions}
+    <div class="audio-actions">
+      {#if retrying}
+        <span class="audio-status">
+          <span class="spinning"><LoaderCircle size={ICON_SIZE.sm} /></span>
+          Retrying transcription…
+        </span>
+      {:else if hasAudio}
+        {#if isFailedTranscription}
+          <button
+            class="audio-btn"
+            onclick={() => onRetry?.(entry)}
+            title="Retry transcription — result is copied to the clipboard"
+          >
+            <RotateCcw size={ICON_SIZE.sm} />
+            Retry
+          </button>
+        {/if}
+        <button
+          class="audio-btn"
+          onclick={() => onExportAudio?.(entry)}
+          title="Save the recording as a WAV file"
+        >
+          <Download size={ICON_SIZE.sm} />
+          Export audio
+        </button>
+        <button
+          class="audio-btn"
+          onclick={() => onDiscardAudio?.(entry)}
+          title="Delete the stored recording now"
+        >
+          <Trash2 size={ICON_SIZE.sm} />
+          Discard audio
+        </button>
+        {#if audioExpiry}
+          <span class="audio-status">{audioExpiry}</span>
+        {/if}
+      {:else}
+        <span class="audio-status">Audio no longer available — cannot retry</span>
+      {/if}
+    </div>
+  {/if}
+</div>
+
 <style>
+  .entry-row-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .audio-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-6) 0 calc(var(--space-6) + var(--space-4) + 16px);
+  }
+
+  .audio-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+  }
+
+  .audio-btn:hover {
+    background: var(--surface-overlay);
+    color: var(--text-primary);
+  }
+
+  .audio-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--text-muted);
+    font-size: var(--font-size-sm);
+  }
+
+  .spinning {
+    display: flex;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
   .entry-row {
     position: relative;
     display: block;

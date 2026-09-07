@@ -10,6 +10,7 @@ Top-level index of all `DOCS.md` files in the project. Updated incrementally as 
 - [src-tauri/src/models/DOCS.md](src-tauri/src/models/DOCS.md) — Data structures, serde conventions, settings schema
 - [src-tauri/src/services/DOCS.md](src-tauri/src/services/DOCS.md) — Service layer: ClipboardService, ConfigService, error handling, lifecycle
 - [src-tauri/src/services/mcp/DOCS.md](src-tauri/src/services/mcp/DOCS.md) — MCP client: rmcp wrapper, McpClient, McpError
+- [src-tauri/src/services/speech/DOCS.md](src-tauri/src/services/speech/DOCS.md) — Speech: recording, transcription retry/backoff, audio clip retention, events
 - [src/lib/components/shared/ui/DOCS.md](src/lib/components/shared/ui/DOCS.md) — Dumb UI primitives: toast overlay, shared components
 - [src/lib/components/features/context-menu/DOCS.md](src/lib/components/features/context-menu/DOCS.md) — Context menu popup window: sections, keyboard nav, item execution
 - [src/lib/components/features/settings/DOCS.md](src/lib/components/features/settings/DOCS.md) — Settings dialog: sidebar nav, auto-save sections, models editor

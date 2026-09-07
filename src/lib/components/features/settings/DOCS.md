@@ -14,6 +14,7 @@ settings/
 ├── SectionModels.svelte           # Models section: list pane + editor pane
 ├── SectionAppearance.svelte       # Theme toggle
 ├── SectionHistory.svelte          # History retention window (presets + custom days, confirm before pruning) + storage card (size / reclaimable / Compact database)
+├── SectionSpeech.svelte           # STT failure handling: transcription attempts, audio retention hours, keep-audio-on-success
 ├── SectionPromptBase.svelte       # Preferred name field + System / about_you / environment / input_format prompts (tabbed)
 ├── SectionSurfacePrompts.svelte   # Title generation + STT prompt + STT keyterms (tabbed)
 ├── SttKeytermsEditor.svelte       # STT keyterms file editor (chip view + raw text fallback)

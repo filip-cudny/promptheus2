@@ -21,7 +21,7 @@ use crate::services::notification::NotificationService;
 use crate::services::placeholder::PlaceholderService;
 use crate::services::recent_apps::RecentAppsState;
 use crate::services::skill::SkillService;
-use crate::services::speech::SpeechService;
+use crate::services::speech::{AudioClipStore, SpeechService};
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::services::{self, conversation_context, tool_confirmation, ui_state};
 
@@ -89,6 +89,15 @@ pub fn manage(
             retention_days
         );
     }
+    let audio_clip_store = AudioClipStore::new(&app_data_dir);
+    audio_clip_store
+        .initialize()
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
+    let swept = audio_clip_store.sweep(history_service.conn());
+    if swept > 0 {
+        log::info!("audio clip startup sweep removed {} clips", swept);
+    }
+
     let image_storage = ImageStorage::new(&app_data_dir);
     image_storage
         .initialize()
@@ -113,6 +122,7 @@ pub fn manage(
     app.manage(Arc::new(Mutex::new(PromptExecutionService::new())));
     app.manage(Arc::new(Mutex::new(skill_service)));
     app.manage(Arc::new(Mutex::new(SpeechService::new())));
+    app.manage(Arc::new(audio_clip_store));
     app.manage(Arc::new(Mutex::new(ui_state_service)));
     app.manage(Arc::new(Mutex::new(
         conversation_context::ConversationContextCache::new(),

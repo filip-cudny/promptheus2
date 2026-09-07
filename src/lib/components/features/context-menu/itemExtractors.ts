@@ -12,10 +12,22 @@ export interface LastTextEntryRef {
   skill_name: string | null;
 }
 
+export type TranscriptionStatus = "ok" | "failed" | "retrying";
+
+export interface TranscriptionChipData {
+  status: TranscriptionStatus;
+  entry_id: string;
+  content: string | null;
+  preview: string | null;
+  error: string | null;
+  has_audio: boolean;
+  expires_at: string | null;
+}
+
 export interface LastInteractionData {
   input: LastInteractionChipData | null;
   output: LastInteractionChipData | null;
-  transcription: LastInteractionChipData | null;
+  transcription: TranscriptionChipData | null;
   last_text_entry: LastTextEntryRef | null;
 }
 

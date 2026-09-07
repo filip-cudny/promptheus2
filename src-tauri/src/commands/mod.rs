@@ -174,6 +174,10 @@ macro_rules! handlers {
             // === speech ===
             $crate::commands::speech::toggle_speech_recording,
             $crate::commands::speech::get_recording_state,
+            $crate::commands::speech::retry_transcription,
+            $crate::commands::speech::get_audio_clip_info,
+            $crate::commands::speech::export_audio_clip,
+            $crate::commands::speech::discard_audio_clip,
             $crate::commands::speech::get_stt_keyterms,
             $crate::commands::speech::save_stt_keyterms,
             // === text_preview ===

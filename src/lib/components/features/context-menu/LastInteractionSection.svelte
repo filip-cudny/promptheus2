@@ -1,36 +1,32 @@
 <script lang="ts">
-  import { Copy, Check, History, SquareArrowOutUpRight } from "lucide-svelte";
+  import {
+    Copy,
+    Check,
+    History,
+    SquareArrowOutUpRight,
+    CircleAlert,
+    RotateCcw,
+    LoaderCircle,
+  } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import Chip from "$lib/components/shared/ui/Chip.svelte";
-
-  interface ChipData {
-    content: string;
-    preview: string;
-  }
-
-  interface LastTextEntryRef {
-    id: string;
-    skill_id: string | null;
-    skill_name: string | null;
-  }
-
-  interface LastInteractionData {
-    input: ChipData | null;
-    output: ChipData | null;
-    transcription: ChipData | null;
-    last_text_entry: LastTextEntryRef | null;
-  }
+  import type {
+    LastInteractionData,
+    LastTextEntryRef,
+  } from "./itemExtractors";
 
   let {
     data,
     onCopyContent,
     onOpenLastInteraction,
     onOpenHistory,
+    onRetryTranscription,
   }: {
     data: LastInteractionData | null;
     onCopyContent: (content: string) => Promise<void>;
     onOpenLastInteraction: (entry: LastTextEntryRef) => Promise<void>;
     onOpenHistory: () => Promise<void>;
+    onRetryTranscription: (entryId: string) => Promise<void>;
   } = $props();
 
   let copyConfirm = $state<string | null>(null);
@@ -50,13 +46,34 @@
 
   type ChipEntry = { type: string; label: string; content: string | null; preview: string | null };
 
+  let transcription = $derived(data?.transcription ?? null);
+  let transcriptionFailed = $derived(transcription?.status === "failed");
+  let transcriptionRetrying = $derived(transcription?.status === "retrying");
+
   let chips = $derived<ChipEntry[]>([
     { type: "input", label: "Input", content: data?.input?.content ?? null, preview: data?.input?.preview ?? null },
     { type: "output", label: "Output", content: data?.output?.content ?? null, preview: data?.output?.preview ?? null },
-    { type: "transcription", label: "Transcription", content: data?.transcription?.content ?? null, preview: data?.transcription?.preview ?? null },
   ]);
 
-  let hasAnyContent = $derived(chips.some((c) => c.content !== null));
+  let transcriptionTitle = $derived.by(() => {
+    if (transcriptionRetrying) return "Retrying transcription…";
+    if (transcriptionFailed) {
+      const reason = transcription?.error ?? "Transcription failed";
+      return transcription?.has_audio
+        ? `${reason} — audio kept, retry available`
+        : `${reason} — audio no longer available`;
+    }
+    return transcription?.preview ?? "No content";
+  });
+
+  let hasAnyContent = $derived(
+    chips.some((c) => c.content !== null) || transcription !== null,
+  );
+
+  async function handleRetry() {
+    if (!transcription?.entry_id || !transcription.has_audio) return;
+    await onRetryTranscription(transcription.entry_id);
+  }
 </script>
 
 <div class="last-interaction-section">
@@ -99,6 +116,40 @@
           <span class="chip-label">{chip.label}</span>
         </Chip>
       {/each}
+
+      <div class="transcription-group" class:failed={transcriptionFailed}>
+        <Chip
+          onclick={() => handleCopy("transcription", transcription?.content)}
+          disabled={!transcription?.content || transcriptionRetrying}
+          title={transcriptionTitle}
+        >
+          <span class="chip-copy">
+            {#if transcriptionRetrying}
+              <span class="spinning"><LoaderCircle size={ICON_SIZE.md} /></span>
+            {:else if transcriptionFailed}
+              <CircleAlert size={ICON_SIZE.md} />
+            {:else if copyConfirm === "transcription"}
+              <Check size={ICON_SIZE.md} />
+            {:else}
+              <Copy size={ICON_SIZE.md} />
+            {/if}
+          </span>
+          <span class="chip-label">
+            {transcriptionRetrying ? "Retrying…" : "Transcription"}
+          </span>
+        </Chip>
+
+        {#if transcriptionFailed && transcription?.has_audio}
+          <button
+            class="retry-btn"
+            onclick={handleRetry}
+            title="Retry transcription — result goes to the clipboard"
+            aria-label="Retry transcription"
+          >
+            <RotateCcw size={ICON_SIZE.md} />
+          </button>
+        {/if}
+      </div>
     </div>
   {/if}
 </div>
@@ -169,5 +220,43 @@
 
   .chip-label {
     font-weight: var(--font-weight-medium);
+  }
+
+  .transcription-group {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .transcription-group.failed :global(.chip) {
+    color: var(--danger);
+    border-color: var(--danger-border);
+  }
+
+  .retry-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--danger);
+    cursor: pointer;
+  }
+
+  .retry-btn:hover {
+    background: var(--surface-overlay);
+  }
+
+  .spinning {
+    display: flex;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>

@@ -132,11 +132,21 @@ Renders when `item.item_type === "last_interaction"`. The backend injects last i
 | Section header | "Last interaction" label + History button |
 | Input chip | Last text entry's input content (copy on click) |
 | Output chip | Last text entry's output content (copy on click) |
-| Transcription chip | Last speech entry's output content (copy on click) |
+| Transcription chip | Last speech entry — stateful (see below) |
 
 Chips are disabled (grayed out) when no content is available. Copy uses `copyHistoryContent` from the history service which also triggers a clipboard notification. The store refreshes on `"history-changed"` events so chips update after each execution.
 
-History button is a placeholder — the history dialog window is not yet implemented.
+The transcription chip is driven by `data.transcription`, a state object rather than plain text:
+
+| `status` | Chip |
+|----------|------|
+| `ok` | Copy icon, click copies the transcription |
+| `retrying` | Spinner + "Retrying…", not clickable |
+| `failed` | Alert icon in `--danger`, tooltip carries the error; a `RotateCcw` button next to it invokes `retry_transcription` when `has_audio` is true |
+
+The backend builds this payload in `get_context_menu_items` and marks `retrying` from `SpeechService::retrying_entries()`. The store refreshes on `speech-transcription-retry` in addition to the existing complete/error events, so the chip tracks a retry that was started from the history window.
+
+A failed transcription is a real history entry (`success = false`), which is what gives the chip and the history row something to address. See [`src-tauri/src/services/speech/DOCS.md`](../../../../../src-tauri/src/services/speech/DOCS.md) for the clip lifecycle.
 
 ### Other types
 

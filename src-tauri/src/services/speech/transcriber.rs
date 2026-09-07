@@ -4,6 +4,10 @@ use crate::models::settings::{ModelConfig, Provider};
 
 use super::SpeechError;
 
+const MIN_UPLOAD_SECS: u64 = 30;
+const MAX_UPLOAD_SECS: u64 = 300;
+const ASSUMED_UPLOAD_BYTES_PER_SEC: u64 = 50_000;
+
 #[derive(Debug, Clone, Default)]
 pub struct SttOptions {
     pub language: Option<String>,
@@ -23,30 +27,60 @@ pub async fn transcribe(
     }
 }
 
-fn build_http_client() -> Result<reqwest::Client, SpeechError> {
+/// A three-minute recording is several megabytes; a fixed 60s ceiling turns a
+/// slow uplink into a self-inflicted timeout, so the budget scales with payload.
+fn upload_timeout(payload_bytes: usize) -> std::time::Duration {
+    let secs = MIN_UPLOAD_SECS + payload_bytes as u64 / ASSUMED_UPLOAD_BYTES_PER_SEC;
+    std::time::Duration::from_secs(secs.min(MAX_UPLOAD_SECS))
+}
+
+fn build_http_client(payload_bytes: usize) -> Result<reqwest::Client, SpeechError> {
     reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))
-        .timeout(std::time::Duration::from_secs(60))
+        .timeout(upload_timeout(payload_bytes))
         .build()
-        .map_err(|e| SpeechError::TranscriptionFailed(e.to_string()))
+        .map_err(|e| SpeechError::permanent(e.to_string()))
 }
 
 fn map_send_error(e: reqwest::Error) -> SpeechError {
     if e.is_connect() {
-        SpeechError::TranscriptionFailed("Connection failed — check your internet".into())
+        SpeechError::transient("Connection failed — check your internet")
+    } else if e.is_timeout() {
+        SpeechError::transient("Request timed out")
+    } else if e.is_request() {
+        SpeechError::transient(e.to_string())
     } else {
-        SpeechError::TranscriptionFailed(e.to_string())
+        SpeechError::permanent(e.to_string())
+    }
+}
+
+fn parse_retry_after(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    let raw = headers.get(reqwest::header::RETRY_AFTER)?.to_str().ok()?;
+    match raw.trim().parse::<u64>() {
+        Ok(secs) => Some(secs),
+        Err(_) => {
+            log::debug!("ignoring non-numeric Retry-After header: {raw}");
+            None
+        }
     }
 }
 
 async fn map_http_error(status: reqwest::StatusCode, response: reqwest::Response) -> SpeechError {
+    let retry_after = parse_retry_after(response.headers());
     let body = response.text().await.unwrap_or_default();
+
     match status.as_u16() {
-        401 => SpeechError::TranscriptionFailed("API key is invalid or expired".into()),
-        429 => SpeechError::TranscriptionFailed(
-            "Rate limit exceeded — please wait and try again".into(),
+        401 | 403 => SpeechError::permanent("API key is invalid or expired"),
+        429 => SpeechError::transient_after(
+            "Rate limit exceeded — retrying shortly",
+            retry_after,
         ),
-        _ => SpeechError::TranscriptionFailed(format!("API error (status {status}): {body}")),
+        408 => SpeechError::transient_after("Request timed out on the server", retry_after),
+        500..=599 => SpeechError::transient_after(
+            format!("Provider is unavailable (status {status})"),
+            retry_after,
+        ),
+        _ => SpeechError::permanent(format!("API error (status {status}): {body}")),
     }
 }
 
@@ -74,10 +108,11 @@ async fn transcribe_openai(
         options.prompt.is_some()
     );
 
+    let payload_bytes = wav_bytes.len();
     let file_part = reqwest::multipart::Part::bytes(wav_bytes)
         .file_name("recording.wav")
         .mime_str("audio/wav")
-        .map_err(|e| SpeechError::TranscriptionFailed(e.to_string()))?;
+        .map_err(|e| SpeechError::permanent(e.to_string()))?;
 
     let mut form = reqwest::multipart::Form::new()
         .part("file", file_part)
@@ -91,7 +126,7 @@ async fn transcribe_openai(
         form = form.text("prompt", prompt.clone());
     }
 
-    let response = build_http_client()?
+    let response = build_http_client(payload_bytes)?
         .post(&url)
         .header("Authorization", format!("Bearer {api_key}"))
         .multipart(form)
@@ -107,7 +142,7 @@ async fn transcribe_openai(
     let parsed: TranscriptionResponse = response
         .json()
         .await
-        .map_err(|e| SpeechError::TranscriptionFailed(format!("Failed to parse response: {e}")))?;
+        .map_err(|e| SpeechError::transient(format!("Failed to parse response: {e}")))?;
 
     let text = parsed.text.trim().to_string();
     if text.is_empty() {
@@ -141,10 +176,11 @@ async fn transcribe_elevenlabs(
         options.keyterms.len()
     );
 
+    let payload_bytes = wav_bytes.len();
     let file_part = reqwest::multipart::Part::bytes(wav_bytes)
         .file_name("recording.wav")
         .mime_str("audio/wav")
-        .map_err(|e| SpeechError::TranscriptionFailed(e.to_string()))?;
+        .map_err(|e| SpeechError::permanent(e.to_string()))?;
 
     let mut form = reqwest::multipart::Form::new()
         .part("file", file_part)
@@ -164,7 +200,7 @@ async fn transcribe_elevenlabs(
         form = form.text("keyterms", term.clone());
     }
 
-    let response = build_http_client()?
+    let response = build_http_client(payload_bytes)?
         .post(&url)
         .header("xi-api-key", api_key)
         .multipart(form)
@@ -180,7 +216,7 @@ async fn transcribe_elevenlabs(
     let parsed: TranscriptionResponse = response
         .json()
         .await
-        .map_err(|e| SpeechError::TranscriptionFailed(format!("Failed to parse response: {e}")))?;
+        .map_err(|e| SpeechError::transient(format!("Failed to parse response: {e}")))?;
 
     let text = parsed.text.trim().to_string();
     if text.is_empty() {

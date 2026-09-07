@@ -223,6 +223,27 @@ pub struct SpeechToTextConfig {
 
     #[serde(default)]
     pub prompt: Option<String>,
+
+    /// Total transcription attempts per recording, including the first one.
+    /// `1` disables background retrying.
+    #[serde(default = "default_auto_retry_attempts")]
+    pub auto_retry_attempts: u32,
+
+    /// How long a recording stays on disk so a failed transcription can be
+    /// replayed or exported. `0` discards audio immediately.
+    #[serde(default = "default_audio_retention_hours")]
+    pub audio_retention_hours: u32,
+
+    #[serde(default)]
+    pub keep_audio_on_success: bool,
+}
+
+fn default_auto_retry_attempts() -> u32 {
+    3
+}
+
+fn default_audio_retention_hours() -> u32 {
+    3
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
@@ -420,6 +441,8 @@ pub struct NotificationEvents {
     #[serde(default = "default_true")]
     pub speech_transcription_success: bool,
     #[serde(default = "default_true")]
+    pub speech_transcription_retry: bool,
+    #[serde(default = "default_true")]
     pub context_saved: bool,
     #[serde(default = "default_true")]
     pub context_set: bool,
@@ -569,6 +592,7 @@ impl Default for NotificationEvents {
             speech_recording_start: true,
             speech_recording_stop: true,
             speech_transcription_success: true,
+            speech_transcription_retry: true,
             context_saved: true,
             context_set: true,
             context_append: true,

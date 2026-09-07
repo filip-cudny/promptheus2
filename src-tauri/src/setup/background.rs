@@ -1,4 +1,13 @@
+use std::sync::Arc;
+
+use tauri::Manager;
+use tokio::sync::Mutex;
+
 use crate::services;
+use crate::services::speech::AudioClipStore;
+use crate::services::sqlite_history::SqliteHistoryService;
+
+const AUDIO_CLIP_SWEEP_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(15 * 60);
 
 pub fn spawn_heartbeat(app_handle: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
@@ -47,6 +56,21 @@ pub fn spawn_ai_webview_cold_suspend(app_handle: tauri::AppHandle) {
                     "cold-suspend dispatch failed: {e}",
                 );
             }
+        }
+    });
+}
+
+pub fn spawn_audio_clip_sweeper(app_handle: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let mut interval = tokio::time::interval(AUDIO_CLIP_SWEEP_INTERVAL);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            let clips = app_handle.state::<Arc<AudioClipStore>>();
+            let history = app_handle.state::<Arc<Mutex<SqliteHistoryService>>>();
+            let history = history.lock().await;
+            clips.sweep(history.conn());
         }
     });
 }

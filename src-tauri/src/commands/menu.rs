@@ -13,7 +13,7 @@ use crate::services::execution::PromptExecutionService;
 use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::monitor::find_monitor_at;
 use crate::services::skill::SkillService;
-use crate::services::speech::SpeechService;
+use crate::services::speech::{AudioClipStore, SpeechService};
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
 
@@ -60,12 +60,16 @@ pub async fn get_context_menu_items(
     prompt_execution: State<'_, Arc<Mutex<PromptExecutionService>>>,
     history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     skill_service: State<'_, Arc<Mutex<SkillService>>>,
+    clips: State<'_, Arc<AudioClipStore>>,
 ) -> crate::Result<Vec<MenuItem>> {
     let context_items = context.lock().await.get_items();
     let mut menu_coordinator = menu_coordinator.lock().await;
     menu_coordinator.update_context_items(context_items);
 
-    let is_recording = speech.lock().await.is_recording();
+    let (is_recording, retrying_entries) = {
+        let s = speech.lock().await;
+        (s.is_recording(), s.retrying_entries())
+    };
     let is_executing = prompt_execution.lock().await.is_busy();
     for provider in menu_coordinator.providers_mut() {
         if let Some(speech) = provider.as_any_mut().downcast_mut::<SpeechMenuProvider>() {
@@ -74,10 +78,38 @@ pub async fn get_context_menu_items(
         }
     }
 
-    let history = history.lock().await;
-    let last_text = history.get_last_quick_action(HistoryEntryType::Text);
-    let last_speech = history.get_last_quick_action(HistoryEntryType::Speech);
-    drop(history);
+    let (last_text, last_speech, last_speech_clip) = {
+        let history = history.lock().await;
+        let last_text = history.get_last_quick_action(HistoryEntryType::Text);
+        let last_speech = history.get_last_quick_action(HistoryEntryType::Speech);
+        let clip = last_speech
+            .as_ref()
+            .and_then(|e| clips.find_by_entry(history.conn(), &e.id))
+            .filter(|clip| clip.path.exists());
+        (last_text, last_speech, clip)
+    };
+
+    let transcription_payload = last_speech.as_ref().map(|entry| {
+        let status = if !entry.success {
+            if retrying_entries.contains(&entry.id) {
+                "retrying"
+            } else {
+                "failed"
+            }
+        } else {
+            "ok"
+        };
+        let content = entry.output_content.clone();
+        serde_json::json!({
+            "status": status,
+            "entry_id": entry.id,
+            "content": content,
+            "preview": content.as_deref().map(|c| truncate(c, 200)),
+            "error": entry.error,
+            "has_audio": last_speech_clip.is_some(),
+            "expires_at": last_speech_clip.as_ref().map(|c| c.expires_at.clone()),
+        })
+    });
 
     let config = config.lock().await;
     let skill_service = skill_service.lock().await;
@@ -94,9 +126,7 @@ pub async fn get_context_menu_items(
                 "output": last_text.as_ref().and_then(|e| {
                     e.output_content.as_ref().map(|c| serde_json::json!({ "content": c, "preview": truncate(c, 200) }))
                 }),
-                "transcription": last_speech.as_ref().and_then(|e| {
-                    e.output_content.as_ref().map(|c| serde_json::json!({ "content": c, "preview": truncate(c, 200) }))
-                }),
+                "transcription": transcription_payload.clone(),
                 "last_text_entry": last_text.as_ref().map(|e| {
                     serde_json::json!({
                         "id": e.id,

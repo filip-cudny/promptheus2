@@ -14,6 +14,7 @@
     { key: "speech_recording_start", label: "Recording started" },
     { key: "speech_recording_stop", label: "Recording stopped" },
     { key: "speech_transcription_success", label: "Transcription finished" },
+    { key: "speech_transcription_retry", label: "Transcription retrying" },
     { key: "context_saved", label: "Context saved" },
     { key: "context_set", label: "Context set" },
     { key: "context_append", label: "Context appended" },

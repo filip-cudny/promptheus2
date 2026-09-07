@@ -1,7 +1,10 @@
+mod clip_store;
 mod recorder;
 pub mod reminder;
+pub mod retry;
 mod transcriber;
 
+use std::collections::HashSet;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -10,10 +13,20 @@ use cpal::traits::{DeviceTrait, StreamTrait};
 
 use recorder::{find_input_device, negotiate_sample_rate};
 
+pub use clip_store::{AudioClipStore, ClipStoreError};
 pub use recorder::encode_wav;
+pub use retry::transcribe_with_retry;
 pub use transcriber::{transcribe, SttOptions};
 
 const TOGGLE_DEBOUNCE_MS: u128 = 250;
+
+/// Whether a failed transcription is worth sending again unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FailureKind {
+    Transient,
+    Permanent,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum SpeechError {
@@ -29,14 +42,67 @@ pub enum SpeechError {
     StreamBuild(String),
     #[error("WAV encoding error: {0}")]
     WavEncode(String),
-    #[error("Transcription failed: {0}")]
-    TranscriptionFailed(String),
+    #[error("{message}")]
+    Transcription {
+        message: String,
+        kind: FailureKind,
+        retry_after_secs: Option<u64>,
+    },
     #[error("API key not configured")]
     ApiKeyMissing,
     #[error("No speech detected")]
     NoSpeechDetected,
     #[error("Recording failed: {0}")]
     RecordingFailed(String),
+    #[error("No audio available for this transcription")]
+    AudioUnavailable,
+    #[error("Audio storage error: {0}")]
+    ClipStore(#[from] ClipStoreError),
+}
+
+impl SpeechError {
+    pub fn transient(message: impl Into<String>) -> Self {
+        Self::Transcription {
+            message: message.into(),
+            kind: FailureKind::Transient,
+            retry_after_secs: None,
+        }
+    }
+
+    pub fn transient_after(message: impl Into<String>, retry_after_secs: Option<u64>) -> Self {
+        Self::Transcription {
+            message: message.into(),
+            kind: FailureKind::Transient,
+            retry_after_secs,
+        }
+    }
+
+    pub fn permanent(message: impl Into<String>) -> Self {
+        Self::Transcription {
+            message: message.into(),
+            kind: FailureKind::Permanent,
+            retry_after_secs: None,
+        }
+    }
+
+    pub fn is_transient(&self) -> bool {
+        matches!(
+            self,
+            Self::Transcription {
+                kind: FailureKind::Transient,
+                ..
+            }
+        )
+    }
+
+    pub fn retry_after_secs(&self) -> Option<u64> {
+        match self {
+            Self::Transcription {
+                retry_after_secs, ..
+            } => *retry_after_secs,
+            _ => None,
+        }
+    }
 }
 
 pub struct SpeechService {
@@ -51,6 +117,7 @@ pub struct SpeechService {
     last_toggle: Option<Instant>,
     session: u64,
     started_at: Option<Instant>,
+    retrying_entries: HashSet<String>,
 }
 
 impl SpeechService {
@@ -67,6 +134,7 @@ impl SpeechService {
             last_toggle: None,
             session: 0,
             started_at: None,
+            retrying_entries: HashSet::new(),
         }
     }
 
@@ -188,6 +256,24 @@ impl SpeechService {
         (self.pending_skill_id.take(), self.pending_skill_name.take())
     }
 
+    /// Manual retries are tracked per history entry rather than through
+    /// `is_transcribing`, so replaying an old clip never blocks a new recording.
+    pub fn begin_retry(&mut self, entry_id: &str) -> bool {
+        self.retrying_entries.insert(entry_id.to_string())
+    }
+
+    pub fn end_retry(&mut self, entry_id: &str) {
+        self.retrying_entries.remove(entry_id);
+    }
+
+    pub fn is_retrying(&self, entry_id: &str) -> bool {
+        self.retrying_entries.contains(entry_id)
+    }
+
+    pub fn retrying_entries(&self) -> HashSet<String> {
+        self.retrying_entries.clone()
+    }
+
     pub fn mark_toggle(&mut self) {
         self.last_toggle = Some(Instant::now());
     }
@@ -228,6 +314,26 @@ mod tests {
         let mut service = SpeechService::new();
         service.mark_toggle();
         assert!(service.is_debouncing());
+    }
+
+    #[test]
+    fn retry_guard_is_per_entry() {
+        let mut service = SpeechService::new();
+        assert!(service.begin_retry("entry-1"));
+        assert!(!service.begin_retry("entry-1"));
+        assert!(service.begin_retry("entry-2"));
+        assert!(service.is_retrying("entry-1"));
+
+        service.end_retry("entry-1");
+        assert!(!service.is_retrying("entry-1"));
+        assert!(service.is_retrying("entry-2"));
+    }
+
+    #[test]
+    fn retry_guard_does_not_touch_transcribing_flag() {
+        let mut service = SpeechService::new();
+        service.begin_retry("entry-1");
+        assert!(!service.is_transcribing());
     }
 
     #[test]

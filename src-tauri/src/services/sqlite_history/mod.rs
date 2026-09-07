@@ -373,6 +373,33 @@ impl SqliteHistoryService {
         Ok(())
     }
 
+    /// Rewrites the result of a single-shot entry. Used when a manual retry
+    /// finally produces a transcription for a previously failed recording.
+    pub fn update_entry_result(
+        &self,
+        entry_id: &str,
+        input_content: Option<String>,
+        output_content: Option<String>,
+        success: bool,
+        error: Option<String>,
+    ) -> Result<(), HistoryError> {
+        let now = Self::now_timestamp();
+        let updated = self.db.conn().execute(
+            "UPDATE conversations
+             SET input_content = COALESCE(?1, input_content),
+                 output_content = ?2,
+                 success = ?3,
+                 error = ?4,
+                 updated_at = ?5
+             WHERE id = ?6",
+            rusqlite::params![input_content, output_content, success, error, now, entry_id],
+        )?;
+        if updated == 0 {
+            return Err(HistoryError::EntryNotFound(entry_id.to_string()));
+        }
+        Ok(())
+    }
+
     pub fn delete_entry(&self, entry_id: &str) -> Result<(), HistoryError> {
         self.db.conn().execute(
             "DELETE FROM conversation_images WHERE conversation_id = ?1",

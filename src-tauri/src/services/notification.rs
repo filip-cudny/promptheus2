@@ -84,6 +84,7 @@ pub fn is_event_enabled(event_name: &str, events: &NotificationEvents) -> bool {
         "speech_recording_start" => events.speech_recording_start,
         "speech_recording_stop" => events.speech_recording_stop,
         "speech_transcription_success" => events.speech_transcription_success,
+        "speech_transcription_retry" => events.speech_transcription_retry,
         "context_saved" => events.context_saved,
         "context_set" => events.context_set,
         "context_append" => events.context_append,

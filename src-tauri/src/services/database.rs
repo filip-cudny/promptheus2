@@ -86,6 +86,10 @@ fn run_migrations(conn: &Connection) -> Result<(), DatabaseError> {
         migrate_to_v5(conn)?;
     }
 
+    if version < 6 {
+        migrate_to_v6(conn)?;
+    }
+
     Ok(())
 }
 
@@ -655,6 +659,28 @@ fn migrate_to_v3(conn: &Connection) -> Result<(), DatabaseError> {
     Ok(())
 }
 
+fn migrate_to_v6(conn: &Connection) -> Result<(), DatabaseError> {
+    conn.execute_batch(
+        "CREATE TABLE audio_clips (
+            id TEXT PRIMARY KEY,
+            history_entry_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
+            path TEXT NOT NULL,
+            sample_rate INTEGER NOT NULL,
+            duration_secs REAL NOT NULL,
+            bytes INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL
+        );
+
+        CREATE INDEX idx_audio_clips_entry ON audio_clips(history_entry_id);
+        CREATE INDEX idx_audio_clips_expires ON audio_clips(expires_at);",
+    )?;
+
+    set_schema_version(conn, 6)?;
+    log::info!("database migrated to schema version 6");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -677,7 +703,7 @@ mod tests {
     fn schema_version_is_set() {
         let db = Database::open_in_memory().unwrap();
         let version = get_schema_version(db.conn());
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
     }
 
     #[test]
@@ -685,7 +711,21 @@ mod tests {
         let db = Database::open_in_memory().unwrap();
         run_migrations(db.conn()).unwrap();
         let version = get_schema_version(db.conn());
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
+    }
+
+    #[test]
+    fn audio_clips_table_exists() {
+        let db = Database::open_in_memory().unwrap();
+        let count: i32 = db
+            .conn()
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='audio_clips'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
     }
 
     #[test]
