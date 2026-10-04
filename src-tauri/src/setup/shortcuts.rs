@@ -18,6 +18,16 @@ pub fn register(
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     use tauri_plugin_global_shortcut::{Shortcut, ShortcutState};
 
+    #[cfg(target_os = "linux")]
+    if crate::services::gnome_shell::is_gnome_wayland() {
+        log::info!("GNOME Wayland session: shortcuts are grabbed by the shell extension");
+        tauri::async_runtime::spawn(run_shell_shortcuts(
+            app.handle().clone(),
+            settings.clone(),
+        ));
+        return Ok(());
+    }
+
     let bindings = get_active_bindings(settings);
     let mut action_map = HashMap::new();
     let mut builder = tauri_plugin_global_shortcut::Builder::new();
@@ -72,6 +82,73 @@ pub fn register(
     log::info!("{} global shortcuts registered", bindings.len());
 
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+async fn run_shell_shortcuts(app: tauri::AppHandle, initial_settings: Settings) {
+    use std::sync::Arc;
+
+    use futures::StreamExt;
+    use tokio::sync::Mutex;
+
+    use crate::services::config::ConfigService;
+    use crate::services::hotkeys::sync_shell_shortcuts;
+
+    let proxy = match crate::services::gnome_shell::proxy().await {
+        Ok(proxy) => proxy,
+        Err(e) => {
+            log::warn!("failed to connect to the shell extension, shortcuts are disabled: {e}");
+            return;
+        }
+    };
+    let (mut ready, mut activated) = match (
+        proxy.receive_ready().await,
+        proxy.receive_shortcut_activated().await,
+    ) {
+        (Ok(ready), Ok(activated)) => (ready, activated),
+        (Err(e), _) | (_, Err(e)) => {
+            log::warn!("failed to subscribe to shell extension signals, shortcuts are disabled: {e}");
+            return;
+        }
+    };
+
+    let current_settings = || async {
+        match app.try_state::<Arc<Mutex<ConfigService>>>() {
+            Some(config) => config.lock().await.settings().clone(),
+            None => initial_settings.clone(),
+        }
+    };
+
+    sync_shell_shortcuts(&current_settings().await).await;
+
+    loop {
+        tokio::select! {
+            Some(_) = ready.next() => {
+                log::info!("shell extension ready, registering shortcuts");
+                sync_shell_shortcuts(&current_settings().await).await;
+            }
+            Some(signal) = activated.next() => {
+                let action = match signal.args() {
+                    Ok(args) => args.action.to_string(),
+                    Err(e) => {
+                        log::warn!("invalid ShortcutActivated signal: {e}");
+                        continue;
+                    }
+                };
+                log::info!(
+                    target: "app_lib::hotkey_handler",
+                    "hotkey action: {}",
+                    action,
+                );
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    execute_hotkey_action(&app, &action).await;
+                });
+            }
+            else => break,
+        }
+    }
+    log::warn!("shell extension signal streams ended, shortcuts are disabled");
 }
 
 #[cfg(not(desktop))]

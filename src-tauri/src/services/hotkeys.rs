@@ -104,9 +104,113 @@ pub fn shortcut_for_action(settings: &Settings, action: &str) -> Option<String> 
         .map(|(shortcut, _)| shortcut)
 }
 
+fn gtk_key_name(key: &str) -> Option<String> {
+    let name = match key {
+        "ArrowUp" => "Up",
+        "ArrowDown" => "Down",
+        "ArrowLeft" => "Left",
+        "ArrowRight" => "Right",
+        "PageUp" => "Page_Up",
+        "PageDown" => "Page_Down",
+        "Enter" => "Return",
+        "Space" => "space",
+        "Backspace" => "BackSpace",
+        "Escape" | "Tab" | "Delete" | "Home" | "End" => key,
+        _ => {
+            let is_function_key = key
+                .strip_prefix('F')
+                .and_then(|n| n.parse::<u8>().ok())
+                .is_some_and(|n| (1..=24).contains(&n));
+            let is_single_character =
+                key.len() == 1 && key.chars().all(|c| c.is_ascii_alphanumeric());
+            return (is_function_key || is_single_character).then(|| key.to_string());
+        }
+    };
+    Some(name.to_string())
+}
+
+pub fn to_gtk_accelerator(binding: &str) -> Option<String> {
+    let mut parts: Vec<&str> = binding.split('+').collect();
+    let key = parts.pop()?;
+    let mut accelerator = String::new();
+    for modifier in parts {
+        match modifier {
+            "Control" | "Shift" | "Alt" | "Super" => {
+                accelerator.push_str(&format!("<{modifier}>"));
+            }
+            _ => {
+                log::warn!("unsupported modifier '{modifier}' in shortcut {binding}");
+                return None;
+            }
+        }
+    }
+    match gtk_key_name(key) {
+        Some(name) => {
+            accelerator.push_str(&name);
+            Some(accelerator)
+        }
+        None => {
+            log::warn!("unsupported key '{key}' in shortcut {binding}");
+            None
+        }
+    }
+}
+
+pub fn accelerators_by_action(bindings: &[(String, String)]) -> HashMap<String, Vec<String>> {
+    let mut map: HashMap<String, Vec<String>> = HashMap::new();
+    for (binding, action) in bindings {
+        if let Some(accelerator) = to_gtk_accelerator(binding) {
+            map.entry(action.clone()).or_default().push(accelerator);
+        }
+    }
+    map
+}
+
+#[cfg(target_os = "linux")]
+pub async fn sync_shell_shortcuts(settings: &Settings) {
+    let accelerators = accelerators_by_action(&get_active_bindings(settings));
+    let count: usize = accelerators.values().map(Vec::len).sum();
+    let result = match crate::services::gnome_shell::proxy().await {
+        Ok(proxy) => proxy.set_shortcuts(accelerators).await,
+        Err(e) => Err(e),
+    };
+    match result {
+        Ok(ungrabbed) => {
+            for accelerator in &ungrabbed {
+                log::warn!("shell extension could not grab shortcut {accelerator}");
+            }
+            log::info!(
+                target: "app_lib::hotkey_handler",
+                "{} shortcuts grabbed by the shell extension",
+                count.saturating_sub(ungrabbed.len())
+            );
+        }
+        Err(zbus::Error::MethodError(name, _, _))
+            if matches!(
+                name.as_str(),
+                "org.freedesktop.DBus.Error.UnknownObject"
+                    | "org.freedesktop.DBus.Error.UnknownMethod"
+                    | "org.freedesktop.DBus.Error.ServiceUnknown"
+            ) =>
+        {
+            log::info!("waiting for the shell extension");
+        }
+        Err(e) => log::warn!("failed to set shortcuts on the shell extension: {e}"),
+    }
+}
+
 #[cfg(desktop)]
 pub fn reload_shortcuts(app: &tauri::AppHandle, settings: &Settings) {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
+
+    #[cfg(target_os = "linux")]
+    if crate::services::gnome_shell::is_gnome_wayland() {
+        let settings = settings.clone();
+        tauri::async_runtime::spawn(async move {
+            sync_shell_shortcuts(&settings).await;
+        });
+        return;
+    }
 
     let global_shortcut = app.global_shortcut();
 
@@ -273,6 +377,38 @@ mod tests {
     use super::*;
     use crate::models::settings::KeymapGroup;
     use std::collections::HashMap;
+
+    #[test]
+    fn to_gtk_accelerator_translates_bindings() {
+        let cases = [
+            ("Control+F1", Some("<Control>F1")),
+            ("Shift+F1", Some("<Shift>F1")),
+            ("Super+Space", Some("<Super>space")),
+            ("Alt+Enter", Some("<Alt>Return")),
+            ("Control+Shift+A", Some("<Control><Shift>A")),
+            ("Control+ArrowUp", Some("<Control>Up")),
+            ("Control+PageDown", Some("<Control>Page_Down")),
+            ("Control+Foo", None),
+        ];
+        for (binding, expected) in cases {
+            assert_eq!(to_gtk_accelerator(binding).as_deref(), expected, "{binding}");
+        }
+    }
+
+    #[test]
+    fn accelerators_by_action_groups_bindings_and_skips_unknown_keys() {
+        let bindings = vec![
+            ("Control+F1".to_string(), "open_context_menu".to_string()),
+            ("Shift+F1".to_string(), "open_context_menu".to_string()),
+            ("Control+Foo".to_string(), "clear_context".to_string()),
+        ];
+        let map = accelerators_by_action(&bindings);
+        assert_eq!(map.len(), 1);
+        assert_eq!(
+            map["open_context_menu"],
+            vec!["<Control>F1".to_string(), "<Shift>F1".to_string()]
+        );
+    }
 
     #[test]
     fn test_translate_cmd_macos() {

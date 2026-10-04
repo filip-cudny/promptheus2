@@ -48,28 +48,13 @@ fn detect_x11() -> String {
 }
 
 fn detect_wayland() -> String {
-    let output = std::process::Command::new("gdbus")
-        .args([
-            "call",
-            "--session",
-            "--dest",
-            "org.gnome.Shell",
-            "--object-path",
-            "/org/gnome/Shell",
-            "--method",
-            "org.gnome.Shell.Eval",
-            "global.display.focus_window ? global.display.focus_window.get_wm_class() : ''",
-        ])
-        .output()
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| String::from_utf8(o.stdout).ok())
-        .unwrap_or_default();
-
-    output
-        .split('\'')
-        .nth(1)
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_default()
+    let result = crate::services::gnome_shell::blocking_proxy()
+        .and_then(|proxy| proxy.get_focused_wm_class());
+    match result {
+        Ok(wm_class) => wm_class,
+        Err(e) => {
+            log::debug!("failed to read focused wm_class from the shell extension: {e}");
+            String::new()
+        }
+    }
 }
