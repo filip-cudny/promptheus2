@@ -1,0 +1,7 @@
+{
+  "uuid": "promptheus@promptheus.desktop",
+  "name": "Promptheus",
+  "description": "Global shortcuts, window placement and focused-window lookup for Promptheus on GNOME Wayland",
+  "shell-version": ["50"],
+  "url": "https://github.com/filip-cudny/promptheus2"
+}
