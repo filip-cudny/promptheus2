@@ -22,4 +22,5 @@ Top-level index of all `DOCS.md` files in the project. Updated incrementally as 
 - [docs/gotchas/tauri-command-threading.md](docs/gotchas/tauri-command-threading.md) — Sync Tauri commands run on GTK main thread; use `(async)` for blocking work
 - [docs/gotchas/paste-handler.md](docs/gotchas/paste-handler.md) — Shift+Cmd/Ctrl+V raw paste: Mac uses arboard invoke, Linux uses native paste event
 - [docs/gotchas/linux-gtk-focus.md](docs/gotchas/linux-gtk-focus.md) — `present_with_time` with real X11 timestamp from `x11_get_server_time`
+- [docs/gotchas/linux-wayland-gnome-extension.md](docs/gotchas/linux-wayland-gnome-extension.md) — GNOME Wayland: shortcuts, positioning and focus through the GNOME Shell extension (D-Bus `com.promptheus.Shell`)
 - [docs/gotchas/linux-webkit-opacity.md](docs/gotchas/linux-webkit-opacity.md) — CSS opacity ignored on transparent WebKitGTK; use GTK `set_opacity()` instead

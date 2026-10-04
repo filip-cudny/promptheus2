@@ -4,6 +4,8 @@
 
 On a Linux window created with `.transparent(true)`, **no CSS-level opacity technique** produces visible transparency on the static rendering of an inner element. Use **GTK-level window opacity** via `gtk_window().set_opacity(value)` instead. Reference implementation: notification window in `src-tauri/src/commands/notification.rs` (or wherever `set_opacity` is called — search for it).
 
+The `set_opacity` fix below applies to X11 windows (it writes an X11 atom). On GNOME Wayland it has no effect; the context menu is hidden until placed by the GNOME Shell extension instead — see [linux-wayland-gnome-extension.md](linux-wayland-gnome-extension.md).
+
 ## Why
 
 WebKitGTK uses two different paint paths:

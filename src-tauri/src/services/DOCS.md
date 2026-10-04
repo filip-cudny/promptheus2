@@ -33,6 +33,8 @@ services/
 │   ├── mod.rs           #   SqliteHistoryService CRUD + public API
 │   ├── codec.rs         #   TreeJson, row→entry mapping, summary builders (pure)
 │   └── tests.rs         #   CRUD integration tests against an in-memory database
+├── gnome_shell/         # GNOME Shell extension D-Bus client (Linux)
+│   └── mod.rs           #   Shell proxy, OnceLock connection, is_gnome_wayland
 ├── hotkeys.rs           # Hotkey translation and OS-filtered binding resolution
 ├── image_storage.rs     # ImageStorage — temp image file save/load for conversation history
 ├── mcp/                 # MCP client — rmcp-based tool server management
@@ -169,6 +171,18 @@ Pure functions (no struct/state) for translating keymap settings into `tauri-plu
 **Validation**: shortcuts with fewer than 2 parts (no modifier) return `None` and are silently skipped.
 
 **Key translation rules**: `cmd`→`Command`/`Super`, `ctrl`→`Control`, `shift`→`Shift`, `alt`→`Alt`, `meta`/`super`→`Super`. Key names: `f1`-`f20` uppercased, single letters uppercased, named keys mapped (`space`→`Space`, `esc`→`Escape`, `up`→`ArrowUp`, etc.).
+
+**Backends**: on GNOME Wayland (`gnome_shell::is_gnome_wayland()`) shortcuts are grabbed by the GNOME Shell extension; elsewhere by `tauri-plugin-global-shortcut`. `to_gtk_accelerator` converts the `get_active_bindings` output (`Control+F1`, `ArrowUp`) to GTK accelerators (`<Control>F1`, `Up`) for the extension; an unknown key returns `None`. `setup/shortcuts.rs` selects the backend. See [linux-wayland-gnome-extension.md](../../../docs/gotchas/linux-wayland-gnome-extension.md).
+
+### GnomeShell specifics
+
+Linux-only D-Bus client for the `com.promptheus.Shell` interface served by the GNOME Shell extension (`linux/gnome-shell-extension/`). Uses `zbus`.
+
+- `ShellProxy` (`#[zbus::proxy]`): `set_shortcuts`, `get_pointer`, `place_window`, `get_focused_wm_class`, signals `shortcut_activated` and `ready`.
+- The session connection lives in a process-wide `OnceLock`, so callers without state (`frontmost_app::detect()`) reach it through `proxy()` (async) or `blocking_proxy()`.
+- `is_gnome_wayland()` is the backend selector: `XDG_SESSION_TYPE=wayland` and `XDG_CURRENT_DESKTOP` contains `GNOME`.
+- `frontmost_app` on Wayland reads `GetFocusedWmClass`; it returns an empty string when the extension is unreachable.
+- Shortcuts run in `setup/shortcuts.rs` `run_shell_shortcuts`: `SetShortcuts` after every `Ready`; it falls back to the settings passed to `register` before `ConfigService` is managed.
 
 ### ImageStorage specifics
 

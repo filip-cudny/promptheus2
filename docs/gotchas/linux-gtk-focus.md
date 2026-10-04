@@ -4,6 +4,8 @@
 
 On Linux, never rely on Tauri's `set_focus()` alone to bring a window forward. Use `gdk_window().present_with_time(timestamp)` with a **real X11 timestamp** obtained from `gdkx11::functions::x11_get_server_time()`. Reference implementation: `focus_context_menu` in `src-tauri/src/commands/menu.rs`.
 
+This applies to X11 windows. On GNOME Wayland the app is a native Wayland client, `x11_get_server_time` is unavailable and activation goes through the GNOME Shell extension — see [linux-wayland-gnome-extension.md](linux-wayland-gnome-extension.md).
+
 ## Why
 
 Tauri's `Window::set_focus()` internally calls GTK's `gtk_window_present_with_time(GDK_CURRENT_TIME)`. `GDK_CURRENT_TIME` is the constant `0`. Modern X11 window managers (GNOME/Mutter, KDE/KWin) treat a focus request with timestamp `0` as a **focus-steal attempt** by an app that wasn't user-initiated, and silently demote it to `_NET_WM_STATE_DEMANDS_ATTENTION` (taskbar flash) instead of actually focusing.

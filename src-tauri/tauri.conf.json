@@ -20,6 +20,14 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/metadata.json": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/metadata.json",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/extension.js": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/extension.js"
+        }
+      }
+    },
     "macOS": {
       "entitlements": "entitlements.plist",
       "signingIdentity": "-"

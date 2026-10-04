@@ -59,6 +59,7 @@ Defined in `src-tauri/tauri.conf.json` under `app.windows` with label `context-m
 
 1. Trigger (tray "Show Menu" or future global hotkey) calls `show_context_menu_window` backend command.
 2. Backend positions the window at cursor, emits `show-context-menu` event to the window, then shows and focuses it.
+   - **Extension variant (GNOME Wayland)**: the show payload has `shell_placement: true` (`shellPlacement`) and carries the `GetPointer` result (cursor and work area). `useMenuPositioning` clamps the position to the work area and calls `place_context_menu { x, y, first }` instead of `setPosition` + `show_context_menu_panel` + `focus_context_menu`. `first: true` sends `PlaceWindow` before `win.show()` and awaits the reply; the frontend clears the first-placement flag right after starting that invoke. After the height correction it calls `place_context_menu` with `first: false`. See [linux-wayland-gnome-extension.md](../../../../../docs/gotchas/linux-wayland-gnome-extension.md).
 3. Store's `init()` listener catches the event → calls `openMenu()`.
 4. `openMenu()` invokes `get_context_menu_items` command and populates state (window is already visible).
 5. User interacts via keyboard or mouse → executes item via `execute_menu_item` command.
