@@ -62,8 +62,9 @@ export function useMenuPositioning(opts: Opts) {
 
     async function placeThroughShell() {
       const first = isFirstPlacementPending();
-      await invoke("place_context_menu", { x, y, first });
+      const placement = invoke("place_context_menu", { x, y, first });
       if (first) clearFirstPlacementPending();
+      await placement;
       if (gen !== resizeGeneration || !opts.isVisible()) return;
 
       const correctedHeight = menuEl!.scrollHeight + 2;

@@ -342,8 +342,7 @@ async fn place_context_menu_through_shell(
     y: i32,
     first: bool,
 ) -> crate::Result<()> {
-    use std::future::{poll_fn, Future};
-    use std::task::Poll;
+    use futures::StreamExt;
 
     let win = app
         .get_webview_window("context-menu")
@@ -353,16 +352,43 @@ async fn place_context_menu_through_shell(
         .map_err(|e| Error::Other(e.to_string()))?;
 
     let t = std::time::Instant::now();
-    let mut call = std::pin::pin!(proxy.place_window(CONTEXT_MENU_TITLE, x, y, first));
-    if first {
-        poll_fn(|cx| {
-            let _ = call.as_mut().poll(cx);
-            Poll::Ready(())
-        })
-        .await;
+    let placed = if first {
+        let connection = proxy.inner().connection().clone();
+        let mut replies = zbus::MessageStream::from(&connection);
+        let call = zbus::Message::method_call("/com/promptheus/Shell", "PlaceWindow")
+            .and_then(|b| b.destination("org.gnome.Shell"))
+            .and_then(|b| b.interface("com.promptheus.Shell"))
+            .and_then(|b| b.build(&(CONTEXT_MENU_TITLE, x, y, first)))
+            .map_err(|e| Error::Other(e.to_string()))?;
+        let serial = call.primary_header().serial_num();
+        connection
+            .send(&call)
+            .await
+            .map_err(|e| Error::Other(e.to_string()))?;
         win.show()?;
-    }
-    let placed = call.await.map_err(|e| Error::Other(e.to_string()))?;
+        let reply = loop {
+            let message = replies
+                .next()
+                .await
+                .ok_or_else(|| Error::Other("session bus connection closed".into()))?
+                .map_err(|e| Error::Other(e.to_string()))?;
+            if message.header().reply_serial() == Some(serial) {
+                break message;
+            }
+        };
+        if reply.message_type() == zbus::message::Type::Error {
+            return Err(Error::Other(format!("PlaceWindow failed: {:?}", reply.header().error_name())));
+        }
+        reply
+            .body()
+            .deserialize::<bool>()
+            .map_err(|e| Error::Other(e.to_string()))?
+    } else {
+        proxy
+            .place_window(CONTEXT_MENU_TITLE, x, y, first)
+            .await
+            .map_err(|e| Error::Other(e.to_string()))?
+    };
     log::debug!(
         target: "app_lib::commands::menu",
         "place_context_menu: PlaceWindow(({x}, {y}), activate={first}) -> {placed} in {:?}",
