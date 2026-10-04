@@ -1,8 +1,8 @@
 import type { MenuItem } from "$lib/types/menu";
 import type { ContextItem } from "$lib/types/context";
 
+/** Display text only, capped at 200 characters; the clipboard value is resolved in Rust. */
 export interface LastInteractionChipData {
-  content: string;
   preview: string;
 }
 
@@ -17,7 +17,6 @@ export type TranscriptionStatus = "ok" | "failed" | "retrying";
 export interface TranscriptionChipData {
   status: TranscriptionStatus;
   entry_id: string;
-  content: string | null;
   preview: string | null;
   error: string | null;
   has_audio: boolean;

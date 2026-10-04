@@ -1217,7 +1217,7 @@ export function createConversationStore(
             applied_skills: serialized.applied_skills ?? [],
           });
         }
-      } else if (entry.input_content) {
+      } else if (entry.input_preview) {
         const userNodeId = `restored-user-${generateId()}`;
         const assistantNodeId = `restored-asst-${generateId()}`;
         const now = entry.timestamp;
@@ -1229,11 +1229,11 @@ export function createConversationStore(
           node_id: userNodeId,
           parent_id: null,
           role: "user",
-          content: entry.input_content,
+          content: entry.input_preview,
           images: [],
           text_attachments: [],
           timestamp: now,
-          children: entry.output_content ? [assistantNodeId] : [],
+          children: entry.output_preview ? [assistantNodeId] : [],
           updates: [],
           prompt_tokens: null,
           completion_tokens: null,
@@ -1246,13 +1246,13 @@ export function createConversationStore(
           applied_skills: [],
         });
 
-        if (entry.output_content) {
+        if (entry.output_preview) {
           restoredTree.current_path.push(assistantNodeId);
           restoredTree.nodes.set(assistantNodeId, {
             node_id: assistantNodeId,
             parent_id: userNodeId,
             role: "assistant",
-            content: entry.output_content,
+            content: entry.output_preview,
             images: [],
             text_attachments: [],
             timestamp: now,

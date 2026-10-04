@@ -109,7 +109,7 @@ Adding a new window:
 
 ### Services (History)
 
-- `lib/services/history.ts` — typed wrappers for history Tauri commands (`getHistory`, `addHistoryEntry`, `addConversationEntry`, `updateConversationEntry`, `getLastInteraction`, `clearHistory`, `copyHistoryContent`).
+- `lib/services/history.ts` — typed wrappers for history Tauri commands (`getHistory`, `addHistoryEntry`, `addConversationEntry`, `updateConversationEntry`, `getLastInteraction`, `clearHistory`, `copyLastInteraction`, `copyHistoryEntryContent`).
 - `lib/stores/history.svelte.ts` — reactive store via `getHistoryStore()`. Listens to `"history-changed"` events, exposes `entries`, `count`, `isEmpty`, `lastTextEntry`, `lastSpeechEntry`. Call `init()` on mount, `destroy()` on teardown.
 
 ### Services (Settings)

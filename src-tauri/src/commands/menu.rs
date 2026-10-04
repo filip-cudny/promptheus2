@@ -12,7 +12,7 @@ use crate::services::context::ContextManagerService;
 use crate::services::execution::PromptExecutionService;
 use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::monitor::find_monitor_at;
-use crate::services::skill::SkillService;
+use crate::services::skill::{strip_skill_prefix, SkillService};
 use crate::services::speech::{AudioClipStore, SpeechService};
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
@@ -27,18 +27,6 @@ struct ShowMenuPayload {
     work_height: f64,
 }
 
-fn strip_skill_prefix<'a>(s: &'a str, skill_service: &crate::services::skill::SkillService) -> &'a str {
-    if let Some(rest) = s.strip_prefix('/') {
-        if let Some(space_idx) = rest.find(' ') {
-            let name = &rest[..space_idx];
-            if skill_service.get_skill(name).is_some() {
-                return &rest[space_idx + 1..];
-            }
-        }
-    }
-    s
-}
-
 fn truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
@@ -51,6 +39,9 @@ fn truncate(s: &str, max_len: usize) -> String {
     }
 }
 
+/// Chip payloads carry previews only. The clipboard value is resolved on the
+/// Rust side by `copy_last_interaction`, so a full response never crosses IPC
+/// just to render the menu.
 #[tauri::command]
 pub async fn get_context_menu_items(
     config: State<'_, Arc<Mutex<ConfigService>>>,
@@ -99,12 +90,10 @@ pub async fn get_context_menu_items(
         } else {
             "ok"
         };
-        let content = entry.output_content.clone();
         serde_json::json!({
             "status": status,
             "entry_id": entry.id,
-            "content": content,
-            "preview": content.as_deref().map(|c| truncate(c, 200)),
+            "preview": entry.output_preview.as_deref().map(|c| truncate(c, 200)),
             "error": entry.error,
             "has_audio": last_speech_clip.is_some(),
             "expires_at": last_speech_clip.as_ref().map(|c| c.expires_at.clone()),
@@ -120,11 +109,11 @@ pub async fn get_context_menu_items(
         if item.item_type == MenuItemType::LastInteraction {
             item.data = Some(serde_json::json!({
                 "input": last_text.as_ref().map(|e| {
-                    let raw_input = strip_skill_prefix(&e.input_content, &skill_service);
-                    serde_json::json!({ "content": raw_input, "preview": truncate(raw_input, 200) })
+                    let raw_input = strip_skill_prefix(&e.input_preview, &skill_service);
+                    serde_json::json!({ "preview": truncate(raw_input, 200) })
                 }),
                 "output": last_text.as_ref().and_then(|e| {
-                    e.output_content.as_ref().map(|c| serde_json::json!({ "content": c, "preview": truncate(c, 200) }))
+                    e.output_preview.as_ref().map(|c| serde_json::json!({ "preview": truncate(c, 200) }))
                 }),
                 "transcription": transcription_payload.clone(),
                 "last_text_entry": last_text.as_ref().map(|e| {

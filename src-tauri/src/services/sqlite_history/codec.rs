@@ -30,8 +30,8 @@ pub(super) fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<HistoryE
         skill_id: row.get(2)?,
         skill_name: row.get(3)?,
         entry_type: parse_entry_type(row.get::<_, String>(4)?.as_str()),
-        input_content: row.get(5)?,
-        output_content: row.get(6)?,
+        input_preview: row.get(5)?,
+        output_preview: row.get(6)?,
         success: row.get(7)?,
         error: row.get(8)?,
         is_multi_turn: row.get(9)?,
@@ -47,6 +47,20 @@ pub(super) const ENTRY_COLUMNS: &str =
     "id, title, skill_id, skill_name, entry_type, input_content, output_content, \
      success, error, is_multi_turn, quick_action, created_at, updated_at";
 
+/// Full content of the last node with `role`, as stored in the conversation tree.
+pub(super) fn last_role_content(
+    nodes: &[SerializedConversationNode],
+    role: &str,
+) -> Option<String> {
+    nodes
+        .iter()
+        .rev()
+        .find(|n| n.role == role)
+        .map(|n| n.content.clone())
+        .filter(|c| !c.is_empty())
+}
+
+/// Display-only summary of the last user node, capped at 200 characters.
 pub(super) fn build_input_summary(nodes: &[SerializedConversationNode]) -> String {
     let last_user = nodes.iter().rev().find(|n| n.role == "user");
     match last_user {
@@ -69,6 +83,7 @@ pub(super) fn build_input_summary(nodes: &[SerializedConversationNode]) -> Strin
     }
 }
 
+/// Display-only summary of the last assistant node, capped at 200 characters.
 pub(super) fn build_output_summary(nodes: &[SerializedConversationNode]) -> Option<String> {
     let last_assistant = nodes.iter().rev().find(|n| n.role == "assistant");
     match last_assistant {

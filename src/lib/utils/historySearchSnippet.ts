@@ -9,10 +9,10 @@ export function displayName(r: SearchResult): string {
 }
 
 function snippetSourceFor(matches: readonly FieldMatch[]): SearchField | null {
-  const input = matches.find((m) => m.field === "input_content" && m.indices.length > 0);
-  if (input) return "input_content";
-  const output = matches.find((m) => m.field === "output_content" && m.indices.length > 0);
-  if (output) return "output_content";
+  const input = matches.find((m) => m.field === "input_preview" && m.indices.length > 0);
+  if (input) return "input_preview";
+  const output = matches.find((m) => m.field === "output_preview" && m.indices.length > 0);
+  if (output) return "output_preview";
   return null;
 }
 
@@ -22,7 +22,7 @@ export function snippetFor(
   const source = snippetSourceFor(r.matches);
   if (!source) return null;
   const e = r.entry;
-  const raw = source === "input_content" ? (e.input_content ?? "") : (e.output_content ?? "");
+  const raw = source === "input_preview" ? (e.input_preview ?? "") : (e.output_preview ?? "");
   if (!raw) return null;
   const truncated = truncateAroundMatch(raw, r.matches, source, SNIPPET_RADIUS);
   if (!truncated.text) return null;

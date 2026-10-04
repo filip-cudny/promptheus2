@@ -1,17 +1,18 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 
 use crate::models::history::{
-    HistoryEntry, HistoryEntryType, ImagePayload, SerializedConversationNode,
+    HistoryContentPart, HistoryEntry, HistoryEntryType, ImagePayload, SerializedConversationNode,
 };
 use crate::services::clipboard::ClipboardService;
 use crate::services::conversation_context::ConversationContextCache;
 use crate::services::history_events::emit_history_changed;
 use crate::services::history_search::{HistorySearch, SearchQuery, SearchResponse};
+use crate::services::skill::{strip_skill_prefix, SkillService};
 use crate::services::sqlite_history::{HistoryStorageStats, SqliteHistoryService};
 
 #[derive(Debug, Clone, Serialize)]
@@ -269,12 +270,73 @@ pub async fn list_history_skills(
     Ok(list)
 }
 
+/// Which chip of the context-menu "Last interaction" section is being copied.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LastInteractionChip {
+    Input,
+    Output,
+    Transcription,
+}
+
+/// Copies the full text behind a "Last interaction" chip. The menu only ever
+/// receives previews, so the value is resolved here from the stored
+/// conversation tree.
 #[tauri::command]
-pub async fn copy_history_content(
+pub async fn copy_last_interaction(
     clipboard: State<'_, ClipboardService>,
-    content: String,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
+    skill_service: State<'_, Arc<Mutex<SkillService>>>,
+    chip: LastInteractionChip,
 ) -> crate::Result<()> {
+    let entry_type = match chip {
+        LastInteractionChip::Transcription => HistoryEntryType::Speech,
+        _ => HistoryEntryType::Text,
+    };
+    let part = match chip {
+        LastInteractionChip::Input => HistoryContentPart::Input,
+        _ => HistoryContentPart::Output,
+    };
+
+    let resolved = {
+        let history = history.lock().await;
+        history
+            .get_last_quick_action(entry_type)
+            .and_then(|entry| history.resolve_full_content(&entry.id, part))
+    };
+
+    let Some(content) = resolved else {
+        return Ok(());
+    };
+
+    let content = match chip {
+        LastInteractionChip::Input => {
+            strip_skill_prefix(&content, &*skill_service.lock().await).to_string()
+        }
+        _ => content,
+    };
+
     clipboard.set_text(&content)?;
+    Ok(())
+}
+
+/// Copies a history entry's response, falling back to its prompt when the entry
+/// has no response. Resolves the full text rather than the capped preview the
+/// list view renders.
+#[tauri::command]
+pub async fn copy_history_entry_content(
+    clipboard: State<'_, ClipboardService>,
+    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
+    entry_id: String,
+) -> crate::Result<()> {
+    let history = history.lock().await;
+    let content = history
+        .resolve_full_content(&entry_id, HistoryContentPart::Output)
+        .or_else(|| history.resolve_full_content(&entry_id, HistoryContentPart::Input));
+
+    if let Some(content) = content {
+        clipboard.set_text(&content)?;
+    }
     Ok(())
 }
 
@@ -287,9 +349,9 @@ mod tests {
         HistoryEntry {
             id: id.into(),
             timestamp: "2026-01-01 00:00:00".into(),
-            input_content: "input".into(),
+            input_preview: "input".into(),
             entry_type: HistoryEntryType::Text,
-            output_content: None,
+            output_preview: None,
             skill_id: skill_id.map(|s| s.to_string()),
             success: true,
             error: None,

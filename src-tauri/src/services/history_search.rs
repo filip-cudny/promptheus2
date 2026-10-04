@@ -48,11 +48,13 @@ pub struct SearchQuery {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// Which stored field a match was found in. Input and output are the capped
+/// previews, not the full conversation text — see `HistoryEntry`.
 pub enum SearchField {
     Title,
     SkillName,
-    InputContent,
-    OutputContent,
+    InputPreview,
+    OutputPreview,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -77,15 +79,15 @@ pub struct SearchResponse {
 const FIELD_WEIGHTS: &[(SearchField, f32)] = &[
     (SearchField::Title, 1.00),
     (SearchField::SkillName, 0.75),
-    (SearchField::InputContent, 0.50),
-    (SearchField::OutputContent, 0.25),
+    (SearchField::InputPreview, 0.50),
+    (SearchField::OutputPreview, 0.25),
 ];
 
 const AVG_LEN_FALLBACK: &[(SearchField, f32)] = &[
     (SearchField::Title, 50.0),
     (SearchField::SkillName, 15.0),
-    (SearchField::InputContent, 200.0),
-    (SearchField::OutputContent, 2000.0),
+    (SearchField::InputPreview, 200.0),
+    (SearchField::OutputPreview, 2000.0),
 ];
 
 fn is_transcription(entry: &HistoryEntry) -> bool {
@@ -115,8 +117,8 @@ fn field_value<'a>(entry: &'a HistoryEntry, field: SearchField) -> Option<&'a st
     let value: Option<&'a str> = match field {
         SearchField::Title => entry.title.as_deref(),
         SearchField::SkillName => entry.skill_name.as_deref(),
-        SearchField::InputContent => Some(entry.input_content.as_str()),
-        SearchField::OutputContent => entry.output_content.as_deref(),
+        SearchField::InputPreview => Some(entry.input_preview.as_str()),
+        SearchField::OutputPreview => entry.output_preview.as_deref(),
     };
     value.filter(|s| !s.is_empty())
 }
@@ -422,7 +424,7 @@ impl HistorySearch {
             let mut title_strong_hit = false;
 
             for (field, weight) in FIELD_WEIGHTS {
-                if title_strong_hit && *field == SearchField::OutputContent {
+                if title_strong_hit && *field == SearchField::OutputPreview {
                     continue;
                 }
                 let Some(text) = field_value(entry, *field) else {
@@ -545,9 +547,9 @@ mod tests {
         HistoryEntry {
             id: id.into(),
             timestamp: "2026-01-01 00:00:00".into(),
-            input_content: input.into(),
+            input_preview: input.into(),
             entry_type: HistoryEntryType::Text,
-            output_content: None,
+            output_preview: None,
             skill_id: None,
             success: true,
             error: None,
@@ -597,7 +599,7 @@ mod tests {
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             rusqlite::params![
                 e.id, e.title, e.skill_id, e.skill_name, entry_type_str,
-                e.input_content, e.output_content, e.success, e.error,
+                e.input_preview, e.output_preview, e.success, e.error,
                 e.is_multi_turn, e.quick_action, e.created_at, e.updated_at,
             ],
         ).unwrap();
@@ -786,7 +788,7 @@ mod tests {
     }
 
     #[test]
-    fn search_matches_input_content() {
+    fn search_matches_input_preview() {
         let entry = make_entry("e", "raw input contains banana");
 
         let history = make_history(vec![entry]);
@@ -800,7 +802,7 @@ mod tests {
         let m = response.results[0]
             .matches
             .iter()
-            .find(|m| m.field == SearchField::InputContent)
+            .find(|m| m.field == SearchField::InputPreview)
             .expect("input content match present");
         assert!(!m.indices.is_empty());
     }

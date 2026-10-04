@@ -130,11 +130,13 @@ Renders when `item.item_type === "last_interaction"`. The backend injects last i
 | Element | Description |
 |---------|-------------|
 | Section header | "Last interaction" label + History button |
-| Input chip | Last text entry's input content (copy on click) |
-| Output chip | Last text entry's output content (copy on click) |
+| Input chip | Preview of the last text entry's prompt (copy on click) |
+| Output chip | Preview of the last text entry's response (copy on click) |
 | Transcription chip | Last speech entry — stateful (see below) |
 
-Chips are disabled (grayed out) when no content is available. Copy uses `copyHistoryContent` from the history service which also triggers a clipboard notification. The store refreshes on `"history-changed"` events so chips update after each execution.
+`item.data` carries **previews only**, capped at 200 characters. Clicking a chip calls `copyLastInteraction(chip)` → the `copy_last_interaction` command, which resolves the full text from the stored conversation tree and writes it to the clipboard. Never put chip text on the clipboard from the frontend: the stored `output_preview` is a summary, and copying it hands the user a truncated response. Keeping the full text out of `item.data` also keeps long responses off the IPC path on every menu open.
+
+Chips are disabled (grayed out) when there is no preview, which is also the signal that there is nothing to copy. The store refreshes on `"history-changed"` events so chips update after each execution.
 
 The transcription chip is driven by `data.transcription`, a state object rather than plain text:
 

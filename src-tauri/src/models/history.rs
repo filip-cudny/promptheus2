@@ -85,13 +85,31 @@ fn default_true() -> bool {
     true
 }
 
+/// Which side of an entry a full-text lookup refers to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HistoryContentPart {
+    Input,
+    Output,
+}
+
+/// A history row without its conversation tree.
+///
+/// `input_preview` and `output_preview` are display-only. For conversation
+/// entries (anything written by `add_conversation_entry`, including skill quick
+/// actions) they are summaries capped at 200 characters; the full text lives in
+/// `tree_json` and is reachable only via `SqliteHistoryService::resolve_full_content`
+/// or `conversation_data`. For simple entries (speech) they happen to hold the
+/// whole value. Never copy, export or re-execute these fields.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HistoryEntry {
     pub id: String,
     pub timestamp: String,
-    pub input_content: String,
+    #[serde(alias = "input_content")]
+    pub input_preview: String,
     pub entry_type: HistoryEntryType,
-    pub output_content: Option<String>,
+    #[serde(alias = "output_content")]
+    pub output_preview: Option<String>,
     pub skill_id: Option<String>,
     #[serde(default = "default_true")]
     pub success: bool,
@@ -119,9 +137,9 @@ mod tests {
         let entry = HistoryEntry {
             id: "entry-1".into(),
             timestamp: "2026-01-01T00:00:00Z".into(),
-            input_content: "Hello world".into(),
+            input_preview: "Hello world".into(),
             entry_type: HistoryEntryType::Text,
-            output_content: Some("Response text".into()),
+            output_preview: Some("Response text".into()),
             skill_id: Some("prompt-1".into()),
             success: true,
             error: None,
@@ -149,9 +167,9 @@ mod tests {
         let entry = HistoryEntry {
             id: "entry-2".into(),
             timestamp: "2026-01-01T12:00:00Z".into(),
-            input_content: "Conversation start".into(),
+            input_preview: "Conversation start".into(),
             entry_type: HistoryEntryType::Speech,
-            output_content: Some("Final output".into()),
+            output_preview: Some("Final output".into()),
             skill_id: Some("prompt-2".into()),
             success: true,
             error: None,
@@ -237,10 +255,11 @@ mod tests {
         let entry: HistoryEntry = serde_json::from_str(json).unwrap();
 
         assert_eq!(entry.id, "entry-3");
+        assert_eq!(entry.input_preview, "test");
         assert_eq!(entry.entry_type, HistoryEntryType::Text);
         assert!(entry.success);
         assert!(!entry.is_multi_turn);
-        assert!(entry.output_content.is_none());
+        assert!(entry.output_preview.is_none());
         assert!(entry.skill_id.is_none());
         assert!(entry.error.is_none());
         assert!(entry.skill_name.is_none());

@@ -289,6 +289,19 @@ impl SkillService {
     }
 }
 
+/// Drops a leading `/<skill-name> ` invocation prefix, so stored text reads as
+/// the user typed it without the routing token.
+pub fn strip_skill_prefix<'a>(text: &'a str, skill_service: &SkillService) -> &'a str {
+    if let Some(rest) = text.strip_prefix('/') {
+        if let Some(space_idx) = rest.find(' ') {
+            if skill_service.get_skill(&rest[..space_idx]).is_some() {
+                return &rest[space_idx + 1..];
+            }
+        }
+    }
+    text
+}
+
 fn upsert_skill_row(
     conn: &Connection,
     name: &str,
@@ -594,6 +607,21 @@ mod tests {
             )
             .unwrap();
         assert!(deleted.is_some());
+    }
+
+    #[test]
+    fn strip_skill_prefix_only_strips_known_skills() {
+        let dir = TempDir::new().unwrap();
+        let skills_dir = dir.path().join("skills");
+        std::fs::create_dir(&skills_dir).unwrap();
+        write_skill_dir(&skills_dir, "translate", "translate", "desc", "body");
+
+        let service = SkillService::load(&skills_dir, None, &[]).unwrap();
+
+        assert_eq!(strip_skill_prefix("/translate hello", &service), "hello");
+        assert_eq!(strip_skill_prefix("/unknown hello", &service), "/unknown hello");
+        assert_eq!(strip_skill_prefix("/translate", &service), "/translate");
+        assert_eq!(strip_skill_prefix("plain text", &service), "plain text");
     }
 
     #[test]

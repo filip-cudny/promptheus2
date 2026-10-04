@@ -25,7 +25,7 @@
     removeContextItem,
   } from "$lib/services/context";
   import { openContextEditor } from "$lib/services/contextEditor";
-  import { copyHistoryContent } from "$lib/services/history";
+  import { copyLastInteraction, type LastInteractionChip } from "$lib/services/history";
   import { retryTranscription } from "$lib/services/speech";
   import { openHistoryDialog } from "$lib/services/historyDialog";
   import { openSettingsWindow } from "$lib/services/settingsDialog";
@@ -163,8 +163,8 @@
     await invoke("open_image_preview", { data, mediaType });
   }
 
-  async function handleCopyHistoryContent(content: string) {
-    await copyHistoryContent(content);
+  async function handleCopyChip(chip: LastInteractionChip) {
+    await copyLastInteraction(chip);
   }
 
   async function handleOpenLastInteraction(entry: LastTextEntryRef) {
@@ -296,7 +296,7 @@
         {:else if lastInteractionData !== null}
           <LastInteractionSection
             data={lastInteractionData}
-            onCopyContent={handleCopyHistoryContent}
+            onCopyChip={handleCopyChip}
             onOpenLastInteraction={handleOpenLastInteraction}
             onOpenHistory={handleOpenHistory}
             onRetryTranscription={handleRetryTranscription}

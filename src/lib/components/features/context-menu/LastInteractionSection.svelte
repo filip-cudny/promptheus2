@@ -14,16 +14,17 @@
     LastInteractionData,
     LastTextEntryRef,
   } from "./itemExtractors";
+  import type { LastInteractionChip } from "$lib/services/history";
 
   let {
     data,
-    onCopyContent,
+    onCopyChip,
     onOpenLastInteraction,
     onOpenHistory,
     onRetryTranscription,
   }: {
     data: LastInteractionData | null;
-    onCopyContent: (content: string) => Promise<void>;
+    onCopyChip: (chip: LastInteractionChip) => Promise<void>;
     onOpenLastInteraction: (entry: LastTextEntryRef) => Promise<void>;
     onOpenHistory: () => Promise<void>;
     onRetryTranscription: (entryId: string) => Promise<void>;
@@ -31,10 +32,10 @@
 
   let copyConfirm = $state<string | null>(null);
 
-  async function handleCopy(chipType: string, content: string | undefined | null) {
-    if (!content) return;
-    await onCopyContent(content);
-    copyConfirm = chipType;
+  async function handleCopy(chip: LastInteractionChip, available: boolean) {
+    if (!available) return;
+    await onCopyChip(chip);
+    copyConfirm = chip;
     setTimeout(() => (copyConfirm = null), 1200);
   }
 
@@ -44,15 +45,15 @@
     await onOpenLastInteraction(entry);
   }
 
-  type ChipEntry = { type: string; label: string; content: string | null; preview: string | null };
+  type ChipEntry = { type: LastInteractionChip; label: string; preview: string | null };
 
   let transcription = $derived(data?.transcription ?? null);
   let transcriptionFailed = $derived(transcription?.status === "failed");
   let transcriptionRetrying = $derived(transcription?.status === "retrying");
 
   let chips = $derived<ChipEntry[]>([
-    { type: "input", label: "Input", content: data?.input?.content ?? null, preview: data?.input?.preview ?? null },
-    { type: "output", label: "Output", content: data?.output?.content ?? null, preview: data?.output?.preview ?? null },
+    { type: "input", label: "Input", preview: data?.input?.preview ?? null },
+    { type: "output", label: "Output", preview: data?.output?.preview ?? null },
   ]);
 
   let transcriptionTitle = $derived.by(() => {
@@ -67,7 +68,7 @@
   });
 
   let hasAnyContent = $derived(
-    chips.some((c) => c.content !== null) || transcription !== null,
+    chips.some((c) => c.preview !== null) || transcription !== null,
   );
 
   async function handleRetry() {
@@ -102,8 +103,8 @@
     <div class="chips">
       {#each chips as chip}
         <Chip
-          onclick={() => handleCopy(chip.type, chip.content)}
-          disabled={!chip.content}
+          onclick={() => handleCopy(chip.type, chip.preview !== null)}
+          disabled={!chip.preview}
           title={chip.preview ?? "No content"}
         >
           <span class="chip-copy">
@@ -119,8 +120,8 @@
 
       <div class="transcription-group" class:failed={transcriptionFailed}>
         <Chip
-          onclick={() => handleCopy("transcription", transcription?.content)}
-          disabled={!transcription?.content || transcriptionRetrying}
+          onclick={() => handleCopy("transcription", !!transcription?.preview && !transcriptionRetrying)}
+          disabled={!transcription?.preview || transcriptionRetrying}
           title={transcriptionTitle}
         >
           <span class="chip-copy">

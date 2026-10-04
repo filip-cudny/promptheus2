@@ -2,7 +2,7 @@ import type { HistoryEntry } from "$lib/types/history";
 
 export type HistoryTypeFilter = "all" | "chat" | "quick_action" | "speech";
 export type HistoryStatusFilter = "all" | "success" | "error";
-export type SearchField = "title" | "skill_name" | "input_content" | "output_content";
+export type SearchField = "title" | "skill_name" | "input_preview" | "output_preview";
 export type TimeRangePreset = "all" | "today" | "7d" | "30d";
 
 export interface SearchQuery {

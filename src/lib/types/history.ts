@@ -47,12 +47,18 @@ export interface LastInteractionData {
   last_speech: HistoryEntry | null;
 }
 
+/**
+ * `input_preview` and `output_preview` are display-only. For conversation
+ * entries they are summaries capped at 200 characters; the full text lives in
+ * `conversation_data` and is copied through the Rust side. Never put them on
+ * the clipboard or feed them back into an execution.
+ */
 export interface HistoryEntry {
   id: string;
   timestamp: string;
-  input_content: string;
+  input_preview: string;
   entry_type: HistoryEntryType;
-  output_content: string | null;
+  output_preview: string | null;
   skill_id: string | null;
   success: boolean;
   error: string | null;

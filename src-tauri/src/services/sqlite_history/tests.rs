@@ -94,7 +94,7 @@ fn add_and_get_history() {
     );
     let history = svc.get_history();
     assert_eq!(history.len(), 1);
-    assert_eq!(history[0].input_content, "hello");
+    assert_eq!(history[0].input_preview, "hello");
 }
 
 #[test]
@@ -124,6 +124,69 @@ fn add_conversation_and_restore() {
     assert_eq!(conv.root_node_id, Some("u1".into()));
     assert_eq!(conv.current_path, vec!["u1", "a1"]);
     assert_eq!(conv.context_text, "context");
+}
+
+#[test]
+fn resolve_full_content_returns_text_beyond_the_capped_preview() {
+    let svc = make_svc();
+    let long_answer = "z".repeat(5000);
+    let long_prompt = "y".repeat(5000);
+    let id = svc.add_conversation_entry(
+        "context".into(),
+        None,
+        None,
+        true,
+        None,
+        make_nodes(&long_prompt, &long_answer),
+        Some("u1".into()),
+        vec!["u1".into(), "a1".into()],
+        true,
+        None,
+        vec![],
+        None,
+        None,
+    );
+
+    let entry = svc.get_last_quick_action(HistoryEntryType::Text).unwrap();
+    assert_eq!(entry.input_preview.chars().count(), 200);
+    assert_eq!(entry.output_preview.as_ref().unwrap().chars().count(), 200);
+
+    assert_eq!(
+        svc.resolve_full_content(&id, HistoryContentPart::Output),
+        Some(long_answer),
+    );
+    assert_eq!(
+        svc.resolve_full_content(&id, HistoryContentPart::Input),
+        Some(long_prompt),
+    );
+}
+
+#[test]
+fn resolve_full_content_falls_back_to_columns_for_simple_entries() {
+    let svc = make_svc();
+    let id = svc
+        .add_entry(
+            "spoken input".into(),
+            HistoryEntryType::Speech,
+            Some("full transcript".into()),
+            None,
+            true,
+            None,
+            false,
+            None,
+            true,
+        )
+        .unwrap();
+
+    assert_eq!(
+        svc.resolve_full_content(&id, HistoryContentPart::Output),
+        Some("full transcript".into()),
+    );
+    assert_eq!(
+        svc.resolve_full_content(&id, HistoryContentPart::Input),
+        Some("spoken input".into()),
+    );
+    assert_eq!(svc.resolve_full_content("missing", HistoryContentPart::Output), None);
 }
 
 #[test]
@@ -266,10 +329,10 @@ fn get_last_item_by_type() {
     svc.add_entry("t2".into(), HistoryEntryType::Text, None, None, true, None, false, None, false);
 
     let last_text = svc.get_last_item_by_type(HistoryEntryType::Text).unwrap();
-    assert_eq!(last_text.input_content, "t2");
+    assert_eq!(last_text.input_preview, "t2");
 
     let last_speech = svc.get_last_item_by_type(HistoryEntryType::Speech).unwrap();
-    assert_eq!(last_speech.input_content, "s1");
+    assert_eq!(last_speech.input_preview, "s1");
 }
 
 #[test]
@@ -386,7 +449,7 @@ fn quick_action_query() {
     svc.add_entry("quick".into(), HistoryEntryType::Text, None, None, true, None, false, None, true);
 
     let last_quick = svc.get_last_quick_action(HistoryEntryType::Text).unwrap();
-    assert_eq!(last_quick.input_content, "quick");
+    assert_eq!(last_quick.input_preview, "quick");
 }
 
 #[test]

@@ -4,6 +4,7 @@
   import { getHistoryStore } from "$lib/stores/history.svelte";
   import { getHistorySearchStore } from "$lib/stores/historySearch.svelte";
   import { openConversationDialog } from "$lib/services/conversationDialog";
+  import { copyHistoryEntryContent } from "$lib/services/history";
   import { getUiState, setUiState } from "$lib/services/uiState";
   import type { AudioClipInfo, HistoryEntry } from "$lib/types";
   import {
@@ -277,6 +278,14 @@
     await openConversationDialog(entry.skill_id ?? "", entry.title ?? entry.skill_name ?? "", entry.id);
   }
 
+  async function handleCopy(entryId: string) {
+    try {
+      await copyHistoryEntryContent(entryId);
+    } catch (e) {
+      logError("Failed to copy history entry: " + e);
+    }
+  }
+
   async function changePageSize(size: number) {
     pageSize = size;
     currentPage = 0;
@@ -337,7 +346,7 @@
           audioClip={audioClips[result.entry.id] ?? null}
           retrying={retryingIds.has(result.entry.id)}
           onOpen={handleOpen}
-          oncopy={(content) => navigator.clipboard.writeText(content)}
+          oncopy={handleCopy}
           onRetry={handleRetry}
           onExportAudio={handleExportAudio}
           onDiscardAudio={handleDiscardAudio}

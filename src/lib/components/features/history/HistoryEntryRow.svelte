@@ -24,7 +24,7 @@
     audioClip?: AudioClipInfo | null;
     retrying?: boolean;
     onOpen: (entry: HistoryEntry) => void;
-    oncopy: (content: string) => void;
+    oncopy: (entryId: string) => void;
     onRetry?: (entry: HistoryEntry) => void;
     onExportAudio?: (entry: HistoryEntry) => void;
     onDiscardAudio?: (entry: HistoryEntry) => void;
@@ -47,8 +47,7 @@
 
   function copyToClipboard(e: MouseEvent) {
     e.stopPropagation();
-    const text = entry.output_content ?? entry.input_content;
-    oncopy(text);
+    oncopy(entry.id);
     copied = true;
     if (copyTimeout) clearTimeout(copyTimeout);
     copyTimeout = setTimeout(() => { copied = false; }, 1500);
@@ -64,15 +63,15 @@
     entry.title ?? entry.skill_name ?? (entry.entry_type === "speech" ? "Transcription" : "Chat"),
   );
 
-  let inputForDisplay = $derived(entry.input_content);
+  let inputForDisplay = $derived(entry.input_preview);
 
   let inputPreview = $derived(
-    truncateAroundMatch(inputForDisplay, matches, "input_content", 120),
+    truncateAroundMatch(inputForDisplay, matches, "input_preview", 120),
   );
 
-  let outputForDisplay = $derived(entry.output_content ?? "");
+  let outputForDisplay = $derived(entry.output_preview ?? "");
 
-  let outputMatch = $derived(matches.find((m) => m.field === "output_content"));
+  let outputMatch = $derived(matches.find((m) => m.field === "output_preview"));
   let outputDuplicatesInput = $derived(outputForDisplay === inputForDisplay);
   let hasOutputMatch = $derived(
     !!outputMatch && outputMatch.indices.length > 0 && !outputDuplicatesInput,
@@ -80,7 +79,7 @@
 
   let outputPreview = $derived(
     hasOutputMatch
-      ? truncateAroundMatch(outputForDisplay, matches, "output_content", 120)
+      ? truncateAroundMatch(outputForDisplay, matches, "output_preview", 120)
       : { text: "", matches: [] },
   );
 
@@ -91,8 +90,8 @@
       switch (m.field) {
         case "title": labels.push("title"); break;
         case "skill_name": labels.push("skill"); break;
-        case "input_content": labels.push("prompt"); break;
-        case "output_content": labels.push("response"); break;
+        case "input_preview": labels.push("prompt"); break;
+        case "output_preview": labels.push("response"); break;
       }
     }
     return labels;
@@ -198,12 +197,12 @@
         {/if}
       </div>
       {#if inputPreview.text}
-        <div class="input-preview">{@html highlightFor(inputPreview.text, inputPreview.matches, ["input_content"])}</div>
+        <div class="input-preview">{@html highlightFor(inputPreview.text, inputPreview.matches, ["input_preview"])}</div>
       {/if}
       {#if hasOutputMatch && outputPreview.text}
         <div class="output-preview">
           <span class="output-preview-icon"><CornerDownRight size={ICON_SIZE.sm} /></span>
-          <span class="output-preview-text">{@html highlightFor(outputPreview.text, outputPreview.matches, ["output_content"])}</span>
+          <span class="output-preview-text">{@html highlightFor(outputPreview.text, outputPreview.matches, ["output_preview"])}</span>
         </div>
       {/if}
     </div>

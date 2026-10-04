@@ -97,6 +97,17 @@ export async function clearHistory(): Promise<void> {
   return invoke("clear_history");
 }
 
-export async function copyHistoryContent(content: string): Promise<void> {
-  return invoke("copy_history_content", { content });
+export type LastInteractionChip = "input" | "output" | "transcription";
+
+/**
+ * Copies the full text behind a "Last interaction" chip. The value is resolved
+ * in Rust, since the menu only holds previews.
+ */
+export async function copyLastInteraction(chip: LastInteractionChip): Promise<void> {
+  return invoke("copy_last_interaction", { chip });
+}
+
+/** Copies a history entry's full response (or its prompt, when there is none). */
+export async function copyHistoryEntryContent(entryId: string): Promise<void> {
+  return invoke("copy_history_entry_content", { entryId });
 }

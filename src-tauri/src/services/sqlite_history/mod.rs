@@ -8,7 +8,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 
 use crate::models::history::{
-    ConversationHistoryData, HistoryEntry, HistoryEntryType, ImagePayload,
+    ConversationHistoryData, HistoryContentPart, HistoryEntry, HistoryEntryType, ImagePayload,
     SerializedConversationNode,
 };
 use crate::models::message::ImageData;
@@ -17,8 +17,8 @@ use serde::Serialize;
 use crate::services::history_search::{HistoryStatusFilter, HistoryTypeFilter};
 
 use codec::{
-    build_applied_skill_names, build_input_summary, build_output_summary, row_to_entry,
-    TreeJson, ENTRY_COLUMNS,
+    build_applied_skill_names, build_input_summary, build_output_summary, last_role_content,
+    row_to_entry, TreeJson, ENTRY_COLUMNS,
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -275,8 +275,8 @@ impl SqliteHistoryService {
                         skill_id: row.get(2)?,
                         skill_name: row.get(3)?,
                         entry_type: codec::parse_entry_type(row.get::<_, String>(4)?.as_str()),
-                        input_content: row.get(5)?,
-                        output_content: row.get(6)?,
+                        input_preview: row.get(5)?,
+                        output_preview: row.get(6)?,
                         success: row.get(7)?,
                         error: row.get(8)?,
                         is_multi_turn: row.get(9)?,
@@ -350,6 +350,40 @@ impl SqliteHistoryService {
              ORDER BY COALESCE(updated_at, created_at) DESC, rowid DESC LIMIT 1"
         );
         self.db.conn().query_row(&sql, [type_str], row_to_entry).ok()
+    }
+
+    /// Full stored text of one side of an entry, bypassing the capped
+    /// `input_preview` / `output_preview` columns. Reads the conversation tree
+    /// without loading attached images; falls back to the preview column for
+    /// simple entries, which have no tree.
+    pub fn resolve_full_content(
+        &self,
+        entry_id: &str,
+        part: HistoryContentPart,
+    ) -> Option<String> {
+        let (input_preview, output_preview, tree_json): (String, Option<String>, Option<String>) =
+            self.db
+                .conn()
+                .query_row(
+                    "SELECT input_content, output_content, tree_json FROM conversations WHERE id = ?1",
+                    [entry_id],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                )
+                .ok()?;
+
+        let role = match part {
+            HistoryContentPart::Input => "user",
+            HistoryContentPart::Output => "assistant",
+        };
+
+        let from_tree = tree_json
+            .and_then(|json| serde_json::from_str::<TreeJson>(&json).ok())
+            .and_then(|tree| last_role_content(&tree.nodes, role));
+
+        from_tree.or(match part {
+            HistoryContentPart::Input => Some(input_preview),
+            HistoryContentPart::Output => output_preview,
+        })
     }
 
     pub fn get_conversation_data(&self, entry_id: &str) -> Option<ConversationHistoryData> {
