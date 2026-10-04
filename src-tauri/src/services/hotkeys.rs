@@ -104,6 +104,7 @@ pub fn shortcut_for_action(settings: &Settings, action: &str) -> Option<String> 
         .map(|(shortcut, _)| shortcut)
 }
 
+#[cfg(target_os = "linux")]
 fn gtk_key_name(key: &str) -> Option<String> {
     let name = match key {
         "ArrowUp" => "Up",
@@ -129,6 +130,7 @@ fn gtk_key_name(key: &str) -> Option<String> {
     Some(name.to_string())
 }
 
+#[cfg(target_os = "linux")]
 pub fn to_gtk_accelerator(binding: &str) -> Option<String> {
     let mut parts: Vec<&str> = binding.split('+').collect();
     let key = parts.pop()?;
@@ -156,6 +158,7 @@ pub fn to_gtk_accelerator(binding: &str) -> Option<String> {
     }
 }
 
+#[cfg(target_os = "linux")]
 pub fn accelerators_by_action(bindings: &[(String, String)]) -> HashMap<String, Vec<String>> {
     let mut map: HashMap<String, Vec<String>> = HashMap::new();
     for (binding, action) in bindings {
@@ -378,6 +381,7 @@ mod tests {
     use crate::models::settings::KeymapGroup;
     use std::collections::HashMap;
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn to_gtk_accelerator_translates_bindings() {
         let cases = [
@@ -395,6 +399,7 @@ mod tests {
         }
     }
 
+    #[cfg(target_os = "linux")]
     #[test]
     fn accelerators_by_action_groups_bindings_and_skips_unknown_keys() {
         let bindings = vec![
