@@ -3,6 +3,7 @@ import { tick } from "svelte";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
 import { debug as logDebug } from "@tauri-apps/plugin-log";
+import { isFirstPlacementPending, clearFirstPlacementPending } from "$lib/stores/contextMenu.svelte";
 
 interface WorkArea {
   cursorX: number;
@@ -11,6 +12,7 @@ interface WorkArea {
   workY: number;
   workWidth: number;
   workHeight: number;
+  shellPlacement: boolean;
 }
 
 const MENU_WIDTH = 320;
@@ -58,10 +60,33 @@ export function useMenuPositioning(opts: Opts) {
       if (y < wa.workY) y = wa.workY;
     }
 
+    async function placeThroughShell() {
+      const first = isFirstPlacementPending();
+      await invoke("place_context_menu", { x, y, first });
+      if (first) clearFirstPlacementPending();
+      if (gen !== resizeGeneration || !opts.isVisible()) return;
+
+      const correctedHeight = menuEl!.scrollHeight + 2;
+      if (correctedHeight !== height) {
+        height = correctedHeight;
+        positionFromHeight(height);
+        await win.setSize(new LogicalSize(MENU_WIDTH, height));
+        if (gen !== resizeGeneration || !opts.isVisible()) return;
+        await invoke("place_context_menu", { x, y, first: false });
+      }
+      logDebug(`[ctx-menu] placed through shell at (${x}, ${y}), size ${MENU_WIDTH}x${height}`);
+    }
+
     positionFromHeight(height);
     hoverEnabled = false;
     await win.setSize(new LogicalSize(MENU_WIDTH, height));
     if (gen !== resizeGeneration || !opts.isVisible()) return;
+
+    if (wa?.shellPlacement === true) {
+      await placeThroughShell();
+      return;
+    }
+
     if (wa) {
       await win.setPosition(new LogicalPosition(x, y));
       if (gen !== resizeGeneration || !opts.isVisible()) return;

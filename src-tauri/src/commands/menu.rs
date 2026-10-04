@@ -17,6 +17,8 @@ use crate::services::speech::{AudioClipStore, SpeechService};
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
 
+pub const CONTEXT_MENU_TITLE: &str = "Promptheus Context Menu";
+
 #[derive(Serialize, Clone)]
 struct ShowMenuPayload {
     cursor_x: f64,
@@ -25,6 +27,50 @@ struct ShowMenuPayload {
     work_y: f64,
     work_width: f64,
     work_height: f64,
+    shell_placement: bool,
+}
+
+#[cfg(target_os = "linux")]
+fn payload_from_pointer(pointer: (i32, i32, i32, i32, i32, i32)) -> ShowMenuPayload {
+    let (cursor_x, cursor_y, work_x, work_y, work_width, work_height) = pointer;
+    ShowMenuPayload {
+        cursor_x: cursor_x as f64,
+        cursor_y: cursor_y as f64,
+        work_x: work_x as f64,
+        work_y: work_y as f64,
+        work_width: work_width as f64,
+        work_height: work_height as f64,
+        shell_placement: true,
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn shell_pointer_payload() -> Option<ShowMenuPayload> {
+    let t = std::time::Instant::now();
+    let result = async {
+        crate::services::gnome_shell::proxy()
+            .await?
+            .get_pointer()
+            .await
+    }
+    .await;
+    match result {
+        Ok(pointer) => {
+            log::debug!(
+                target: "app_lib::commands::menu",
+                "show_context_menu_window: GetPointer OK in {:?}",
+                t.elapsed(),
+            );
+            Some(payload_from_pointer(pointer))
+        }
+        Err(e) => {
+            log::warn!(
+                target: "app_lib::commands::menu",
+                "show_context_menu_window: GetPointer failed, falling back to cursor_position: {e}",
+            );
+            None
+        }
+    }
 }
 
 fn truncate(s: &str, max_len: usize) -> String {
@@ -178,6 +224,14 @@ pub async fn show_context_menu_window(app: tauri::AppHandle) -> crate::Result<()
         .get_webview_window("context-menu")
         .ok_or_else(|| Error::Other("context-menu window not found".into()))?;
 
+    #[cfg(target_os = "linux")]
+    if crate::services::gnome_shell::is_gnome_wayland() {
+        if let Some(payload) = shell_pointer_payload().await {
+            app.emit_to("context-menu", "show-context-menu", payload)?;
+            return Ok(());
+        }
+    }
+
     log::debug!(target: "app_lib::commands::menu", "show_context_menu_window: calling cursor_position()");
     let t0 = std::time::Instant::now();
     let cursor_pos = win.cursor_position()?;
@@ -206,6 +260,7 @@ pub async fn show_context_menu_window(app: tauri::AppHandle) -> crate::Result<()
         work_y: work.position.y as f64 / scale,
         work_width: work.size.width as f64 / scale,
         work_height: work.size.height as f64 / scale,
+        shell_placement: false,
     };
 
     log::debug!(
@@ -262,6 +317,64 @@ pub async fn show_context_menu_panel(app: tauri::AppHandle) -> crate::Result<()>
         }
         Ok(())
     }
+}
+
+#[tauri::command]
+pub async fn place_context_menu(
+    app: tauri::AppHandle,
+    x: f64,
+    y: f64,
+    first: bool,
+) -> crate::Result<()> {
+    #[cfg(target_os = "linux")]
+    if crate::services::gnome_shell::is_gnome_wayland() {
+        return place_context_menu_through_shell(&app, x.round() as i32, y.round() as i32, first)
+            .await;
+    }
+    let _ = (app, x, y, first);
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+async fn place_context_menu_through_shell(
+    app: &tauri::AppHandle,
+    x: i32,
+    y: i32,
+    first: bool,
+) -> crate::Result<()> {
+    use std::future::{poll_fn, Future};
+    use std::task::Poll;
+
+    let win = app
+        .get_webview_window("context-menu")
+        .ok_or_else(|| Error::Other("context-menu window not found".into()))?;
+    let proxy = crate::services::gnome_shell::proxy()
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?;
+
+    let t = std::time::Instant::now();
+    let mut call = std::pin::pin!(proxy.place_window(CONTEXT_MENU_TITLE, x, y, first));
+    if first {
+        poll_fn(|cx| {
+            let _ = call.as_mut().poll(cx);
+            Poll::Ready(())
+        })
+        .await;
+        win.show()?;
+    }
+    let placed = call.await.map_err(|e| Error::Other(e.to_string()))?;
+    log::debug!(
+        target: "app_lib::commands::menu",
+        "place_context_menu: PlaceWindow(({x}, {y}), activate={first}) -> {placed} in {:?}",
+        t.elapsed(),
+    );
+    if !placed {
+        log::warn!(
+            target: "app_lib::commands::menu",
+            "place_context_menu: extension found no window titled {CONTEXT_MENU_TITLE:?}",
+        );
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -358,4 +471,20 @@ pub async fn refresh_menu_providers(
 ) -> crate::Result<()> {
     menu_coordinator.lock().await.refresh_all();
     Ok(())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pointer_tuple_maps_to_shell_placement_payload() {
+        let payload = payload_from_pointer((100, 200, 0, 32, 1920, 1048));
+        assert_eq!((payload.cursor_x, payload.cursor_y), (100.0, 200.0));
+        assert_eq!(
+            (payload.work_x, payload.work_y, payload.work_width, payload.work_height),
+            (0.0, 32.0, 1920.0, 1048.0),
+        );
+        assert!(payload.shell_placement);
+    }
 }

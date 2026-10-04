@@ -13,6 +13,7 @@ interface WorkArea {
   workY: number;
   workWidth: number;
   workHeight: number;
+  shellPlacement: boolean;
 }
 
 let _items = $state<MenuItem[]>([]);
@@ -25,6 +26,7 @@ let _recordingSkillId = $state<string | null>(null);
 let _openTrigger = $state(0);
 let _openedAt = 0;
 let _workArea: WorkArea | null = null;
+let _firstPlacementPending = false;
 
 const BLUR_GRACE_MS = 500;
 let numberBuffer = "";
@@ -155,9 +157,18 @@ function getWorkArea(): WorkArea | null {
   return _workArea;
 }
 
+function isFirstPlacementPending(): boolean {
+  return _firstPlacementPending;
+}
+
+function clearFirstPlacementPending() {
+  _firstPlacementPending = false;
+}
+
 async function openMenu(workArea: WorkArea | null) {
   try {
     _workArea = workArea;
+    _firstPlacementPending = workArea?.shellPlacement === true;
     await fetchRecordingState();
     const fetched = await invoke<MenuItem[]>("get_context_menu_items");
     _items = applyItemStates(fetched);
@@ -435,6 +446,7 @@ async function init() {
     work_y: number;
     work_width: number;
     work_height: number;
+    shell_placement: boolean;
   }>("show-context-menu", (event) => {
     const p = event.payload;
     openMenu({
@@ -444,6 +456,7 @@ async function init() {
       workY: p.work_y,
       workWidth: p.work_width,
       workHeight: p.work_height,
+      shellPlacement: p.shell_placement,
     });
   });
   unlistenContextChanged = await listen("context-changed", () => {
@@ -538,6 +551,8 @@ export {
   isRecording,
   getRecordingSkillId,
   getWorkArea,
+  isFirstPlacementPending,
+  clearFirstPlacementPending,
   getOpenTrigger,
   openMenu,
   closeMenu,

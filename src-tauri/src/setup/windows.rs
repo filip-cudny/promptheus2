@@ -6,7 +6,7 @@ pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::E
         "context-menu",
         tauri::WebviewUrl::App("context-menu.html".into()),
     )
-    .title("")
+    .title(crate::commands::menu::CONTEXT_MENU_TITLE)
     .inner_size(320.0, 400.0)
     .resizable(false)
     .decorations(false)

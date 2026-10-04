@@ -124,6 +124,7 @@ macro_rules! handlers {
             $crate::commands::menu::refresh_menu_providers,
             $crate::commands::menu::show_context_menu_window,
             $crate::commands::menu::show_context_menu_panel,
+            $crate::commands::menu::place_context_menu,
             $crate::commands::menu::hide_context_menu_panel,
             $crate::commands::menu::focus_context_menu,
             // === notification ===
