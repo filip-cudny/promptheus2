@@ -194,6 +194,8 @@ export default class PromptheusExtension extends Extension {
             () => this._applyAnchor(anchor, 're-anchor on size-changed'));
         anchor.unmanagedId = win.connect('unmanaged', () => this._releaseAnchor(anchor));
         this._anchors.set(title, anchor);
+        win.make_above();
+        console.log(`Promptheus: make_above "${title}"`);
         this._applyAnchor(anchor, 'anchor');
         anchor.idleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
             anchor.idleId = 0;
