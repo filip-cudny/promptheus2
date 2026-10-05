@@ -17,6 +17,14 @@ pub trait Shell {
 
     fn place_window(&self, title: &str, x: i32, y: i32, activate: bool) -> zbus::Result<bool>;
 
+    fn place_window_anchored(
+        &self,
+        title: &str,
+        right: i32,
+        bottom: i32,
+        activate: bool,
+    ) -> zbus::Result<bool>;
+
     fn get_focused_wm_class(&self) -> zbus::Result<String>;
 
     #[zbus(signal)]
@@ -56,6 +64,104 @@ pub async fn proxy() -> zbus::Result<ShellProxy<'static>> {
 pub fn blocking_proxy() -> zbus::Result<ShellProxyBlocking<'static>> {
     let connection = zbus::block_on(connection())?;
     ShellProxyBlocking::new(&zbus::blocking::Connection::from(connection))
+}
+
+fn to_error(e: impl std::fmt::Display) -> crate::Error {
+    crate::Error::Other(e.to_string())
+}
+
+/// Moves the window titled `title` to the logical stage position `(x, y)`.
+///
+/// With `show` set, the `PlaceWindow` call goes on the bus before `show` runs:
+/// GTK3 on Wayland creates the surface at `show()`, and the extension waits for
+/// the window and keeps it hidden until its first frame, then moves it.
+pub async fn place_window(
+    title: &str,
+    x: i32,
+    y: i32,
+    activate: bool,
+    show: Option<&tauri::WebviewWindow>,
+) -> crate::Result<bool> {
+    call_placement("PlaceWindow", title, x, y, activate, show).await
+}
+
+/// Keeps the frame of the window titled `title` anchored with its bottom-right
+/// corner at the logical stage position `(right, bottom)`.
+///
+/// The extension re-applies the anchor on every size change of the window
+/// until it is unmanaged, so callers only resize afterwards. `show` behaves as
+/// in [`place_window`].
+pub async fn place_window_anchored(
+    title: &str,
+    right: i32,
+    bottom: i32,
+    activate: bool,
+    show: Option<&tauri::WebviewWindow>,
+) -> crate::Result<bool> {
+    call_placement("PlaceWindowAnchored", title, right, bottom, activate, show).await
+}
+
+async fn call_placement(
+    method: &'static str,
+    title: &str,
+    a: i32,
+    b: i32,
+    activate: bool,
+    show: Option<&tauri::WebviewWindow>,
+) -> crate::Result<bool> {
+    let proxy = proxy().await.map_err(to_error)?;
+    let body = (title, a, b, activate);
+    let t = std::time::Instant::now();
+    let placed = match show {
+        Some(win) => call_before_show(&proxy, method, &body, win).await?,
+        None => proxy.inner().call(method, &body).await.map_err(to_error)?,
+    };
+    log::debug!(
+        "{method}({title:?}, ({a}, {b}), activate={activate}, show={}) -> {placed} in {:?}",
+        show.is_some(),
+        t.elapsed(),
+    );
+    if !placed {
+        log::warn!("extension found no window titled {title:?} for {method}");
+    }
+    Ok(placed)
+}
+
+async fn call_before_show(
+    proxy: &ShellProxy<'static>,
+    method: &'static str,
+    body: &(&str, i32, i32, bool),
+    win: &tauri::WebviewWindow,
+) -> crate::Result<bool> {
+    use futures::StreamExt;
+
+    let connection = proxy.inner().connection().clone();
+    let mut replies = zbus::MessageStream::from(&connection);
+    let call = zbus::Message::method_call("/com/promptheus/Shell", method)
+        .and_then(|b| b.destination("org.gnome.Shell"))
+        .and_then(|b| b.interface("com.promptheus.Shell"))
+        .and_then(|b| b.build(body))
+        .map_err(to_error)?;
+    let serial = call.primary_header().serial_num();
+    connection.send(&call).await.map_err(to_error)?;
+    win.show()?;
+    let reply = loop {
+        let message = replies
+            .next()
+            .await
+            .ok_or_else(|| to_error("session bus connection closed"))?
+            .map_err(to_error)?;
+        if message.header().reply_serial() == Some(serial) {
+            break message;
+        }
+    };
+    if reply.message_type() == zbus::message::Type::Error {
+        return Err(to_error(format!(
+            "{method} failed: {:?}",
+            reply.header().error_name()
+        )));
+    }
+    reply.body().deserialize::<bool>().map_err(to_error)
 }
 
 #[cfg(test)]

@@ -31,7 +31,7 @@ pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::E
         "notification",
         tauri::WebviewUrl::App("notification.html".into()),
     )
-    .title("")
+    .title(crate::commands::notification::NOTIFICATION_TITLE)
     .inner_size(380.0, 100.0)
     .resizable(false)
     .decorations(false)

@@ -342,64 +342,11 @@ async fn place_context_menu_through_shell(
     y: i32,
     first: bool,
 ) -> crate::Result<()> {
-    use futures::StreamExt;
-
     let win = app
         .get_webview_window("context-menu")
         .ok_or_else(|| Error::Other("context-menu window not found".into()))?;
-    let proxy = crate::services::gnome_shell::proxy()
-        .await
-        .map_err(|e| Error::Other(e.to_string()))?;
-
-    let t = std::time::Instant::now();
-    let placed = if first {
-        let connection = proxy.inner().connection().clone();
-        let mut replies = zbus::MessageStream::from(&connection);
-        let call = zbus::Message::method_call("/com/promptheus/Shell", "PlaceWindow")
-            .and_then(|b| b.destination("org.gnome.Shell"))
-            .and_then(|b| b.interface("com.promptheus.Shell"))
-            .and_then(|b| b.build(&(CONTEXT_MENU_TITLE, x, y, first)))
-            .map_err(|e| Error::Other(e.to_string()))?;
-        let serial = call.primary_header().serial_num();
-        connection
-            .send(&call)
-            .await
-            .map_err(|e| Error::Other(e.to_string()))?;
-        win.show()?;
-        let reply = loop {
-            let message = replies
-                .next()
-                .await
-                .ok_or_else(|| Error::Other("session bus connection closed".into()))?
-                .map_err(|e| Error::Other(e.to_string()))?;
-            if message.header().reply_serial() == Some(serial) {
-                break message;
-            }
-        };
-        if reply.message_type() == zbus::message::Type::Error {
-            return Err(Error::Other(format!("PlaceWindow failed: {:?}", reply.header().error_name())));
-        }
-        reply
-            .body()
-            .deserialize::<bool>()
-            .map_err(|e| Error::Other(e.to_string()))?
-    } else {
-        proxy
-            .place_window(CONTEXT_MENU_TITLE, x, y, first)
-            .await
-            .map_err(|e| Error::Other(e.to_string()))?
-    };
-    log::debug!(
-        target: "app_lib::commands::menu",
-        "place_context_menu: PlaceWindow(({x}, {y}), activate={first}) -> {placed} in {:?}",
-        t.elapsed(),
-    );
-    if !placed {
-        log::warn!(
-            target: "app_lib::commands::menu",
-            "place_context_menu: extension found no window titled {CONTEXT_MENU_TITLE:?}",
-        );
-    }
+    let show = first.then_some(&win);
+    crate::services::gnome_shell::place_window(CONTEXT_MENU_TITLE, x, y, first, show).await?;
     Ok(())
 }
 

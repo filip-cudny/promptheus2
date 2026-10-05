@@ -11,10 +11,42 @@ use crate::Error;
 static PENDING: Mutex<Vec<NotificationPayload>> = Mutex::new(Vec::new());
 static SHOW_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
 
+pub const NOTIFICATION_TITLE: &str = "Promptheus Notifications";
+
+const WINDOW_WIDTH: f64 = 380.0;
+const FIRST_SHOW_HEIGHT: f64 = 140.0;
+const MIN_HEIGHT: u32 = 60;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 struct AnchorPosition {
     work_right: i32,
     work_bottom: i32,
     scale: f64,
+    through_shell: bool,
+}
+
+impl AnchorPosition {
+    fn from_work_area(
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        scale: f64,
+        through_shell: bool,
+    ) -> Self {
+        Self {
+            work_right: x + width,
+            work_bottom: y + height,
+            scale,
+            through_shell,
+        }
+    }
+
+    fn origin(&self, logical_height: f64) -> (i32, i32) {
+        let width = (WINDOW_WIDTH * self.scale) as i32;
+        let height = (logical_height * self.scale) as i32;
+        (self.work_right - width, self.work_bottom - height)
+    }
 }
 
 static ANCHOR: Mutex<Option<AnchorPosition>> = Mutex::new(None);
@@ -67,51 +99,110 @@ pub fn show_notification(handle: &tauri::AppHandle, payload: NotificationPayload
     mark_webview_alive();
     let handle = handle.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = show_notification_window(&handle) {
+        if let Err(e) = show_notification_window(&handle).await {
             log::error!("show_notification failed: {e}");
             SHOW_IN_FLIGHT.store(false, Ordering::Release);
         }
     });
 }
 
+fn resize(win: &WebviewWindow, logical_height: f64) -> crate::Result<()> {
+    win.set_size(tauri::Size::Logical(tauri::LogicalSize {
+        width: WINDOW_WIDTH,
+        height: logical_height,
+    }))?;
+    Ok(())
+}
+
+fn remember_anchor(anchor: AnchorPosition) {
+    *ANCHOR.lock().unwrap_or_else(|e| e.into_inner()) = Some(anchor);
+}
+
 fn compute_anchor(
     handle: &tauri::AppHandle,
     win: &WebviewWindow,
-) -> crate::Result<(i32, i32, f64)> {
+) -> crate::Result<AnchorPosition> {
     let cursor_pos = win.cursor_position()?;
     let monitor = find_monitor_at(handle, cursor_pos.x as i32, cursor_pos.y as i32)
         .map_err(Error::Other)?;
     let work = monitor.work_area();
-    let scale = monitor.scale_factor();
-
-    let work_right = work.position.x + work.size.width as i32;
-    let work_bottom = work.position.y + work.size.height as i32;
-
-    *ANCHOR.lock().unwrap_or_else(|e| e.into_inner()) = Some(AnchorPosition {
-        work_right,
-        work_bottom,
-        scale,
-    });
-
-    Ok((work_right, work_bottom, scale))
+    Ok(AnchorPosition::from_work_area(
+        work.position.x,
+        work.position.y,
+        work.size.width as i32,
+        work.size.height as i32,
+        monitor.scale_factor(),
+        false,
+    ))
 }
 
-fn show_notification_window(handle: &tauri::AppHandle) -> crate::Result<()> {
+#[cfg(target_os = "linux")]
+async fn show_through_shell(win: &WebviewWindow) -> crate::Result<()> {
+    let pointer = crate::services::gnome_shell::proxy()
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?
+        .get_pointer()
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?;
+    let (_, _, work_x, work_y, work_width, work_height) = pointer;
+    let anchor =
+        AnchorPosition::from_work_area(work_x, work_y, work_width, work_height, 1.0, true);
+    remember_anchor(anchor);
+    crate::services::gnome_shell::place_window_anchored(
+        NOTIFICATION_TITLE,
+        anchor.work_right,
+        anchor.work_bottom,
+        false,
+        Some(win),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn anchor_and_show(
+    handle: &tauri::AppHandle,
+    win: &WebviewWindow,
+    logical_height: f64,
+) -> crate::Result<()> {
+    resize(win, logical_height)?;
+
+    #[cfg(target_os = "linux")]
+    if crate::services::gnome_shell::is_gnome_wayland() {
+        match show_through_shell(win).await {
+            Ok(()) => return Ok(()),
+            Err(e) => log::warn!(
+                "placing the notification through the GNOME Shell extension failed, \
+                 leaving placement to the compositor: {e}"
+            ),
+        }
+    }
+
+    let anchor = compute_anchor(handle, win)?;
+    remember_anchor(anchor);
+    let (x, y) = anchor.origin(logical_height);
+    win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))?;
+    win.show()?;
+    Ok(())
+}
+
+fn resize_and_place(
+    win: &WebviewWindow,
+    anchor: AnchorPosition,
+    logical_height: f64,
+) -> crate::Result<()> {
+    if !anchor.through_shell {
+        let (x, y) = anchor.origin(logical_height);
+        win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))?;
+    }
+    resize(win, logical_height)
+}
+
+async fn show_notification_window(handle: &tauri::AppHandle) -> crate::Result<()> {
     let win = handle
         .get_webview_window("notification")
         .ok_or_else(|| Error::Other("notification window not found".into()))?;
 
-    let (work_right, work_bottom, scale) = compute_anchor(handle, &win)?;
-
-    let win_width = (380.0 * scale) as i32;
-    let win_height = (140.0 * scale) as i32;
-
-    let x = work_right - win_width;
-    let y = work_bottom - win_height;
-
-    win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))?;
-
-    win.show()?;
+    anchor_and_show(handle, &win, FIRST_SHOW_HEIGHT).await?;
 
     #[cfg(target_os = "linux")]
     {
@@ -152,35 +243,35 @@ pub async fn update_notification_window(
         return Ok(());
     }
 
-    let anchor = ANCHOR
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .as_ref()
-        .map(|a| (a.work_right, a.work_bottom, a.scale));
+    let new_height = height.max(MIN_HEIGHT) as f64;
+    let cached = *ANCHOR.lock().unwrap_or_else(|e| e.into_inner());
 
-    let (work_right, work_bottom, scale) = match anchor {
-        Some(cached) => cached,
+    let anchor = match cached {
+        Some(anchor) => anchor,
         None => {
             log::warn!("notification anchor dropped while toasts are live, re-showing window");
-            let recomputed = compute_anchor(&app, &win)?;
             SHOW_IN_FLIGHT.store(true, Ordering::Release);
-            win.show()?;
-            recomputed
+            anchor_and_show(&app, &win, new_height).await?;
+            let shown = *ANCHOR.lock().unwrap_or_else(|e| e.into_inner());
+            shown.ok_or_else(|| Error::Other("notification anchor missing after show".into()))?
         }
     };
 
-    let new_height = height.max(60);
-    let win_width = (380.0 * scale) as i32;
-    let win_height = (new_height as f64 * scale) as i32;
-
-    let x = work_right - win_width;
-    let y = work_bottom - win_height;
-
-    win.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }))?;
-    win.set_size(tauri::Size::Logical(tauri::LogicalSize {
-        width: 380.0,
-        height: new_height as f64,
-    }))?;
+    if anchor.through_shell {
+        log::debug!(
+            "notification window update: count={count}, logical height={new_height}, \
+             anchored by the extension at bottom-right ({}, {})",
+            anchor.work_right,
+            anchor.work_bottom,
+        );
+    } else {
+        log::debug!(
+            "notification window update: count={count}, logical height={new_height}, \
+             origin={:?}",
+            anchor.origin(new_height),
+        );
+    }
+    resize_and_place(&win, anchor, new_height)?;
 
     #[cfg(target_os = "linux")]
     {
@@ -207,6 +298,24 @@ mod tests {
 
         assert!(!ack_expired(Some(within), now));
         assert!(ack_expired(Some(beyond), now));
+    }
+
+    #[test]
+    fn work_area_gives_the_bottom_right_anchor() {
+        let anchor = AnchorPosition::from_work_area(1920, 32, 2560, 1408, 1.0, true);
+        assert_eq!((anchor.work_right, anchor.work_bottom), (1920 + 2560, 32 + 1408));
+    }
+
+    #[test]
+    fn origin_anchors_the_bottom_right_corner_in_logical_pixels() {
+        let anchor = AnchorPosition::from_work_area(0, 0, 1920, 1080, 1.0, false);
+        assert_eq!(anchor.origin(200.0), (1920 - 380, 1080 - 200));
+    }
+
+    #[test]
+    fn origin_scales_window_size_to_physical_pixels() {
+        let anchor = AnchorPosition::from_work_area(0, 0, 3840, 2100, 2.0, false);
+        assert_eq!(anchor.origin(140.0), (3840 - 760, 2100 - 280));
     }
 
     #[test]

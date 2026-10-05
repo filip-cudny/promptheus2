@@ -249,6 +249,7 @@ Cwd is **not** part of either contract. Tauri inherits the launch cwd (Finder/la
 - `tauri-plugin-*` crates are pinned exactly **but independently** of Tauri core. The official plugin ecosystem does not version in lockstep with core minors (no `2.10.x` line of plugins exists). The pins in `Cargo.toml` are the latest releases known to build against the core version we use; bump them deliberately, not in bulk.
 - `serde`, `tokio`, `thiserror` track latest stable major lines — they're pulled in transitively anyway, divergence costs duplicate compilation.
 - Before adding any dependency, verify the current latest version (`cargo search`); follow the verification process in `docs/api-verification.md`.
+- `src-tauri/.cargo/config.toml` sets `[env] CXXFLAGS = "-include cstdint"`: `sentencepiece-sys` 0.11.3 uses `uint32_t` without `<cstdint>` and fails on GCC 15 (`'uint32_t' does not name a type`). The flag is plain (all targets) so every clone and worktree builds; a `CXXFLAGS` set in the shell overrides it, and cargo run from outside `src-tauri/` lacks it. Delete the file once `sentencepiece-sys` includes `<cstdint>` itself.
 
 ### Testing
 

@@ -34,7 +34,7 @@ services/
 │   ├── codec.rs         #   TreeJson, row→entry mapping, summary builders (pure)
 │   └── tests.rs         #   CRUD integration tests against an in-memory database
 ├── gnome_shell/         # GNOME Shell extension D-Bus client (Linux)
-│   └── mod.rs           #   Shell proxy, OnceLock connection, is_gnome_wayland
+│   └── mod.rs           #   Shell proxy, OnceLock connection, is_gnome_wayland, place_window, place_window_anchored
 ├── hotkeys.rs           # Hotkey translation and OS-filtered binding resolution
 ├── image_storage.rs     # ImageStorage — temp image file save/load for conversation history
 ├── mcp/                 # MCP client — rmcp-based tool server management
@@ -178,9 +178,10 @@ Pure functions (no struct/state) for translating keymap settings into `tauri-plu
 
 Linux-only D-Bus client for the `com.promptheus.Shell` interface served by the GNOME Shell extension (`linux/gnome-shell-extension/`). Uses `zbus`.
 
-- `ShellProxy` (`#[zbus::proxy]`): `set_shortcuts`, `get_pointer`, `place_window`, `get_focused_wm_class`, signals `shortcut_activated` and `ready`.
+- `ShellProxy` (`#[zbus::proxy]`): `set_shortcuts`, `get_pointer`, `place_window`, `place_window_anchored`, `get_focused_wm_class`, signals `shortcut_activated` and `ready`.
 - The session connection lives in a process-wide `OnceLock`, so callers without state (`frontmost_app::detect()`) reach it through `proxy()` (async) or `blocking_proxy()`.
 - `is_gnome_wayland()` is the backend selector: `XDG_SESSION_TYPE=wayland` and `XDG_CURRENT_DESKTOP` contains `GNOME`.
+- `place_window(title, x, y, activate, show)` (context menu) and `place_window_anchored(title, right, bottom, activate, show)` (notification window) are the only callers of `PlaceWindow` and `PlaceWindowAnchored`; both go through `call_placement`. With `show = Some(win)` the call is sent before `win.show()` and the reply awaited after it; with `None` it is a plain call to an already visible window.
 - `frontmost_app` on Wayland reads `GetFocusedWmClass`; it returns an empty string when the extension is unreachable.
 - Shortcuts run in `setup/shortcuts.rs` `run_shell_shortcuts`: `SetShortcuts` after every `Ready`; it falls back to the settings passed to `register` before `ConfigService` is managed.
 

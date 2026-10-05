@@ -30,6 +30,13 @@ const INTERFACE_XML = `
       <arg type="b" direction="in" name="activate"/>
       <arg type="b" direction="out" name="placed"/>
     </method>
+    <method name="PlaceWindowAnchored">
+      <arg type="s" direction="in" name="title"/>
+      <arg type="i" direction="in" name="right"/>
+      <arg type="i" direction="in" name="bottom"/>
+      <arg type="b" direction="in" name="activate"/>
+      <arg type="b" direction="out" name="placed"/>
+    </method>
     <method name="GetFocusedWmClass">
       <arg type="s" direction="out" name="wm_class"/>
     </method>
@@ -44,6 +51,7 @@ export default class PromptheusExtension extends Extension {
     enable() {
         this._grabbed = new Map();
         this._pending = new Map();
+        this._anchors = new Map();
         this._watchId = 0;
         this._dbus = Gio.DBusExportedObject.wrapJSObject(INTERFACE_XML, this);
         this._dbus.export(Gio.DBus.session, OBJECT_PATH);
@@ -62,7 +70,10 @@ export default class PromptheusExtension extends Extension {
         this._ungrabAll();
         for (const pending of [...this._pending.values()])
             pending.finish(false);
+        for (const anchor of [...this._anchors.values()])
+            this._releaseAnchor(anchor);
         this._pending = null;
+        this._anchors = null;
         this._grabbed = null;
         this._dbus.unexport();
         this._dbus = null;
@@ -102,20 +113,15 @@ export default class PromptheusExtension extends Extension {
     }
 
     PlaceWindowAsync(params, invocation) {
-        try {
-            const [title, x, y, activate] = params;
-            this._pending.get(title)?.finish(false);
-            const win = this._findWindow(title);
-            if (win) {
-                this._placeNow(win, x, y, activate);
-                invocation.return_value(new GLib.Variant('(b)', [true]));
-                return;
-            }
-            this._waitForWindow(title, x, y, activate, invocation);
-        } catch (e) {
-            logError(e, 'Promptheus: PlaceWindow failed');
-            invocation.return_dbus_error('com.promptheus.Shell.Error', String(e));
-        }
+        const [title, x, y, activate] = params;
+        this._placeOrWait('PlaceWindow', title, invocation,
+            win => this._placeNow(win, x, y, activate));
+    }
+
+    PlaceWindowAnchoredAsync(params, invocation) {
+        const [title, right, bottom, activate] = params;
+        this._placeOrWait('PlaceWindowAnchored', title, invocation,
+            win => this._anchorWindow(win, title, right, bottom, activate));
     }
 
     GetFocusedWmClass() {
@@ -157,13 +163,76 @@ export default class PromptheusExtension extends Extension {
             .find(win => win.get_title() === title);
     }
 
+    _placeOrWait(method, title, invocation, place) {
+        try {
+            this._pending.get(title)?.finish(false);
+            const win = this._findWindow(title);
+            if (win) {
+                place(win);
+                invocation.return_value(new GLib.Variant('(b)', [true]));
+                return;
+            }
+            this._waitForWindow(title, place, invocation);
+        } catch (e) {
+            logError(e, `Promptheus: ${method} failed`);
+            invocation.return_dbus_error('com.promptheus.Shell.Error', String(e));
+        }
+    }
+
     _placeNow(win, x, y, activate) {
         win.move_frame(true, x, y);
         if (activate)
             Main.activateWindow(win);
     }
 
-    _waitForWindow(title, x, y, activate, invocation) {
+    _anchorWindow(win, title, right, bottom, activate) {
+        const previous = this._anchors.get(title);
+        if (previous)
+            this._releaseAnchor(previous);
+        const anchor = {title, win, right, bottom, sizeId: 0, unmanagedId: 0, idleId: 0};
+        anchor.sizeId = win.connect('size-changed',
+            () => this._applyAnchor(anchor, 're-anchor on size-changed'));
+        anchor.unmanagedId = win.connect('unmanaged', () => this._releaseAnchor(anchor));
+        this._anchors.set(title, anchor);
+        this._applyAnchor(anchor, 'anchor');
+        anchor.idleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            anchor.idleId = 0;
+            this._applyAnchor(anchor, 're-anchor after placement');
+            return GLib.SOURCE_REMOVE;
+        });
+        if (activate)
+            Main.activateWindow(win);
+    }
+
+    _applyAnchor(anchor, reason) {
+        const {title, win, right, bottom} = anchor;
+        const before = win.get_frame_rect();
+        const x = right - before.width;
+        const y = bottom - before.height;
+        const moved = before.x !== x || before.y !== y;
+        if (moved)
+            win.move_frame(true, x, y);
+        const after = win.get_frame_rect();
+        console.log(`Promptheus: ${reason} "${title}" right=${right} bottom=${bottom} ` +
+            `moved=${moved} frame=${after.x},${after.y} ${after.width}x${after.height}`);
+    }
+
+    _releaseAnchor(anchor) {
+        if (anchor.sizeId)
+            anchor.win.disconnect(anchor.sizeId);
+        if (anchor.unmanagedId)
+            anchor.win.disconnect(anchor.unmanagedId);
+        if (anchor.idleId)
+            GLib.Source.remove(anchor.idleId);
+        anchor.sizeId = 0;
+        anchor.unmanagedId = 0;
+        anchor.idleId = 0;
+        if (this._anchors?.get(anchor.title) === anchor)
+            this._anchors.delete(anchor.title);
+        console.log(`Promptheus: anchor released "${anchor.title}"`);
+    }
+
+    _waitForWindow(title, place, invocation) {
         const display = global.display;
         const titleWatches = [];
         let createdId = 0;
@@ -206,7 +275,7 @@ export default class PromptheusExtension extends Extension {
             stopWatchingCreation();
             actor = win.get_compositor_private();
             if (!actor) {
-                this._placeNow(win, x, y, activate);
+                place(win);
                 finish(true);
                 return;
             }
@@ -214,7 +283,7 @@ export default class PromptheusExtension extends Extension {
             frameId = actor.connect('first-frame', () => {
                 actor.disconnect(frameId);
                 frameId = 0;
-                this._placeNow(win, x, y, activate);
+                place(win);
                 finish(true);
             });
         };
