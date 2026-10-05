@@ -92,6 +92,8 @@ Uses the `arboard` crate for cross-platform clipboard access (text and images). 
 
 **Methods**: `new`, `get_text`, `set_text`, `is_empty`, `has_image`, `get_image_base64`.
 
+**Linux text writes**: `write_text` pipes the text to `wl-copy` when `WAYLAND_DISPLAY` is set, else to `xclip -selection clipboard`. When the tool is missing it logs `warn` (`clipboard subprocess failed`) and falls back to `tauri-plugin-clipboard-manager`; on GNOME Wayland that fallback writes the XWayland clipboard and the text does not reach Wayland apps, without an error. The `.deb` therefore depends on `wl-clipboard` (`bundle.linux.deb.depends` in `src-tauri/tauri.conf.json`).
+
 ### ConfigService specifics
 
 **Load sequence**: `load_env()` -> read JSON -> deserialize -> `migrate_model_params()` -> `load_api_keys()` -> `validate()`.
