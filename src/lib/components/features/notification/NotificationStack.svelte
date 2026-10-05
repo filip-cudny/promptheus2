@@ -1,11 +1,23 @@
 <script lang="ts">
   import { Toaster } from "svelte-sonner";
   import { CircleCheck, CircleX, Info, CircleAlert } from "lucide-svelte";
+  import type { ToasterHandlers } from "./drivers/useNotificationDrain.svelte";
 
-  let { expand = false }: { expand?: boolean } = $props();
+  let { expand = false, handlers }: { expand?: boolean; handlers?: ToasterHandlers } = $props();
 </script>
 
-<Toaster position="bottom-right" closeButton={false} richColors={false} duration={2000} {expand} gap={14}>
+<Toaster
+  position="bottom-right"
+  closeButton={false}
+  richColors={false}
+  duration={2000}
+  {expand}
+  gap={14}
+  onmouseenter={handlers?.onmouseenter}
+  onmouseleave={handlers?.onmouseleave}
+  onpointerdown={handlers?.onpointerdown}
+  onpointerup={handlers?.onpointerup}
+>
   {#snippet successIcon()}
     <CircleCheck size={20} strokeWidth={2} />
   {/snippet}

@@ -17,7 +17,7 @@
   onDestroy(() => drain.destroy());
 </script>
 
-<NotificationStack expand={isLinux} />
+<NotificationStack expand={isLinux} handlers={drain.toasterHandlers} />
 
 <style>
   :global(html),
