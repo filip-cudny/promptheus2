@@ -25,7 +25,15 @@
         "depends": ["wl-clipboard"],
         "files": {
           "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/metadata.json": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/metadata.json",
-          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/extension.js": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/extension.js"
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/extension.js": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/extension.js",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/success-mono.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/success-mono.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/success-color.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/success-color.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/error-mono.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/error-mono.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/error-color.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/error-color.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/info-mono.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/info-mono.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/info-color.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/info-color.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/warning-mono.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/warning-mono.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/warning-color.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/warning-color.svg"
         }
       }
     },

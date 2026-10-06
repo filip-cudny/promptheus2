@@ -2,11 +2,16 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
+import St from 'gi://St';
+import Clutter from 'gi://Clutter';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const PLACE_WINDOW_TIMEOUT_MS = 1000;
 const OBJECT_PATH = '/com/promptheus/Shell';
+const TOAST_DURATIONS_MS = {success: 2000, error: 4000, info: 2000, warning: 3000};
+const TOAST_MARGIN = 20;
+const TOAST_GAP = 14;
 
 const INTERFACE_XML = `
 <node>
@@ -40,6 +45,12 @@ const INTERFACE_XML = `
     <method name="GetFocusedWmClass">
       <arg type="s" direction="out" name="wm_class"/>
     </method>
+    <method name="ShowToast">
+      <arg type="s" direction="in" name="level"/>
+      <arg type="s" direction="in" name="title"/>
+      <arg type="s" direction="in" name="message"/>
+      <arg type="b" direction="in" name="monochromatic"/>
+    </method>
     <signal name="ShortcutActivated">
       <arg type="s" name="action"/>
     </signal>
@@ -53,6 +64,9 @@ export default class PromptheusExtension extends Extension {
         this._pending = new Map();
         this._anchors = new Map();
         this._watchId = 0;
+        this._toasts = [];
+        this._toastMonitor = 0;
+        this._restackId = 0;
         this._dbus = Gio.DBusExportedObject.wrapJSObject(INTERFACE_XML, this);
         this._dbus.export(Gio.DBus.session, OBJECT_PATH);
         this._acceleratorId = global.display.connect(
@@ -72,6 +86,7 @@ export default class PromptheusExtension extends Extension {
             pending.finish(false);
         for (const anchor of [...this._anchors.values()])
             this._releaseAnchor(anchor);
+        this._clearToasts();
         this._pending = null;
         this._anchors = null;
         this._grabbed = null;
@@ -126,6 +141,86 @@ export default class PromptheusExtension extends Extension {
 
     GetFocusedWmClass() {
         return global.display.focus_window?.get_wm_class() ?? '';
+    }
+
+    ShowToast(level, title, message, monochromatic) {
+        const duration = TOAST_DURATIONS_MS[level];
+        if (duration === undefined)
+            throw new Error(`Unknown toast level: ${level}`);
+        const actor = this._buildToast(level, title, message, monochromatic);
+        if (this._toasts.length === 0)
+            this._toastMonitor = global.display.get_current_monitor();
+        const toast = {actor, timerId: 0};
+        this._toasts.push(toast);
+        toast.timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, duration, () => {
+            toast.timerId = 0;
+            this._toasts = this._toasts.filter(t => t !== toast);
+            toast.actor.destroy();
+            this._restackToasts();
+            return GLib.SOURCE_REMOVE;
+        });
+        if (!this._restackId) {
+            this._restackId = global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
+                this._restackId = 0;
+                this._restackToasts();
+                return GLib.SOURCE_REMOVE;
+            });
+        }
+        Main.layoutManager.uiGroup.add_child(actor);
+    }
+
+    _buildToast(level, title, message, monochromatic) {
+        const actor = new St.BoxLayout({
+            style: 'width: 300px; background-color: #ffffff; border: 1px solid rgba(200,200,200,0.9); ' +
+                'border-radius: 8px; padding: 12px 16px; spacing: 10px; ' +
+                'font-family: "Noto Sans", sans-serif; box-shadow: 0 4px 12px rgba(0,0,0,0.15);',
+            opacity: 204,
+            reactive: false,
+        });
+        const file = this.dir.get_child('icons').get_child(`${level}-${monochromatic ? 'mono' : 'color'}.svg`);
+        actor.add_child(new St.Icon({
+            gicon: new Gio.FileIcon({file}),
+            icon_size: 20,
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+        const text = new St.BoxLayout({vertical: true, x_expand: true});
+        text.add_child(new St.Label({
+            text: title,
+            style: 'color: #1a1a1a; font-weight: 600; font-size: 14px;',
+        }));
+        if (message !== '') {
+            text.add_child(new St.Label({
+                text: message,
+                style: 'color: rgba(0,0,0,0.65); font-size: 13px;',
+            }));
+        }
+        actor.add_child(text);
+        return actor;
+    }
+
+    _restackToasts() {
+        const area = Main.layoutManager.getWorkAreaForMonitor(this._toastMonitor);
+        let bottom = area.y + area.height - TOAST_MARGIN;
+        for (const {actor} of [...this._toasts].reverse()) {
+            const [, width] = actor.get_preferred_width(-1);
+            const [, height] = actor.get_preferred_height(width);
+            const y = bottom - height;
+            actor.set_position(area.x + area.width - TOAST_MARGIN - width, y);
+            bottom = y - TOAST_GAP;
+        }
+    }
+
+    _clearToasts() {
+        for (const toast of this._toasts) {
+            if (toast.timerId)
+                GLib.Source.remove(toast.timerId);
+            toast.actor.destroy();
+        }
+        this._toasts.length = 0;
+        if (this._restackId) {
+            global.compositor.get_laters().remove(this._restackId);
+            this._restackId = 0;
+        }
     }
 
     _onAcceleratorActivated(id) {
