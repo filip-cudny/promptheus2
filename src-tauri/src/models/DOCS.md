@@ -22,6 +22,10 @@ models/
 
 All model structs derive `Debug, Clone, Serialize, Deserialize`. Add `Default` when the struct has meaningful defaults. Add `PartialEq` only when needed for comparisons (e.g., enums used in assertions).
 
+### Stable `settings.json`
+
+Maps in `Settings` serialize sorted by key (`serialize_sorted`, `BTreeMap` for `ModelParameters.extra`), so `settings.json` is byte-stable across saves. Unknown top-level keys are kept in `Settings.extra`.
+
 ### Serde defaults pattern
 
 The settings JSON uses `snake_case` keys — no `rename_all` needed on settings structs (Rust fields already match).

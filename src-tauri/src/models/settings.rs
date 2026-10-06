@@ -1,8 +1,17 @@
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize, Serializer};
+use std::collections::{BTreeMap, HashMap};
 
 use crate::models::capabilities::ModelCapabilities;
 use crate::services::env_resolve::resolve_env_refs;
+
+fn serialize_sorted<S, K, V>(map: &HashMap<K, V>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    K: Ord + Serialize,
+    V: Serialize,
+{
+    serializer.collect_map(map.iter().collect::<BTreeMap<_, _>>())
+}
 
 const fn default_timeout_secs() -> u64 {
     180
@@ -13,11 +22,11 @@ pub struct McpServerConfig {
     pub command: String,
     #[serde(default)]
     pub args: Vec<String>,
-    #[serde(default)]
+    #[serde(default, serialize_with = "serialize_sorted")]
     pub env: HashMap<String, String>,
     #[serde(default = "default_timeout_secs")]
     pub timeout_secs: u64,
-    #[serde(default)]
+    #[serde(default, serialize_with = "serialize_sorted")]
     pub tool_timeouts: HashMap<String, u64>,
 }
 
@@ -86,7 +95,7 @@ pub struct Settings {
     #[serde(default = "default_recent_apps_count")]
     pub recent_apps_count: usize,
 
-    #[serde(default)]
+    #[serde(default, serialize_with = "serialize_sorted")]
     pub mcp_servers: HashMap<String, McpServerConfig>,
 
     #[serde(default)]
@@ -94,6 +103,9 @@ pub struct Settings {
 
     #[serde(default = "default_webview_providers")]
     pub webview_providers: Vec<WebviewProvider>,
+
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -344,7 +356,7 @@ pub struct ModelParameters {
     pub reasoning_effort: Option<String>,
 
     #[serde(flatten)]
-    pub extra: HashMap<String, serde_json::Value>,
+    pub extra: BTreeMap<String, serde_json::Value>,
 }
 
 impl Default for ModelParameters {
@@ -356,7 +368,7 @@ impl Default for ModelParameters {
             frequency_penalty: None,
             presence_penalty: None,
             reasoning_effort: None,
-            extra: HashMap::new(),
+            extra: BTreeMap::new(),
         }
     }
 }
@@ -364,7 +376,7 @@ impl Default for ModelParameters {
 impl ModelParameters {
     pub fn from_map(map: &HashMap<String, serde_json::Value>) -> Self {
         let mut params = Self::default();
-        let mut extra = HashMap::new();
+        let mut extra = BTreeMap::new();
         for (key, value) in map {
             match key.as_str() {
                 "temperature" => params.temperature = value.as_f64(),
@@ -384,6 +396,7 @@ impl ModelParameters {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KeymapGroup {
     pub context: String,
+    #[serde(serialize_with = "serialize_sorted")]
     pub bindings: HashMap<String, String>,
 }
 
@@ -556,6 +569,7 @@ impl Default for Settings {
             mcp_servers: HashMap::new(),
             skills_order: Vec::new(),
             webview_providers: default_webview_providers(),
+            extra: serde_json::Map::new(),
         }
     }
 }

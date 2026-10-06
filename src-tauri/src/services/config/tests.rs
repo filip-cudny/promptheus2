@@ -615,3 +615,65 @@ fn test_stt_keyterms_resolves_config_dir_placeholder_to_relative() {
         "${{CONFIG_DIR}} expands to absolute, which is rejected for config-relative fields"
     );
 }
+
+fn assert_keys_in_order(text: &str, keys: &[&str]) {
+    let positions: Vec<usize> = keys
+        .iter()
+        .map(|k| text.find(&format!("\"{k}\"")).unwrap_or_else(|| panic!("missing {k}")))
+        .collect();
+    assert!(positions.windows(2).all(|w| w[0] < w[1]), "not sorted: {keys:?}");
+}
+
+#[test]
+fn test_load_writes_sorted_maps_byte_stable() {
+    let dir = setup_test_dir();
+    let mut raw: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(dir.path().join("settings.json")).unwrap())
+            .unwrap();
+    raw["mcp_servers"] = serde_json::json!({
+        "srv_c": {"command": "c"},
+        "srv_a": {
+            "command": "a",
+            "env": {"ENV_C": "3", "ENV_A": "1", "ENV_B": "2"},
+            "tool_timeouts": {"tool_c": 3, "tool_a": 1, "tool_b": 2}
+        },
+        "srv_b": {"command": "b"}
+    });
+    raw["keymaps"] = serde_json::json!([{
+        "context": "linux",
+        "bindings": {"Ctrl+C": "act_c", "Ctrl+A": "act_a", "Ctrl+B": "act_b"}
+    }]);
+    let mut model = serde_json::to_value(test_model("sorted-model", "k")).unwrap();
+    model["parameters"] = serde_json::json!({"xk_c": 3, "xk_a": 1, "xk_b": 2});
+    raw["models"].as_array_mut().unwrap().push(model);
+    let path = dir.path().join("settings.json");
+    fs::write(&path, serde_json::to_string_pretty(&raw).unwrap()).unwrap();
+
+    ConfigService::load(dir.path(), None).unwrap();
+    let first = fs::read_to_string(&path).unwrap();
+    ConfigService::load(dir.path(), None).unwrap();
+    let second = fs::read_to_string(&path).unwrap();
+
+    assert_eq!(first, second);
+    assert_keys_in_order(&first, &["srv_a", "srv_b", "srv_c"]);
+    assert_keys_in_order(&first, &["ENV_A", "ENV_B", "ENV_C"]);
+    assert_keys_in_order(&first, &["tool_a", "tool_b", "tool_c"]);
+    assert_keys_in_order(&first, &["Ctrl+A", "Ctrl+B", "Ctrl+C"]);
+    assert_keys_in_order(&first, &["xk_a", "xk_b", "xk_c"]);
+}
+
+#[test]
+fn test_unknown_top_level_key_survives_load() {
+    let dir = setup_test_dir();
+    let path = dir.path().join("settings.json");
+    let mut raw: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    raw["zz_future_key"] = serde_json::json!({"a": 1});
+    fs::write(&path, serde_json::to_string_pretty(&raw).unwrap()).unwrap();
+
+    ConfigService::load(dir.path(), None).unwrap();
+
+    let saved: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+    assert_eq!(saved["zz_future_key"], serde_json::json!({"a": 1}));
+}
