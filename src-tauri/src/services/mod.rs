@@ -7,6 +7,7 @@ pub mod env_resolve;
 pub mod frontmost_app;
 #[cfg(target_os = "linux")]
 pub mod gnome_shell;
+pub mod settings_sync;
 pub mod shell_env;
 pub mod mcp;
 pub mod config;

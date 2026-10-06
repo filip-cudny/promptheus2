@@ -44,6 +44,11 @@ services/
 ├── notification.rs      # NotificationService — event-gated notifications
 ├── placeholder.rs       # PlaceholderService — template variable substitution and image injection
 ├── execution.rs         # PromptExecutionService — execution state machine (cancel, streaming, model resolution)
+├── settings_sync/       # SettingsSync — git sync of the symlinked settings repo
+│   ├── mod.rs           #   SettingsSync engine, SyncHooks trait, SyncStatus, one sync cycle
+│   ├── git.rs           #   GitRunner — non-interactive git CLI with timeout and login-shell env
+│   ├── detect.rs        #   detect() — repo, stage paths and branch from the config dir symlinks
+│   └── tests.rs         #   Cycle and detection tests on temp bare repo + two clones
 ├── skill/               # SkillService — file-based skill loading + DB-backed versioning
 │   ├── mod.rs           #   SkillService load/list/sync_versions; SkillError
 │   └── parser.rs        #   YAML frontmatter + body splitter (pure)
@@ -76,6 +81,10 @@ Services are plain structs (not singletons). They are created once at startup an
 - **Constructor**: `Service::load(args) -> Result<Self, ServiceError>` — reads from disk, validates, returns ready-to-use instance.
 - **Persistence**: `save(&self)` writes to disk. Mutation methods do **not** auto-save — the command layer decides when to persist.
 - **Reload**: `reload(&mut self)` re-reads from disk, replacing in-memory state.
+
+### Settings sync
+
+`settings_sync` runs the system `git` CLI with the login-shell environment (`shell_env`), never interactively: stdin null, `GIT_TERMINAL_PROMPT=0`, `ssh -o BatchMode=yes` unless the user configured ssh, per-command timeout with `kill_on_drop`. `detect()` finds the repo from the `settings.json`, `prompts`, `skills` symlinks of the config dir (none → `off`, different repos → `error`). A cycle: detect, `fetch`, `lock_local()` hook, `add -A` + `commit` on the target paths only (`*.tmp` excluded), `rebase --autostash @{u}`, `reload` hook for files changed by the rebase, unlock, `push` when ahead. A failed rebase is aborted and the engine pauses (`conflict`): `Periodic` triggers return without running git until a `Startup`/`Manual` cycle succeeds; the pause is in memory only. Locks, reload, events and toasts are supplied by the caller through `SyncHooks`. Logs and errors carry git stderr only, never file contents or diffs.
 
 ### ClipboardService specifics
 
