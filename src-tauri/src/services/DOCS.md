@@ -34,14 +34,14 @@ services/
 │   ├── codec.rs         #   TreeJson, row→entry mapping, summary builders (pure)
 │   └── tests.rs         #   CRUD integration tests against an in-memory database
 ├── gnome_shell/         # GNOME Shell extension D-Bus client (Linux)
-│   └── mod.rs           #   Shell proxy, OnceLock connection, is_gnome_wayland, place_window, place_window_anchored
+│   └── mod.rs           #   Shell proxy, OnceLock connection, is_gnome_wayland, place_window, place_window_anchored, show_toast
 ├── hotkeys.rs           # Hotkey translation and OS-filtered binding resolution
 ├── image_storage.rs     # ImageStorage — temp image file save/load for conversation history
 ├── mcp/                 # MCP client — rmcp-based tool server management
 │   ├── mod.rs           #   Re-exports McpClient, McpError
 │   └── client.rs        #   McpClient wrapper, McpError enum
 ├── menu_coordinator.rs  # MenuCoordinator — aggregates menu providers into ordered sections
-├── notification.rs      # NotificationService — event-gated Tauri event emission
+├── notification.rs      # NotificationService — event-gated notifications
 ├── placeholder.rs       # PlaceholderService — template variable substitution and image injection
 ├── execution.rs         # PromptExecutionService — execution state machine (cancel, streaming, model resolution)
 ├── skill/               # SkillService — file-based skill loading + DB-backed versioning
@@ -211,13 +211,12 @@ Manages temporary image files for conversation history. Saves base64-encoded ima
 
 ### NotificationService specifics
 
-Holds an `AppHandle` to emit Tauri events to the frontend. Unlike other services, this one depends on the Tauri runtime — it uses the `Emitter` trait (`use tauri::Emitter`) to send events.
+Holds an `AppHandle`. Unlike other services, this one depends on the Tauri runtime.
+**Event gating**: `notify()` checks `NotificationSettings.events` before showing. If the event is disabled in settings, the notification is silently dropped. Error-level notifications bypass the gate.
 
-**Event gating**: `notify()` checks `NotificationSettings.events` before emitting. If the event is disabled in settings, the notification is silently dropped. Error-level notifications bypass the gate and always emit.
+**Display**: `notify()` calls `commands::notification::show_notification`. On GNOME Wayland it routes to the extension's `ShowToast` (falling back to the notification webview window if the call fails); elsewhere it uses the notification webview window. See `docs/gotchas/linux-wayland-gnome-extension.md`.
 
-**Event name**: all notifications are emitted as a single `"notification"` Tauri event. The payload includes `level`, `title`, and optional `message`. The frontend listens on this one event name and routes by level.
-
-**`is_event_enabled` mapping**: maps 12 string event names (e.g., `"prompt_execution_success"`, `"clipboard_copy"`) to the corresponding bool field on `NotificationEvents`. Unknown event names return `true` (safe default — show rather than hide).
+**`is_event_enabled` mapping**: maps 13 string event names (e.g., `"prompt_execution_success"`, `"clipboard_copy"`) to the corresponding bool field on `NotificationEvents`. Unknown event names return `true` (safe default — show rather than hide).
 
 **Methods**: `new(AppHandle)`, `notify(event_name, level, title, message, settings)`.
 

@@ -21,6 +21,7 @@ Interface `com.promptheus.Shell`, object `/com/promptheus/Shell`, served by `org
 | `PlaceWindow` | `(s title, i x, i y, b activate) → b` | move the window with that title, optionally activate it |
 | `PlaceWindowAnchored` | `(s title, i right, i bottom, b activate) → b` | keep the frame's bottom-right corner at `(right, bottom)` until the window is unmanaged, optionally activate it |
 | `GetFocusedWmClass` | `() → s` | `wm_class` of the focused window |
+| `ShowToast` | `(s level, s title, s message, b monochromatic) → ()` | draw a toast as a shell actor; `level` is `success`/`error`/`info`/`warning`, empty `message` = no description |
 | `ShortcutActivated` | signal `s action` | an accelerator fired |
 | `Ready` | signal | the extension is enabled and serving |
 
@@ -44,8 +45,14 @@ Context menu placement:
 - GTK `set_opacity` cannot do this: it writes an X11 atom and is X11-only (see [linux-webkit-opacity.md](linux-webkit-opacity.md)).
 - `GetPointer` supplies the cursor and work area; the frontend positions inside the work area and calls `place_context_menu` (see `src/lib/components/features/context-menu/DOCS.md`).
 
-Notification placement:
-- `commands/notification.rs` reads `GetPointer` and sends `PlaceWindowAnchored(NOTIFICATION_TITLE, work_right, work_bottom, activate=false)` before the first `show()`, with the bottom-right corner of the work area under the pointer. The window is `focusable(false)` and is never activated.
+Notification toasts:
+- On GNOME Wayland `commands/notification.rs::show_notification` calls `ShowToast` (async, proxy method `show_toast`) and does not touch the webview queue. The extension draws the toast as St actors in `Main.layoutManager.uiGroup`: not windows, never focused, non-reactive (no hover pause).
+- Durations are set in the extension (`TOAST_DURATIONS_MS`: success 2000, error 4000, info 2000, warning 3000 ms). The stack sits bottom-right in the work area of the monitor current when the stack went from empty to non-empty, newest at the bottom.
+- A failed `ShowToast` call logs `warn` and shows that payload through the webview window path below. That path is also the only one on X11 and macOS.
+- Why actors: Mutter ignores the GTK3 `accept_focus` hint (`focusable(false)`) for Wayland clients and focuses the mapped notification window anyway, even with `activate=false`; focus returns only when `hide()` unmanages it.
+
+Notification placement (webview window path):
+- `commands/notification.rs` reads `GetPointer` and sends `PlaceWindowAnchored(NOTIFICATION_TITLE, work_right, work_bottom, activate=false)` before the first `show()`, with the bottom-right corner of the work area under the pointer. The window is `focusable(false)`, which Mutter does not honor for Wayland clients (see above).
 - The extension sets the frame to x = `right` − frame width, y = `bottom` − frame height from `get_frame_rect()`. It applies this at placement (on `first-frame` when it had to wait for the window), once more on the next idle, and on every `size-changed` of the `MetaWindow`. It moves only when the computed x/y differ from the current frame position, so its own move does not re-trigger it.
 - The anchor is stored per title; a new `PlaceWindowAnchored` for the same title replaces it. It is released on the window's `unmanaged` signal: GTK3 on Wayland destroys the surface on `hide()`, so each show cycle is a new `MetaWindow` and a new `PlaceWindowAnchored`.
 - `.always_on_top(true)` in `setup/windows.rs` maps to GTK `keep_above`, which has no Wayland protocol under GTK3 (`xdg-shell` has no stacking request); on Wayland it does nothing.
@@ -61,14 +68,14 @@ Notification placement:
 - `services/monitor.rs::find_monitor_at` falls back to the monitor under the cursor, then `primary_monitor()`, then the first of `available_monitors()`. On Wayland `cursor_position()` is not global and GDK reports no primary monitor; without the last fallback the notification never showed (`no monitor found`).
 
 Install:
-- `.deb`: `bundle.linux.deb.files` in `src-tauri/tauri.conf.json` installs `metadata.json` and `extension.js` into `/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/`.
+- `.deb`: `bundle.linux.deb.files` in `src-tauri/tauri.conf.json` installs `metadata.json`, `extension.js` and `icons/` into `/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/`.
 - Development: `linux/gnome-shell-extension/install-dev.sh` symlinks the directory into `~/.local/share/gnome-shell/extensions/`.
 - Then re-login and `gnome-extensions enable promptheus@promptheus.desktop`. The app never installs or enables the extension itself.
 - `metadata.json` `shell-version` lists exact GNOME majors (`["50"]`); add the new major on each GNOME release.
 - A changed `extension.js` needs a re-login: GNOME Shell caches loaded ES modules, so `gnome-extensions disable`/`enable` re-runs the old code.
 
 Debugging:
-- `gdbus introspect --session --dest org.gnome.Shell --object-path /com/promptheus/Shell` — 5 methods, 2 signals when the extension is enabled.
+- `gdbus introspect --session --dest org.gnome.Shell --object-path /com/promptheus/Shell` — 6 methods, 2 signals when the extension is enabled.
 - `gdbus monitor --session --dest org.gnome.Shell` — watch `Ready` and `ShortcutActivated`.
 - `journalctl --user /usr/bin/gnome-shell` — extension errors.
 - `journalctl --user -f -o cat /usr/bin/gnome-shell | grep Promptheus` — anchored placement lines: `Promptheus: make_above "<title>"` on every anchor, then `Promptheus: anchor "<title>" right=R bottom=B moved=… frame=X,Y WxH`, then `re-anchor after placement` and `re-anchor on size-changed` with the same fields, and `anchor released "<title>"` on hide. A correct anchor has `X + W = R` and `Y + H = B`.
