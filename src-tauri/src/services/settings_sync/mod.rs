@@ -13,7 +13,7 @@ use async_trait::async_trait;
 use serde::Serialize;
 
 pub use detect::{detect, Detection, SyncRepo};
-pub use git::{GitError, GitOutput, GitRunner};
+pub use git::{GitError, GitRunner};
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 const UNKNOWN_HOST: &str = "unknown";
