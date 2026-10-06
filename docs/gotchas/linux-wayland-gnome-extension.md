@@ -48,6 +48,7 @@ Context menu placement:
 Notification toasts:
 - On GNOME Wayland `commands/notification.rs::show_notification` calls `ShowToast` (async, proxy method `show_toast`) and does not touch the webview queue. The extension draws the toast as St actors in `Main.layoutManager.uiGroup`: not windows, never focused, non-reactive (no hover pause).
 - Durations are set in the extension (`TOAST_DURATIONS_MS`: success 2000, error 4000, info 2000, warning 3000 ms). The stack sits bottom-right in the work area of the monitor current when the stack went from empty to non-empty, newest at the bottom.
+- Each toast actor eases in and out with the values of GNOME Shell's window map/destroy animation for normal windows (`windowManager.js` `_mapWindow`/`_destroyWindow`): enter from pivot (0.5, 1.0), scale 0.01 × 0.05, opacity 0 to scale 1 and opacity 204 in 150 ms `EASE_OUT_EXPO`; exit at pivot (0.5, 0.5) to scale 0.8 and opacity 0 in 150 ms `EASE_OUT_QUAD`, after which the actor is destroyed and the remaining toasts move to their new place without animation.
 - A failed `ShowToast` call logs `warn` and shows that payload through the webview window path below. That path is also the only one on X11 and macOS.
 - Why actors: Mutter ignores the GTK3 `accept_focus` hint (`focusable(false)`) for Wayland clients and focuses the mapped notification window anyway, even with `activate=false`; focus returns only when `hide()` unmanages it.
 

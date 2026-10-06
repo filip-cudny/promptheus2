@@ -12,6 +12,9 @@ const OBJECT_PATH = '/com/promptheus/Shell';
 const TOAST_DURATIONS_MS = {success: 2000, error: 4000, info: 2000, warning: 3000};
 const TOAST_MARGIN = 20;
 const TOAST_GAP = 14;
+const TOAST_OPACITY = 204;
+const TOAST_SHOW_ANIMATION_MS = 150;
+const TOAST_HIDE_ANIMATION_MS = 150;
 
 const INTERFACE_XML = `
 <node>
@@ -154,9 +157,7 @@ export default class PromptheusExtension extends Extension {
         this._toasts.push(toast);
         toast.timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, duration, () => {
             toast.timerId = 0;
-            this._toasts = this._toasts.filter(t => t !== toast);
-            toast.actor.destroy();
-            this._restackToasts();
+            this._hideToast(toast);
             return GLib.SOURCE_REMOVE;
         });
         if (!this._restackId) {
@@ -167,6 +168,33 @@ export default class PromptheusExtension extends Extension {
             });
         }
         Main.layoutManager.uiGroup.add_child(actor);
+        actor.ease({
+            opacity: TOAST_OPACITY,
+            scale_x: 1,
+            scale_y: 1,
+            duration: TOAST_SHOW_ANIMATION_MS,
+            mode: Clutter.AnimationMode.EASE_OUT_EXPO,
+        });
+    }
+
+    _hideToast(toast) {
+        toast.actor.set_pivot_point(0.5, 0.5);
+        toast.actor.ease({
+            opacity: 0,
+            scale_x: 0.8,
+            scale_y: 0.8,
+            duration: TOAST_HIDE_ANIMATION_MS,
+            mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            onStopped: () => this._removeToast(toast),
+        });
+    }
+
+    _removeToast(toast) {
+        if (!this._toasts.includes(toast))
+            return;
+        this._toasts = this._toasts.filter(t => t !== toast);
+        toast.actor.destroy();
+        this._restackToasts();
     }
 
     _buildToast(level, title, message, monochromatic) {
@@ -174,9 +202,12 @@ export default class PromptheusExtension extends Extension {
             style: 'width: 300px; background-color: #ffffff; border: 1px solid rgba(200,200,200,0.9); ' +
                 'border-radius: 8px; padding: 12px 16px; spacing: 10px; ' +
                 'font-family: "Noto Sans", sans-serif; box-shadow: 0 4px 12px rgba(0,0,0,0.15);',
-            opacity: 204,
+            opacity: 0,
+            scale_x: 0.01,
+            scale_y: 0.05,
             reactive: false,
         });
+        actor.set_pivot_point(0.5, 1.0);
         const file = this.dir.get_child('icons').get_child(`${level}-${monochromatic ? 'mono' : 'color'}.svg`);
         actor.add_child(new St.Icon({
             gicon: new Gio.FileIcon({file}),
@@ -211,12 +242,14 @@ export default class PromptheusExtension extends Extension {
     }
 
     _clearToasts() {
-        for (const toast of this._toasts) {
+        const toasts = this._toasts;
+        this._toasts = [];
+        for (const toast of toasts) {
             if (toast.timerId)
                 GLib.Source.remove(toast.timerId);
+            toast.actor.remove_all_transitions();
             toast.actor.destroy();
         }
-        this._toasts.length = 0;
         if (this._restackId) {
             global.compositor.get_laters().remove(this._restackId);
             this._restackId = 0;
