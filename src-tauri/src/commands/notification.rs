@@ -5,6 +5,8 @@ use std::time::{Duration, Instant};
 use tauri::{Manager, WebviewWindow};
 
 use crate::services::monitor::find_monitor_at;
+#[cfg(target_os = "linux")]
+use crate::services::notification::NotificationLevel;
 use crate::services::notification::NotificationPayload;
 use crate::Error;
 
@@ -72,7 +74,49 @@ fn webview_unresponsive() -> bool {
     ack_expired(last, Instant::now())
 }
 
+#[cfg(target_os = "linux")]
+fn toast_arguments(payload: &NotificationPayload) -> (&'static str, &str, &str, bool) {
+    let level = match payload.level {
+        NotificationLevel::Success => "success",
+        NotificationLevel::Error => "error",
+        NotificationLevel::Info => "info",
+        NotificationLevel::Warning => "warning",
+    };
+    let message = payload.message.as_deref().unwrap_or("");
+    (level, &payload.title, message, payload.monochromatic)
+}
+
+#[cfg(target_os = "linux")]
+async fn show_toast_through_shell(payload: &NotificationPayload) -> zbus::Result<()> {
+    let (level, title, message, monochromatic) = toast_arguments(payload);
+    crate::services::gnome_shell::proxy()
+        .await?
+        .show_toast(level, title, message, monochromatic)
+        .await?;
+    log::debug!("notification shown through the GNOME Shell extension: level={level}");
+    Ok(())
+}
+
 pub fn show_notification(handle: &tauri::AppHandle, payload: NotificationPayload) {
+    #[cfg(target_os = "linux")]
+    if crate::services::gnome_shell::is_gnome_wayland() {
+        let handle = handle.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = show_toast_through_shell(&payload).await {
+                log::warn!(
+                    "showing the notification through the GNOME Shell extension failed, \
+                     falling back to the webview: {e}"
+                );
+                show_in_webview(&handle, payload);
+            }
+        });
+        return;
+    }
+
+    show_in_webview(handle, payload);
+}
+
+fn show_in_webview(handle: &tauri::AppHandle, payload: NotificationPayload) {
     PENDING
         .lock()
         .unwrap_or_else(|e| e.into_inner())
@@ -316,6 +360,34 @@ mod tests {
     fn origin_scales_window_size_to_physical_pixels() {
         let anchor = AnchorPosition::from_work_area(0, 0, 3840, 2100, 2.0, false);
         assert_eq!(anchor.origin(140.0), (3840 - 760, 2100 - 280));
+    }
+
+    #[cfg(target_os = "linux")]
+    fn payload(level: NotificationLevel, message: Option<&str>) -> NotificationPayload {
+        NotificationPayload {
+            id: "n-1".into(),
+            level,
+            title: "t".into(),
+            message: message.map(String::from),
+            monochromatic: true,
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn toast_level_maps_to_the_four_extension_strings() {
+        let level = |l| toast_arguments(&payload(l, None)).0;
+        assert_eq!(level(NotificationLevel::Success), "success");
+        assert_eq!(level(NotificationLevel::Error), "error");
+        assert_eq!(level(NotificationLevel::Info), "info");
+        assert_eq!(level(NotificationLevel::Warning), "warning");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn toast_message_none_is_empty_and_some_is_kept() {
+        assert_eq!(toast_arguments(&payload(NotificationLevel::Info, None)).2, "");
+        assert_eq!(toast_arguments(&payload(NotificationLevel::Info, Some("x"))).2, "x");
     }
 
     #[test]

@@ -27,6 +27,14 @@ pub trait Shell {
 
     fn get_focused_wm_class(&self) -> zbus::Result<String>;
 
+    fn show_toast(
+        &self,
+        level: &str,
+        title: &str,
+        message: &str,
+        monochromatic: bool,
+    ) -> zbus::Result<()>;
+
     #[zbus(signal)]
     fn shortcut_activated(&self, action: String) -> zbus::Result<()>;
 
