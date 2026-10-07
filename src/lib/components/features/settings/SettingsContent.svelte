@@ -9,6 +9,7 @@
   import SectionNotifications from "./SectionNotifications.svelte";
   import SectionHistory from "./SectionHistory.svelte";
   import SectionSpeech from "./SectionSpeech.svelte";
+  import SectionSync from "./SectionSync.svelte";
 
   let { activeSection }: { activeSection: SettingsSection } = $props();
 
@@ -38,6 +39,8 @@
     <SectionHistory />
   {:else if activeSection === "speech"}
     <SectionSpeech />
+  {:else if activeSection === "sync"}
+    <SectionSync />
   {:else}
     <div class="placeholder">This section is not yet implemented.</div>
   {/if}

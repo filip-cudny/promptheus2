@@ -15,6 +15,7 @@ settings/
 ├── SectionAppearance.svelte       # Theme toggle
 ├── SectionHistory.svelte          # History retention window (presets + custom days, confirm before pruning) + storage card (size / reclaimable / Compact database)
 ├── SectionSpeech.svelte           # STT failure handling: transcription attempts, audio retention hours, keep-audio-on-success
+├── SectionSync.svelte             # Git settings sync: state, repo path, branch, last sync, "Sync now" (reads status via `$lib/services/settingsSync`)
 ├── SectionPromptBase.svelte       # Preferred name field + System / about_you / environment / input_format prompts (tabbed)
 ├── SectionSurfacePrompts.svelte   # Title generation + STT prompt + STT keyterms (tabbed)
 ├── SttKeytermsEditor.svelte       # STT keyterms file editor (chip view + raw text fallback)
@@ -39,7 +40,7 @@ Surrounding pieces (not in this dir):
 ### Adding a new section
 
 1. Add the id to the `SettingsSection` union and `SIDEBAR_ITEMS` array in `SettingsSidebar.svelte`. Set `enabled: true` only when the section actually renders.
-2. Create `Section<Name>.svelte` here and branch on it in `src/windows/settings-dialog/App.svelte`'s `{#if activeSection === ...}`.
+2. Create `Section<Name>.svelte` here and branch on it in `SettingsContent.svelte`'s `{#if activeSection === ...}`.
 3. Read state from `getSettingsStore()` — never `invoke("get_settings")` directly from a component.
 4. Write through `$lib/services/settings.ts` helpers; the store auto-refreshes on the backend's `settings-changed` event.
 

@@ -12,6 +12,7 @@
     | "shortcuts"
     | "skills"
     | "mcp_servers"
+    | "sync"
     | "advanced";
 
   export interface SidebarItem {
@@ -33,6 +34,7 @@
     { id: "shortcuts", label: "Shortcuts", enabled: false },
     { id: "skills", label: "Skills", enabled: true },
     { id: "mcp_servers", label: "MCP Servers", enabled: false },
+    { id: "sync", label: "Sync", enabled: true },
     { id: "advanced", label: "Advanced", enabled: false },
   ];
 </script>
