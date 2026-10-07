@@ -58,9 +58,9 @@ Notification toasts:
 - Why actors: Mutter ignores the GTK3 `accept_focus` hint (`focusable(false)`) for Wayland clients and focuses the mapped notification window anyway, even with `activate=false`; focus returns only when `hide()` unmanages it.
 
 Recording widget:
-- Drawn by the extension as St actors in `Main.layoutManager.uiGroup`, like the toasts: no modal (`Main.pushModal`), no `global.stage.grab`, so the client keeps keyboard focus. Buttons are `St.Button` children; dragging the pill body is handled in the shell.
+- Drawn by the extension as a reactive St actor added with `Main.layoutManager.addTopChrome` (unlike the non-reactive toasts, it receives clicks above windows): no modal (`Main.pushModal`), no `global.stage.grab`, so the client keeps keyboard focus. Buttons are `St.Button` children; dragging the pill body is handled in the shell (a `captured-event` handler on the stage for the duration of the drag).
 - `ShowRecordingWidget` position is validated by the shell against the current monitors; outside every work area (or `has_position = false`) it uses the default, bottom center 24 px above the work area bottom of the pointer's monitor.
-- Hidden by `HideRecordingWidget`, when the bus name of the `ShowRecordingWidget` caller vanishes, and in `disable()`.
+- Hidden by `HideRecordingWidget`, when the bus name of the `SetShortcuts` caller vanishes, and in `disable()`.
 - Rust side: `services/speech/widget.rs` (see `src-tauri/src/services/speech/DOCS.md`); position stored under `recording_widget.shell_position`. A failed `ShowRecordingWidget` makes the recording use toasts.
 
 Notification placement (webview window path):

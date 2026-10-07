@@ -51,9 +51,9 @@ Nothing is retried automatically at startup. Failed entries with a live clip wai
 | Command | Notes |
 |---------|-------|
 | `toggle_speech_recording` | Start/stop; on stop runs the retry loop in a background task |
-| `pause_speech_recording` | Pauses the running recording; ignored when not recording |
+| `pause_speech_recording` | Pauses the running recording; `NotRecording` error when none runs |
 | `resume_speech_recording` | Resumes a paused recording |
-| `cancel_speech_recording` | Discards the recording without transcribing |
+| `cancel_speech_recording` | Discards the recording without transcribing; ignored when not recording or while transcribing |
 | `retry_transcription` | Spawns a background retry; drives the UI through events, returns immediately |
 | `get_audio_clip_info` | `has_audio` / `expires_at` / `duration_secs` / `is_retrying` for one entry |
 | `export_audio_clip` | Copies the WAV to a caller-supplied destination (frontend picks it via `plugin-dialog`) |
