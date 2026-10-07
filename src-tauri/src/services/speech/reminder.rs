@@ -47,14 +47,27 @@ pub fn spawn(
         let mut cursor: usize = 0;
         let mut silence_since: Option<Instant> = None;
         let mut last_reminder_at = Instant::now();
+        let mut paused_since: Option<Instant> = None;
 
         loop {
             tokio::time::sleep(TICK).await;
 
-            let elapsed = match recording_elapsed(&speech, session).await {
-                Some(elapsed) => elapsed,
+            let (elapsed, paused) = match recording_state(&speech, session).await {
+                Some(state) => state,
                 None => return,
             };
+
+            if paused {
+                paused_since.get_or_insert_with(Instant::now);
+                continue;
+            }
+
+            if let Some(since) = paused_since.take() {
+                last_reminder_at = shift_for_pause(last_reminder_at, since.elapsed());
+                silence_since = None;
+                cursor = buffer.lock().unwrap_or_else(|e| e.into_inner()).len();
+                continue;
+            }
 
             let rms = {
                 let buf = buffer.lock().unwrap_or_else(|e| e.into_inner());
@@ -95,7 +108,7 @@ pub fn spawn(
                 return;
             }
 
-            if recording_elapsed(&speech, session).await.is_none() {
+            if recording_state(&speech, session).await.is_none() {
                 return;
             }
 
@@ -126,15 +139,22 @@ pub fn spawn(
     });
 }
 
-async fn recording_elapsed(speech: &Arc<Mutex<SpeechService>>, session: u64) -> Option<Duration> {
+async fn recording_state(
+    speech: &Arc<Mutex<SpeechService>>,
+    session: u64,
+) -> Option<(Duration, bool)> {
     let s = speech.lock().await;
     if !s.is_recording() || s.session() != session {
         return None;
     }
-    s.started_at().map(|t| t.elapsed())
+    s.elapsed().map(|elapsed| (elapsed, s.is_paused()))
 }
 
-fn rms(samples: &[i16]) -> f64 {
+fn shift_for_pause(last_reminder_at: Instant, pause: Duration) -> Instant {
+    last_reminder_at + pause
+}
+
+pub(super) fn rms(samples: &[i16]) -> f64 {
     if samples.is_empty() {
         return 0.0;
     }
@@ -165,6 +185,20 @@ mod tests {
     fn rms_of_speech_level_audio_is_above_threshold() {
         let loud: Vec<i16> = (0..100).map(|i| if i % 2 == 0 { 8000 } else { -8000 }).collect();
         assert!(rms(&loud) > SILENCE_RMS_THRESHOLD);
+    }
+
+    #[test]
+    fn shift_for_pause_keeps_hard_interval_from_firing_after_resume() {
+        let max_interval = Duration::from_secs(60);
+        let last_reminder_at = Instant::now();
+        let pause = Duration::from_secs(50);
+        let now = last_reminder_at + Duration::from_secs(65);
+
+        let unshifted = now.duration_since(last_reminder_at);
+        let shifted = now.duration_since(shift_for_pause(last_reminder_at, pause));
+
+        assert!(unshifted >= max_interval);
+        assert!(shifted < max_interval);
     }
 
     #[test]

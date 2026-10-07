@@ -219,7 +219,7 @@ impl Default for TitleGenConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpeechToTextConfig {
     #[serde(default)]
     pub model_id: Option<String>,
@@ -248,6 +248,25 @@ pub struct SpeechToTextConfig {
 
     #[serde(default)]
     pub keep_audio_on_success: bool,
+
+    #[serde(default = "default_true")]
+    pub show_recording_widget: bool,
+}
+
+impl Default for SpeechToTextConfig {
+    fn default() -> Self {
+        Self {
+            model_id: None,
+            language: None,
+            keyterms_file: None,
+            no_verbatim: None,
+            prompt: None,
+            auto_retry_attempts: default_auto_retry_attempts(),
+            audio_retention_hours: default_audio_retention_hours(),
+            keep_audio_on_success: false,
+            show_recording_widget: true,
+        }
+    }
 }
 
 fn default_auto_retry_attempts() -> u32 {
@@ -647,6 +666,17 @@ mod tests {
         assert_eq!(settings.prompt_base.environment, "prompts/base/environment.md");
         assert_eq!(settings.prompt_base.input_format, "prompts/base/input_format.md");
         assert!(settings.preferred_name.is_empty());
+    }
+
+    #[test]
+    fn speech_to_text_defaults_show_widget_and_retry() {
+        let surfaces: Surfaces = serde_json::from_str("{}").unwrap();
+        assert!(surfaces.speech_to_text.show_recording_widget);
+        assert_eq!(surfaces.speech_to_text.auto_retry_attempts, 3);
+
+        let config = SpeechToTextConfig::default();
+        assert!(config.show_recording_widget);
+        assert_eq!(config.auto_retry_attempts, 3);
     }
 
     #[test]

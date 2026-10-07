@@ -760,6 +760,48 @@ pub async fn discard_audio_clip(
 }
 
 #[tauri::command]
+pub async fn pause_speech_recording(app: AppHandle) -> crate::Result<()> {
+    let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
+    let mut s = speech_state.lock().await;
+    s.pause()?;
+    log::info!("pause_speech_recording: session={}", s.session());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn resume_speech_recording(app: AppHandle) -> crate::Result<()> {
+    let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
+    let mut s = speech_state.lock().await;
+    s.resume()?;
+    log::info!("resume_speech_recording: session={}", s.session());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn cancel_speech_recording(app: AppHandle) -> crate::Result<()> {
+    let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
+    {
+        let mut s = speech_state.lock().await;
+        if !s.is_recording() || s.is_transcribing() {
+            log::debug!("cancel_speech_recording: ignored, not recording");
+            return Ok(());
+        }
+        s.cancel_recording()?;
+        log::info!("cancel_speech_recording: session={}", s.session());
+    }
+
+    let _ = app.emit(
+        "speech-recording-stopped",
+        SpeechRecordingStoppedEvent { had_audio: false },
+    );
+    let _ = app.emit(
+        "speech-transcription-complete",
+        TranscriptionComplete { text: String::new(), duration_secs: 0.0, entry_id: None },
+    );
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn get_recording_state(
     speech: State<'_, Arc<Mutex<SpeechService>>>,
 ) -> crate::Result<RecordingState> {

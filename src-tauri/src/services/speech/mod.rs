@@ -5,9 +5,10 @@ pub mod retry;
 mod transcriber;
 
 use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, StreamTrait};
 
@@ -117,7 +118,31 @@ pub struct SpeechService {
     last_toggle: Option<Instant>,
     session: u64,
     started_at: Option<Instant>,
+    paused: Arc<AtomicBool>,
+    paused_at: Option<Instant>,
+    paused_total: Duration,
     retrying_entries: HashSet<String>,
+}
+
+fn append_unless_paused(buffer: &Mutex<Vec<i16>>, paused: &AtomicBool, data: &[i16]) {
+    if paused.load(Ordering::Relaxed) {
+        return;
+    }
+    if let Ok(mut buf) = buffer.lock() {
+        buf.extend_from_slice(data);
+    }
+}
+
+fn elapsed_excluding_pauses(
+    now: Instant,
+    started_at: Instant,
+    paused_total: Duration,
+    paused_at: Option<Instant>,
+) -> Duration {
+    let current_pause = paused_at.map_or(Duration::ZERO, |t| now.saturating_duration_since(t));
+    now.saturating_duration_since(started_at)
+        .saturating_sub(paused_total)
+        .saturating_sub(current_pause)
 }
 
 impl SpeechService {
@@ -134,6 +159,9 @@ impl SpeechService {
             last_toggle: None,
             session: 0,
             started_at: None,
+            paused: Arc::new(AtomicBool::new(false)),
+            paused_at: None,
+            paused_total: Duration::ZERO,
             retrying_entries: HashSet::new(),
         }
     }
@@ -154,6 +182,8 @@ impl SpeechService {
 
         let buffer = Arc::new(Mutex::new(Vec::new()));
         let buffer_clone = Arc::clone(&buffer);
+        let paused = Arc::new(AtomicBool::new(false));
+        let paused_clone = Arc::clone(&paused);
 
         let (stop_tx, stop_rx) = mpsc::channel();
 
@@ -161,9 +191,7 @@ impl SpeechService {
             let stream = device.build_input_stream(
                 &config,
                 move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                    if let Ok(mut buf) = buffer_clone.lock() {
-                        buf.extend_from_slice(data);
-                    }
+                    append_unless_paused(&buffer_clone, &paused_clone, data);
                 },
                 |err| {
                     log::error!("Audio stream error: {err}");
@@ -185,6 +213,9 @@ impl SpeechService {
         });
 
         self.audio_buffer = buffer;
+        self.paused = paused;
+        self.paused_at = None;
+        self.paused_total = Duration::ZERO;
         self.sample_rate = sample_rate;
         self.is_recording = true;
         self.recording_action_id = action_id;
@@ -213,8 +244,50 @@ impl SpeechService {
         self.is_recording = false;
         self.recording_action_id = None;
         self.started_at = None;
+        self.paused.store(false, Ordering::Relaxed);
+        self.paused_at = None;
+        self.paused_total = Duration::ZERO;
 
         Ok((samples, sample_rate))
+    }
+
+    pub fn cancel_recording(&mut self) -> Result<(), SpeechError> {
+        self.stop_recording_raw()?;
+        self.set_pending_prompt(None, None);
+        Ok(())
+    }
+
+    pub fn pause(&mut self) -> Result<(), SpeechError> {
+        if !self.is_recording {
+            return Err(SpeechError::NotRecording);
+        }
+        if self.paused_at.is_none() {
+            self.paused.store(true, Ordering::Relaxed);
+            self.paused_at = Some(Instant::now());
+        }
+        Ok(())
+    }
+
+    pub fn resume(&mut self) -> Result<(), SpeechError> {
+        if !self.is_recording {
+            return Err(SpeechError::NotRecording);
+        }
+        if let Some(paused_at) = self.paused_at.take() {
+            self.paused_total += paused_at.elapsed();
+            self.paused.store(false, Ordering::Relaxed);
+        }
+        Ok(())
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.paused_at.is_some()
+    }
+
+    /// Recording time without paused spans.
+    pub fn elapsed(&self) -> Option<Duration> {
+        self.started_at.map(|started_at| {
+            elapsed_excluding_pauses(Instant::now(), started_at, self.paused_total, self.paused_at)
+        })
     }
 
     pub fn is_recording(&self) -> bool {
@@ -225,10 +298,6 @@ impl SpeechService {
     /// whether the session they were started for is still the active one.
     pub fn session(&self) -> u64 {
         self.session
-    }
-
-    pub fn started_at(&self) -> Option<Instant> {
-        self.started_at
     }
 
     pub fn audio_buffer(&self) -> Arc<Mutex<Vec<i16>>> {
@@ -301,6 +370,73 @@ mod tests {
         let mut service = SpeechService::new();
         let result = service.stop_recording_raw();
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn append_unless_paused_drops_samples_while_paused() {
+        let buffer = Mutex::new(Vec::new());
+        let paused = AtomicBool::new(true);
+        append_unless_paused(&buffer, &paused, &[1, 2, 3]);
+        assert!(buffer.lock().unwrap().is_empty());
+
+        paused.store(false, Ordering::Relaxed);
+        append_unless_paused(&buffer, &paused, &[4, 5]);
+        assert_eq!(*buffer.lock().unwrap(), vec![4, 5]);
+    }
+
+    #[test]
+    fn elapsed_excludes_paused_span() {
+        let started = Instant::now();
+        let now = started + Duration::from_secs(5);
+        let elapsed = elapsed_excluding_pauses(now, started, Duration::from_secs(2), None);
+        assert_eq!(elapsed, Duration::from_secs(3));
+    }
+
+    #[test]
+    fn elapsed_excludes_current_pause() {
+        let started = Instant::now();
+        let now = started + Duration::from_secs(5);
+        let paused_at = Some(started + Duration::from_secs(3));
+        let elapsed = elapsed_excluding_pauses(now, started, Duration::ZERO, paused_at);
+        assert_eq!(elapsed, Duration::from_secs(3));
+    }
+
+    #[test]
+    fn cancel_clears_recording_and_pending_prompt() {
+        let mut service = SpeechService::new();
+        service.is_recording = true;
+        service.started_at = Some(Instant::now());
+        service.set_pending_prompt(Some("prompt-1".to_string()), Some("Prompt One".to_string()));
+
+        assert!(service.cancel_recording().is_ok());
+        assert!(!service.is_recording());
+        assert!(!service.is_transcribing());
+        assert_eq!(service.take_pending_prompt(), (None, None));
+    }
+
+    #[test]
+    fn pause_and_resume_without_recording_return_error() {
+        let mut service = SpeechService::new();
+        assert!(service.pause().is_err());
+        assert!(service.resume().is_err());
+    }
+
+    #[test]
+    fn pause_and_resume_toggle_paused_state() {
+        let mut service = SpeechService::new();
+        service.is_recording = true;
+        service.started_at = Some(Instant::now());
+
+        service.pause().unwrap();
+        assert!(service.is_paused());
+        assert!(service.is_recording());
+        service.pause().unwrap();
+        assert!(service.is_paused());
+
+        service.resume().unwrap();
+        assert!(!service.is_paused());
+        service.resume().unwrap();
+        assert!(!service.is_paused());
     }
 
     #[test]
