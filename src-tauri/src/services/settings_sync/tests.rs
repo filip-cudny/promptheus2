@@ -10,6 +10,9 @@ use tempfile::TempDir;
 use tokio::sync::Notify;
 
 use super::*;
+use crate::services::config::ConfigService;
+use crate::services::database::Database;
+use crate::services::skill::SkillService;
 
 const TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -381,4 +384,138 @@ async fn targets_in_different_repos_are_an_error() {
         detect(&f.runner(), &config_dir).await,
         Detection::Error(_)
     ));
+}
+
+const SETTINGS_FIRST: &str = r#"{"theme":"first","models":[{"id":"m","type":"text","model":"gpt-4","display_name":"M","provider":"openai","api_key":"k"}]}"#;
+const SETTINGS_SECOND: &str = r#"{"theme":"second","models":[{"id":"m","type":"text","model":"gpt-4","display_name":"M","provider":"openai","api_key":"k"}]}"#;
+
+struct ReloadFixture {
+    fixture: Fixture,
+    config_dir: PathBuf,
+    config: Arc<Mutex<ConfigService>>,
+    skills: Arc<Mutex<SkillService>>,
+    database: Arc<Mutex<Database>>,
+    _db_dir: TempDir,
+}
+
+impl ReloadFixture {
+    fn new() -> Self {
+        let fixture = Fixture::new();
+        write(&fixture.a().join("tauri-app/settings.json"), SETTINGS_FIRST);
+        fixture.git(&fixture.a(), &["add", "-A"]);
+        fixture.git(&fixture.a(), &["commit", "-m", "valid settings"]);
+        fixture.git(&fixture.a(), &["push"]);
+        fixture.git(&fixture.b(), &["pull"]);
+
+        let config_dir = fixture.config_dir_for(&fixture.a(), "config-a");
+        let config = ConfigService::load(&config_dir, None).unwrap();
+        let skills = SkillService::load(&config_dir.join("skills"), None, &[]).unwrap();
+        fixture.git(&fixture.a(), &["add", "-A"]);
+        fixture.git(&fixture.a(), &["commit", "--allow-empty", "-m", "normalized by load"]);
+        fixture.git(&fixture.a(), &["push"]);
+        fixture.git(&fixture.b(), &["pull"]);
+        let db_dir = TempDir::new().unwrap();
+        let database = Database::open(db_dir.path()).unwrap();
+        Self {
+            fixture,
+            config_dir,
+            config: Arc::new(Mutex::new(config)),
+            skills: Arc::new(Mutex::new(skills)),
+            database: Arc::new(Mutex::new(database)),
+            _db_dir: db_dir,
+        }
+    }
+
+    fn push_from_b(&self, relative: &str, content: &str) {
+        let b = self.fixture.b();
+        write(&b.join("tauri-app").join(relative), content);
+        self.fixture.git(&b, &["add", "-A"]);
+        self.fixture.git(&b, &["commit", "-m", "change from b"]);
+        self.fixture.git(&b, &["push"]);
+    }
+
+    async fn sync_a(&self) -> Reloaded {
+        let engine = self.fixture.engine(
+            self.config_dir.clone(),
+            self.fixture.env.clone(),
+            TIMEOUT,
+        );
+        let hooks = ReloadingHooks {
+            config_dir: self.config_dir.clone(),
+            config: self.config.clone(),
+            skills: self.skills.clone(),
+            database: self.database.clone(),
+            reloaded: Mutex::new(Reloaded::default()),
+        };
+        completed(engine.sync(Trigger::Manual, &hooks).await);
+        let reloaded = *hooks.reloaded.lock().unwrap();
+        reloaded
+    }
+}
+
+struct ReloadingHooks {
+    config_dir: PathBuf,
+    config: Arc<Mutex<ConfigService>>,
+    skills: Arc<Mutex<SkillService>>,
+    database: Arc<Mutex<Database>>,
+    reloaded: Mutex<Reloaded>,
+}
+
+#[async_trait]
+impl SyncHooks for ReloadingHooks {
+    type Guard = ();
+
+    async fn lock_local(&self) -> Self::Guard {}
+
+    async fn reload(&self, _guard: &mut Self::Guard, changed: &[PathBuf]) {
+        let reloaded = reload_changed(
+            changed,
+            &self.config_dir.join("settings.json"),
+            &self.config_dir.join("skills"),
+            &mut self.config.lock().unwrap(),
+            &mut self.skills.lock().unwrap(),
+            self.database.lock().unwrap().conn(),
+        )
+        .unwrap();
+        *self.reloaded.lock().unwrap() = reloaded;
+    }
+
+    fn status_changed(&self, _status: &SyncStatus) {}
+}
+
+#[tokio::test]
+async fn pulled_settings_change_reloads_settings_and_skills() {
+    let f = ReloadFixture::new();
+    assert_eq!(f.config.lock().unwrap().settings().theme, "first");
+
+    f.push_from_b("settings.json", SETTINGS_SECOND);
+    let reloaded = f.sync_a().await;
+
+    assert_eq!(f.config.lock().unwrap().settings().theme, "second");
+    assert_eq!(reloaded, Reloaded { settings: true, skills: true });
+}
+
+#[tokio::test]
+async fn pulled_skill_dir_reloads_skills_only() {
+    let f = ReloadFixture::new();
+    assert!(f.skills.lock().unwrap().get_skill("fresh").is_none());
+
+    f.push_from_b(
+        "skills/fresh/SKILL.md",
+        "---\nname: fresh\ndescription: desc\n---\n\nbody\n",
+    );
+    let reloaded = f.sync_a().await;
+
+    assert!(f.skills.lock().unwrap().get_skill("fresh").is_some());
+    assert_eq!(reloaded, Reloaded { settings: false, skills: true });
+}
+
+#[tokio::test]
+async fn pulled_prompt_change_reloads_nothing() {
+    let f = ReloadFixture::new();
+
+    f.push_from_b("prompts/p.md", "changed prompt\n");
+    let reloaded = f.sync_a().await;
+
+    assert_eq!(reloaded, Reloaded::default());
 }

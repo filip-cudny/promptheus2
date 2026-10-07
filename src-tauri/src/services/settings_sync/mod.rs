@@ -1,5 +1,6 @@
 mod detect;
 mod git;
+mod reload;
 #[cfg(test)]
 mod tests;
 
@@ -14,6 +15,7 @@ use serde::Serialize;
 
 pub use detect::{detect, Detection, SyncRepo};
 pub use git::{GitError, GitRunner};
+pub use reload::{reload_changed, Reloaded};
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 const UNKNOWN_HOST: &str = "unknown";

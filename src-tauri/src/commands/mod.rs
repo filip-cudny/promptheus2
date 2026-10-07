@@ -18,6 +18,7 @@ pub mod provider_menu;
 pub mod conversation_dialog;
 pub mod settings;
 pub mod settings_dialog;
+pub mod settings_sync;
 pub mod skills;
 pub mod speech;
 pub mod text_preview;
@@ -155,6 +156,9 @@ macro_rules! handlers {
             $crate::commands::settings::update_keymaps,
             $crate::commands::settings::update_menu_section_order,
             $crate::commands::settings::reload_settings,
+            // === settings_sync ===
+            $crate::commands::settings_sync::get_settings_sync_status,
+            $crate::commands::settings_sync::sync_settings_now,
             // === settings_dialog ===
             $crate::commands::settings_dialog::open_settings_window,
             $crate::commands::settings_dialog::check_env_var,

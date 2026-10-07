@@ -20,7 +20,7 @@ struct SettingsChangedEvent {
     version: u64,
 }
 
-fn emit_changed(app: &AppHandle) -> crate::Result<()> {
+pub(crate) fn emit_changed(app: &AppHandle) -> crate::Result<()> {
     let version = SETTINGS_VERSION.fetch_add(1, Ordering::Relaxed) + 1;
     app.emit("settings-changed", SettingsChangedEvent { version })?;
     Ok(())
@@ -31,8 +31,13 @@ fn save_and_emit(config: &ConfigService, app: &AppHandle) -> crate::Result<()> {
     emit_changed(app)
 }
 
-fn rebuild_ai(config: &ConfigService, ai: &mut AiService) {
+pub(crate) fn rebuild_ai(config: &ConfigService, ai: &mut AiService) {
     *ai = AiService::new(&config.settings().models);
+}
+
+pub(crate) fn apply_reloaded_settings(app: &AppHandle, settings: &Settings) {
+    crate::reload_shortcuts(app, settings);
+    crate::services::autostart::reconcile(app, settings);
 }
 
 #[tauri::command]
@@ -229,7 +234,6 @@ pub async fn reload_settings(
         rebuild_ai(&c, &mut *ai.lock().await);
         c.settings().clone()
     };
-    crate::reload_shortcuts(&app, &settings);
-    crate::services::autostart::reconcile(&app, &settings);
-    Ok(())
+    apply_reloaded_settings(&app, &settings);
+    emit_changed(&app)
 }

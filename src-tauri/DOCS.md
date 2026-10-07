@@ -21,14 +21,14 @@ src-tauri/
     │   ├── windows.rs          # Window/webview creation
     │   ├── tray.rs / menu.rs   # System tray + native menu
     │   ├── shortcuts.rs        # Global hotkey registration
-    │   ├── background.rs       # `tauri::async_runtime::spawn` background tasks
+    │   ├── background.rs       # `tauri::async_runtime::spawn` background tasks (heartbeat, AI webview cold-suspend, audio clip sweeper, settings sync loop)
     │   └── log.rs              # Logging plugin config
     ├── commands/               # IPC surface — thin adapters, no business logic
     │   ├── mod.rs              # `pub mod` re-exports + `handlers!` macro
     │   ├── ai.rs / ai_webview.rs
     │   ├── execution_stream.rs / execution_control.rs / execution_generation.rs
     │   ├── prompts.rs / skills.rs / mcp.rs
-    │   ├── settings.rs / settings_dialog.rs
+    │   ├── settings.rs / settings_dialog.rs / settings_sync.rs
     │   ├── history.rs / history_dialog.rs
     │   ├── context.rs / context_editor.rs
     │   ├── menu.rs / provider_menu.rs / dock.rs

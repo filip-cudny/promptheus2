@@ -4,9 +4,11 @@ use tauri::Manager;
 use tokio::sync::Mutex;
 
 use crate::services;
+use crate::services::settings_sync::Trigger;
 use crate::services::speech::AudioClipStore;
 use crate::services::sqlite_history::SqliteHistoryService;
 
+const SETTINGS_SYNC_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(5 * 60);
 const AUDIO_CLIP_SWEEP_INTERVAL: tokio::time::Duration = tokio::time::Duration::from_secs(15 * 60);
 
 pub fn spawn_heartbeat(app_handle: tauri::AppHandle) {
@@ -71,6 +73,20 @@ pub fn spawn_audio_clip_sweeper(app_handle: tauri::AppHandle) {
             let history = app_handle.state::<Arc<Mutex<SqliteHistoryService>>>();
             let history = history.lock().await;
             clips.sweep(history.conn());
+        }
+    });
+}
+
+pub fn spawn_settings_sync(app_handle: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        log::info!("settings sync loop started");
+        crate::commands::settings_sync::run_sync(&app_handle, Trigger::Startup).await;
+        let mut interval = tokio::time::interval(SETTINGS_SYNC_INTERVAL);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            crate::commands::settings_sync::run_sync(&app_handle, Trigger::Periodic).await;
         }
     });
 }

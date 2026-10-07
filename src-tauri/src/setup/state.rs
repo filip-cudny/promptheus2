@@ -20,6 +20,8 @@ use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::notification::NotificationService;
 use crate::services::placeholder::PlaceholderService;
 use crate::services::recent_apps::RecentAppsState;
+use crate::services::settings_sync::SettingsSync;
+use crate::services::shell_env::get_shell_env;
 use crate::services::skill::SkillService;
 use crate::services::speech::{AudioClipStore, SpeechService};
 use crate::services::sqlite_history::SqliteHistoryService;
@@ -131,6 +133,12 @@ pub fn manage(
         tool_confirmation::ToolConfirmationService::new(),
     )));
     app.manage(Arc::new(RecentAppsState::new()));
+    app.manage(Arc::new(SettingsSync::new(
+        config_dir.to_path_buf(),
+        Arc::new(|| get_shell_env().clone()),
+        None,
+        None,
+    )));
 
     if !mcp_servers_config.is_empty() {
         let _ = app.emit("mcp-ready", ());

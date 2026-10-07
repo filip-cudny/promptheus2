@@ -20,7 +20,7 @@ struct SkillsChangedEvent {
     reason: String,
 }
 
-fn emit_changed(app: &AppHandle, reason: &str) -> crate::Result<()> {
+pub(crate) fn emit_changed(app: &AppHandle, reason: &str) -> crate::Result<()> {
     app.emit(
         "skills-changed",
         SkillsChangedEvent {
@@ -97,11 +97,13 @@ pub async fn get_skill_body(
 
 #[tauri::command]
 pub async fn reload_skills(
+    app: AppHandle,
     config: State<'_, Arc<Mutex<ConfigService>>>,
     skill_service: State<'_, Arc<Mutex<SkillService>>>,
     history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
 ) -> crate::Result<()> {
-    rescan_and_prune(&skill_service, &config, &history).await
+    rescan_and_prune(&skill_service, &config, &history).await?;
+    emit_changed(&app, "reload")
 }
 
 #[tauri::command]
