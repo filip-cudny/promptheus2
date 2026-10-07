@@ -81,6 +81,7 @@ export interface SpeechToTextConfig {
   auto_retry_attempts: number;
   audio_retention_hours: number;
   keep_audio_on_success: boolean;
+  show_recording_widget: boolean;
 }
 
 export interface AudioClipInfo {

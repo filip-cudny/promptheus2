@@ -49,6 +49,24 @@
       <p class="muted">Settings unavailable.</p>
     {:else}
       <div class="group">
+        <h3>Recording</h3>
+
+        <label class="check">
+          <input
+            type="checkbox"
+            checked={config.show_recording_widget}
+            onchange={(e: Event) =>
+              save({ show_recording_widget: (e.target as HTMLInputElement).checked })}
+          />
+          <span>Show recording widget</span>
+        </label>
+        <p class="muted">
+          A small floating widget shows the recording level and lets you pause, stop or cancel.
+          Off shows notifications instead.
+        </p>
+      </div>
+
+      <div class="group">
         <h3>Failure handling</h3>
 
         <FormRow label="Transcription attempts" hint={attemptsHint}>

@@ -37,6 +37,7 @@ export default defineConfig({
         "image-preview": path.resolve("./image-preview.html"),
         "text-preview": path.resolve("./text-preview.html"),
         notification: path.resolve("./notification.html"),
+        "recording-widget": path.resolve("./recording-widget.html"),
       },
     },
   },
