@@ -19,7 +19,9 @@ const STATE_EVENT: &str = "recording-widget-state";
 const TICK: Duration = Duration::from_millis(50);
 const DONE_VISIBLE: Duration = Duration::from_secs(1);
 const MOVE_DEBOUNCE: Duration = Duration::from_millis(500);
-const FULL_LEVEL_RMS: f64 = 6000.0;
+const FULL_SCALE_RMS: f64 = 32768.0;
+const FLOOR_DB: f64 = -50.0;
+const CEIL_DB: f64 = -20.0;
 const BOTTOM_MARGIN: f64 = 24.0;
 
 type Rect = (i32, i32, u32, u32);
@@ -115,7 +117,11 @@ fn current_session_kind() -> SessionKind {
 }
 
 pub fn level_from_rms(rms: f64) -> f64 {
-    (rms / FULL_LEVEL_RMS).min(1.0)
+    if rms <= 0.0 {
+        return 0.0;
+    }
+    let dbfs = 20.0 * (rms / FULL_SCALE_RMS).log10();
+    ((dbfs - FLOOR_DB) / (CEIL_DB - FLOOR_DB)).clamp(0.0, 1.0)
 }
 
 fn default_origin(work_area: Rect, size: (u32, u32), scale: f64) -> (i32, i32) {
@@ -523,10 +529,16 @@ mod tests {
 
     #[test]
     fn level_maps_rms_to_zero_through_one() {
+        let at_dbfs = |db: f64| FULL_SCALE_RMS * 10f64.powf(db / 20.0);
         assert_eq!(level_from_rms(0.0), 0.0);
-        assert_eq!(level_from_rms(6000.0), 1.0);
-        assert_eq!(level_from_rms(12000.0), 1.0);
-        assert_eq!(level_from_rms(3000.0), 0.5);
+        assert_eq!(level_from_rms(-1.0), 0.0);
+        assert!(level_from_rms(at_dbfs(-50.0)).abs() < 1e-9);
+        assert_eq!(level_from_rms(50.0), 0.0);
+        assert!((level_from_rms(at_dbfs(-30.0)) - 2.0 / 3.0).abs() < 1e-9);
+        assert!((level_from_rms(1036.0) - 0.667).abs() < 1e-3);
+        assert_eq!(level_from_rms(at_dbfs(-20.0) + 1e-6), 1.0);
+        assert_eq!(level_from_rms(3277.0), 1.0);
+        assert_eq!(level_from_rms(32768.0), 1.0);
     }
 
     #[test]
