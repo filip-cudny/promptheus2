@@ -22,7 +22,12 @@ Interface `com.promptheus.Shell`, object `/com/promptheus/Shell`, served by `org
 | `PlaceWindowAnchored` | `(s title, i right, i bottom, b activate) → b` | keep the frame's bottom-right corner at `(right, bottom)` until the window is unmanaged, optionally activate it |
 | `GetFocusedWmClass` | `() → s` | `wm_class` of the focused window |
 | `ShowToast` | `(s level, s title, s message, b monochromatic) → ()` | draw a toast as a shell actor; `level` is `success`/`error`/`info`/`warning`, empty `message` = no description |
+| `ShowRecordingWidget` | `(i x, i y, b has_position) → ()` | show the recording widget at `(x, y)` logical stage pixels when `has_position`, else at the default position |
+| `UpdateRecordingWidget` | `(s state, d level, u elapsed_ms) → ()` | `state` is `recording`/`paused`/`processing`/`done`; `level` 0..1 |
+| `HideRecordingWidget` | `() → ()` | remove the widget |
 | `ShortcutActivated` | signal `s action` | an accelerator fired |
+| `RecordingWidgetAction` | signal `s action` | widget button pressed: `pause`, `resume`, `stop` or `cancel` |
+| `RecordingWidgetMoved` | signal `(i x, i y)` | drag released, logical stage pixels |
 | `Ready` | signal | the extension is enabled and serving |
 
 ## Pattern
@@ -52,6 +57,12 @@ Notification toasts:
 - A failed `ShowToast` call logs `warn` and shows that payload through the webview window path below. That path is also the only one on X11 and macOS.
 - Why actors: Mutter ignores the GTK3 `accept_focus` hint (`focusable(false)`) for Wayland clients and focuses the mapped notification window anyway, even with `activate=false`; focus returns only when `hide()` unmanages it.
 
+Recording widget:
+- Drawn by the extension as St actors in `Main.layoutManager.uiGroup`, like the toasts: no modal (`Main.pushModal`), no `global.stage.grab`, so the client keeps keyboard focus. Buttons are `St.Button` children; dragging the pill body is handled in the shell.
+- `ShowRecordingWidget` position is validated by the shell against the current monitors; outside every work area (or `has_position = false`) it uses the default, bottom center 24 px above the work area bottom of the pointer's monitor.
+- Hidden by `HideRecordingWidget`, when the bus name of the `ShowRecordingWidget` caller vanishes, and in `disable()`.
+- Rust side: `services/speech/widget.rs` (see `src-tauri/src/services/speech/DOCS.md`); position stored under `recording_widget.shell_position`. A failed `ShowRecordingWidget` makes the recording use toasts.
+
 Notification placement (webview window path):
 - `commands/notification.rs` reads `GetPointer` and sends `PlaceWindowAnchored(NOTIFICATION_TITLE, work_right, work_bottom, activate=false)` before the first `show()`, with the bottom-right corner of the work area under the pointer. The window is `focusable(false)`, which Mutter does not honor for Wayland clients (see above).
 - The extension sets the frame to x = `right` − frame width, y = `bottom` − frame height from `get_frame_rect()`. It applies this at placement (on `first-frame` when it had to wait for the window), once more on the next idle, and on every `size-changed` of the `MetaWindow`. It moves only when the computed x/y differ from the current frame position, so its own move does not re-trigger it.
@@ -76,7 +87,7 @@ Install:
 - A changed `extension.js` needs a re-login: GNOME Shell caches loaded ES modules, so `gnome-extensions disable`/`enable` re-runs the old code.
 
 Debugging:
-- `gdbus introspect --session --dest org.gnome.Shell --object-path /com/promptheus/Shell` — 6 methods, 2 signals when the extension is enabled.
+- `gdbus introspect --session --dest org.gnome.Shell --object-path /com/promptheus/Shell` — 9 methods, 4 signals when the extension is enabled.
 - `gdbus monitor --session --dest org.gnome.Shell` — watch `Ready` and `ShortcutActivated`.
 - `journalctl --user /usr/bin/gnome-shell` — extension errors.
 - `journalctl --user -f -o cat /usr/bin/gnome-shell | grep Promptheus` — anchored placement lines: `Promptheus: make_above "<title>"` on every anchor, then `Promptheus: anchor "<title>" right=R bottom=B moved=… frame=X,Y WxH`, then `re-anchor after placement` and `re-anchor on size-changed` with the same fields, and `anchor released "<title>"` on hide. A correct anchor has `X + W = R` and `Y + H = B`.

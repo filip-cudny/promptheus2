@@ -16,6 +16,7 @@ src/
 │   ├── settings-dialog/
 │   ├── image-preview/
 │   ├── text-preview/
+│   ├── recording-widget/       # Floating recording widget (X11/macOS transport)
 │   └── notification/
 ├── lib/
 │   ├── components/             # UI components

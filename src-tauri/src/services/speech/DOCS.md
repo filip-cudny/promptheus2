@@ -12,6 +12,7 @@ Recording, transcription, and the retry path that keeps a failed voice note reco
 | `retry.rs` | Shared backoff loop used by both the automatic and manual paths |
 | `clip_store.rs` | Short-lived WAV storage on disk, indexed by the `audio_clips` table |
 | `reminder.rs` | "Still recording" nudge while a session runs |
+| `widget.rs` | `RecordingWidget`: widget transitions, 50 ms level task, transport choice, position storage |
 
 ## Failure model
 
@@ -50,6 +51,9 @@ Nothing is retried automatically at startup. Failed entries with a live clip wai
 | Command | Notes |
 |---------|-------|
 | `toggle_speech_recording` | Start/stop; on stop runs the retry loop in a background task |
+| `pause_speech_recording` | Pauses the running recording; ignored when not recording |
+| `resume_speech_recording` | Resumes a paused recording |
+| `cancel_speech_recording` | Discards the recording without transcribing |
 | `retry_transcription` | Spawns a background retry; drives the UI through events, returns immediately |
 | `get_audio_clip_info` | `has_audio` / `expires_at` / `duration_secs` / `is_retrying` for one entry |
 | `export_audio_clip` | Copies the WAV to a caller-supplied destination (frontend picks it via `plugin-dialog`) |
@@ -61,8 +65,22 @@ Nothing is retried automatically at startup. Failed entries with a live clip wai
 |-------|---------|--------------|
 | `speech-recording-started` | `{ action_id }` | Recording begins |
 | `speech-recording-stopped` | `{ had_audio }` | Recording ends, before transcription |
+| `recording-widget-state` | `{ state, level, elapsedMs }` | Every widget update (`state`: `recording`/`paused`/`processing`/`done`, `level` 0..1); sent to the `recording-widget` window only |
 | `speech-transcription-retry` | `{ attempt, max_attempts, next_in_secs, reason, entry_id }` | Each transient failure; `attempt: 0` marks the start of a manual retry |
 | `speech-transcription-complete` | `{ text, duration_secs, entry_id }` | Success (or a discarded too-short recording) |
 | `speech-transcription-error` | `{ message, recoverable, entry_id, has_audio, attempts }` | Attempts exhausted or a permanent failure |
 
+Cancel emits `speech-recording-stopped` and then `speech-transcription-complete` with empty `text`, like a discarded too-short recording.
+
 `entry_id` is `null` for the automatic path when no history entry was created (pending-skill executions, no-speech results).
+
+## Recording widget
+
+`widget.rs` (`RecordingWidget`) is called from `commands/speech.rs` at every transition, so one place owns widget state and the setting check. Setting: `surfaces.speech_to_text.show_recording_widget`, default `true`; off keeps the toast-only behavior.
+
+- **Transports** — GNOME Wayland: the extension draws the widget (`ShowRecordingWidget` / `UpdateRecordingWidget` / `HideRecordingWidget`, see [linux-wayland-gnome-extension.md](../../../../docs/gotchas/linux-wayland-gnome-extension.md)). X11 and macOS: webview window `recording-widget` (`src/windows/recording-widget/`) fed by `recording-widget-state`. Any other Wayland session, or a failed `ShowRecordingWidget`, falls back to toasts for that recording with a `warn` log.
+- **Toasts** — while the widget is shown it replaces "Recording started", "Processing audio" and "Speech transcribed". Error and warning toasts and the reminder stay.
+- **Transitions** — `recording` ⇄ `paused` → `processing` → `done` (about 1 s, "Copied"), then closed. Closed without `done`: start failure (never shown), too-short recording, encode or runtime/API-key error, transcription error, cancel, no speech detected. A pending skill closes the widget right after processing, with no `done`.
+- **Pause** — `is_recording` stays `true`; the cpal callback drops samples while paused and the microphone stays open (the OS indicator stays on); `SpeechService::elapsed()` excludes paused time; the reminder skips paused ticks and shifts its timers by the pause length. Stop from pause transcribes.
+- **Level** — a session-scoped task every 50 ms computes the RMS of the new buffer tail (`reminder::rms`) and sends `min(1, rms / 6000)` with state and elapsed time, awaiting each update before the next tick.
+- **Position** — `ui_state.json` keys `recording_widget.shell_position` (logical stage pixels) and `recording_widget.window_position` (physical pixels); `{ x, y }`. Separate keys so a session switch never reuses coordinates in the wrong space. Default: bottom center of the work area under the pointer, 24 px above the bottom edge.
