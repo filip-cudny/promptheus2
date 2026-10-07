@@ -23,7 +23,9 @@ const WIDGET_STATES = ['recording', 'paused', 'processing', 'done'];
 const WIDGET_BAR_FACTORS = [0.55, 0.8, 0.65, 1, 0.75, 0.9, 0.6, 0.85, 0.5];
 const WIDGET_BAR_MIN_HEIGHT = 4;
 const WIDGET_BAR_MAX_HEIGHT = 24;
-const WIDGET_BAR_EASE_MS = 100;
+const WIDGET_BAR_MIN_SCALE = WIDGET_BAR_MIN_HEIGHT / WIDGET_BAR_MAX_HEIGHT;
+const WIDGET_BAR_SCALE_EPSILON = 0.005;
+const WIDGET_BAR_EASE_MS = 60;
 const WIDGET_BAR_WIDTH = 3;
 const WIDGET_BAR_SPACING = 3;
 const WIDGET_WAVE_BAR_COUNT = Math.floor(
@@ -321,7 +323,7 @@ export default class PromptheusExtension extends Extension {
             this._widget = this._buildRecordingWidget();
         const widget = this._widget;
         widget.monochromatic = monochromatic;
-        widget.heights.fill(WIDGET_BAR_MIN_HEIGHT);
+        widget.scales.fill(WIDGET_BAR_MIN_SCALE);
         widget.elapsed = formatElapsed(0);
         this._setWidgetState(widget, 'recording');
         const monitors = Main.layoutManager.monitors;
@@ -382,7 +384,7 @@ export default class PromptheusExtension extends Extension {
             actor,
             state: null,
             elapsed: formatElapsed(0),
-            heights: WIDGET_BAR_FACTORS.map(() => WIDGET_BAR_MIN_HEIGHT),
+            scales: WIDGET_BAR_FACTORS.map(() => WIDGET_BAR_MIN_SCALE),
             bars: [],
             timeLabel: null,
             waveBars: [],
@@ -478,7 +480,7 @@ export default class PromptheusExtension extends Extension {
 
     _fillControls(widget, content, state) {
         const bars = this._widgetBarRow();
-        widget.bars = widget.heights.map(height => this._widgetBar(bars, height));
+        widget.bars = widget.scales.map(scale => this._widgetBar(bars, scale));
         widget.timeLabel = new St.Label({
             text: widget.elapsed,
             y_align: Clutter.ActorAlign.CENTER,
@@ -501,12 +503,14 @@ export default class PromptheusExtension extends Extension {
         });
     }
 
-    _widgetBar(row, height) {
+    _widgetBar(row, scale) {
         const bar = new St.Widget({
             y_align: Clutter.ActorAlign.CENTER,
             style: `width: ${WIDGET_BAR_WIDTH}px; border-radius: 2px; background-color: #e5e5e7;`,
-            height,
+            height: WIDGET_BAR_MAX_HEIGHT,
+            scale_y: scale,
         });
+        bar.set_pivot_point(0.5, 0.5);
         row.add_child(bar);
         return bar;
     }
@@ -515,7 +519,7 @@ export default class PromptheusExtension extends Extension {
         const row = this._widgetBarRow();
         row.opacity = WIDGET_WAVE_OPACITY;
         widget.waveBars = Array.from({length: WIDGET_WAVE_BAR_COUNT},
-            () => this._widgetBar(row, WIDGET_BAR_MIN_HEIGHT));
+            () => this._widgetBar(row, WIDGET_BAR_MIN_SCALE));
         content.add_child(row);
         widget.waveStart = GLib.get_monotonic_time();
         this._updateWidgetWave(widget);
@@ -530,7 +534,7 @@ export default class PromptheusExtension extends Extension {
         const phase = 2 * Math.PI * (elapsed % WIDGET_WAVE_PERIOD_US) / WIDGET_WAVE_PERIOD_US;
         widget.waveBars.forEach((bar, i) => {
             const wave = 0.5 + 0.5 * Math.sin(phase - i * WIDGET_WAVE_STEP);
-            bar.height = Math.round(WIDGET_BAR_MIN_HEIGHT + WIDGET_WAVE_AMPLITUDE * wave);
+            bar.scale_y = (WIDGET_BAR_MIN_HEIGHT + WIDGET_WAVE_AMPLITUDE * wave) / WIDGET_BAR_MAX_HEIGHT;
         });
     }
 
@@ -578,16 +582,16 @@ export default class PromptheusExtension extends Extension {
 
     _easeWidgetBars(widget, level) {
         const clamped = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 0;
-        const range = WIDGET_BAR_MAX_HEIGHT - WIDGET_BAR_MIN_HEIGHT;
+        const range = 1 - WIDGET_BAR_MIN_SCALE;
         widget.bars.forEach((bar, i) => {
-            const height = Math.round(WIDGET_BAR_MIN_HEIGHT + range * clamped * WIDGET_BAR_FACTORS[i]);
-            if (height === widget.heights[i])
+            const scale = WIDGET_BAR_MIN_SCALE + range * clamped * WIDGET_BAR_FACTORS[i];
+            if (Math.abs(scale - widget.scales[i]) < WIDGET_BAR_SCALE_EPSILON)
                 return;
-            widget.heights[i] = height;
+            widget.scales[i] = scale;
             bar.ease({
-                height,
+                scale_y: scale,
                 duration: WIDGET_BAR_EASE_MS,
-                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                mode: Clutter.AnimationMode.LINEAR,
             });
         });
     }
