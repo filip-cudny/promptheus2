@@ -44,6 +44,31 @@ pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::E
 
     notif.build()?;
 
+    let recording_widget = WebviewWindowBuilder::new(
+        app,
+        "recording-widget",
+        tauri::WebviewUrl::App("recording-widget.html".into()),
+    )
+    .title("")
+    .inner_size(240.0, 44.0)
+    .resizable(false)
+    .decorations(false)
+    .transparent(true)
+    .shadow(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    .focusable(false)
+    .accept_first_mouse(true)
+    .visible(false)
+    .build()?;
+
+    let handle = app.handle().clone();
+    recording_widget.on_window_event(move |event| {
+        if let tauri::WindowEvent::Moved(position) = event {
+            crate::services::speech::widget::window_moved(&handle, *position);
+        }
+    });
+
     WebviewWindowBuilder::new(
         app,
         "image-preview",

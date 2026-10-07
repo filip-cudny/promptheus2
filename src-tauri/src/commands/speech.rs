@@ -13,6 +13,7 @@ use crate::models::speech::{
 };
 use crate::services::config::{ConfigService, KeytermsDoc};
 use crate::services::notification::{NotificationLevel, NotificationService};
+use crate::services::speech::widget::RecordingWidget;
 use crate::services::speech::{
     self, AudioClipStore, SpeechError, SpeechService, SttOptions,
 };
@@ -135,6 +136,7 @@ pub async fn toggle_speech_recording(
     let notifications = app.state::<NotificationService>();
     let history_state = app.state::<Arc<Mutex<SqliteHistoryService>>>();
     let clip_state = app.state::<Arc<AudioClipStore>>();
+    let widget = app.state::<RecordingWidget>();
 
     let was_recording;
     let raw_audio;
@@ -197,13 +199,19 @@ pub async fn toggle_speech_recording(
                 crate::services::hotkeys::shortcut_for_action(settings, "speech_to_text_toggle"),
             )
         };
-        let _ = notifications.notify(
-            "speech_recording_start",
-            NotificationLevel::Info,
-            "Recording started",
-            Some("Click Speech to Text again to stop."),
-            &notification_settings,
-        );
+        let widget_shown = match started_session {
+            Some(session) => widget.show(&app, session).await,
+            None => false,
+        };
+        if !widget_shown {
+            let _ = notifications.notify(
+                "speech_recording_start",
+                NotificationLevel::Info,
+                "Recording started",
+                Some("Click Speech to Text again to stop."),
+                &notification_settings,
+            );
+        }
         if let Some(session) = started_session {
             speech::reminder::spawn(
                 app.clone(),
@@ -216,6 +224,7 @@ pub async fn toggle_speech_recording(
     }
 
     let (samples, sample_rate) = raw_audio.unwrap();
+    widget.processing(&app).await;
     let had_audio = !samples.is_empty();
     let sample_count = samples.len();
     let duration_secs = sample_count as f64 / sample_rate.max(1) as f64;
@@ -236,6 +245,7 @@ pub async fn toggle_speech_recording(
             "speech-transcription-complete",
             TranscriptionComplete { text: String::new(), duration_secs: 0.0, entry_id: None },
         );
+        widget.close(&app).await;
         let mut s = speech_state.lock().await;
         s.set_transcribing(false);
         s.set_pending_prompt(None, None);
@@ -248,6 +258,7 @@ pub async fn toggle_speech_recording(
     {
         Ok(bytes) => bytes,
         Err(e) => {
+            widget.close(&app).await;
             let mut s = speech_state.lock().await;
             s.set_transcribing(false);
             s.set_pending_prompt(None, None);
@@ -257,18 +268,21 @@ pub async fn toggle_speech_recording(
 
     let runtime = match load_stt_runtime(&config_state).await {
         Ok(runtime) => {
-            let notification_settings =
-                config_state.lock().await.settings().notifications.clone();
-            let _ = notifications.notify(
-                "speech_recording_stop",
-                NotificationLevel::Info,
-                "Processing audio",
-                Some("Transcribing your speech to text"),
-                &notification_settings,
-            );
+            if !widget.is_shown().await {
+                let notification_settings =
+                    config_state.lock().await.settings().notifications.clone();
+                let _ = notifications.notify(
+                    "speech_recording_stop",
+                    NotificationLevel::Info,
+                    "Processing audio",
+                    Some("Transcribing your speech to text"),
+                    &notification_settings,
+                );
+            }
             runtime
         }
         Err(e) => {
+            widget.close(&app).await;
             let mut s = speech_state.lock().await;
             s.set_transcribing(false);
             s.set_pending_prompt(None, None);
@@ -303,6 +317,7 @@ pub async fn toggle_speech_recording(
 
     tokio::spawn(async move {
         let notifications_inner = app_clone.state::<NotificationService>();
+        let widget_inner = app_clone.state::<RecordingWidget>();
         let start = std::time::Instant::now();
 
         let mut first_retry: Option<speech::retry::RetryNotice> = None;
@@ -334,6 +349,7 @@ pub async fn toggle_speech_recording(
                 let mut created_entry_id = None;
 
                 if let Some(skill_id) = pending.0 {
+                    widget_inner.close(&app_clone).await;
                     let _ = app_clone.emit(
                         "speech-alternative-execute",
                         AlternativeExecutePayload {
@@ -365,16 +381,20 @@ pub async fn toggle_speech_recording(
                         None,
                     );
 
-                    let notification_settings =
-                        config_inner.lock().await.settings().notifications.clone();
-                    let duration_display = format!("Processed in {:.1}s", duration_secs);
-                    let _ = notifications_inner.notify(
-                        "speech_transcription_success",
-                        NotificationLevel::Success,
-                        "Speech transcribed",
-                        Some(duration_display),
-                        &notification_settings,
-                    );
+                    if widget_inner.is_shown().await {
+                        widget_inner.done(&app_clone).await;
+                    } else {
+                        let notification_settings =
+                            config_inner.lock().await.settings().notifications.clone();
+                        let duration_display = format!("Processed in {:.1}s", duration_secs);
+                        let _ = notifications_inner.notify(
+                            "speech_transcription_success",
+                            NotificationLevel::Success,
+                            "Speech transcribed",
+                            Some(duration_display),
+                            &notification_settings,
+                        );
+                    }
                 }
 
                 let _ = app_clone.emit(
@@ -402,6 +422,7 @@ pub async fn toggle_speech_recording(
                 speech_inner.lock().await.set_transcribing(false);
             }
             Err(SpeechError::NoSpeechDetected) => {
+                widget_inner.close(&app_clone).await;
                 let _ = app_clone.emit(
                     "speech-transcription-complete",
                     TranscriptionComplete {
@@ -443,6 +464,7 @@ pub async fn toggle_speech_recording(
                 s.set_transcribing(false);
             }
             Err(e) => {
+                widget_inner.close(&app_clone).await;
                 let message = e.to_string();
                 speech_inner.lock().await.set_pending_prompt(None, None);
 
@@ -762,18 +784,24 @@ pub async fn discard_audio_clip(
 #[tauri::command]
 pub async fn pause_speech_recording(app: AppHandle) -> crate::Result<()> {
     let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
-    let mut s = speech_state.lock().await;
-    s.pause()?;
-    log::info!("pause_speech_recording: session={}", s.session());
+    {
+        let mut s = speech_state.lock().await;
+        s.pause()?;
+        log::info!("pause_speech_recording: session={}", s.session());
+    }
+    app.state::<RecordingWidget>().pause(&app).await;
     Ok(())
 }
 
 #[tauri::command]
 pub async fn resume_speech_recording(app: AppHandle) -> crate::Result<()> {
     let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
-    let mut s = speech_state.lock().await;
-    s.resume()?;
-    log::info!("resume_speech_recording: session={}", s.session());
+    {
+        let mut s = speech_state.lock().await;
+        s.resume()?;
+        log::info!("resume_speech_recording: session={}", s.session());
+    }
+    app.state::<RecordingWidget>().resume(&app).await;
     Ok(())
 }
 
@@ -790,6 +818,7 @@ pub async fn cancel_speech_recording(app: AppHandle) -> crate::Result<()> {
         log::info!("cancel_speech_recording: session={}", s.session());
     }
 
+    app.state::<RecordingWidget>().close(&app).await;
     let _ = app.emit(
         "speech-recording-stopped",
         SpeechRecordingStoppedEvent { had_audio: false },

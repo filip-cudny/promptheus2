@@ -35,6 +35,23 @@ pub trait Shell {
         monochromatic: bool,
     ) -> zbus::Result<()>;
 
+    fn show_recording_widget(&self, x: i32, y: i32, has_position: bool) -> zbus::Result<()>;
+
+    fn update_recording_widget(
+        &self,
+        state: &str,
+        level: f64,
+        elapsed_ms: u32,
+    ) -> zbus::Result<()>;
+
+    fn hide_recording_widget(&self) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    fn recording_widget_action(&self, action: String) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    fn recording_widget_moved(&self, x: i32, y: i32) -> zbus::Result<()>;
+
     #[zbus(signal)]
     fn shortcut_activated(&self, action: String) -> zbus::Result<()>;
 

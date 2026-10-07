@@ -3,6 +3,7 @@ mod recorder;
 pub mod reminder;
 pub mod retry;
 mod transcriber;
+pub mod widget;
 
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};

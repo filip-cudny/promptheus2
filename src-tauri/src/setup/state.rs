@@ -23,6 +23,7 @@ use crate::services::recent_apps::RecentAppsState;
 use crate::services::settings_sync::SettingsSync;
 use crate::services::shell_env::get_shell_env;
 use crate::services::skill::SkillService;
+use crate::services::speech::widget::RecordingWidget;
 use crate::services::speech::{AudioClipStore, SpeechService};
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::services::{self, conversation_context, tool_confirmation, ui_state};
@@ -124,6 +125,7 @@ pub fn manage(
     app.manage(Arc::new(Mutex::new(PromptExecutionService::new())));
     app.manage(Arc::new(Mutex::new(skill_service)));
     app.manage(Arc::new(Mutex::new(SpeechService::new())));
+    app.manage(RecordingWidget::new());
     app.manage(Arc::new(audio_clip_store));
     app.manage(Arc::new(Mutex::new(ui_state_service)));
     app.manage(Arc::new(Mutex::new(

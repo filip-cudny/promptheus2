@@ -121,8 +121,38 @@ async fn run_shell_shortcuts(app: tauri::AppHandle, initial_settings: Settings) 
 
     sync_shell_shortcuts(&current_settings().await).await;
 
+    let mut widget_actions = subscribe_or_warn(proxy.receive_recording_widget_action().await);
+    let mut widget_moves = subscribe_or_warn(proxy.receive_recording_widget_moved().await);
+
     loop {
         tokio::select! {
+            Some(signal) = next_signal(&mut widget_actions) => {
+                let action = match signal.args() {
+                    Ok(args) => args.action.to_string(),
+                    Err(e) => {
+                        log::warn!("invalid RecordingWidgetAction signal: {e}");
+                        continue;
+                    }
+                };
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    run_widget_action(app, &action).await;
+                });
+            }
+            Some(signal) = next_signal(&mut widget_moves) => {
+                match signal.args() {
+                    Ok(args) => {
+                        crate::services::speech::widget::store_position(
+                            &app,
+                            crate::services::speech::widget::SHELL_POSITION_KEY,
+                            args.x,
+                            args.y,
+                        )
+                        .await;
+                    }
+                    Err(e) => log::warn!("invalid RecordingWidgetMoved signal: {e}"),
+                }
+            }
             Some(_) = ready.next() => {
                 log::info!("shell extension ready, registering shortcuts");
                 sync_shell_shortcuts(&current_settings().await).await;
@@ -149,6 +179,43 @@ async fn run_shell_shortcuts(app: tauri::AppHandle, initial_settings: Settings) 
         }
     }
     log::warn!("shell extension signal streams ended, shortcuts are disabled");
+}
+
+#[cfg(target_os = "linux")]
+fn subscribe_or_warn<S>(stream: zbus::Result<S>) -> Option<S> {
+    stream
+        .map_err(|e| log::warn!("failed to subscribe to recording widget signals: {e}"))
+        .ok()
+}
+
+#[cfg(target_os = "linux")]
+async fn next_signal<S: futures::Stream + Unpin>(stream: &mut Option<S>) -> Option<S::Item> {
+    use futures::StreamExt;
+
+    match stream {
+        Some(stream) => stream.next().await,
+        None => std::future::pending().await,
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn run_widget_action(app: tauri::AppHandle, action: &str) {
+    use crate::commands::speech;
+
+    log::debug!("recording widget action: {action}");
+    let result = match action {
+        "pause" => speech::pause_speech_recording(app).await,
+        "resume" => speech::resume_speech_recording(app).await,
+        "stop" => speech::toggle_speech_recording(app, None).await,
+        "cancel" => speech::cancel_speech_recording(app).await,
+        other => {
+            log::warn!("unknown recording widget action: {other}");
+            return;
+        }
+    };
+    if let Err(e) = result {
+        log::warn!("recording widget action {action} failed: {e}");
+    }
 }
 
 #[cfg(not(desktop))]
