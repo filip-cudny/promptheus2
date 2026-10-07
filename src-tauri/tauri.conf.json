@@ -33,7 +33,13 @@
           "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/info-mono.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/info-mono.svg",
           "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/info-color.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/info-color.svg",
           "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/warning-mono.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/warning-mono.svg",
-          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/warning-color.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/warning-color.svg"
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/warning-color.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/warning-color.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-pause.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-pause.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-play.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-play.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-stop.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-stop.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-cancel.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-cancel.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-check.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-check.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-loader.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-loader.svg"
         }
       }
     },

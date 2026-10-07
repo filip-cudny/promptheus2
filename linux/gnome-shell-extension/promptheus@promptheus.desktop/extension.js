@@ -15,6 +15,35 @@ const TOAST_GAP = 14;
 const TOAST_OPACITY = 204;
 const TOAST_SHOW_ANIMATION_MS = 150;
 const TOAST_HIDE_ANIMATION_MS = 150;
+const WIDGET_WIDTH = 240;
+const WIDGET_HEIGHT = 44;
+const WIDGET_BOTTOM_MARGIN = 24;
+const WIDGET_STATES = ['recording', 'paused', 'processing', 'done'];
+const WIDGET_BAR_FACTORS = [0.55, 0.8, 0.65, 1, 0.75, 0.9, 0.6, 0.85, 0.5];
+const WIDGET_BAR_MIN_HEIGHT = 4;
+const WIDGET_BAR_MAX_HEIGHT = 24;
+const WIDGET_BAR_SMOOTHING = 0.5;
+const WIDGET_SPIN_MS = 1000;
+const WIDGET_BUTTON_HOVER = 'rgba(255,255,255,0.14)';
+
+function pointInRect(x, y, rect) {
+    return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+}
+
+function resolveWidgetPosition(hasPosition, x, y, workAreas, pointerArea) {
+    if (hasPosition && workAreas.some(area => pointInRect(x, y, area)))
+        return {x, y, stored: true};
+    return {
+        x: Math.round(pointerArea.x + (pointerArea.width - WIDGET_WIDTH) / 2),
+        y: pointerArea.y + pointerArea.height - WIDGET_BOTTOM_MARGIN - WIDGET_HEIGHT,
+        stored: false,
+    };
+}
+
+function formatElapsed(elapsedMs) {
+    const seconds = Math.floor(elapsedMs / 1000);
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
 
 const INTERFACE_XML = `
 <node>
@@ -54,8 +83,26 @@ const INTERFACE_XML = `
       <arg type="s" direction="in" name="message"/>
       <arg type="b" direction="in" name="monochromatic"/>
     </method>
+    <method name="ShowRecordingWidget">
+      <arg type="i" direction="in" name="x"/>
+      <arg type="i" direction="in" name="y"/>
+      <arg type="b" direction="in" name="has_position"/>
+    </method>
+    <method name="UpdateRecordingWidget">
+      <arg type="s" direction="in" name="state"/>
+      <arg type="d" direction="in" name="level"/>
+      <arg type="u" direction="in" name="elapsed_ms"/>
+    </method>
+    <method name="HideRecordingWidget"/>
     <signal name="ShortcutActivated">
       <arg type="s" name="action"/>
+    </signal>
+    <signal name="RecordingWidgetAction">
+      <arg type="s" name="action"/>
+    </signal>
+    <signal name="RecordingWidgetMoved">
+      <arg type="i" name="x"/>
+      <arg type="i" name="y"/>
     </signal>
     <signal name="Ready"/>
   </interface>
@@ -70,6 +117,7 @@ export default class PromptheusExtension extends Extension {
         this._toasts = [];
         this._toastMonitor = 0;
         this._restackId = 0;
+        this._widget = null;
         this._dbus = Gio.DBusExportedObject.wrapJSObject(INTERFACE_XML, this);
         this._dbus.export(Gio.DBus.session, OBJECT_PATH);
         this._acceleratorId = global.display.connect(
@@ -90,6 +138,7 @@ export default class PromptheusExtension extends Extension {
         for (const anchor of [...this._anchors.values()])
             this._releaseAnchor(anchor);
         this._clearToasts();
+        this._removeRecordingWidget();
         this._pending = null;
         this._anchors = null;
         this._grabbed = null;
@@ -256,6 +305,233 @@ export default class PromptheusExtension extends Extension {
         }
     }
 
+    ShowRecordingWidget(x, y, hasPosition) {
+        if (!this._widget)
+            this._widget = this._buildRecordingWidget();
+        const widget = this._widget;
+        widget.heights.fill(WIDGET_BAR_MIN_HEIGHT);
+        widget.elapsed = formatElapsed(0);
+        this._setWidgetState(widget, 'recording');
+        const monitors = Main.layoutManager.monitors;
+        const workAreas = monitors.map((_monitor, i) => Main.layoutManager.getWorkAreaForMonitor(i));
+        const pointerArea = Main.layoutManager.getWorkAreaForMonitor(global.display.get_current_monitor());
+        const position = resolveWidgetPosition(hasPosition, x, y, workAreas, pointerArea);
+        widget.actor.set_position(position.x, position.y);
+        console.log(`Promptheus: recording widget shown at ${position.x},${position.y} ` +
+            `stored=${position.stored}`);
+    }
+
+    UpdateRecordingWidget(state, level, elapsedMs) {
+        if (!WIDGET_STATES.includes(state))
+            throw new Error(`Unknown recording widget state: ${state}`);
+        const widget = this._widget;
+        if (!widget)
+            throw new Error('Recording widget is not shown');
+        widget.elapsed = formatElapsed(elapsedMs);
+        if (state !== widget.state)
+            this._setWidgetState(widget, state);
+        else if (state === 'recording')
+            this._updateWidgetBars(widget, level);
+        if (widget.timeLabel && widget.timeLabel.text !== widget.elapsed)
+            widget.timeLabel.text = widget.elapsed;
+    }
+
+    HideRecordingWidget() {
+        this._removeRecordingWidget();
+    }
+
+    _removeRecordingWidget() {
+        const widget = this._widget;
+        if (!widget)
+            return;
+        this._widget = null;
+        this._endWidgetDrag(widget);
+        this._clearWidgetContent(widget);
+        widget.actor.remove_all_transitions();
+        Main.layoutManager.removeChrome(widget.actor);
+        widget.actor.destroy();
+        console.log('Promptheus: recording widget hidden');
+    }
+
+    _emitRecordingWidgetAction(action) {
+        this._dbus.emit_signal('RecordingWidgetAction', new GLib.Variant('(s)', [action]));
+    }
+
+    _buildRecordingWidget() {
+        const actor = new St.BoxLayout({
+            style: `width: ${WIDGET_WIDTH}px; height: ${WIDGET_HEIGHT}px; border-radius: ${WIDGET_HEIGHT / 2}px; ` +
+                'background-color: rgba(28,28,30,0.92); padding: 0 14px; color: #e5e5e7; ' +
+                'font-family: "Noto Sans", sans-serif; font-size: 13px;',
+            reactive: true,
+            can_focus: false,
+            track_hover: false,
+        });
+        const widget = {
+            actor,
+            state: null,
+            elapsed: formatElapsed(0),
+            heights: WIDGET_BAR_FACTORS.map(() => WIDGET_BAR_MIN_HEIGHT),
+            bars: [],
+            timeLabel: null,
+            spinner: null,
+            dragId: 0,
+        };
+        actor.connect('button-press-event', (_actor, event) => this._beginWidgetDrag(widget, event));
+        Main.layoutManager.addTopChrome(actor);
+        return widget;
+    }
+
+    _beginWidgetDrag(widget, event) {
+        if (event.get_button() !== Clutter.BUTTON_PRIMARY)
+            return Clutter.EVENT_PROPAGATE;
+        this._endWidgetDrag(widget);
+        const [pointerX, pointerY] = event.get_coords();
+        const offsetX = pointerX - widget.actor.x;
+        const offsetY = pointerY - widget.actor.y;
+        widget.dragId = global.stage.connect('captured-event', (_stage, e) => {
+            const type = e.type();
+            if (type === Clutter.EventType.MOTION) {
+                const [x, y] = e.get_coords();
+                widget.actor.set_position(Math.round(x - offsetX), Math.round(y - offsetY));
+                return Clutter.EVENT_STOP;
+            }
+            if (type === Clutter.EventType.BUTTON_RELEASE) {
+                this._endWidgetDrag(widget);
+                const x = Math.round(widget.actor.x);
+                const y = Math.round(widget.actor.y);
+                console.log(`Promptheus: recording widget dragged to ${x},${y}`);
+                this._dbus.emit_signal('RecordingWidgetMoved', new GLib.Variant('(ii)', [x, y]));
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
+        return Clutter.EVENT_STOP;
+    }
+
+    _endWidgetDrag(widget) {
+        if (widget.dragId) {
+            global.stage.disconnect(widget.dragId);
+            widget.dragId = 0;
+        }
+    }
+
+    _clearWidgetContent(widget) {
+        widget.spinner?.remove_all_transitions();
+        widget.spinner = null;
+        widget.bars = [];
+        widget.timeLabel = null;
+        widget.actor.destroy_all_children();
+    }
+
+    _setWidgetState(widget, state) {
+        this._clearWidgetContent(widget);
+        widget.state = state;
+        const content = new St.BoxLayout({
+            x_expand: true,
+            y_expand: true,
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+            style: 'spacing: 10px;',
+        });
+        if (state === 'recording' || state === 'paused')
+            this._fillControls(widget, content, state);
+        else
+            this._fillStatus(widget, content, state);
+        widget.actor.add_child(content);
+    }
+
+    _fillControls(widget, content, state) {
+        const bars = new St.BoxLayout({
+            y_align: Clutter.ActorAlign.CENTER,
+            style: `spacing: 3px; height: ${WIDGET_BAR_MAX_HEIGHT}px;`,
+        });
+        widget.bars = widget.heights.map(height => {
+            const bar = new St.Widget({
+                y_align: Clutter.ActorAlign.CENTER,
+                style: 'width: 3px; border-radius: 2px; background-color: #e5e5e7;',
+                height,
+            });
+            bars.add_child(bar);
+            return bar;
+        });
+        widget.timeLabel = new St.Label({
+            text: widget.elapsed,
+            y_align: Clutter.ActorAlign.CENTER,
+            style: 'min-width: 34px;',
+        });
+        content.add_child(bars);
+        content.add_child(widget.timeLabel);
+        if (state === 'paused')
+            content.add_child(this._widgetButton('play', 'resume'));
+        else
+            content.add_child(this._widgetButton('pause', 'pause'));
+        content.add_child(this._widgetButton('stop', 'stop'));
+        content.add_child(this._widgetButton('cancel', 'cancel'));
+    }
+
+    _fillStatus(widget, content, state) {
+        const icon = this._widgetIcon(state === 'done' ? 'check' : 'loader');
+        content.add_child(icon);
+        content.add_child(new St.Label({
+            text: state === 'done' ? 'Copied' : 'Transcribing',
+            y_align: Clutter.ActorAlign.CENTER,
+        }));
+        if (state === 'processing') {
+            widget.spinner = icon;
+            icon.set_pivot_point(0.5, 0.5);
+            this._spinWidgetIcon(icon);
+        }
+    }
+
+    _spinWidgetIcon(icon) {
+        icon.rotation_angle_z = 0;
+        icon.ease({
+            rotation_angle_z: 360,
+            duration: WIDGET_SPIN_MS,
+            mode: Clutter.AnimationMode.LINEAR,
+            onStopped: finished => {
+                if (finished)
+                    this._spinWidgetIcon(icon);
+            },
+        });
+    }
+
+    _widgetIcon(name) {
+        const file = this.dir.get_child('icons').get_child(`recording-${name}.svg`);
+        return new St.Icon({
+            gicon: new Gio.FileIcon({file}),
+            icon_size: 16,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+    }
+
+    _widgetButton(iconName, action) {
+        const button = new St.Button({
+            can_focus: false,
+            reactive: true,
+            track_hover: true,
+            y_align: Clutter.ActorAlign.CENTER,
+            style: 'width: 28px; height: 28px; border-radius: 14px;',
+            child: this._widgetIcon(iconName),
+        });
+        button.connect('notify::hover', () => {
+            button.style = `width: 28px; height: 28px; border-radius: 14px; ` +
+                `background-color: ${button.hover ? WIDGET_BUTTON_HOVER : 'transparent'};`;
+        });
+        button.connect('clicked', () => this._emitRecordingWidgetAction(action));
+        return button;
+    }
+
+    _updateWidgetBars(widget, level) {
+        const clamped = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 0;
+        const range = WIDGET_BAR_MAX_HEIGHT - WIDGET_BAR_MIN_HEIGHT;
+        widget.bars.forEach((bar, i) => {
+            const target = WIDGET_BAR_MIN_HEIGHT + range * clamped * WIDGET_BAR_FACTORS[i];
+            widget.heights[i] += (target - widget.heights[i]) * WIDGET_BAR_SMOOTHING;
+            bar.height = Math.round(widget.heights[i]);
+        });
+    }
+
     _onAcceleratorActivated(id) {
         const action = this._grabbed.get(id);
         if (action !== undefined)
@@ -275,6 +551,7 @@ export default class PromptheusExtension extends Extension {
             () => {
                 this._unwatchSender();
                 this._ungrabAll();
+                this._removeRecordingWidget();
             });
     }
 
