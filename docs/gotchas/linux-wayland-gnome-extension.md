@@ -27,7 +27,7 @@ Interface `com.promptheus.Shell`, object `/com/promptheus/Shell`, served by `org
 | `HideRecordingWidget` | `() → ()` | remove the widget |
 | `ShortcutActivated` | signal `s action` | an accelerator fired |
 | `RecordingWidgetAction` | signal `s action` | widget button pressed: `pause`, `resume`, `stop` or `cancel` |
-| `RecordingWidgetMoved` | signal `(i x, i y)` | drag released, logical stage pixels |
+| `RecordingWidgetMoved` | signal `(i x, i y)` | drag released after the pointer moved more than 4 px, logical stage pixels |
 | `Ready` | signal | the extension is enabled and serving |
 
 ## Pattern
@@ -59,6 +59,8 @@ Notification toasts:
 
 Recording widget:
 - Drawn by the extension as a reactive St actor added with `Main.layoutManager.addTopChrome` (unlike the non-reactive toasts, it receives clicks above windows): no modal (`Main.pushModal`), no `global.stage.grab`, so the client keeps keyboard focus. Buttons are `St.Button` children; dragging the pill body is handled in the shell (a `captured-event` handler on the stage for the duration of the drag).
+- Drag: `button-press-event` on the pill installs a stage `captured-event` handler; it moves the pill only after the pointer moved more than `WIDGET_DRAG_THRESHOLD_PX` (4 px) from the press point, and only then stops the release and emits `RecordingWidgetMoved`. A press whose event actor (`global.stage.get_event_actor(event)`) is an `St.Button` or inside one never starts a drag.
+- Pitfall: a stage `captured-event` handler sees events before every actor. When it returned `Clutter.EVENT_STOP` for the `BUTTON_RELEASE` of a press that started on a child `St.Button` (the press bubbles to the pill), the button never got the release and never emitted `clicked`; each click only logged `recording widget dragged to X,Y`. Any stage capture handler must propagate events it does not own.
 - `ShowRecordingWidget` position is validated by the shell against the current monitors; outside every work area (or `has_position = false`) it uses the default, bottom center 24 px above the work area bottom of the pointer's monitor.
 - Hidden by `HideRecordingWidget`, when the bus name of the `SetShortcuts` caller vanishes, and in `disable()`.
 - Rust side: `services/speech/widget.rs` (see `src-tauri/src/services/speech/DOCS.md`); position stored under `recording_widget.shell_position`. A failed `ShowRecordingWidget` makes the recording use toasts.

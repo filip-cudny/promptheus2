@@ -25,6 +25,7 @@ const WIDGET_BAR_MAX_HEIGHT = 24;
 const WIDGET_BAR_SMOOTHING = 0.5;
 const WIDGET_SPIN_MS = 1000;
 const WIDGET_BUTTON_HOVER = 'rgba(255,255,255,0.14)';
+const WIDGET_DRAG_THRESHOLD_PX = 4;
 
 function pointInRect(x, y, rect) {
     return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
@@ -384,28 +385,48 @@ export default class PromptheusExtension extends Extension {
     _beginWidgetDrag(widget, event) {
         if (event.get_button() !== Clutter.BUTTON_PRIMARY)
             return Clutter.EVENT_PROPAGATE;
+        if (this._isInWidgetButton(widget, global.stage.get_event_actor(event)))
+            return Clutter.EVENT_PROPAGATE;
         this._endWidgetDrag(widget);
-        const [pointerX, pointerY] = event.get_coords();
-        const offsetX = pointerX - widget.actor.x;
-        const offsetY = pointerY - widget.actor.y;
+        const [pressX, pressY] = event.get_coords();
+        const offsetX = pressX - widget.actor.x;
+        const offsetY = pressY - widget.actor.y;
+        let dragging = false;
         widget.dragId = global.stage.connect('captured-event', (_stage, e) => {
             const type = e.type();
             if (type === Clutter.EventType.MOTION) {
                 const [x, y] = e.get_coords();
+                if (!dragging && Math.hypot(x - pressX, y - pressY) <= WIDGET_DRAG_THRESHOLD_PX)
+                    return Clutter.EVENT_PROPAGATE;
+                dragging = true;
                 widget.actor.set_position(Math.round(x - offsetX), Math.round(y - offsetY));
                 return Clutter.EVENT_STOP;
             }
             if (type === Clutter.EventType.BUTTON_RELEASE) {
                 this._endWidgetDrag(widget);
-                const x = Math.round(widget.actor.x);
-                const y = Math.round(widget.actor.y);
-                console.log(`Promptheus: recording widget dragged to ${x},${y}`);
-                this._dbus.emit_signal('RecordingWidgetMoved', new GLib.Variant('(ii)', [x, y]));
+                if (!dragging)
+                    return Clutter.EVENT_PROPAGATE;
+                this._emitRecordingWidgetMoved(widget);
                 return Clutter.EVENT_STOP;
             }
             return Clutter.EVENT_PROPAGATE;
         });
         return Clutter.EVENT_STOP;
+    }
+
+    _isInWidgetButton(widget, actor) {
+        for (let current = actor; current && current !== widget.actor; current = current.get_parent()) {
+            if (current instanceof St.Button)
+                return true;
+        }
+        return false;
+    }
+
+    _emitRecordingWidgetMoved(widget) {
+        const x = Math.round(widget.actor.x);
+        const y = Math.round(widget.actor.y);
+        console.log(`Promptheus: recording widget dragged to ${x},${y}`);
+        this._dbus.emit_signal('RecordingWidgetMoved', new GLib.Variant('(ii)', [x, y]));
     }
 
     _endWidgetDrag(widget) {
