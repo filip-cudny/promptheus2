@@ -22,6 +22,8 @@ const MOVE_DEBOUNCE: Duration = Duration::from_millis(500);
 const FULL_SCALE_RMS: f64 = 32768.0;
 const FLOOR_DB: f64 = -50.0;
 const CEIL_DB: f64 = -20.0;
+const LEVEL_ATTACK: f64 = 0.6;
+const LEVEL_RELEASE: f64 = 0.2;
 const BOTTOM_MARGIN: f64 = 24.0;
 
 type Rect = (i32, i32, u32, u32);
@@ -130,6 +132,11 @@ pub fn level_from_rms(rms: f64) -> f64 {
     }
     let dbfs = 20.0 * (rms / FULL_SCALE_RMS).log10();
     ((dbfs - FLOOR_DB) / (CEIL_DB - FLOOR_DB)).clamp(0.0, 1.0)
+}
+
+pub fn smooth_level(previous: f64, target: f64) -> f64 {
+    let rate = if target > previous { LEVEL_ATTACK } else { LEVEL_RELEASE };
+    previous + (target - previous) * rate
 }
 
 fn default_origin(work_area: Rect, size: (u32, u32), scale: f64) -> (i32, i32) {
@@ -476,6 +483,7 @@ fn spawn_level_task(app: AppHandle, session: u64, generation: u64) {
         };
         let widget = app.state::<RecordingWidget>();
         let mut cursor = 0usize;
+        let mut smoothed = 0.0;
 
         loop {
             tokio::time::sleep(TICK).await;
@@ -502,8 +510,12 @@ fn spawn_level_task(app: AppHandle, session: u64, generation: u64) {
                 return;
             }
             inner.elapsed_ms = elapsed;
-            let level = if inner.state == WidgetState::Paused { 0.0 } else { level };
-            push(&app, &mut inner, level).await;
+            smoothed = if inner.state == WidgetState::Paused {
+                0.0
+            } else {
+                smooth_level(smoothed, level)
+            };
+            push(&app, &mut inner, smoothed).await;
         }
     });
 }
@@ -557,6 +569,25 @@ mod tests {
         assert_eq!(level_from_rms(at_dbfs(-20.0) + 1e-6), 1.0);
         assert_eq!(level_from_rms(3277.0), 1.0);
         assert_eq!(level_from_rms(32768.0), 1.0);
+    }
+
+    #[test]
+    fn smoothed_level_rises_fast() {
+        assert!(smooth_level(0.0, 1.0) >= 0.6);
+        assert!(smooth_level(0.25, 0.75) >= 0.55);
+    }
+
+    #[test]
+    fn smoothed_level_falls_slowly() {
+        assert!(smooth_level(1.0, 0.0) > 0.5);
+        let after_eleven_ticks = (0..11).fold(1.0, |level, _| smooth_level(level, 0.0));
+        assert!(after_eleven_ticks < 0.1);
+        assert!(after_eleven_ticks > 0.0);
+    }
+
+    #[test]
+    fn smoothed_level_holds_a_steady_target() {
+        assert_eq!(smooth_level(0.4, 0.4), 0.4);
     }
 
     #[test]

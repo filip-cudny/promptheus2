@@ -35,8 +35,8 @@
     return `${Math.floor(totalSeconds / 60)}:${seconds}`;
   });
 
-  function barHeight(factor: number): number {
-    return Math.max(MIN_BAR, Math.min(1, level * factor)) * 100;
+  function barScale(factor: number): number {
+    return Math.max(MIN_BAR, Math.min(1, level * factor));
   }
 
   async function run(command: string) {
@@ -64,7 +64,7 @@
   {#if widgetState === "recording" || widgetState === "paused"}
     <div class="bars" data-tauri-drag-region>
       {#each BAR_FACTORS as factor}
-        <span class="bar" style:height="{barHeight(factor)}%" data-tauri-drag-region></span>
+        <span class="bar" style:transform="scaleY({barScale(factor)})" data-tauri-drag-region></span>
       {/each}
     </div>
     <span class="time" data-tauri-drag-region>{clock}</span>
@@ -140,9 +140,10 @@
 
   .bar {
     width: 3px;
+    height: 100%;
     border-radius: 2px;
     background: #e5e5e7;
-    transition: height 90ms ease-out;
+    transition: transform 120ms ease-out;
   }
 
   .time {
