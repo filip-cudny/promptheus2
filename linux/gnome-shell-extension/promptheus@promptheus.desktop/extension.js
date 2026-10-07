@@ -23,8 +23,7 @@ const WIDGET_STATES = ['recording', 'paused', 'processing', 'done'];
 const WIDGET_BAR_FACTORS = [0.55, 0.8, 0.65, 1, 0.75, 0.9, 0.6, 0.85, 0.5];
 const WIDGET_BAR_MIN_HEIGHT = 4;
 const WIDGET_BAR_MAX_HEIGHT = 24;
-const WIDGET_BAR_EASE = 0.25;
-const WIDGET_BAR_FRAME_MS = 16;
+const WIDGET_BAR_EASE_MS = 100;
 const WIDGET_BAR_WIDTH = 3;
 const WIDGET_BAR_SPACING = 3;
 const WIDGET_WAVE_BAR_COUNT = Math.floor(
@@ -323,7 +322,6 @@ export default class PromptheusExtension extends Extension {
         const widget = this._widget;
         widget.monochromatic = monochromatic;
         widget.heights.fill(WIDGET_BAR_MIN_HEIGHT);
-        widget.targets.fill(WIDGET_BAR_MIN_HEIGHT);
         widget.elapsed = formatElapsed(0);
         this._setWidgetState(widget, 'recording');
         const monitors = Main.layoutManager.monitors;
@@ -345,7 +343,7 @@ export default class PromptheusExtension extends Extension {
         if (state !== widget.state)
             this._setWidgetState(widget, state);
         else if (state === 'recording')
-            this._setWidgetBarTargets(widget, level);
+            this._easeWidgetBars(widget, level);
         if (widget.timeLabel && widget.timeLabel.text !== widget.elapsed)
             widget.timeLabel.text = widget.elapsed;
     }
@@ -385,9 +383,7 @@ export default class PromptheusExtension extends Extension {
             state: null,
             elapsed: formatElapsed(0),
             heights: WIDGET_BAR_FACTORS.map(() => WIDGET_BAR_MIN_HEIGHT),
-            targets: WIDGET_BAR_FACTORS.map(() => WIDGET_BAR_MIN_HEIGHT),
             bars: [],
-            barsId: 0,
             timeLabel: null,
             waveBars: [],
             waveStart: 0,
@@ -454,7 +450,7 @@ export default class PromptheusExtension extends Extension {
     }
 
     _clearWidgetContent(widget) {
-        this._stopWidgetBars(widget);
+        widget.bars.forEach(bar => bar.remove_all_transitions());
         this._stopWidgetWave(widget);
         widget.bars = [];
         widget.timeLabel = null;
@@ -496,8 +492,6 @@ export default class PromptheusExtension extends Extension {
             content.add_child(this._widgetButton('pause', 'pause'));
         content.add_child(this._widgetButton('stop', 'stop'));
         content.add_child(this._widgetButton('cancel', 'cancel'));
-        if (state === 'recording')
-            this._startWidgetBars(widget);
     }
 
     _widgetBarRow() {
@@ -582,35 +576,20 @@ export default class PromptheusExtension extends Extension {
         return button;
     }
 
-    _setWidgetBarTargets(widget, level) {
+    _easeWidgetBars(widget, level) {
         const clamped = Number.isFinite(level) ? Math.min(1, Math.max(0, level)) : 0;
         const range = WIDGET_BAR_MAX_HEIGHT - WIDGET_BAR_MIN_HEIGHT;
-        WIDGET_BAR_FACTORS.forEach((factor, i) => {
-            widget.targets[i] = WIDGET_BAR_MIN_HEIGHT + range * clamped * factor;
-        });
-    }
-
-    _startWidgetBars(widget) {
-        widget.barsId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, WIDGET_BAR_FRAME_MS, () => {
-            this._easeWidgetBars(widget);
-            return GLib.SOURCE_CONTINUE;
-        });
-    }
-
-    _easeWidgetBars(widget) {
         widget.bars.forEach((bar, i) => {
-            widget.heights[i] += (widget.targets[i] - widget.heights[i]) * WIDGET_BAR_EASE;
-            const height = Math.round(widget.heights[i]);
-            if (bar.height !== height)
-                bar.height = height;
+            const height = Math.round(WIDGET_BAR_MIN_HEIGHT + range * clamped * WIDGET_BAR_FACTORS[i]);
+            if (height === widget.heights[i])
+                return;
+            widget.heights[i] = height;
+            bar.ease({
+                height,
+                duration: WIDGET_BAR_EASE_MS,
+                mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+            });
         });
-    }
-
-    _stopWidgetBars(widget) {
-        if (widget.barsId) {
-            GLib.Source.remove(widget.barsId);
-            widget.barsId = 0;
-        }
     }
 
     _onAcceleratorActivated(id) {
