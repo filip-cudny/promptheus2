@@ -71,6 +71,13 @@ struct WidgetPayload {
     state: &'static str,
     level: f64,
     elapsed_ms: u32,
+    monochromatic: bool,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct WidgetSettings {
+    enabled: bool,
+    monochromatic: bool,
 }
 
 struct Inner {
@@ -79,6 +86,7 @@ struct Inner {
     state: WidgetState,
     generation: u64,
     elapsed_ms: u32,
+    monochromatic: bool,
     update_failed: bool,
     #[cfg(target_os = "linux")]
     shell: Option<crate::services::gnome_shell::ShellProxy<'static>>,
@@ -170,22 +178,22 @@ pub fn window_moved(app: &AppHandle, position: PhysicalPosition<i32>) {
     }
 }
 
-async fn show_enabled(app: &AppHandle) -> bool {
-    match app.try_state::<Arc<Mutex<ConfigService>>>() {
-        Some(config) => config
-            .lock()
-            .await
-            .settings()
-            .surfaces
-            .speech_to_text
-            .show_recording_widget,
-        None => false,
+async fn widget_settings(app: &AppHandle) -> WidgetSettings {
+    let Some(config) = app.try_state::<Arc<Mutex<ConfigService>>>() else {
+        return WidgetSettings::default();
+    };
+    let config = config.lock().await;
+    let speech = &config.settings().surfaces.speech_to_text;
+    WidgetSettings {
+        enabled: speech.show_recording_widget,
+        monochromatic: speech.monochromatic_widget_icon,
     }
 }
 
 #[cfg(target_os = "linux")]
 async fn show_in_shell(
     app: &AppHandle,
+    monochromatic: bool,
 ) -> Result<crate::services::gnome_shell::ShellProxy<'static>, String> {
     let stored = read_position(app, SHELL_POSITION_KEY).await;
     let (x, y) = stored.unwrap_or((0, 0));
@@ -193,7 +201,7 @@ async fn show_in_shell(
         .await
         .map_err(|e| e.to_string())?;
     proxy
-        .show_recording_widget(x, y, stored.is_some())
+        .show_recording_widget(x, y, stored.is_some(), monochromatic)
         .await
         .map_err(|e| e.to_string())?;
     Ok(proxy)
@@ -219,6 +227,7 @@ impl RecordingWidget {
                 state: WidgetState::Recording,
                 generation: 0,
                 elapsed_ms: 0,
+                monochromatic: true,
                 update_failed: false,
                 #[cfg(target_os = "linux")]
                 shell: None,
@@ -233,11 +242,11 @@ impl RecordingWidget {
     }
 
     pub async fn show(&self, app: &AppHandle, session: u64) -> bool {
-        let enabled = show_enabled(app).await;
+        let settings = widget_settings(app).await;
         let kind = current_session_kind();
-        let transport = choose_transport(enabled, kind);
+        let transport = choose_transport(settings.enabled, kind);
         #[cfg(target_os = "linux")]
-        if enabled && kind == SessionKind::OtherWayland {
+        if settings.enabled && kind == SessionKind::OtherWayland {
             log::warn!(
                 "recording widget unavailable on this Wayland session without the GNOME Shell extension, using toasts"
             );
@@ -251,6 +260,7 @@ impl RecordingWidget {
         inner.session = session;
         inner.state = WidgetState::Recording;
         inner.elapsed_ms = 0;
+        inner.monochromatic = settings.monochromatic;
         inner.update_failed = false;
         inner.transport = None;
         #[cfg(target_os = "linux")]
@@ -260,7 +270,7 @@ impl RecordingWidget {
 
         let shown = match transport {
             #[cfg(target_os = "linux")]
-            Transport::Shell => show_in_shell(app).await.map(|proxy| inner.shell = Some(proxy)),
+            Transport::Shell => show_in_shell(app, settings.monochromatic).await.map(|proxy| inner.shell = Some(proxy)),
             Transport::Window => self.show_window(app).await,
         };
         if let Err(e) = shown {
@@ -268,7 +278,10 @@ impl RecordingWidget {
             return false;
         }
 
-        log::debug!("recording widget: show session={session} transport={transport:?}");
+        log::debug!(
+            "recording widget: show session={session} transport={transport:?} monochromatic={}",
+            settings.monochromatic
+        );
         inner.transport = Some(transport);
         if transport == Transport::Window {
             push(app, &mut inner, 0.0).await;
@@ -429,7 +442,12 @@ async fn push(app: &AppHandle, inner: &mut Inner, level: f64) {
             .emit_to(
                 WINDOW_LABEL,
                 STATE_EVENT,
-                WidgetPayload { state, level, elapsed_ms: inner.elapsed_ms },
+                WidgetPayload {
+                    state,
+                    level,
+                    elapsed_ms: inner.elapsed_ms,
+                    monochromatic: inner.monochromatic,
+                },
             )
             .map_err(|e| e.to_string()),
     };

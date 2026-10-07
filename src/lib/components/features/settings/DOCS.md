@@ -14,7 +14,7 @@ settings/
 ├── SectionModels.svelte           # Models section: list pane + editor pane
 ├── SectionAppearance.svelte       # Theme toggle
 ├── SectionHistory.svelte          # History retention window (presets + custom days, confirm before pruning) + storage card (size / reclaimable / Compact database)
-├── SectionSpeech.svelte           # STT failure handling: transcription attempts, audio retention hours, keep-audio-on-success
+├── SectionSpeech.svelte           # STT recording widget (show, monochromatic "Copied" icon) + failure handling: transcription attempts, audio retention hours, keep-audio-on-success
 ├── SectionSync.svelte             # Git settings sync: state, repo path, branch, last sync, "Sync now" (reads status via `$lib/services/settingsSync`)
 ├── SectionPromptBase.svelte       # Preferred name field + System / about_you / environment / input_format prompts (tabbed)
 ├── SectionSurfacePrompts.svelte   # Title generation + STT prompt + STT keyterms (tabbed)

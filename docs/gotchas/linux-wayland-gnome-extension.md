@@ -22,7 +22,7 @@ Interface `com.promptheus.Shell`, object `/com/promptheus/Shell`, served by `org
 | `PlaceWindowAnchored` | `(s title, i right, i bottom, b activate) → b` | keep the frame's bottom-right corner at `(right, bottom)` until the window is unmanaged, optionally activate it |
 | `GetFocusedWmClass` | `() → s` | `wm_class` of the focused window |
 | `ShowToast` | `(s level, s title, s message, b monochromatic) → ()` | draw a toast as a shell actor; `level` is `success`/`error`/`info`/`warning`, empty `message` = no description |
-| `ShowRecordingWidget` | `(i x, i y, b has_position) → ()` | show the recording widget at `(x, y)` logical stage pixels when `has_position`, else at the default position |
+| `ShowRecordingWidget` | `(i x, i y, b has_position, b monochromatic) → ()` | show the recording widget at `(x, y)` logical stage pixels when `has_position`, else at the default position; `monochromatic` picks the `done` check icon (`recording-check-mono.svg` in the widget foreground or green `recording-check.svg`) |
 | `UpdateRecordingWidget` | `(s state, d level, u elapsed_ms) → ()` | `state` is `recording`/`paused`/`processing`/`done`; `level` 0..1 |
 | `HideRecordingWidget` | `() → ()` | remove the widget |
 | `ShortcutActivated` | signal `s action` | an accelerator fired |

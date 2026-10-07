@@ -88,6 +88,7 @@ const INTERFACE_XML = `
       <arg type="i" direction="in" name="x"/>
       <arg type="i" direction="in" name="y"/>
       <arg type="b" direction="in" name="has_position"/>
+      <arg type="b" direction="in" name="monochromatic"/>
     </method>
     <method name="UpdateRecordingWidget">
       <arg type="s" direction="in" name="state"/>
@@ -306,10 +307,11 @@ export default class PromptheusExtension extends Extension {
         }
     }
 
-    ShowRecordingWidget(x, y, hasPosition) {
+    ShowRecordingWidget(x, y, hasPosition, monochromatic) {
         if (!this._widget)
             this._widget = this._buildRecordingWidget();
         const widget = this._widget;
+        widget.monochromatic = monochromatic;
         widget.heights.fill(WIDGET_BAR_MIN_HEIGHT);
         widget.elapsed = formatElapsed(0);
         this._setWidgetState(widget, 'recording');
@@ -491,7 +493,7 @@ export default class PromptheusExtension extends Extension {
     }
 
     _fillStatus(widget, content, state) {
-        const icon = this._widgetIcon(state === 'done' ? 'check' : 'loader');
+        const icon = this._widgetIcon(this._statusIconName(widget, state));
         content.add_child(icon);
         content.add_child(new St.Label({
             text: state === 'done' ? 'Copied' : 'Transcribing',
@@ -502,6 +504,12 @@ export default class PromptheusExtension extends Extension {
             icon.set_pivot_point(0.5, 0.5);
             this._spinWidgetIcon(icon);
         }
+    }
+
+    _statusIconName(widget, state) {
+        if (state !== 'done')
+            return 'loader';
+        return widget.monochromatic ? 'check-mono' : 'check';
     }
 
     _spinWidgetIcon(icon) {

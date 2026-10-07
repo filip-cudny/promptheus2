@@ -35,7 +35,13 @@ pub trait Shell {
         monochromatic: bool,
     ) -> zbus::Result<()>;
 
-    fn show_recording_widget(&self, x: i32, y: i32, has_position: bool) -> zbus::Result<()>;
+    fn show_recording_widget(
+        &self,
+        x: i32,
+        y: i32,
+        has_position: bool,
+        monochromatic: bool,
+    ) -> zbus::Result<()>;
 
     fn update_recording_widget(
         &self,

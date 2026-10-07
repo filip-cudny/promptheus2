@@ -11,16 +11,19 @@
     state: WidgetState;
     level: number;
     elapsedMs: number;
+    monochromatic: boolean;
   }
 
   const BAR_FACTORS = [0.55, 0.8, 0.65, 1, 0.75, 0.95, 0.6, 0.85, 0.5];
   const MIN_BAR = 0.12;
+  const DONE_COLOR = "#62A878";
 
   const isMac = /Mac/.test(navigator.platform);
 
   let widgetState = $state<WidgetState>("recording");
   let level = $state(0);
   let elapsedMs = $state(0);
+  let monochromatic = $state(true);
   let unlisten: UnlistenFn | undefined;
 
   const clock = $derived.by(() => {
@@ -46,6 +49,7 @@
     unlisten = await listen<WidgetPayload>("recording-widget-state", (event) => {
       widgetState = event.payload.state;
       elapsedMs = event.payload.elapsedMs;
+      monochromatic = event.payload.monochromatic;
       if (widgetState === "recording") level = event.payload.level;
     });
   });
@@ -85,7 +89,7 @@
     </span>
   {:else}
     <span class="status" data-tauri-drag-region>
-      <Check size={16} />
+      <Check size={16} color={monochromatic ? "currentColor" : DONE_COLOR} />
       Copied
     </span>
   {/if}

@@ -64,6 +64,18 @@
           A small floating widget shows the recording level and lets you pause, stop or cancel.
           Off shows notifications instead.
         </p>
+        <label class="check">
+          <input
+            type="checkbox"
+            checked={config.monochromatic_widget_icon}
+            onchange={(e: Event) =>
+              save({ monochromatic_widget_icon: (e.target as HTMLInputElement).checked })}
+          />
+          <span>Monochromatic widget icon</span>
+        </label>
+        <p class="muted">
+          The "Copied" check uses the widget's text color. Off shows it in green.
+        </p>
       </div>
 
       <div class="group">
