@@ -17,13 +17,22 @@ const TOAST_SHOW_ANIMATION_MS = 150;
 const TOAST_HIDE_ANIMATION_MS = 150;
 const WIDGET_WIDTH = 240;
 const WIDGET_HEIGHT = 44;
+const WIDGET_PADDING_X = 14;
 const WIDGET_BOTTOM_MARGIN = 24;
 const WIDGET_STATES = ['recording', 'paused', 'processing', 'done'];
 const WIDGET_BAR_FACTORS = [0.55, 0.8, 0.65, 1, 0.75, 0.9, 0.6, 0.85, 0.5];
 const WIDGET_BAR_MIN_HEIGHT = 4;
 const WIDGET_BAR_MAX_HEIGHT = 24;
 const WIDGET_BAR_SMOOTHING = 0.5;
-const WIDGET_SPIN_MS = 1000;
+const WIDGET_BAR_WIDTH = 3;
+const WIDGET_BAR_SPACING = 3;
+const WIDGET_WAVE_BAR_COUNT = Math.floor(
+    (WIDGET_WIDTH - 2 * WIDGET_PADDING_X + WIDGET_BAR_SPACING) / (WIDGET_BAR_WIDTH + WIDGET_BAR_SPACING));
+const WIDGET_WAVE_AMPLITUDE = WIDGET_BAR_MAX_HEIGHT / 3;
+const WIDGET_WAVE_OPACITY = 150;
+const WIDGET_WAVE_PERIOD_US = 1200 * 1000;
+const WIDGET_WAVE_FRAME_MS = 33;
+const WIDGET_WAVE_STEP = 2 * Math.PI / WIDGET_WAVE_BAR_COUNT;
 const WIDGET_BUTTON_HOVER = 'rgba(255,255,255,0.14)';
 const WIDGET_DRAG_THRESHOLD_PX = 4;
 
@@ -363,7 +372,7 @@ export default class PromptheusExtension extends Extension {
     _buildRecordingWidget() {
         const actor = new St.BoxLayout({
             style: `width: ${WIDGET_WIDTH}px; height: ${WIDGET_HEIGHT}px; border-radius: ${WIDGET_HEIGHT / 2}px; ` +
-                'background-color: rgba(28,28,30,0.92); padding: 0 14px; color: #e5e5e7; ' +
+                `background-color: rgba(28,28,30,0.92); padding: 0 ${WIDGET_PADDING_X}px; color: #e5e5e7; ` +
                 'font-family: "Noto Sans", sans-serif; font-size: 13px;',
             reactive: true,
             can_focus: false,
@@ -376,7 +385,9 @@ export default class PromptheusExtension extends Extension {
             heights: WIDGET_BAR_FACTORS.map(() => WIDGET_BAR_MIN_HEIGHT),
             bars: [],
             timeLabel: null,
-            spinner: null,
+            waveBars: [],
+            waveStart: 0,
+            waveId: 0,
             dragId: 0,
         };
         actor.connect('button-press-event', (_actor, event) => this._beginWidgetDrag(widget, event));
@@ -439,8 +450,7 @@ export default class PromptheusExtension extends Extension {
     }
 
     _clearWidgetContent(widget) {
-        widget.spinner?.remove_all_transitions();
-        widget.spinner = null;
+        this._stopWidgetWave(widget);
         widget.bars = [];
         widget.timeLabel = null;
         widget.actor.destroy_all_children();
@@ -458,25 +468,16 @@ export default class PromptheusExtension extends Extension {
         });
         if (state === 'recording' || state === 'paused')
             this._fillControls(widget, content, state);
+        else if (state === 'processing')
+            this._fillWave(widget, content);
         else
-            this._fillStatus(widget, content, state);
+            this._fillDone(widget, content);
         widget.actor.add_child(content);
     }
 
     _fillControls(widget, content, state) {
-        const bars = new St.BoxLayout({
-            y_align: Clutter.ActorAlign.CENTER,
-            style: `spacing: 3px; height: ${WIDGET_BAR_MAX_HEIGHT}px;`,
-        });
-        widget.bars = widget.heights.map(height => {
-            const bar = new St.Widget({
-                y_align: Clutter.ActorAlign.CENTER,
-                style: 'width: 3px; border-radius: 2px; background-color: #e5e5e7;',
-                height,
-            });
-            bars.add_child(bar);
-            return bar;
-        });
+        const bars = this._widgetBarRow();
+        widget.bars = widget.heights.map(height => this._widgetBar(bars, height));
         widget.timeLabel = new St.Label({
             text: widget.elapsed,
             y_align: Clutter.ActorAlign.CENTER,
@@ -492,37 +493,60 @@ export default class PromptheusExtension extends Extension {
         content.add_child(this._widgetButton('cancel', 'cancel'));
     }
 
-    _fillStatus(widget, content, state) {
-        const icon = this._widgetIcon(this._statusIconName(widget, state));
-        content.add_child(icon);
+    _widgetBarRow() {
+        return new St.BoxLayout({
+            y_align: Clutter.ActorAlign.CENTER,
+            style: `spacing: ${WIDGET_BAR_SPACING}px; height: ${WIDGET_BAR_MAX_HEIGHT}px;`,
+        });
+    }
+
+    _widgetBar(row, height) {
+        const bar = new St.Widget({
+            y_align: Clutter.ActorAlign.CENTER,
+            style: `width: ${WIDGET_BAR_WIDTH}px; border-radius: 2px; background-color: #e5e5e7;`,
+            height,
+        });
+        row.add_child(bar);
+        return bar;
+    }
+
+    _fillWave(widget, content) {
+        const row = this._widgetBarRow();
+        row.opacity = WIDGET_WAVE_OPACITY;
+        widget.waveBars = Array.from({length: WIDGET_WAVE_BAR_COUNT},
+            () => this._widgetBar(row, WIDGET_BAR_MIN_HEIGHT));
+        content.add_child(row);
+        widget.waveStart = GLib.get_monotonic_time();
+        this._updateWidgetWave(widget);
+        widget.waveId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, WIDGET_WAVE_FRAME_MS, () => {
+            this._updateWidgetWave(widget);
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    _updateWidgetWave(widget) {
+        const elapsed = GLib.get_monotonic_time() - widget.waveStart;
+        const phase = 2 * Math.PI * (elapsed % WIDGET_WAVE_PERIOD_US) / WIDGET_WAVE_PERIOD_US;
+        widget.waveBars.forEach((bar, i) => {
+            const wave = 0.5 + 0.5 * Math.sin(phase - i * WIDGET_WAVE_STEP);
+            bar.height = Math.round(WIDGET_BAR_MIN_HEIGHT + WIDGET_WAVE_AMPLITUDE * wave);
+        });
+    }
+
+    _stopWidgetWave(widget) {
+        if (widget.waveId) {
+            GLib.Source.remove(widget.waveId);
+            widget.waveId = 0;
+        }
+        widget.waveBars = [];
+    }
+
+    _fillDone(widget, content) {
+        content.add_child(this._widgetIcon(widget.monochromatic ? 'check-mono' : 'check'));
         content.add_child(new St.Label({
-            text: state === 'done' ? 'Copied' : 'Transcribing',
+            text: 'Copied',
             y_align: Clutter.ActorAlign.CENTER,
         }));
-        if (state === 'processing') {
-            widget.spinner = icon;
-            icon.set_pivot_point(0.5, 0.5);
-            this._spinWidgetIcon(icon);
-        }
-    }
-
-    _statusIconName(widget, state) {
-        if (state !== 'done')
-            return 'loader';
-        return widget.monochromatic ? 'check-mono' : 'check';
-    }
-
-    _spinWidgetIcon(icon) {
-        icon.rotation_angle_z = 0;
-        icon.ease({
-            rotation_angle_z: 360,
-            duration: WIDGET_SPIN_MS,
-            mode: Clutter.AnimationMode.LINEAR,
-            onStopped: finished => {
-                if (finished)
-                    this._spinWidgetIcon(icon);
-            },
-        });
     }
 
     _widgetIcon(name) {

@@ -3,7 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { attachConsole, error as logError } from "@tauri-apps/plugin-log";
-  import { Check, LoaderCircle, Pause, Play, Square, X } from "lucide-svelte";
+  import { Check, Pause, Play, Square, X } from "lucide-svelte";
 
   type WidgetState = "recording" | "paused" | "processing" | "done";
 
@@ -17,6 +17,9 @@
   const BAR_FACTORS = [0.55, 0.8, 0.65, 1, 0.75, 0.95, 0.6, 0.85, 0.5];
   const MIN_BAR = 0.12;
   const DONE_COLOR = "#62A878";
+  const WAVE_BAR_COUNT = 35;
+  const WAVE_PERIOD_MS = 1200;
+  const WAVE_BARS = Array.from({ length: WAVE_BAR_COUNT }, (_, i) => (i / WAVE_BAR_COUNT - 1) * WAVE_PERIOD_MS);
 
   const isMac = /Mac/.test(navigator.platform);
 
@@ -83,10 +86,11 @@
       </button>
     </div>
   {:else if widgetState === "processing"}
-    <span class="status" data-tauri-drag-region>
-      <span class="spin"><LoaderCircle size={16} /></span>
-      Transcribing
-    </span>
+    <div class="wave" style:--wave-period="{WAVE_PERIOD_MS}ms" data-tauri-drag-region>
+      {#each WAVE_BARS as delayMs}
+        <span class="wave-bar" style:animation-delay="{delayMs}ms" data-tauri-drag-region></span>
+      {/each}
+    </div>
   {:else}
     <span class="status" data-tauri-drag-region>
       <Check size={16} color={monochromatic ? "currentColor" : DONE_COLOR} />
@@ -180,14 +184,26 @@
     gap: 8px;
   }
 
-  .spin {
+  .wave {
+    flex: 1;
     display: flex;
-    animation: spin 1s linear infinite;
+    align-items: center;
+    justify-content: space-between;
+    height: 24px;
   }
 
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
+  .wave-bar {
+    width: 3px;
+    height: 12px;
+    border-radius: 2px;
+    background: #929294;
+    transform: scaleY(0.34);
+    animation: wave var(--wave-period) ease-in-out infinite;
+  }
+
+  @keyframes wave {
+    50% {
+      transform: scaleY(1);
     }
   }
 </style>
