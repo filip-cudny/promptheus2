@@ -410,6 +410,7 @@ fn write_bundled_defaults(skills_dir: &Path) -> Result<(), SkillError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::skill::OfferedIn;
     use crate::services::database::Database;
     use tempfile::TempDir;
 
@@ -634,5 +635,64 @@ mod tests {
         assert!(validate_slug("has_underscore").is_err());
         assert!(validate_slug("").is_err());
         assert!(validate_slug("x").is_err());
+    }
+
+    fn frontmatter(description: &str, offered_in: Option<Vec<OfferedIn>>) -> SkillFrontmatter {
+        SkillFrontmatter {
+            name: "alpha".into(),
+            display_name: None,
+            description: Some(description.into()),
+            model: None,
+            parameters: None,
+            offered_in,
+        }
+    }
+
+    fn service_in(dir: &TempDir) -> SkillService {
+        let skills_dir = dir.path().join("skills");
+        std::fs::create_dir(&skills_dir).unwrap();
+        SkillService::load(&skills_dir, None, &[]).unwrap()
+    }
+
+    #[test]
+    fn write_skill_without_offered_in_writes_no_field() {
+        let dir = TempDir::new().unwrap();
+        let mut service = service_in(&dir);
+        service.write_skill("alpha", &frontmatter("d", None), "body").unwrap();
+        let content = std::fs::read_to_string(service.skill_dir("alpha").join("SKILL.md")).unwrap();
+        assert!(!content.contains("offered_in"));
+    }
+
+    #[test]
+    fn write_skill_round_trips_offered_in() {
+        let dir = TempDir::new().unwrap();
+        let mut service = service_in(&dir);
+        let fm = frontmatter("d", Some(vec![OfferedIn::Pill]));
+        service.write_skill("alpha", &fm, "body").unwrap();
+        service.reload(&[]).unwrap();
+        assert_eq!(
+            service.get_skill("alpha").unwrap().offered_in,
+            Some(vec![OfferedIn::Pill])
+        );
+    }
+
+    #[test]
+    fn rewrite_with_changed_description_keeps_offered_in() {
+        let dir = TempDir::new().unwrap();
+        let mut service = service_in(&dir);
+        let fm = frontmatter("old", Some(vec![OfferedIn::Pill]));
+        service.write_skill("alpha", &fm, "body").unwrap();
+        service.reload(&[]).unwrap();
+        let loaded = service.get_skill("alpha").unwrap().clone();
+        let edited = SkillFrontmatter {
+            description: Some("new".into()),
+            offered_in: loaded.offered_in.clone(),
+            ..fm
+        };
+        service.write_skill("alpha", &edited, &loaded.body).unwrap();
+        service.reload(&[]).unwrap();
+        let reloaded = service.get_skill("alpha").unwrap();
+        assert_eq!(reloaded.offered_in, Some(vec![OfferedIn::Pill]));
+        assert_eq!(reloaded.description.as_deref(), Some("new"));
     }
 }

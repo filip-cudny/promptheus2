@@ -40,6 +40,7 @@ pub(super) fn parse_skill_file(path: &Path, dir_name: &str) -> Result<Skill, Ski
         description: fm.description,
         model: fm.model,
         parameters: fm.parameters,
+        offered_in: fm.offered_in,
         body: body.trim().to_string(),
         file_path: path.to_path_buf(),
         skill_version_id: None,
@@ -62,7 +63,37 @@ pub fn split_frontmatter(content: &str) -> Option<(&str, &str)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::skill::OfferedIn;
     use tempfile::TempDir;
+
+    fn parse_frontmatter(extra: &str) -> Result<Skill, SkillError> {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("SKILL.md");
+        std::fs::write(&path, format!("---\nname: s\n{extra}---\n\nBody.\n")).unwrap();
+        parse_skill_file(&path, "s")
+    }
+
+    #[test]
+    fn offered_in_absent_is_none() {
+        assert_eq!(parse_frontmatter("").unwrap().offered_in, None);
+    }
+
+    #[test]
+    fn offered_in_pill() {
+        let skill = parse_frontmatter("offered_in: [pill]\n").unwrap();
+        assert_eq!(skill.offered_in, Some(vec![OfferedIn::Pill]));
+    }
+
+    #[test]
+    fn offered_in_empty_list() {
+        let skill = parse_frontmatter("offered_in: []\n").unwrap();
+        assert_eq!(skill.offered_in, Some(vec![]));
+    }
+
+    #[test]
+    fn offered_in_unknown_value_fails() {
+        assert!(parse_frontmatter("offered_in: [chat]\n").is_err());
+    }
 
     #[test]
     fn parse_valid_skill_file() {

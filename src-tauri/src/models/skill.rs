@@ -3,6 +3,19 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OfferedIn {
+    ContextMenu,
+    Pill,
+}
+
+pub fn is_offered_in(offered_in: &Option<Vec<OfferedIn>>, place: OfferedIn) -> bool {
+    offered_in
+        .as_ref()
+        .is_none_or(|places| places.contains(&place))
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SkillFrontmatter {
     pub name: String,
@@ -14,6 +27,8 @@ pub struct SkillFrontmatter {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parameters: Option<HashMap<String, serde_json::Value>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offered_in: Option<Vec<OfferedIn>>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -23,6 +38,7 @@ pub struct Skill {
     pub description: Option<String>,
     pub model: Option<String>,
     pub parameters: Option<HashMap<String, serde_json::Value>>,
+    pub offered_in: Option<Vec<OfferedIn>>,
     pub body: String,
     #[serde(skip)]
     pub file_path: PathBuf,
@@ -35,6 +51,7 @@ pub struct SkillSummary {
     pub name: String,
     pub display_name: String,
     pub description: Option<String>,
+    pub offered_in: Option<Vec<OfferedIn>>,
 }
 
 impl From<&Skill> for SkillSummary {
@@ -43,6 +60,7 @@ impl From<&Skill> for SkillSummary {
             name: skill.name.clone(),
             display_name: skill.display_name.clone(),
             description: skill.description.clone(),
+            offered_in: skill.offered_in.clone(),
         }
     }
 }
@@ -54,6 +72,7 @@ pub struct SkillFull {
     pub description: Option<String>,
     pub model: Option<String>,
     pub parameters: Option<HashMap<String, serde_json::Value>>,
+    pub offered_in: Option<Vec<OfferedIn>>,
     pub body: String,
     pub file_path: String,
 }
@@ -66,6 +85,7 @@ impl From<&Skill> for SkillFull {
             description: skill.description.clone(),
             model: skill.model.clone(),
             parameters: skill.parameters.clone(),
+            offered_in: skill.offered_in.clone(),
             body: skill.body.clone(),
             file_path: skill.file_path.to_string_lossy().to_string(),
         }

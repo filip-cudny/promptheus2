@@ -1,5 +1,5 @@
 use crate::models::menu::{MenuItem, MenuItemType};
-use crate::models::skill::SkillSummary;
+use crate::models::skill::{is_offered_in, OfferedIn, SkillSummary};
 use crate::traits::MenuItemProvider;
 
 pub struct SkillMenuProvider {
@@ -24,6 +24,7 @@ impl MenuItemProvider for SkillMenuProvider {
     fn get_menu_items(&self) -> Vec<MenuItem> {
         self.skills
             .iter()
+            .filter(|skill| is_offered_in(&skill.offered_in, OfferedIn::ContextMenu))
             .map(|skill| MenuItem {
                 id: skill.name.clone(),
                 label: skill.display_name.clone(),
@@ -59,7 +60,28 @@ mod tests {
             name: name.to_string(),
             display_name: display_name.to_string(),
             description: None,
+            offered_in: None,
         }
+    }
+
+    fn make_skill_offered_in(name: &str, offered_in: Vec<OfferedIn>) -> SkillSummary {
+        SkillSummary {
+            offered_in: Some(offered_in),
+            ..make_skill(name, name)
+        }
+    }
+
+    #[test]
+    fn get_menu_items_filters_by_offered_in() {
+        let provider = SkillMenuProvider::new(vec![
+            make_skill_offered_in("pill-only", vec![OfferedIn::Pill]),
+            make_skill_offered_in("nowhere", vec![]),
+            make_skill("everywhere", "Everywhere"),
+            make_skill_offered_in("menu", vec![OfferedIn::ContextMenu]),
+        ]);
+
+        let ids: Vec<String> = provider.get_menu_items().into_iter().map(|i| i.id).collect();
+        assert_eq!(ids, vec!["everywhere", "menu"]);
     }
 
     #[test]

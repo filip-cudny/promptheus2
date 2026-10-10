@@ -11,6 +11,7 @@ models/
 ├── menu.rs         # MenuItemType enum, MenuItem struct
 ├── execution.rs    # ErrorCode enum, ExecutionResult struct
 ├── context.rs      # ContextItem tagged enum (Text / Image variants)
+├── skill.rs        # SkillFrontmatter, Skill, SkillSummary, SkillFull, OfferedIn
 ├── message.rs      # ProcessedMessage, MessageContent, ContentPart — LLM message format
 └── history.rs      # HistoryEntryType, InvocationSource, OutputRoute, HistoryEntry,
                     #   ConversationHistoryData, SerializedConversationNode, ImagePayload
@@ -69,3 +70,13 @@ TypeScript mirrors use `T | null` for `Option<T>` and `unknown` for `serde_json:
 1. Add the field to the appropriate struct with `#[serde(default)]` (or a named default fn).
 2. Update the `Default` impl if the struct has one.
 3. Run `cargo test --lib` — the round-trip test will catch serialization issues.
+
+### Skill `offered_in`
+
+Optional frontmatter field of `SKILL.md`, carried by `SkillFrontmatter`, `Skill`, `SkillSummary` and `SkillFull` as `Option<Vec<OfferedIn>>`. Values: `context_menu`, `pill`.
+
+- Absent: offered in every place (`is_offered_in` returns `true`).
+- `[]`: offered only in the chat.
+- A list: offered only in the listed places.
+- Unknown value (e.g. `chat`): the file is invalid (`SkillError::YamlParse`) and the skill is skipped on load.
+- The chat `/skill` autocomplete ignores the field.

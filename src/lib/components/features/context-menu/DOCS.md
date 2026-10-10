@@ -116,6 +116,10 @@ Action buttons are always visible (not gated by empty state) since Replace/Appen
 
 The context store (`$lib/stores/context.svelte.ts`) is initialized in `src/windows/context-menu/App.svelte` so the section updates reactively via the `"context-changed"` Tauri event.
 
+### Skill list
+
+The menu lists only skills whose `offered_in` is absent or contains `context_menu` (`SkillMenuProvider`). `get_context_menu_items` refreshes the provider's skill list from `SkillService` on every open, so created, deleted, edited, reordered and synced skills appear without a restart.
+
 ### Skill execution
 
 When a `skill` item is clicked, the context menu store intercepts it (instead of calling the generic `execute_menu_item` backend command) and delegates to the execution store's `startExecution(skillId, "context_menu")`. The menu closes immediately, and the execution runs asynchronously.

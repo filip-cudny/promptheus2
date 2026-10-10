@@ -421,6 +421,7 @@ mod tests {
             description: None,
             model: None,
             parameters: None,
+            offered_in: None,
             body: body.to_string(),
             file_path: PathBuf::new(),
             skill_version_id: Some(1),

@@ -59,16 +59,7 @@ pub fn manage(
     menu_coordinator.add_provider(Box::new(LastInteractionMenuProvider::new()));
     menu_coordinator.add_provider(Box::new(SpeechMenuProvider::new()));
 
-    let skill_summaries: Vec<_> = skill_service
-        .list_skills()
-        .iter()
-        .map(|s| crate::models::skill::SkillSummary {
-            name: s.name.clone(),
-            display_name: s.display_name.clone(),
-            description: s.description.clone(),
-        })
-        .collect();
-    menu_coordinator.add_provider(Box::new(SkillMenuProvider::new(skill_summaries)));
+    menu_coordinator.add_provider(Box::new(SkillMenuProvider::new(Vec::new())));
 
     let ui_state_service = ui_state::UiStateService::load(config_dir)
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;

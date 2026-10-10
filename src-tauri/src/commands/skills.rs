@@ -265,14 +265,7 @@ pub async fn duplicate_skill(
         if skill_guard.get_skill(&new_slug).is_some() {
             return Err(Error::Other(format!("Skill '{new_slug}' already exists")));
         }
-        let display_suffix = format!("{} (copy)", source.display_name);
-        let fm = SkillFrontmatter {
-            name: new_slug.clone(),
-            display_name: Some(display_suffix),
-            description: source.description.clone(),
-            model: source.model.clone(),
-            parameters: source.parameters.clone(),
-        };
+        let fm = duplicate_frontmatter(source, &new_slug);
         (fm, source.body.clone())
     };
 
@@ -400,6 +393,17 @@ pub async fn import_skill_file(
     Ok(SkillFull::from(skill))
 }
 
+fn duplicate_frontmatter(source: &Skill, new_slug: &str) -> SkillFrontmatter {
+    SkillFrontmatter {
+        name: new_slug.to_string(),
+        display_name: Some(format!("{} (copy)", source.display_name)),
+        description: source.description.clone(),
+        model: source.model.clone(),
+        parameters: source.parameters.clone(),
+        offered_in: source.offered_in.clone(),
+    }
+}
+
 #[tauri::command]
 pub async fn export_skill(
     skill_service: State<'_, Arc<Mutex<SkillService>>>,
@@ -429,4 +433,28 @@ pub async fn preview_skill_message(
     Ok(format!(
         "<skill name=\"{name}\">\n{rendered_body}\n</skill>\n\n<input>\n{sample_input}\n</input>"
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::skill::OfferedIn;
+
+    #[test]
+    fn duplicate_frontmatter_keeps_offered_in() {
+        let source = Skill {
+            name: "src".into(),
+            display_name: "Src".into(),
+            description: None,
+            model: None,
+            parameters: None,
+            offered_in: Some(vec![OfferedIn::Pill]),
+            body: String::new(),
+            file_path: Default::default(),
+            skill_version_id: None,
+        };
+        let fm = duplicate_frontmatter(&source, "copy");
+        assert_eq!(fm.offered_in, Some(vec![OfferedIn::Pill]));
+        assert_eq!(fm.name, "copy");
+    }
 }

@@ -6,7 +6,8 @@ use tokio::sync::Mutex;
 
 use crate::models::history::HistoryEntryType;
 use crate::models::menu::{MenuItem, MenuItemType};
-use crate::providers::SpeechMenuProvider;
+use crate::models::skill::SkillSummary;
+use crate::providers::{SkillMenuProvider, SpeechMenuProvider};
 use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
 use crate::services::execution::PromptExecutionService;
@@ -148,6 +149,18 @@ pub async fn get_context_menu_items(
 
     let config = config.lock().await;
     let skill_service = skill_service.lock().await;
+
+    let skill_summaries: Vec<SkillSummary> = skill_service
+        .list_skills()
+        .iter()
+        .map(SkillSummary::from)
+        .collect();
+    log::debug!("context menu: refreshing {} skills", skill_summaries.len());
+    for provider in menu_coordinator.providers_mut() {
+        if let Some(skills) = provider.as_any_mut().downcast_mut::<SkillMenuProvider>() {
+            skills.update_skills(skill_summaries.clone());
+        }
+    }
 
     let mut items = menu_coordinator.get_menu_items(&config);
 
