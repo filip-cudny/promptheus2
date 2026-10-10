@@ -52,6 +52,13 @@ const MAX_PREFERRED_NAME_LEN: usize = 60;
 pub struct ConfigService {
     settings: Settings,
     config_dir: PathBuf,
+    baseline: Vec<u8>,
+}
+
+#[derive(Debug)]
+pub struct Mutated<R> {
+    pub value: R,
+    pub reloaded: bool,
 }
 
 impl ConfigService {
@@ -80,12 +87,13 @@ impl ConfigService {
 
         validate(&settings)?;
 
-        let service = ConfigService {
+        let mut service = ConfigService {
             settings,
             config_dir: config_dir.to_path_buf(),
+            baseline: Vec::new(),
         };
 
-        service.save()?;
+        service.write()?;
 
         Ok(service)
     }
@@ -97,6 +105,34 @@ impl ConfigService {
         Ok(())
     }
 
+    fn write(&mut self) -> Result<(), ConfigError> {
+        let json = serde_json::to_string_pretty(&self.settings)?;
+        let settings_path = self.config_dir.join("settings.json");
+        std::fs::write(&settings_path, &json)?;
+        self.baseline = json.into_bytes();
+        Ok(())
+    }
+
+    pub fn reload_if_changed(&mut self) -> Result<bool, ConfigError> {
+        let settings_path = self.config_dir.join("settings.json");
+        if std::fs::read(&settings_path)? == self.baseline {
+            return Ok(false);
+        }
+        self.reload()?;
+        log::info!("settings.json changed outside the app and was reloaded");
+        Ok(true)
+    }
+
+    pub fn mutate<R>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> R,
+    ) -> Result<Mutated<R>, ConfigError> {
+        let reloaded = self.reload_if_changed()?;
+        let value = f(self);
+        self.write()?;
+        Ok(Mutated { value, reloaded })
+    }
+
     pub fn reload(&mut self) -> Result<(), ConfigError> {
         let settings_path = self.config_dir.join("settings.json");
         if !settings_path.exists() {
@@ -105,8 +141,10 @@ impl ConfigService {
             ));
         }
 
-        let content = std::fs::read_to_string(&settings_path)?;
-        let outcome = parse_and_migrate(&content)?;
+        let bytes = std::fs::read(&settings_path)?;
+        let content = std::str::from_utf8(&bytes)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+        let outcome = parse_and_migrate(content)?;
         let mut settings = outcome.settings;
 
         apply_inline_prompts(&self.config_dir, &outcome.inline_prompts)?;
@@ -122,6 +160,7 @@ impl ConfigService {
 
         validate(&settings)?;
         self.settings = settings;
+        self.baseline = bytes;
         log::debug!("settings reloaded");
 
         Ok(())

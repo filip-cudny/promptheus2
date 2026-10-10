@@ -677,3 +677,118 @@ fn test_unknown_top_level_key_survives_load() {
         serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
     assert_eq!(saved["zz_future_key"], serde_json::json!({"a": 1}));
 }
+
+fn models_json(ids: &[&str], first_display_name: &str) -> String {
+    let models: Vec<serde_json::Value> = ids
+        .iter()
+        .enumerate()
+        .map(|(i, id)| {
+            serde_json::json!({
+                "id": id,
+                "type": "text",
+                "model": "gpt-4",
+                "display_name": if i == 0 { first_display_name } else { "Other" },
+                "provider": "openai",
+                "api_key": "${OPENAI_API_KEY}"
+            })
+        })
+        .collect();
+    serde_json::json!({ "models": models }).to_string()
+}
+
+fn read_json(path: &Path) -> serde_json::Value {
+    serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+}
+
+fn model_ids(value: &serde_json::Value) -> Vec<String> {
+    value["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| m["id"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn mutate_reloads_external_change_before_saving() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("settings.json");
+    fs::write(&path, models_json(&["x", "y"], "Old")).unwrap();
+    let mut service = ConfigService::load(dir.path(), None).expect("load");
+
+    fs::write(&path, models_json(&["x", "z"], "New")).unwrap();
+    let outcome = service
+        .mutate(|c| c.update_setting("theme", serde_json::json!("dark")))
+        .expect("mutate");
+
+    assert!(outcome.reloaded);
+    let saved = read_json(&path);
+    assert_eq!(model_ids(&saved), vec!["x", "z"]);
+    assert_eq!(saved["models"][0]["display_name"], "New");
+    assert_eq!(saved["theme"], "dark");
+    let in_memory: Vec<&str> = service.settings().models.iter().map(|m| m.id.as_str()).collect();
+    assert_eq!(in_memory, vec!["x", "z"]);
+    assert_eq!(service.settings().models[0].display_name, "New");
+    assert_eq!(service.settings().theme, "dark");
+}
+
+#[test]
+fn mutate_without_external_change_does_not_reload() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("settings.json");
+    fs::write(&path, models_json(&["x"], "X")).unwrap();
+    let mut service = ConfigService::load(dir.path(), None).expect("load");
+
+    let first = service
+        .mutate(|c| c.update_setting("theme", serde_json::json!("dark")))
+        .expect("mutate");
+    assert!(!first.reloaded);
+    assert_eq!(read_json(&path)["theme"], "dark");
+
+    let mut external = read_json(&path);
+    external["theme"] = serde_json::json!("light");
+    fs::write(&path, serde_json::to_string_pretty(&external).unwrap()).unwrap();
+    service.reload().expect("reload");
+
+    let second = service
+        .mutate(|c| c.update_setting("code_theme", serde_json::json!("monokai")))
+        .expect("mutate");
+    assert!(!second.reloaded);
+    let saved = read_json(&path);
+    assert_eq!(saved["theme"], "light");
+    assert_eq!(saved["code_theme"], "monokai");
+}
+
+#[test]
+fn mutate_with_invalid_file_fails_without_writing() {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("settings.json");
+    fs::write(&path, models_json(&["x"], "X")).unwrap();
+    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    let theme_before = service.settings().theme.clone();
+
+    fs::write(&path, "{ not json").unwrap();
+    let result = service.mutate(|c| c.update_setting("theme", serde_json::json!("dark")));
+
+    assert!(result.is_err());
+    assert_eq!(fs::read(&path).unwrap(), b"{ not json");
+    assert_eq!(service.settings().theme, theme_before);
+}
+
+#[test]
+fn mutate_keeps_settings_symlink() {
+    let dir = TempDir::new().unwrap();
+    let target_dir = TempDir::new().unwrap();
+    let target = target_dir.path().join("settings.json");
+    let link = dir.path().join("settings.json");
+    fs::write(&target, models_json(&["x"], "X")).unwrap();
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    let mut service = ConfigService::load(dir.path(), None).expect("load");
+
+    service
+        .mutate(|c| c.update_setting("theme", serde_json::json!("dark")))
+        .expect("mutate");
+
+    assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+    assert_eq!(read_json(&target)["theme"], "dark");
+}
