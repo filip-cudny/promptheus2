@@ -1,66 +1,95 @@
 #![cfg(target_os = "macos")]
 
 use std::ffi::CStr;
-use std::sync::Once;
+use std::sync::OnceLock;
 
 use objc2::ffi::object_setClass;
-use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, Sel};
+use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, MethodImplementation, Sel};
 use objc2::{class, msg_send, sel};
 use objc2_app_kit::{NSPanel, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
 
-// Custom NSPanel subclass: canBecomeKeyWindow=YES, canBecomeMainWindow=NO.
+extern "C-unwind" fn returns_yes(_: &AnyObject, _: Sel) -> Bool {
+    Bool::YES
+}
+
+extern "C-unwind" fn returns_no(_: &AnyObject, _: Sel) -> Bool {
+    Bool::NO
+}
+
+// Custom NSPanel subclasses: canBecomeMainWindow=NO, canBecomeKeyWindow=YES for
+// the context menu and NO for the recording widget.
 // OR'ing NonactivatingPanel into the style mask after object_setClass is not
 // enough — Cocoa caches some behavior at init-time and the panel either fails
 // to become key (keystrokes leak to the frontmost app) or pulls the whole app
 // forward. Overriding the class methods directly nails down both behaviors.
-fn promptheus_panel_class() -> &'static AnyClass {
-    static REGISTER: Once = Once::new();
-    static mut CLASS: Option<&'static AnyClass> = None;
+fn register_panel_class(
+    name: &'static CStr,
+    can_become_key_window: impl MethodImplementation<Callee = AnyObject, Arguments = (), Return = Bool>,
+) -> &'static AnyClass {
+    let mut builder = ClassBuilder::new(name, class!(NSPanel))
+        .unwrap_or_else(|| panic!("{name:?} class registration failed"));
 
-    REGISTER.call_once(|| {
-        let superclass = class!(NSPanel);
-        let name = CStr::from_bytes_with_nul(b"PromptheusContextMenuPanel\0").unwrap();
-        let mut builder = ClassBuilder::new(name, superclass)
-            .expect("PromptheusContextMenuPanel class registration failed");
+    unsafe {
+        builder.add_method(sel!(canBecomeKeyWindow), can_become_key_window);
+        let main_fn: extern "C-unwind" fn(_, _) -> _ = returns_no;
+        builder.add_method(sel!(canBecomeMainWindow), main_fn);
+    }
 
-        extern "C-unwind" fn can_become_key_window(_: &AnyObject, _: Sel) -> Bool {
-            Bool::YES
-        }
-
-        extern "C-unwind" fn can_become_main_window(_: &AnyObject, _: Sel) -> Bool {
-            Bool::NO
-        }
-
-        unsafe {
-            let key_fn: extern "C-unwind" fn(_, _) -> _ = can_become_key_window;
-            builder.add_method(sel!(canBecomeKeyWindow), key_fn);
-            let main_fn: extern "C-unwind" fn(_, _) -> _ = can_become_main_window;
-            builder.add_method(sel!(canBecomeMainWindow), main_fn);
-            CLASS = Some(builder.register());
-        }
-    });
-
-    unsafe { CLASS.expect("PromptheusContextMenuPanel class missing") }
+    builder.register()
 }
 
-// Convert a webview window's underlying NSWindow into a non-activating NSPanel
-// so that showing the panel does not raise the app's other windows.
-pub fn make_nonactivating_panel(window: &tauri::WebviewWindow) -> Result<(), String> {
+fn promptheus_panel_class() -> &'static AnyClass {
+    static CLASS: OnceLock<&'static AnyClass> = OnceLock::new();
+    CLASS.get_or_init(|| {
+        let key_fn: extern "C-unwind" fn(_, _) -> _ = returns_yes;
+        register_panel_class(c"PromptheusContextMenuPanel", key_fn)
+    })
+}
+
+fn promptheus_widget_panel_class() -> &'static AnyClass {
+    static CLASS: OnceLock<&'static AnyClass> = OnceLock::new();
+    CLASS.get_or_init(|| {
+        let key_fn: extern "C-unwind" fn(_, _) -> _ = returns_no;
+        register_panel_class(c"PromptheusWidgetPanel", key_fn)
+    })
+}
+
+fn reclass_as_nonactivating_panel(
+    window: &tauri::WebviewWindow,
+    class: &'static AnyClass,
+) -> Result<&'static NSPanel, String> {
     let ptr = window.ns_window().map_err(|e| e.to_string())?;
     if ptr.is_null() {
         return Err("ns_window pointer is null".into());
     }
 
     unsafe {
-        object_setClass(ptr as *mut AnyObject, promptheus_panel_class());
+        object_setClass(ptr as *mut AnyObject, class);
 
         let panel: &NSPanel = &*(ptr as *const NSPanel);
         let mask = panel.styleMask();
         panel.setStyleMask(mask | NSWindowStyleMask::NonactivatingPanel);
-        panel.setBecomesKeyOnlyIfNeeded(false);
-        panel.setFloatingPanel(true);
+        Ok(panel)
     }
+}
 
+// Convert a webview window's underlying NSWindow into a non-activating NSPanel
+// so that showing the panel does not raise the app's other windows.
+pub fn make_nonactivating_panel(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let panel = reclass_as_nonactivating_panel(window, promptheus_panel_class())?;
+    panel.setBecomesKeyOnlyIfNeeded(false);
+    panel.setFloatingPanel(true);
+    Ok(())
+}
+
+// Convert the recording widget into a non-activating NSPanel that never becomes
+// key or main and stays visible when the app deactivates, so a click on it
+// leaves the frontmost app active.
+pub fn make_nonactivating_widget_panel(window: &tauri::WebviewWindow) -> Result<(), String> {
+    let panel = reclass_as_nonactivating_panel(window, promptheus_widget_panel_class())?;
+    panel.setHidesOnDeactivate(false);
+    panel.setBecomesKeyOnlyIfNeeded(false);
+    panel.setFloatingPanel(true);
     Ok(())
 }
 

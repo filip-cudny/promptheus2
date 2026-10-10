@@ -62,6 +62,15 @@ pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::E
     .visible(false)
     .build()?;
 
+    #[cfg(target_os = "macos")]
+    {
+        if let Err(e) =
+            crate::services::macos_panel::make_nonactivating_widget_panel(&recording_widget)
+        {
+            log::warn!("failed to convert recording-widget to non-activating panel: {e}");
+        }
+    }
+
     let handle = app.handle().clone();
     recording_widget.on_window_event(move |event| {
         if let tauri::WindowEvent::Moved(position) = event {
