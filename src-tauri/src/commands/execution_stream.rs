@@ -5,6 +5,7 @@ use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 
 use crate::models::ai::StreamEvent;
+use crate::models::history::InvocationSource;
 use crate::models::message::{AppliedSkill, ConversationNodeForExecution, ImageData};
 use crate::services::ai::AiService;
 use crate::services::clipboard::ClipboardService;
@@ -38,6 +39,7 @@ pub async fn execute_skill(
     recent_apps: State<'_, Arc<RecentAppsState>>,
     skill_name: String,
     input_override: Option<String>,
+    invocation_source: InvocationSource,
     on_event: Channel<StreamEvent>,
 ) -> crate::Result<()> {
     run_skill_stream(
@@ -53,6 +55,7 @@ pub async fn execute_skill(
         Arc::clone(&recent_apps),
         skill_name,
         input_override,
+        invocation_source,
         on_event,
     )
     .await

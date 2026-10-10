@@ -12,8 +12,8 @@ models/
 ├── execution.rs    # ErrorCode enum, ExecutionResult struct
 ├── context.rs      # ContextItem tagged enum (Text / Image variants)
 ├── message.rs      # ProcessedMessage, MessageContent, ContentPart — LLM message format
-└── history.rs      # HistoryEntryType, HistoryEntry, ConversationHistoryData,
-                    #   SerializedConversationNode, ImagePayload
+└── history.rs      # HistoryEntryType, InvocationSource, OutputRoute, HistoryEntry,
+                    #   ConversationHistoryData, SerializedConversationNode, ImagePayload
 ```
 
 ## Conventions
@@ -49,7 +49,7 @@ Non-settings model files define types that cross the Rust↔TypeScript IPC bound
 | `execution.rs` | `types/execution.ts` | `rename_all = "snake_case"` on `ErrorCode` |
 | `context.rs` | `types/context.ts` | `tag = "item_type"` + `rename_all = "lowercase"` — internally tagged enum |
 | `message.rs` | `types/ai.ts` | `untagged` on `MessageContent`, `tag = "type"` on `ContentPart` |
-| `history.rs` | `types/history.ts` | `rename_all = "lowercase"` on `HistoryEntryType` |
+| `history.rs` | `types/history.ts` | `rename_all = "lowercase"` on `HistoryEntryType`; `rename_all = "snake_case"` on `InvocationSource` (`types/history.ts`); `OutputRoute` has no TS counterpart |
 
 TypeScript mirrors use `T | null` for `Option<T>` and `unknown` for `serde_json::Value`. `ContextItem` is a discriminated union (not an interface with optional fields).
 

@@ -161,6 +161,8 @@ Persistent history storage via SQLite. Database file at `{app_data_dir}/history.
 
 **Conversation entries**: `add_conversation_entry()` serializes nodes/tree as JSON into `tree_json`, inserts images as BLOBs in a single transaction. Returns the entry ID. `update_conversation_entry()` replaces tree_json and re-inserts all images in a transaction.
 
+**Source columns**: `conversations` has `invocation_source` (`context_menu` = skill click, `alternative_execute` = Shift+click or the action menu's alternative execute, `chat` = other conversation-dialog rows) and `output_route` (`clipboard` = skill executor rows, `chat` = conversation-dialog rows). Only `add_conversation_entry()` writes them (the executor passes `clipboard`, the command passes `chat`); `update_conversation_entry()` leaves them unchanged. Both are `NULL` in rows from before schema v7 and in speech rows (`add_entry`). Plain `TEXT` without `CHECK`, so values `pill` and `clipboard_chat` can be added later without a schema migration. No reader yet (statistics via SQL).
+
 **Image handling**: images received as base64 `ImagePayload`, decoded to BLOBs on save. On `get_entry_by_id()`, BLOBs are re-encoded to base64 and grouped into `node_images` (by node_id) and `context_images` (node_id = NULL) on `ConversationHistoryData`.
 
 **Summary builders**: `build_input_summary` and `build_output_summary` derive summaries from nodes (last user/assistant content, truncated to 200 chars, with "+N more" suffix for multi-turn).

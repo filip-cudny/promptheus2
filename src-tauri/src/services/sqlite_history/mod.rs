@@ -9,7 +9,7 @@ use base64::Engine;
 
 use crate::models::history::{
     ConversationHistoryData, HistoryContentPart, HistoryEntry, HistoryEntryType, ImagePayload,
-    SerializedConversationNode,
+    InvocationSource, OutputRoute, SerializedConversationNode,
 };
 use crate::models::message::ImageData;
 use crate::services::database::Database;
@@ -113,6 +113,8 @@ impl SqliteHistoryService {
         images: Vec<ImagePayload>,
         model_id: Option<String>,
         reasoning_effort: Option<String>,
+        invocation_source: InvocationSource,
+        output_route: OutputRoute,
     ) -> String {
         let id = Self::generate_id();
         let now = Self::now_timestamp();
@@ -135,8 +137,8 @@ impl SqliteHistoryService {
         let tx = conn.unchecked_transaction().unwrap();
 
         tx.execute(
-            "INSERT INTO conversations (id, entry_type, input_content, output_content, skill_id, skill_name, success, error, is_multi_turn, quick_action, context_text, tree_json, created_at, applied_skill_names)
-             VALUES (?1, 'text', ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?9, ?10, ?11, ?12)",
+            "INSERT INTO conversations (id, entry_type, input_content, output_content, skill_id, skill_name, success, error, is_multi_turn, quick_action, context_text, tree_json, created_at, applied_skill_names, invocation_source, output_route)
+             VALUES (?1, 'text', ?2, ?3, ?4, ?5, ?6, ?7, 1, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             rusqlite::params![
                 id,
                 input_summary,
@@ -150,6 +152,8 @@ impl SqliteHistoryService {
                 tree_json,
                 now,
                 applied_skill_names,
+                invocation_source.as_str(),
+                output_route.as_str(),
             ],
         )
         .unwrap();

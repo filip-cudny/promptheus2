@@ -12,7 +12,7 @@ use super::stream::run_stream_loop;
 use super::system_prompt::build_system_prompt_base;
 use crate::services::placeholder_registry::PlaceholderContext;
 use crate::models::ai::StreamEvent;
-use crate::models::history::SerializedConversationNode;
+use crate::models::history::{InvocationSource, OutputRoute, SerializedConversationNode};
 use crate::models::message::{AppliedSkill, ProcessedMessage};
 use crate::models::settings::ModelParameters;
 use crate::services::ai::AiService;
@@ -41,6 +41,7 @@ pub async fn run_skill_stream(
     recent_apps: Arc<RecentAppsState>,
     skill_name: String,
     input_override: Option<String>,
+    invocation_source: InvocationSource,
     on_event: Channel<StreamEvent>,
 ) -> crate::Result<()> {
     let start_time = Instant::now();
@@ -123,6 +124,7 @@ pub async fn run_skill_stream(
                 start_time.elapsed(),
                 &prepared.model_display_name,
                 &prepared.execution_id,
+                invocation_source,
             );
             Ok(())
         }
@@ -283,6 +285,7 @@ impl SkillExecutor {
         elapsed: Duration,
         model_display_name: &str,
         execution_id: &str,
+        invocation_source: InvocationSource,
     ) {
         let _ = clipboard.set_text(&full_text);
         let now = Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
@@ -347,6 +350,8 @@ impl SkillExecutor {
             vec![],
             None,
             None,
+            invocation_source,
+            OutputRoute::Clipboard,
         );
         let _ = crate::services::history_events::emit_history_changed(app, Some(added_id), None);
 

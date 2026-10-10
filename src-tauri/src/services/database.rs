@@ -90,6 +90,10 @@ fn run_migrations(conn: &Connection) -> Result<(), DatabaseError> {
         migrate_to_v6(conn)?;
     }
 
+    if version < 7 {
+        migrate_to_v7(conn)?;
+    }
+
     Ok(())
 }
 
@@ -681,6 +685,17 @@ fn migrate_to_v6(conn: &Connection) -> Result<(), DatabaseError> {
     Ok(())
 }
 
+fn migrate_to_v7(conn: &Connection) -> Result<(), DatabaseError> {
+    conn.execute_batch(
+        "ALTER TABLE conversations ADD COLUMN invocation_source TEXT;
+        ALTER TABLE conversations ADD COLUMN output_route TEXT;",
+    )?;
+
+    set_schema_version(conn, 7)?;
+    log::info!("database migrated to schema version 7");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -703,7 +718,7 @@ mod tests {
     fn schema_version_is_set() {
         let db = Database::open_in_memory().unwrap();
         let version = get_schema_version(db.conn());
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
     }
 
     #[test]
@@ -711,7 +726,29 @@ mod tests {
         let db = Database::open_in_memory().unwrap();
         run_migrations(db.conn()).unwrap();
         let version = get_schema_version(db.conn());
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
+    }
+
+    #[test]
+    fn source_columns_are_null_when_not_inserted() {
+        let db = Database::open_in_memory().unwrap();
+        db.conn()
+            .execute(
+                "INSERT INTO conversations (id, entry_type, input_content, created_at)
+                 VALUES ('c1', 'text', 'in', '2026-01-01 00:00:00')",
+                [],
+            )
+            .unwrap();
+        let (source, route): (Option<String>, Option<String>) = db
+            .conn()
+            .query_row(
+                "SELECT invocation_source, output_route FROM conversations WHERE id = 'c1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(source, None);
+        assert_eq!(route, None);
     }
 
     #[test]

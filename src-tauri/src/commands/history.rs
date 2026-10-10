@@ -6,7 +6,8 @@ use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 
 use crate::models::history::{
-    HistoryContentPart, HistoryEntry, HistoryEntryType, ImagePayload, SerializedConversationNode,
+    HistoryContentPart, HistoryEntry, HistoryEntryType, ImagePayload, InvocationSource,
+    OutputRoute, SerializedConversationNode,
 };
 use crate::services::clipboard::ClipboardService;
 use crate::services::conversation_context::ConversationContextCache;
@@ -96,6 +97,7 @@ pub async fn add_conversation_entry(
     #[allow(unused_variables)] images: Vec<ImagePayload>,
     model_id: Option<String>,
     reasoning_effort: Option<String>,
+    invocation_source: InvocationSource,
 ) -> crate::Result<String> {
     let resolved_environment_section = match tab_id.as_deref() {
         Some(id) => conversation_context
@@ -119,6 +121,8 @@ pub async fn add_conversation_entry(
         images,
         model_id,
         reasoning_effort,
+        invocation_source,
+        OutputRoute::Chat,
     );
     emit_history_changed(&app, Some(id.clone()), None)?;
     Ok(id)

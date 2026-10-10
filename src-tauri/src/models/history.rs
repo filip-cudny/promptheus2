@@ -12,6 +12,40 @@ pub enum HistoryEntryType {
     Text,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum InvocationSource {
+    ContextMenu,
+    AlternativeExecute,
+    Chat,
+}
+
+impl InvocationSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::ContextMenu => "context_menu",
+            Self::AlternativeExecute => "alternative_execute",
+            Self::Chat => "chat",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputRoute {
+    Clipboard,
+    Chat,
+}
+
+impl OutputRoute {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Clipboard => "clipboard",
+            Self::Chat => "chat",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SerializedConversationNode {
     pub node_id: String,

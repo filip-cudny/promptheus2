@@ -1,4 +1,5 @@
 use super::*;
+use crate::models::history::{InvocationSource, OutputRoute};
 use crate::services::database::Database;
 
 fn make_db() -> Database {
@@ -115,6 +116,8 @@ fn add_conversation_and_restore() {
         vec![],
         None,
         None,
+        InvocationSource::ContextMenu,
+        OutputRoute::Clipboard,
     );
 
     let entry = svc.get_entry_by_id(&id).unwrap();
@@ -145,6 +148,8 @@ fn resolve_full_content_returns_text_beyond_the_capped_preview() {
         vec![],
         None,
         None,
+        InvocationSource::ContextMenu,
+        OutputRoute::Clipboard,
     );
 
     let entry = svc.get_last_quick_action(HistoryEntryType::Text).unwrap();
@@ -207,6 +212,8 @@ fn update_conversation_entry() {
         vec![],
         None,
         None,
+        InvocationSource::ContextMenu,
+        OutputRoute::Clipboard,
     );
 
     let new_nodes = make_nodes("hi updated", "hello updated");
@@ -388,6 +395,8 @@ fn image_round_trip() {
         ],
         None,
         None,
+        InvocationSource::ContextMenu,
+        OutputRoute::Clipboard,
     );
 
     let entry = svc.get_entry_by_id(&id).unwrap();
@@ -428,6 +437,8 @@ fn image_cascade_delete() {
         }],
         None,
         None,
+        InvocationSource::ContextMenu,
+        OutputRoute::Clipboard,
     );
 
     svc.clear();
@@ -478,4 +489,86 @@ fn compact_after_bulk_delete_skips_small_databases() {
     svc.clear();
 
     assert!(!svc.compact_after_bulk_delete());
+}
+
+fn add_with_source(
+    svc: &SqliteHistoryService,
+    invocation_source: InvocationSource,
+    output_route: OutputRoute,
+) -> String {
+    svc.add_conversation_entry(
+        String::new(),
+        None,
+        None,
+        true,
+        None,
+        make_nodes("hi", "hello"),
+        Some("u1".into()),
+        vec!["u1".into(), "a1".into()],
+        false,
+        None,
+        vec![],
+        None,
+        None,
+        invocation_source,
+        output_route,
+    )
+}
+
+fn read_source_columns(svc: &SqliteHistoryService, id: &str) -> (Option<String>, Option<String>) {
+    svc.conn()
+        .query_row(
+            "SELECT invocation_source, output_route FROM conversations WHERE id = ?1",
+            [id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap()
+}
+
+#[test]
+fn add_conversation_entry_stores_alternative_execute_and_clipboard() {
+    let svc = make_svc();
+    let id = add_with_source(&svc, InvocationSource::AlternativeExecute, OutputRoute::Clipboard);
+    assert_eq!(
+        read_source_columns(&svc, &id),
+        (Some("alternative_execute".into()), Some("clipboard".into()))
+    );
+}
+
+#[test]
+fn add_conversation_entry_stores_chat_and_chat() {
+    let svc = make_svc();
+    let id = add_with_source(&svc, InvocationSource::Chat, OutputRoute::Chat);
+    assert_eq!(
+        read_source_columns(&svc, &id),
+        (Some("chat".into()), Some("chat".into()))
+    );
+}
+
+#[test]
+fn update_conversation_entry_keeps_source_columns() {
+    let svc = make_svc();
+    let id = add_with_source(&svc, InvocationSource::ContextMenu, OutputRoute::Clipboard);
+    svc.update_conversation_entry(
+        &id,
+        "new ctx".into(),
+        make_nodes("hi updated", "hello updated"),
+        Some("u1".into()),
+        vec!["u1".into(), "a1".into()],
+        vec![],
+        None,
+        None,
+    )
+    .unwrap();
+    assert_eq!(
+        read_source_columns(&svc, &id),
+        (Some("context_menu".into()), Some("clipboard".into()))
+    );
+}
+
+#[test]
+fn speech_entry_has_null_source_columns() {
+    let svc = make_svc();
+    let id = add_plain(&svc, "spoken");
+    assert_eq!(read_source_columns(&svc, &id), (None, None));
 }
