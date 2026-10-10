@@ -185,10 +185,13 @@ export interface NotificationColors {
   warning: string;
 }
 
+export type OfferedIn = "context_menu" | "pill";
+
 export interface SkillSummary {
   name: string;
   display_name: string;
   description: string | null;
+  offered_in: OfferedIn[] | null;
 }
 
 export interface Skill extends SkillSummary {
@@ -201,6 +204,7 @@ export interface SkillFull {
   description: string | null;
   model: string | null;
   parameters: Record<string, unknown> | null;
+  offered_in: OfferedIn[] | null;
   body: string;
   file_path: string;
 }
@@ -211,6 +215,7 @@ export interface SkillFrontmatter {
   description?: string | null;
   model?: string | null;
   parameters?: Record<string, unknown> | null;
+  offered_in?: OfferedIn[] | null;
 }
 
 export interface SlugValidation {

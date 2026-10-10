@@ -124,6 +124,10 @@ Pass the `inherited` prop (the surface parameters the editor falls back to — f
 
 Reasoning effort is a `<select>`, not an `<input list>` + `<datalist>`. Browsers filter datalist suggestions against the field's current text, so a field already holding `medium` offers exactly one suggestion and looks broken; free text also meant every keystroke fired an immediate save of a half-typed level. The row also renders when the value is set but the model reports no effort support (deleted model, capabilities changed) — with a warning — so a stored value can never become invisible and unremovable.
 
+### Skill "Offered in"
+
+`SkillEditor` shows `offered_in` as two checkboxes, "Context menu" and "Recording widget" (`pill`). Both checked sends `offered_in: null` (no `offered_in` line in the file, offered everywhere); both unchecked sends `[]` (`offered_in: []`, offered only in the chat); one checked sends that value. `persist` always sends the field, because `update_skill` writes exactly the frontmatter it receives — omitting it would erase a restriction on every edit of another field. The chat `/skill` autocomplete ignores the field.
+
 ### Missing or unlisted model references
 
 A skill pins a model by id and nothing rewrites that id when the model is deleted, so the editor must handle "the pinned id resolves to nothing". `SkillEditor` renders a synthetic `<option>` for such an id (`<id> — no longer exists` / `— is not a text model`) plus a `warn-text` helper line. Without it the `<select>` has no matching option, silently renders blank, and the skill looks like it inherits while `resolve_quick_action_model` fails at run time (a pinned id never falls back to the Quick Actions model — that's deliberate, an unrunnable skill should say so rather than quietly run on a different model).

@@ -31,6 +31,7 @@
     type KnownModelParameterKey,
     type ModelParameters,
     type ModelCapabilities,
+    type OfferedIn,
     type SkillFrontmatter,
     type SkillFull,
   } from "$lib/types";
@@ -54,8 +55,14 @@
     description: string;
     model: string | null;
     parameters: ModelParameters | null;
+    offered_in: OfferedIn[] | null;
     body: string;
   };
+
+  const OFFERED_IN_OPTIONS: { value: OfferedIn; label: string }[] = [
+    { value: "context_menu", label: "Context menu" },
+    { value: "pill", label: "Recording widget" },
+  ];
 
   let draft = $state<Draft>(untrack(() => buildDraft(skill)));
   let customEntries = $state<CustomParamEntry[]>(
@@ -102,6 +109,7 @@
       description: s.description ?? "",
       model: s.model ?? null,
       parameters: (s.parameters ?? null) as ModelParameters | null,
+      offered_in: s.offered_in ?? null,
       body: s.body,
     };
   }
@@ -179,6 +187,7 @@
       description: draft.description.trim() || null,
       model: draft.model ?? null,
       parameters: parameters as Record<string, unknown> | null,
+      offered_in: draft.offered_in,
     };
     await updateSkill(skill.name, fm, draft.body);
   }
@@ -208,6 +217,18 @@
       };
     draft.parameters = { ...params, [key]: value as never };
     scheduleSave(immediate);
+  }
+
+  function isOfferedIn(value: OfferedIn): boolean {
+    return draft.offered_in === null || draft.offered_in.includes(value);
+  }
+
+  function toggleOfferedIn(value: OfferedIn, checked: boolean) {
+    const next = OFFERED_IN_OPTIONS.map((o) => o.value).filter((v) =>
+      v === value ? checked : isOfferedIn(v),
+    );
+    draft.offered_in = next.length === OFFERED_IN_OPTIONS.length ? null : next;
+    scheduleSave(true);
   }
 
   $effect(() => {
@@ -378,6 +399,28 @@
         }}
       />
     </FormRow>
+  </section>
+
+  <section class="card">
+    <h3>Availability</h3>
+    <div class="field toggle-field">
+      <span class="field-label">Offered in</span>
+      {#each OFFERED_IN_OPTIONS as option (option.value)}
+        <label>
+          <input
+            type="checkbox"
+            checked={isOfferedIn(option.value)}
+            onchange={(e) =>
+              toggleOfferedIn(option.value, (e.target as HTMLInputElement).checked)}
+          />
+          <span>{option.label}</span>
+        </label>
+      {/each}
+      <p class="helper">
+        Where the skill appears as a pick. Unchecking both keeps it available only through
+        <code>/{skill.name}</code> in the chat.
+      </p>
+    </div>
   </section>
 
   <section class="card">
@@ -600,6 +643,15 @@
 
   select {
     padding-right: var(--space-8);
+  }
+
+  .toggle-field label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    color: var(--text-primary);
+    cursor: pointer;
+    align-self: flex-start;
   }
 
   .slug-row {
