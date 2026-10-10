@@ -69,6 +69,8 @@ Run from `promptheus-tauri/src-tauri/`:
 |---------|-------------|
 | `pnpm tauri dev` | Run the full Tauri app in dev mode (frontend + backend) |
 | `pnpm tauri build` | Production bundle |
+| `pnpm bundle:linux` | Production `.deb` only (installs the GNOME Shell extension to `/usr/share/gnome-shell/extensions/`); output in the cargo target dir from `.cargo/config.toml` (`release/bundle/deb/`) |
+| `pnpm bundle:mac` | Production `.app` and `.dmg` only |
 
 ### Workflow rules
 
