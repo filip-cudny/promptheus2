@@ -5,9 +5,8 @@ use async_trait::async_trait;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::{Mutex, OwnedMutexGuard};
 
-use crate::commands::settings::{apply_reloaded_settings, emit_changed as emit_settings_changed, rebuild_ai};
+use crate::commands::settings::apply_settings_reload;
 use crate::commands::skills::emit_changed as emit_skills_changed;
-use crate::services::ai::AiService;
 use crate::services::config::ConfigService;
 use crate::services::notification::{NotificationLevel, NotificationService};
 use crate::services::settings_sync::{
@@ -61,13 +60,7 @@ impl SyncHooks for AppHooks {
             history.conn(),
         );
         match result {
-            Ok(reloaded) => {
-                if reloaded.settings {
-                    let ai = self.app.state::<Arc<Mutex<AiService>>>().inner().clone();
-                    rebuild_ai(&guard.config, &mut *ai.lock().await);
-                }
-                *self.reloaded.lock().unwrap() = reloaded;
-            }
+            Ok(reloaded) => *self.reloaded.lock().unwrap() = reloaded,
             Err(e) => log::warn!("settings sync: reload after pull failed: {e}"),
         }
     }
@@ -96,14 +89,10 @@ pub async fn run_sync(app: &AppHandle, trigger: Trigger) -> SyncResult {
 
 async fn apply_reloaded(app: &AppHandle, reloaded: Reloaded) {
     if reloaded.settings {
-        let config = app.state::<Arc<Mutex<ConfigService>>>().inner().clone();
-        let settings = config.lock().await.settings().clone();
-        apply_reloaded_settings(app, &settings);
-        if let Err(e) = emit_settings_changed(app) {
-            log::warn!("settings sync: failed to emit settings-changed: {e}");
+        if let Err(e) = apply_settings_reload(app, "sync").await {
+            log::warn!("settings sync: failed to apply reloaded settings: {e}");
         }
-    }
-    if reloaded.skills {
+    } else if reloaded.skills {
         if let Err(e) = emit_skills_changed(app, "sync") {
             log::warn!("settings sync: failed to emit skills-changed: {e}");
         }

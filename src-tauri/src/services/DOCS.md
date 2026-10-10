@@ -107,7 +107,9 @@ Uses the `arboard` crate for cross-platform clipboard access (text and images). 
 
 **Load sequence**: `load_env()` -> read JSON -> deserialize -> `migrate_model_params()` -> `load_api_keys()` -> `validate()`.
 
-**API key sanitization**: `save()` deep-clones settings before writing. Env-sourced model keys and speech model keys are stripped. Direct API keys are preserved.
+**API key sanitization**: the write deep-clones settings before writing. Env-sourced model keys and speech model keys are stripped. Direct API keys are preserved.
+
+**Mutations go through `ConfigService::mutate`**: it reloads `settings.json` when its bytes differ from the last read or written, runs the closure, then writes. No public `save` exists. A reload inside `mutate` is applied to runtime state by `commands::settings::apply_settings_reload`, called after the config guard is dropped. A failed reload fails the mutation and writes nothing. `settings.json` is written in place with `std::fs::write` because it may be a symlink into the settings repo; a temp-file rename would replace the symlink and stop sync.
 
 **Mutation methods**: `add_model`, `update_model` (upsert), `delete_model`, `add_prompt`, `update_prompt`, `delete_prompt`, `reorder_prompts`, `update_notifications`, `update_keymaps`, `update_menu_section_order`, `update_setting`. STT models live in the same `models` list (discriminated by `ModelConfig.model_type = Stt`) — use `add_model`/`update_model`/`delete_model`. `settings.speech_to_text_model: Option<String>` holds the id of the currently selected STT model; resolve via `ConfigService::resolve_stt_model()`.
 

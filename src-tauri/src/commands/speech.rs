@@ -11,6 +11,7 @@ use crate::models::speech::{
     AudioClipInfo, SpeechRecordingStartedEvent, SpeechRecordingStoppedEvent,
     SpeechTranscriptionError, SpeechTranscriptionRetry,
 };
+use crate::commands::settings::apply_settings_reload;
 use crate::services::config::{ConfigService, KeytermsDoc};
 use crate::services::notification::{NotificationLevel, NotificationService};
 use crate::services::speech::widget::RecordingWidget;
@@ -856,11 +857,16 @@ pub async fn save_stt_keyterms(
     config: State<'_, Arc<Mutex<ConfigService>>>,
     content: String,
 ) -> crate::Result<KeytermsDoc> {
-    let mut svc = config.lock().await;
-    let path_was_unset = svc.settings().surfaces.speech_to_text.keyterms_file.is_none();
-    let doc = svc.write_stt_keyterms_file(&content)?;
+    let mutated = config.lock().await.mutate(|c| {
+        let path_was_unset = c.settings().surfaces.speech_to_text.keyterms_file.is_none();
+        c.write_stt_keyterms_file(&content)
+            .map(|doc| (doc, path_was_unset))
+    })?;
+    if mutated.reloaded {
+        apply_settings_reload(&app, "reload").await?;
+    }
+    let (doc, path_was_unset) = mutated.value?;
     if path_was_unset {
-        svc.save()?;
         let _ = app.emit("settings-changed", serde_json::json!({}));
     }
     let _ = app.emit("stt-keyterms-changed", ());

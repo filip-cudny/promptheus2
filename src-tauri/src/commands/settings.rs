@@ -2,15 +2,17 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 use crate::models::settings::{
     KeymapGroup, ModelConfig, NotificationSettings, Settings, SpeechToTextConfig,
 };
+use crate::commands::skills::{emit_changed as emit_skills_changed, rescan_and_prune};
 use crate::services::ai::AiService;
 use crate::services::config::{ConfigService, SurfaceKind};
 use crate::services::history_events::emit_history_changed;
+use crate::services::skill::SkillService;
 use crate::services::sqlite_history::SqliteHistoryService;
 
 static SETTINGS_VERSION: AtomicU64 = AtomicU64::new(0);
@@ -26,11 +28,6 @@ pub(crate) fn emit_changed(app: &AppHandle) -> crate::Result<()> {
     Ok(())
 }
 
-fn save_and_emit(config: &ConfigService, app: &AppHandle) -> crate::Result<()> {
-    config.save()?;
-    emit_changed(app)
-}
-
 pub(crate) fn rebuild_ai(config: &ConfigService, ai: &mut AiService) {
     *ai = AiService::new(&config.settings().models);
 }
@@ -38,6 +35,40 @@ pub(crate) fn rebuild_ai(config: &ConfigService, ai: &mut AiService) {
 pub(crate) fn apply_reloaded_settings(app: &AppHandle, settings: &Settings) {
     crate::reload_shortcuts(app, settings);
     crate::services::autostart::reconcile(app, settings);
+}
+
+pub(crate) async fn apply_settings_reload(app: &AppHandle, reason: &str) -> crate::Result<()> {
+    let config = app.state::<Arc<Mutex<ConfigService>>>();
+    let ai = app.state::<Arc<Mutex<AiService>>>();
+    let skills = app.state::<Arc<Mutex<SkillService>>>();
+    let history = app.state::<Arc<Mutex<SqliteHistoryService>>>();
+
+    let settings = {
+        let guard = config.lock().await;
+        rebuild_ai(&guard, &mut *ai.lock().await);
+        guard.settings().clone()
+    };
+    rescan_and_prune(&skills, &config, &history).await?;
+    apply_reloaded_settings(app, &settings);
+    emit_changed(app)?;
+    emit_skills_changed(app, reason)
+}
+
+async fn finish_mutation(app: &AppHandle, reloaded: bool) -> crate::Result<()> {
+    if reloaded {
+        apply_settings_reload(app, "reload").await
+    } else {
+        emit_changed(app)
+    }
+}
+
+async fn mutate_settings(
+    app: &AppHandle,
+    config: &Mutex<ConfigService>,
+    f: impl FnOnce(&mut ConfigService),
+) -> crate::Result<()> {
+    let reloaded = config.lock().await.mutate(f)?.reloaded;
+    finish_mutation(app, reloaded).await
 }
 
 #[tauri::command]
@@ -54,9 +85,7 @@ pub async fn update_setting(
     key: String,
     value: serde_json::Value,
 ) -> crate::Result<()> {
-    let mut config = config.lock().await;
-    config.update_setting(&key, value);
-    save_and_emit(&config, &app)
+    mutate_settings(&app, &config, |c| c.update_setting(&key, value)).await
 }
 
 #[tauri::command]
@@ -66,9 +95,7 @@ pub async fn update_surface_model(
     surface: SurfaceKind,
     model_id: Option<String>,
 ) -> crate::Result<()> {
-    let mut config = config.lock().await;
-    config.update_surface_model(surface, model_id);
-    save_and_emit(&config, &app)
+    mutate_settings(&app, &config, |c| c.update_surface_model(surface, model_id)).await
 }
 
 #[tauri::command]
@@ -79,9 +106,10 @@ pub async fn update_surface_parameter(
     key: String,
     value: serde_json::Value,
 ) -> crate::Result<()> {
-    let mut config = config.lock().await;
-    config.update_surface_parameter(surface, &key, value);
-    save_and_emit(&config, &app)
+    mutate_settings(&app, &config, |c| {
+        c.update_surface_parameter(surface, &key, value)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -91,9 +119,10 @@ pub async fn update_surface_enabled_tools(
     surface: SurfaceKind,
     tools: Vec<String>,
 ) -> crate::Result<()> {
-    let mut config = config.lock().await;
-    config.update_surface_enabled_tools(surface, tools);
-    save_and_emit(&config, &app)
+    mutate_settings(&app, &config, |c| {
+        c.update_surface_enabled_tools(surface, tools)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -102,9 +131,7 @@ pub async fn update_speech_to_text_config(
     config_svc: State<'_, Arc<Mutex<ConfigService>>>,
     config: SpeechToTextConfig,
 ) -> crate::Result<()> {
-    let mut svc = config_svc.lock().await;
-    svc.update_speech_to_text(config);
-    save_and_emit(&svc, &app)
+    mutate_settings(&app, &config_svc, |c| c.update_speech_to_text(config)).await
 }
 
 #[tauri::command]
@@ -114,10 +141,13 @@ pub async fn add_model(
     ai: State<'_, Arc<Mutex<AiService>>>,
     config: ModelConfig,
 ) -> crate::Result<()> {
-    let mut svc = config_svc.lock().await;
-    svc.add_model(config);
-    rebuild_ai(&svc, &mut *ai.lock().await);
-    save_and_emit(&svc, &app)
+    let reloaded = {
+        let mut svc = config_svc.lock().await;
+        let reloaded = svc.mutate(|c| c.add_model(config))?.reloaded;
+        rebuild_ai(&svc, &mut *ai.lock().await);
+        reloaded
+    };
+    finish_mutation(&app, reloaded).await
 }
 
 #[tauri::command]
@@ -128,10 +158,13 @@ pub async fn update_model(
     model_id: String,
     config: ModelConfig,
 ) -> crate::Result<()> {
-    let mut svc = config_svc.lock().await;
-    svc.update_model(&model_id, config);
-    rebuild_ai(&svc, &mut *ai.lock().await);
-    save_and_emit(&svc, &app)
+    let reloaded = {
+        let mut svc = config_svc.lock().await;
+        let reloaded = svc.mutate(|c| c.update_model(&model_id, config))?.reloaded;
+        rebuild_ai(&svc, &mut *ai.lock().await);
+        reloaded
+    };
+    finish_mutation(&app, reloaded).await
 }
 
 #[tauri::command]
@@ -141,10 +174,13 @@ pub async fn delete_model(
     ai: State<'_, Arc<Mutex<AiService>>>,
     model_id: String,
 ) -> crate::Result<()> {
-    let mut config = config.lock().await;
-    config.delete_model(&model_id);
-    rebuild_ai(&config, &mut *ai.lock().await);
-    save_and_emit(&config, &app)
+    let reloaded = {
+        let mut svc = config.lock().await;
+        let reloaded = svc.mutate(|c| c.delete_model(&model_id))?.reloaded;
+        rebuild_ai(&svc, &mut *ai.lock().await);
+        reloaded
+    };
+    finish_mutation(&app, reloaded).await
 }
 
 #[tauri::command]
@@ -153,9 +189,7 @@ pub async fn update_notifications(
     config_svc: State<'_, Arc<Mutex<ConfigService>>>,
     config: NotificationSettings,
 ) -> crate::Result<()> {
-    let mut svc = config_svc.lock().await;
-    svc.update_notifications(config);
-    save_and_emit(&svc, &app)
+    mutate_settings(&app, &config_svc, |c| c.update_notifications(config)).await
 }
 
 #[tauri::command]
@@ -165,11 +199,7 @@ pub async fn update_history_retention(
     history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     days: u32,
 ) -> crate::Result<()> {
-    {
-        let mut svc = config_svc.lock().await;
-        svc.update_history_retention(days);
-        save_and_emit(&svc, &app)?;
-    }
+    mutate_settings(&app, &config_svc, |c| c.update_history_retention(days)).await?;
 
     let pruned = {
         let mut history = history.lock().await;
@@ -201,12 +231,12 @@ pub async fn update_keymaps(
     config: State<'_, Arc<Mutex<ConfigService>>>,
     keymaps: Vec<KeymapGroup>,
 ) -> crate::Result<()> {
-    let settings = {
+    let (reloaded, settings) = {
         let mut c = config.lock().await;
-        c.update_keymaps(keymaps);
-        save_and_emit(&c, &app)?;
-        c.settings().clone()
+        let reloaded = c.mutate(|c| c.update_keymaps(keymaps))?.reloaded;
+        (reloaded, c.settings().clone())
     };
+    finish_mutation(&app, reloaded).await?;
     crate::reload_shortcuts(&app, &settings);
     Ok(())
 }
@@ -217,9 +247,7 @@ pub async fn update_menu_section_order(
     config: State<'_, Arc<Mutex<ConfigService>>>,
     order: Vec<String>,
 ) -> crate::Result<()> {
-    let mut config = config.lock().await;
-    config.update_menu_section_order(order);
-    save_and_emit(&config, &app)
+    mutate_settings(&app, &config, |c| c.update_menu_section_order(order)).await
 }
 
 #[tauri::command]

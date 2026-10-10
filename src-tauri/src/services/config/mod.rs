@@ -98,7 +98,8 @@ impl ConfigService {
         Ok(service)
     }
 
-    pub fn save(&self) -> Result<(), ConfigError> {
+    #[cfg(test)]
+    fn save(&self) -> Result<(), ConfigError> {
         let json = serde_json::to_string_pretty(&self.settings)?;
         let settings_path = self.config_dir.join("settings.json");
         std::fs::write(&settings_path, json)?;

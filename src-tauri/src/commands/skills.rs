@@ -9,6 +9,7 @@ use crate::models::skill::{
     ExportedSkill, ImportConflictMode, Skill, SkillFrontmatter, SkillFull, SkillSummary,
     SlugValidation,
 };
+use crate::commands::settings::apply_settings_reload;
 use crate::services::config::ConfigService;
 use crate::services::placeholder_registry::{substitute, PlaceholderContext};
 use crate::services::skill::{validate_slug, SkillError, SkillService};
@@ -30,7 +31,7 @@ pub(crate) fn emit_changed(app: &AppHandle, reason: &str) -> crate::Result<()> {
     Ok(())
 }
 
-async fn rescan_and_prune(
+pub(crate) async fn rescan_and_prune(
     skill_service: &Mutex<SkillService>,
     config: &Mutex<ConfigService>,
     history: &Mutex<SqliteHistoryService>,
@@ -160,14 +161,19 @@ pub async fn create_skill(
     }
 
     rescan_and_prune(&skill_service, &config, &history).await?;
-    {
-        let mut config_guard = config.lock().await;
-        let mut order = config_guard.settings().skills_order.clone();
-        if !order.contains(&slug) {
-            order.push(slug.clone());
-            config_guard.update_skills_order(order);
-            config_guard.save()?;
-        }
+    let reloaded = config
+        .lock()
+        .await
+        .mutate(|c| {
+            let mut order = c.settings().skills_order.clone();
+            if !order.contains(&slug) {
+                order.push(slug.clone());
+                c.update_skills_order(order);
+            }
+        })?
+        .reloaded;
+    if reloaded {
+        apply_settings_reload(&app, "create").await?;
     }
     emit_changed(&app, "create")?;
 
@@ -224,14 +230,19 @@ pub async fn delete_skill(
         skill_guard.delete_skill_dir(&slug)?;
     }
     rescan_and_prune(&skill_service, &config, &history).await?;
-    {
-        let mut config_guard = config.lock().await;
-        let mut order = config_guard.settings().skills_order.clone();
-        if order.iter().any(|n| n == &slug) {
-            order.retain(|n| n != &slug);
-            config_guard.update_skills_order(order);
-            config_guard.save()?;
-        }
+    let reloaded = config
+        .lock()
+        .await
+        .mutate(|c| {
+            let mut order = c.settings().skills_order.clone();
+            if order.iter().any(|n| n == &slug) {
+                order.retain(|n| n != &slug);
+                c.update_skills_order(order);
+            }
+        })?
+        .reloaded;
+    if reloaded {
+        apply_settings_reload(&app, "delete").await?;
     }
     emit_changed(&app, "delete")?;
     Ok(())
@@ -270,16 +281,21 @@ pub async fn duplicate_skill(
         skill_guard.write_skill(&new_slug, &frontmatter, &body)?;
     }
     rescan_and_prune(&skill_service, &config, &history).await?;
-    {
-        let mut config_guard = config.lock().await;
-        let mut order = config_guard.settings().skills_order.clone();
-        if let Some(pos) = order.iter().position(|n| n == &slug) {
-            order.insert(pos + 1, new_slug.clone());
-        } else {
-            order.push(new_slug.clone());
-        }
-        config_guard.update_skills_order(order);
-        config_guard.save()?;
+    let reloaded = config
+        .lock()
+        .await
+        .mutate(|c| {
+            let mut order = c.settings().skills_order.clone();
+            if let Some(pos) = order.iter().position(|n| n == &slug) {
+                order.insert(pos + 1, new_slug.clone());
+            } else {
+                order.push(new_slug.clone());
+            }
+            c.update_skills_order(order);
+        })?
+        .reloaded;
+    if reloaded {
+        apply_settings_reload(&app, "duplicate").await?;
     }
     emit_changed(&app, "duplicate")?;
 
@@ -298,10 +314,13 @@ pub async fn reorder_skills(
     history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     order: Vec<String>,
 ) -> crate::Result<()> {
-    {
-        let mut config_guard = config.lock().await;
-        config_guard.update_skills_order(order);
-        config_guard.save()?;
+    let reloaded = config
+        .lock()
+        .await
+        .mutate(|c| c.update_skills_order(order))?
+        .reloaded;
+    if reloaded {
+        apply_settings_reload(&app, "reorder").await?;
     }
     rescan_and_prune(&skill_service, &config, &history).await?;
     emit_changed(&app, "reorder")?;
@@ -358,14 +377,19 @@ pub async fn import_skill_file(
         skill_guard.write_skill(&target_slug, &fm_to_write, &body)?;
     }
     rescan_and_prune(&skill_service, &config, &history).await?;
-    {
-        let mut config_guard = config.lock().await;
-        let mut order = config_guard.settings().skills_order.clone();
-        if !order.contains(&target_slug) {
-            order.push(target_slug.clone());
-            config_guard.update_skills_order(order);
-            config_guard.save()?;
-        }
+    let reloaded = config
+        .lock()
+        .await
+        .mutate(|c| {
+            let mut order = c.settings().skills_order.clone();
+            if !order.contains(&target_slug) {
+                order.push(target_slug.clone());
+                c.update_skills_order(order);
+            }
+        })?
+        .reloaded;
+    if reloaded {
+        apply_settings_reload(&app, "import").await?;
     }
     emit_changed(&app, "import")?;
 
