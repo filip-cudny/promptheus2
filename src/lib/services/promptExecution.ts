@@ -8,6 +8,7 @@ import type {
 } from "$lib/types/ai";
 
 import type { NodeUpdate } from "$lib/types/ai";
+import type { InvocationSource } from "$lib/types/history";
 
 export interface TokenUsageData {
   prompt_tokens: number | null;
@@ -62,6 +63,7 @@ function routeStreamEvent(callbacks: ExecutionCallbacks): (event: StreamEvent) =
 export async function executeSkill(
   skillName: string,
   callbacks: ExecutionCallbacks,
+  invocationSource: InvocationSource,
   inputOverride?: string,
 ): Promise<void> {
   const onEvent = new Channel<StreamEvent>();
@@ -69,6 +71,7 @@ export async function executeSkill(
   return invoke("execute_skill", {
     skillName,
     inputOverride: inputOverride ?? null,
+    invocationSource,
     onEvent,
   });
 }

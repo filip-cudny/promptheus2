@@ -268,7 +268,7 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
 
     if (!itemEnabled) return;
     await closeMenu();
-    startExecution(skillId);
+    startExecution(skillId, "context_menu");
     return;
   }
 

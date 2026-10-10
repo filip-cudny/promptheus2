@@ -118,7 +118,7 @@ The context store (`$lib/stores/context.svelte.ts`) is initialized in `src/windo
 
 ### Skill execution
 
-When a `skill` item is clicked, the context menu store intercepts it (instead of calling the generic `execute_menu_item` backend command) and delegates to the execution store's `startExecution(skillId)`. The menu closes immediately, and the execution runs asynchronously.
+When a `skill` item is clicked, the context menu store intercepts it (instead of calling the generic `execute_menu_item` backend command) and delegates to the execution store's `startExecution(skillId, "context_menu")`. The menu closes immediately, and the execution runs asynchronously.
 
 During execution, skill items are disabled. The store applies this by overlaying `enabled: false` on skill items when `isExecuting()` is true (see `applyExecutionState` in `contextMenu.svelte.ts`). On `execution-completed`, the store refreshes items so they re-enable on next open.
 

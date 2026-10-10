@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { error as logError } from "@tauri-apps/plugin-log";
 import { executeSkill } from "$lib/services/promptExecution";
+import type { InvocationSource } from "$lib/types/history";
 import { openConversationDialog } from "$lib/services/conversationDialog";
 
 let _isExecuting = $state(false);
@@ -31,6 +32,7 @@ function getStreamedContent(): string {
 
 async function startExecution(
   skillName: string,
+  invocationSource: InvocationSource,
   inputOverride?: string,
 ): Promise<void> {
   _executingSkillId = skillName;
@@ -51,6 +53,7 @@ async function startExecution(
           _streamedContent = "";
         },
       },
+      invocationSource,
       inputOverride,
     );
   } catch (e) {
@@ -110,7 +113,7 @@ async function init() {
         (e) => logError("Failed to open dialog for voice input: " + e),
       );
     } else {
-      startExecution(skill_id, text).catch((e) =>
+      startExecution(skill_id, "alternative_execute", text).catch((e) =>
         logError("Failed to execute skill from voice input: " + e),
       );
     }

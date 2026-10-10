@@ -149,6 +149,7 @@ function createTabState(
   return {
     tab_id: generateId(),
     tab_name: tabName,
+    invocation_source: "chat",
     tree: createEmptyTree(),
     context_text: "",
     context_images: [],
@@ -544,7 +545,7 @@ export function createConversationStore(
     }
 
     if (success || assistantNode.cancelled) {
-      await saveToHistory();
+      await saveToHistory(tab);
     }
 
     return { success, result: resultText };
@@ -598,7 +599,7 @@ export function createConversationStore(
         tab.thinking_started_at = null;
         tab.execution_started_at = null;
         tab.active_tool_calls = [];
-        saveToHistory();
+        saveToHistory(tab);
       },
       onError: (message) => {
         if (!assistantNode) return;
@@ -689,7 +690,7 @@ export function createConversationStore(
       if (snapshot.error) {
         assistantNode.error = snapshot.error;
       }
-      await saveToHistory();
+      await saveToHistory(tab);
     } else {
       tab.is_executing = true;
       tab.is_streaming = true;
@@ -882,6 +883,7 @@ export function createConversationStore(
       tab.input_text = prefix;
       tab.pristine_input = prefix || null;
       tab.tab_name = skillName || null;
+      tab.invocation_source = "chat";
       if (skillModel) tab.model_id = skillModel;
       return false;
     } else {
@@ -895,6 +897,11 @@ export function createConversationStore(
     }
   }
 
+  function markActiveTabAlternativeExecute(): void {
+    const tab = getTab(activeTabId);
+    if (tab) tab.invocation_source = "alternative_execute";
+  }
+
   function setPristineInput(text: string): void {
     const tab = getTab(activeTabId);
     if (tab) tab.pristine_input = text || null;
@@ -903,6 +910,7 @@ export function createConversationStore(
   function addTab(): void {
     const existing = tabs.find(t => isTabClean(t));
     if (existing) {
+      existing.invocation_source = "chat";
       activeTabId = existing.tab_id;
       return;
     }
@@ -1115,10 +1123,7 @@ export function createConversationStore(
     } catch {}
   }
 
-  async function saveToHistory(): Promise<void> {
-    const tab = getTab(activeTabId);
-    if (!tab) return;
-
+  async function saveToHistory(tab: TabState): Promise<void> {
     const pairs = getMessagePairs(tab.tree);
     if (pairs.length === 0) return;
 
@@ -1151,6 +1156,7 @@ export function createConversationStore(
           images,
           modelId: tab.model_id,
           reasoningEffort: tab.reasoning_effort,
+          invocationSource: tab.invocation_source,
         });
         tab.history_entry_id = entryId;
         if (tab.tab_name !== null) {
@@ -1488,6 +1494,7 @@ export function createConversationStore(
     rejectToolCall,
     retryToolCall,
     saveToHistory,
+    markActiveTabAlternativeExecute,
     restoreFromHistory,
     isTabClean,
     destroy,

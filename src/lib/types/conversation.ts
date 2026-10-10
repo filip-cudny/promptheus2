@@ -1,4 +1,5 @@
 import type { AppliedSkill, NodeUpdate, ToolCall } from "$lib/types/ai";
+import type { InvocationSource } from "$lib/types/history";
 
 export interface ConversationNode {
   node_id: string;
@@ -41,6 +42,7 @@ export interface MessagePair {
 export interface TabState {
   tab_id: string;
   tab_name: string | null;
+  invocation_source: InvocationSource;
   tree: ConversationTree;
   context_text: string;
   context_images: ConversationImage[];

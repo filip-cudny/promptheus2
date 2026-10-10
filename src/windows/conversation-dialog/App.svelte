@@ -151,6 +151,7 @@
     if (currentTab && currentTab.tree.current_path.length > 0) {
       store.addTab();
     }
+    store.markActiveTabAlternativeExecute();
     const inputText = skillId ? `/${skillId} ${text}` : text;
     store.updateInputText(inputText);
     if (autoSend) store.sendMessage();

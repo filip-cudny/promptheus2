@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   HistoryEntry,
   HistoryEntryType,
+  InvocationSource,
   ImagePayload,
   SerializedConversationNode,
   LastInteractionData,
@@ -51,6 +52,7 @@ export async function addConversationEntry(params: {
   images: ImagePayload[];
   modelId: string | null;
   reasoningEffort: string | null;
+  invocationSource: InvocationSource;
 }): Promise<string> {
   return invoke("add_conversation_entry", params);
 }
