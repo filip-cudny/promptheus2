@@ -434,20 +434,27 @@ impl ReloadFixture {
         self.fixture.git(&b, &["push"]);
     }
 
-    async fn sync_a(&self) -> Reloaded {
-        let engine = self.fixture.engine(
+    fn engine_a(&self) -> SettingsSync {
+        self.fixture.engine(
             self.config_dir.clone(),
             self.fixture.env.clone(),
             TIMEOUT,
-        );
-        let hooks = ReloadingHooks {
+        )
+    }
+
+    fn hooks(&self) -> ReloadingHooks {
+        ReloadingHooks {
             config_dir: self.config_dir.clone(),
             config: self.config.clone(),
             skills: self.skills.clone(),
             database: self.database.clone(),
             reloaded: Mutex::new(Reloaded::default()),
-        };
-        completed(engine.sync(Trigger::Manual, &hooks).await);
+        }
+    }
+
+    async fn sync_a(&self) -> Reloaded {
+        let hooks = self.hooks();
+        completed(self.engine_a().sync(Trigger::Manual, &hooks).await);
         let reloaded = *hooks.reloaded.lock().unwrap();
         reloaded
     }
@@ -465,7 +472,15 @@ struct ReloadingHooks {
 impl SyncHooks for ReloadingHooks {
     type Guard = ();
 
-    async fn lock_local(&self) -> Self::Guard {}
+    async fn lock_local(&self) -> Self::Guard {
+        let reloaded = reload_if_changed(
+            &mut self.config.lock().unwrap(),
+            &mut self.skills.lock().unwrap(),
+            self.database.lock().unwrap().conn(),
+        )
+        .unwrap();
+        self.reloaded.lock().unwrap().merge(reloaded);
+    }
 
     async fn reload(&self, _guard: &mut Self::Guard, changed: &[PathBuf]) {
         let reloaded = reload_changed(
@@ -477,7 +492,7 @@ impl SyncHooks for ReloadingHooks {
             self.database.lock().unwrap().conn(),
         )
         .unwrap();
-        *self.reloaded.lock().unwrap() = reloaded;
+        self.reloaded.lock().unwrap().merge(reloaded);
     }
 
     fn status_changed(&self, _status: &SyncStatus) {}
@@ -518,4 +533,52 @@ async fn pulled_prompt_change_reloads_nothing() {
     let reloaded = f.sync_a().await;
 
     assert_eq!(reloaded, Reloaded::default());
+}
+
+#[tokio::test]
+async fn external_reset_is_reloaded_by_next_cycle() {
+    let f = ReloadFixture::new();
+    f.push_from_b("settings.json", SETTINGS_SECOND);
+    let a = f.fixture.a();
+    f.fixture.git(&a, &["fetch"]);
+    f.fixture.git(&a, &["reset", "--hard", "origin/main"]);
+
+    let reloaded = f.sync_a().await;
+
+    let config = f.config.lock().unwrap();
+    assert_eq!(config.settings().theme, "second");
+    let on_disk: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(f.config_dir.join("settings.json")).unwrap())
+            .unwrap();
+    let in_memory = serde_json::to_value(config.settings()).unwrap();
+    assert_eq!(in_memory["theme"], on_disk["theme"]);
+    assert_eq!(in_memory["models"][0]["id"], on_disk["models"][0]["id"]);
+    assert!(reloaded.settings);
+}
+
+#[tokio::test]
+async fn external_reset_is_reloaded_while_paused() {
+    let f = ReloadFixture::new();
+    f.push_from_b("settings.json", SETTINGS_SECOND);
+    let a = f.fixture.a();
+    write(
+        &a.join("tauri-app/settings.json"),
+        &SETTINGS_FIRST.replace("first", "third"),
+    );
+
+    let engine = f.engine_a();
+    let report = completed(engine.sync(Trigger::Startup, &f.hooks()).await);
+    assert_eq!(report.status.state, SyncState::Conflict);
+
+    let rebase_dir = f.fixture.git(&a, &["rev-parse", "--git-path", "rebase-merge"]);
+    if a.join(rebase_dir).exists() {
+        f.fixture.git(&a, &["rebase", "--abort"]);
+    }
+    f.fixture.git(&a, &["reset", "--hard", "origin/main"]);
+
+    let hooks = f.hooks();
+    assert_eq!(engine.sync(Trigger::Periodic, &hooks).await, SyncResult::Paused);
+
+    assert_eq!(f.config.lock().unwrap().settings().theme, "second");
+    assert!(hooks.reloaded.lock().unwrap().settings);
 }

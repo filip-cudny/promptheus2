@@ -11,6 +11,13 @@ pub struct Reloaded {
     pub skills: bool,
 }
 
+impl Reloaded {
+    pub fn merge(&mut self, other: Reloaded) {
+        self.settings |= other.settings;
+        self.skills |= other.skills;
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ReloadError {
     #[error(transparent)]
@@ -49,4 +56,20 @@ pub fn reload_changed(
         reloaded.skills = true;
     }
     Ok(reloaded)
+}
+
+pub fn reload_if_changed(
+    config: &mut ConfigService,
+    skills: &mut SkillService,
+    conn: &Connection,
+) -> Result<Reloaded, ReloadError> {
+    if !config.reload_if_changed()? {
+        return Ok(Reloaded::default());
+    }
+    skills.reload(&config.settings().skills_order.clone())?;
+    skills.prune_missing_skills(conn)?;
+    Ok(Reloaded {
+        settings: true,
+        skills: true,
+    })
 }

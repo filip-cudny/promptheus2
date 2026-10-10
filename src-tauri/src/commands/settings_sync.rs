@@ -10,7 +10,7 @@ use crate::commands::skills::emit_changed as emit_skills_changed;
 use crate::services::config::ConfigService;
 use crate::services::notification::{NotificationLevel, NotificationService};
 use crate::services::settings_sync::{
-    reload_changed, CycleReport, Reloaded, SettingsSync, SyncHooks, SyncResult, SyncState,
+    reload_changed, reload_if_changed, CycleReport, Reloaded, SettingsSync, SyncHooks, SyncResult, SyncState,
     SyncStatus, Trigger,
 };
 use crate::services::skill::SkillService;
@@ -38,7 +38,15 @@ impl SyncHooks for AppHooks {
         let skills = self.app.state::<Arc<Mutex<SkillService>>>().inner().clone();
         let config = config.lock_owned().await;
         let skills = skills.lock_owned().await;
-        LocalGuard { config, skills }
+        let mut guard = LocalGuard { config, skills };
+        let history = self.app.state::<Arc<Mutex<SqliteHistoryService>>>().inner().clone();
+        let history = history.lock().await;
+        match reload_if_changed(&mut guard.config, &mut guard.skills, history.conn()) {
+            Ok(reloaded) => self.reloaded.lock().unwrap().merge(reloaded),
+            Err(e) => log::warn!("settings sync: reload of externally changed settings failed: {e}"),
+        }
+        drop(history);
+        guard
     }
 
     async fn reload(&self, guard: &mut LocalGuard, changed: &[PathBuf]) {
@@ -60,7 +68,7 @@ impl SyncHooks for AppHooks {
             history.conn(),
         );
         match result {
-            Ok(reloaded) => *self.reloaded.lock().unwrap() = reloaded,
+            Ok(reloaded) => self.reloaded.lock().unwrap().merge(reloaded),
             Err(e) => log::warn!("settings sync: reload after pull failed: {e}"),
         }
     }

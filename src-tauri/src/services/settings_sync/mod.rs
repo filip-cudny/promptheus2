@@ -15,7 +15,7 @@ use serde::Serialize;
 
 pub use detect::{detect, Detection, SyncRepo};
 pub use git::{GitError, GitRunner};
-pub use reload::{reload_changed, Reloaded};
+pub use reload::{reload_changed, reload_if_changed, Reloaded};
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(60);
 const UNKNOWN_HOST: &str = "unknown";
@@ -145,17 +145,21 @@ impl SettingsSync {
     }
 
     pub async fn sync<H: SyncHooks>(&self, trigger: Trigger, hooks: &H) -> SyncResult {
-        let previous = {
+        let (previous, paused) = {
             let mut inner = self.inner.lock().unwrap();
             if inner.running {
                 return SyncResult::AlreadySyncing;
             }
-            if trigger == Trigger::Periodic && inner.paused {
-                return SyncResult::Paused;
+            let paused = trigger == Trigger::Periodic && inner.paused;
+            if !paused {
+                inner.running = true;
             }
-            inner.running = true;
-            inner.status.clone()
+            (inner.status.clone(), paused)
         };
+        if paused {
+            drop(hooks.lock_local().await);
+            return SyncResult::Paused;
+        }
         let _running = RunningGuard(self.inner.clone());
 
         self.publish(
