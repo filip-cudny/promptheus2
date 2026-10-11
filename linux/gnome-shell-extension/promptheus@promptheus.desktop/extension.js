@@ -35,11 +35,11 @@ const WIDGET_PADDING_X = 14;
 const WIDGET_BOTTOM_MARGIN = 24;
 const WIDGET_STATES = ['recording', 'paused', 'processing', 'done'];
 const WIDGET_BAR_MIN_HEIGHT = 4;
-const WIDGET_BAR_MAX_HEIGHT = 24;
+const WIDGET_BAR_MAX_HEIGHT = 28;
 const WIDGET_BAR_MIN_SCALE = WIDGET_BAR_MIN_HEIGHT / WIDGET_BAR_MAX_HEIGHT;
 const WIDGET_BAR_SCALE_EPSILON = 0.005;
 const WIDGET_BAR_EASE_MS = 60;
-const WIDGET_BAR_WIDTH = 3;
+const WIDGET_BAR_WIDTH = 2;
 const WIDGET_BAR_SPACING = 3;
 const WIDGET_TIME_WIDTH = 34;
 const WIDGET_ROW_SPACING = 10;
@@ -50,14 +50,16 @@ const WIDGET_METER_WIDTH = WIDGET_WIDTH - 2 * WIDGET_PADDING_X - WIDGET_TIME_WID
     WIDGET_ROW1_BUTTONS * WIDGET_BUTTON_SIZE - (WIDGET_ROW1_BUTTONS - 1) * WIDGET_ACTION_SPACING;
 const WIDGET_BAR_COUNT = Math.floor(
     (WIDGET_METER_WIDTH + WIDGET_BAR_SPACING) / (WIDGET_BAR_WIDTH + WIDGET_BAR_SPACING));
-const WIDGET_BAR_PATTERN = [0.5, 0.8, 0.65, 1, 0.7, 0.9, 0.55, 0.95, 0.75, 0.85, 0.6, 0.45, 0.8, 0.95, 0.6];
+const WIDGET_BAR_PATTERN = [0.5, 0.8, 0.65, 1, 0.7, 0.9, 0.55, 0.95, 0.75, 0.85, 0.6, 0.45, 0.8, 0.95, 0.6, 0.7, 1, 0.55];
 const WIDGET_BAR_FACTORS = Array.from({length: WIDGET_BAR_COUNT},
     (_, i) => WIDGET_BAR_PATTERN[i % WIDGET_BAR_PATTERN.length]);
 const WIDGET_WAVE_BAR_WIDTH = 2;
 const WIDGET_WAVE_BAR_SPACING = 1;
 const WIDGET_WAVE_BAR_COUNT = Math.floor(
     (WIDGET_WIDTH - 2 * WIDGET_PADDING_X + WIDGET_WAVE_BAR_SPACING) / (WIDGET_WAVE_BAR_WIDTH + WIDGET_WAVE_BAR_SPACING));
-const WIDGET_WAVE_AMPLITUDE = WIDGET_BAR_MAX_HEIGHT / 3;
+const WIDGET_WAVE_HEIGHT = 24;
+const WIDGET_WAVE_MIN_SCALE = WIDGET_BAR_MIN_HEIGHT / WIDGET_WAVE_HEIGHT;
+const WIDGET_WAVE_AMPLITUDE = WIDGET_WAVE_HEIGHT / 3;
 const WIDGET_WAVE_OPACITY = 150;
 const WIDGET_WAVE_PERIOD_US = 1200 * 1000;
 const WIDGET_WAVE_FRAME_MS = 33;
@@ -644,18 +646,18 @@ export default class PromptheusExtension extends Extension {
         return actions;
     }
 
-    _widgetBarRow(spacing = WIDGET_BAR_SPACING) {
+    _widgetBarRow(spacing = WIDGET_BAR_SPACING, height = WIDGET_BAR_MAX_HEIGHT) {
         return new St.BoxLayout({
             y_align: Clutter.ActorAlign.CENTER,
-            style: `spacing: ${spacing}px; height: ${WIDGET_BAR_MAX_HEIGHT}px;`,
+            style: `spacing: ${spacing}px; height: ${height}px;`,
         });
     }
 
-    _widgetBar(row, scale, width = WIDGET_BAR_WIDTH) {
+    _widgetBar(row, scale, width = WIDGET_BAR_WIDTH, height = WIDGET_BAR_MAX_HEIGHT) {
         const bar = new St.Widget({
             y_align: Clutter.ActorAlign.CENTER,
             style: `width: ${width}px; border-radius: 2px; background-color: #e5e5e7;`,
-            height: WIDGET_BAR_MAX_HEIGHT,
+            height,
             scale_y: scale,
         });
         bar.set_pivot_point(0.5, 0.5);
@@ -664,10 +666,10 @@ export default class PromptheusExtension extends Extension {
     }
 
     _fillWave(widget, content) {
-        const row = this._widgetBarRow(WIDGET_WAVE_BAR_SPACING);
+        const row = this._widgetBarRow(WIDGET_WAVE_BAR_SPACING, WIDGET_WAVE_HEIGHT);
         row.opacity = WIDGET_WAVE_OPACITY;
         widget.waveBars = Array.from({length: WIDGET_WAVE_BAR_COUNT},
-            () => this._widgetBar(row, WIDGET_BAR_MIN_SCALE, WIDGET_WAVE_BAR_WIDTH));
+            () => this._widgetBar(row, WIDGET_WAVE_MIN_SCALE, WIDGET_WAVE_BAR_WIDTH, WIDGET_WAVE_HEIGHT));
         content.add_child(row);
         widget.waveStart = GLib.get_monotonic_time();
         this._updateWidgetWave(widget);
@@ -682,7 +684,7 @@ export default class PromptheusExtension extends Extension {
         const phase = 2 * Math.PI * (elapsed % WIDGET_WAVE_PERIOD_US) / WIDGET_WAVE_PERIOD_US;
         widget.waveBars.forEach((bar, i) => {
             const wave = 0.5 + 0.5 * Math.sin(phase - i * WIDGET_WAVE_STEP);
-            bar.scale_y = (WIDGET_BAR_MIN_HEIGHT + WIDGET_WAVE_AMPLITUDE * wave) / WIDGET_BAR_MAX_HEIGHT;
+            bar.scale_y = (WIDGET_BAR_MIN_HEIGHT + WIDGET_WAVE_AMPLITUDE * wave) / WIDGET_WAVE_HEIGHT;
         });
     }
 

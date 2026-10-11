@@ -65,7 +65,7 @@
   const DROPDOWN_ROW_HEIGHT = 28;
   const DROPDOWN_PADDING = 4;
   const DEFAULT_TARGET_LABEL = "Dictation";
-  const BAR_WIDTH = 3;
+  const BAR_WIDTH = 2;
   const BAR_GAP = 3;
   const TIME_WIDTH = 34;
   const ROW_GAP = 10;
@@ -75,7 +75,7 @@
   const METER_WIDTH =
     PILL_WIDTH - 2 * PADDING_X - TIME_WIDTH - 2 * ROW_GAP - ROW1_BUTTONS * BUTTON_SIZE - (ROW1_BUTTONS - 1) * ACTION_GAP;
   const BAR_COUNT = Math.floor((METER_WIDTH + BAR_GAP) / (BAR_WIDTH + BAR_GAP));
-  const BAR_PATTERN = [0.5, 0.8, 0.65, 1, 0.7, 0.9, 0.55, 0.95, 0.75, 0.85, 0.6, 0.45, 0.8, 0.95, 0.6];
+  const BAR_PATTERN = [0.5, 0.8, 0.65, 1, 0.7, 0.9, 0.55, 0.95, 0.75, 0.85, 0.6, 0.45, 0.8, 0.95, 0.6, 0.7, 1, 0.55];
   const BAR_FACTORS = Array.from({ length: BAR_COUNT }, (_, i) => BAR_PATTERN[i % BAR_PATTERN.length]);
   const MIN_BAR = 0.12;
   const DONE_COLOR = "#62A878";
@@ -552,7 +552,7 @@
   .bars {
     display: flex;
     align-items: center;
-    height: 24px;
+    height: 28px;
   }
 
   .bar {
