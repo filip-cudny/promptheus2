@@ -243,7 +243,7 @@ async fn show_in_shell(
         .await
         .map_err(|e| e.to_string())?;
     let stored = read_position(app, SHELL_POSITION_KEY).await;
-    let (x, y, has_position, source) = if settings.at_cursor {
+    let (x, y, has_position) = if settings.at_cursor {
         let (px, py, work_x, work_y, work_width, work_height) =
             proxy.get_pointer().await.map_err(|e| e.to_string())?;
         let (x, y) = clamp_origin(
@@ -251,10 +251,10 @@ async fn show_in_shell(
             (PILL_WIDTH, PILL_HEIGHT),
             (work_x as f64, work_y as f64, work_width as f64, work_height as f64),
         );
-        (x.round() as i32, y.round() as i32, true, "cursor")
+        (x.round() as i32, y.round() as i32, true)
     } else {
         let (x, y) = stored.unwrap_or((0, 0));
-        (x, y, stored.is_some(), if stored.is_some() { "stored position" } else { "default" })
+        (x, y, stored.is_some())
     };
     let (x, y, work_x, work_y, work_width, work_height) = proxy
         .show_recording_widget(x, y, has_position, settings.monochromatic)
@@ -263,6 +263,13 @@ async fn show_in_shell(
     let placement = Placement {
         origin: (x as f64, y as f64),
         work_area: (work_x as f64, work_y as f64, work_width as f64, work_height as f64),
+    };
+    let source = if settings.at_cursor {
+        "cursor"
+    } else if has_position && stored == Some((placement.origin.0 as i32, placement.origin.1 as i32)) {
+        "stored position"
+    } else {
+        "default"
     };
     log_placement(source, placement.origin, (PILL_WIDTH, PILL_HEIGHT), placement.work_area);
     Ok((proxy, placement))
@@ -297,10 +304,6 @@ impl RecordingWidget {
             move_seq: AtomicU64::new(0),
             programmatic_origin: std::sync::Mutex::new(None),
         }
-    }
-
-    pub async fn placement(&self) -> Option<Placement> {
-        self.inner.lock().await.placement
     }
 
     pub async fn is_shown(&self) -> bool {
