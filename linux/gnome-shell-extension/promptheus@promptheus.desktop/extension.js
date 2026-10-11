@@ -813,6 +813,7 @@ export default class PromptheusExtension extends Extension {
                 child: label,
                 clip_to_allocation: true,
             });
+            Main.layoutManager.uiGroup.add_child(popover);
             const innerWidth = WIDGET_PREVIEW_WIDTH - 2 * WIDGET_PREVIEW_PADDING;
             const [, natural] = label.get_preferred_height(innerWidth);
             popover.set_size(WIDGET_PREVIEW_WIDTH,
@@ -823,7 +824,8 @@ export default class PromptheusExtension extends Extension {
             ? actor.y - popover.height - WIDGET_PREVIEW_GAP
             : actor.y + actor.height + WIDGET_PREVIEW_GAP;
         popover.set_position(actor.x, y);
-        Main.layoutManager.uiGroup.add_child(popover);
+        if (!popover.get_parent())
+            Main.layoutManager.uiGroup.add_child(popover);
         widget.preview = popover;
     }
 
