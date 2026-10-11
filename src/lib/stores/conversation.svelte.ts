@@ -37,8 +37,22 @@ import type {
 import { hasUserContent } from "$lib/types";
 import type { ConversationNodeForExecution } from "$lib/types/ai";
 import { invoke } from "@tauri-apps/api/core";
-import { getGlobalContext } from "$lib/services/context";
+import { getContextItems } from "$lib/services/context";
 import type { InvocationSource } from "$lib/types/history";
+
+export async function getGlobalContext(): Promise<{
+  text: string;
+  images: ConversationImage[];
+}> {
+  const items = await getContextItems();
+  const text = items
+    .flatMap((i) => (i.item_type === "text" && i.content ? [i.content] : []))
+    .join("\n");
+  const images = items.flatMap((i) =>
+    i.item_type === "image" ? [{ data: i.data, media_type: i.media_type }] : [],
+  );
+  return { text, images };
+}
 
 export function createEmptyTree(): ConversationTree {
   return {

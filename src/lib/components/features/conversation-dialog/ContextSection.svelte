@@ -3,9 +3,9 @@
   import CollapsibleSection from "$lib/components/shared/ui/CollapsibleSection.svelte";
   import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import ContextEditor from "$lib/components/shared/widgets/ContextEditor.svelte";
-  import { getGlobalContext, appendContext, appendContextImage, clearContext } from "$lib/services/context";
+  import { appendContext, appendContextImage, clearContext } from "$lib/services/context";
   import { Save, Check, X, Trash2 } from "lucide-svelte";
-  import type { createConversationStore } from "$lib/stores/conversation.svelte";
+  import { getGlobalContext, type createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
 
   let {
