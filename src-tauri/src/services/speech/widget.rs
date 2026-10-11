@@ -35,7 +35,16 @@ const LEVEL_RELEASE: f64 = 0.2;
 const BOTTOM_MARGIN: f64 = 24.0;
 const PILL_WIDTH: f64 = 240.0;
 const PILL_HEIGHT: f64 = 80.0;
-const ITEMS_ROW_HEIGHT: f64 = 32.0;
+const MAX_ITEM_ROWS: u32 = 3;
+const ITEM_ROW_HEIGHT: f64 = 22.0;
+const ITEM_ROW_GAP: f64 = 4.0;
+const ITEMS_ROW_PADDING: f64 = 10.0;
+const ITEM_CHIP_BASE_WIDTH: f64 = 28.0;
+const ITEM_CHAR_WIDTH: f64 = 7.0;
+const ITEM_REMOVE_WIDTH: f64 = 16.0;
+const ITEM_GAP: f64 = 4.0;
+const ITEMS_AVAILABLE_WIDTH: f64 = PILL_WIDTH - 2.0 * 14.0;
+const PREVIEW_CHARS: usize = 300;
 const DROPDOWN_ROW_HEIGHT: f64 = 28.0;
 const DROPDOWN_PADDING: f64 = 4.0;
 
@@ -97,12 +106,21 @@ struct WidgetPayload {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct PillItem {
+    pub index: u32,
+    pub kind: String,
+    pub label: String,
+    pub preview: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct PillModel {
     pub targets: Vec<(String, String)>,
     pub selected_id: String,
     pub selected_label: String,
     pub target_locked: bool,
-    pub items: Vec<(u32, String, String)>,
+    pub items: Vec<PillItem>,
+    pub item_rows: u32,
     pub context_version: u64,
     pub x: i32,
     pub y: i32,
@@ -131,7 +149,7 @@ struct Inner {
     monochromatic: bool,
     update_failed: bool,
     placement: Option<Placement>,
-    has_items: bool,
+    item_rows: u32,
     scale: f64,
     dropdown: Option<Dropdown>,
     #[cfg(target_os = "linux")]
@@ -189,9 +207,45 @@ pub fn smooth_level(previous: f64, target: f64) -> f64 {
     previous + (target - previous) * rate
 }
 
-pub fn pill_size(has_items: bool) -> (f64, f64) {
-    let extra = if has_items { ITEMS_ROW_HEIGHT } else { 0.0 };
-    (PILL_WIDTH, PILL_HEIGHT + extra)
+pub fn item_rows(labels: &[String], locked: bool) -> u32 {
+    let remove = if locked { 0.0 } else { ITEM_REMOVE_WIDTH };
+    let mut rows = 0;
+    let mut used = 0.0;
+    for label in labels {
+        let width = ITEM_CHIP_BASE_WIDTH + ITEM_CHAR_WIDTH * label.chars().count() as f64 + remove;
+        if rows > 0 && used + ITEM_GAP + width <= ITEMS_AVAILABLE_WIDTH {
+            used += ITEM_GAP + width;
+        } else {
+            rows += 1;
+            used = width;
+        }
+    }
+    rows.min(MAX_ITEM_ROWS)
+}
+
+pub fn items_height(rows: u32) -> f64 {
+    if rows == 0 {
+        return 0.0;
+    }
+    rows as f64 * ITEM_ROW_HEIGHT + (rows - 1) as f64 * ITEM_ROW_GAP + ITEMS_ROW_PADDING
+}
+
+pub fn rows_resize(old_rows: u32, new_rows: u32) -> bool {
+    old_rows != new_rows
+}
+
+pub fn pill_size(rows: u32) -> (f64, f64) {
+    (PILL_WIDTH, PILL_HEIGHT + items_height(rows))
+}
+
+pub fn text_preview(content: &str) -> String {
+    let mut chars = content.chars();
+    let head: String = chars.by_ref().take(PREVIEW_CHARS).collect();
+    if chars.next().is_some() {
+        format!("{head}…")
+    } else {
+        head
+    }
 }
 
 pub fn regrow_origin(
@@ -237,23 +291,23 @@ pub fn pill_targets(skills: &[Skill]) -> Vec<(String, String)> {
     std::iter::once(dictation).chain(offered).collect()
 }
 
-pub fn pill_items(items: &[ContextItem]) -> Vec<(u32, String, String)> {
+pub fn pill_items(items: &[ContextItem]) -> Vec<PillItem> {
     let (mut texts, mut images) = (0, 0);
     items
         .iter()
         .enumerate()
         .map(|(index, item)| {
-            let (kind, label) = match item {
-                ContextItem::Text { .. } => {
+            let (kind, label, preview) = match item {
+                ContextItem::Text { content } => {
                     texts += 1;
-                    ("text", format!("Text #{texts}"))
+                    ("text", format!("Text #{texts}"), text_preview(content))
                 }
                 ContextItem::Image { .. } => {
                     images += 1;
-                    ("image", format!("Image #{images}"))
+                    ("image", format!("Image #{images}"), String::new())
                 }
             };
-            (index as u32, kind.to_string(), label)
+            PillItem { index: index as u32, kind: kind.to_string(), label, preview }
         })
         .collect()
 }
@@ -270,12 +324,15 @@ pub fn build_model(
         Some(pending) => (pending.id.clone(), pending.name.clone()),
         None => (DICTATION_ID.to_string(), DICTATION_LABEL.to_string()),
     };
+    let items = pill_items(context_items);
+    let labels: Vec<String> = items.iter().map(|item| item.label.clone()).collect();
     PillModel {
         targets,
         selected_id,
         selected_label,
         target_locked,
-        items: pill_items(context_items),
+        item_rows: item_rows(&labels, target_locked),
+        items,
         context_version,
         x: origin.0,
         y: origin.1,
@@ -296,8 +353,16 @@ fn window_payload(model: &PillModel) -> serde_json::Value {
         "items": model
             .items
             .iter()
-            .map(|(index, kind, label)| serde_json::json!({ "index": index, "kind": kind, "label": label }))
+            .map(|item| {
+                serde_json::json!({
+                    "index": item.index,
+                    "kind": item.kind,
+                    "label": item.label,
+                    "preview": item.preview,
+                })
+            })
             .collect::<Vec<_>>(),
+        "itemRows": model.item_rows,
         "contextVersion": model.context_version,
         "x": model.x,
         "y": model.y,
@@ -305,14 +370,7 @@ fn window_payload(model: &PillModel) -> serde_json::Value {
     })
 }
 
-async fn context_has_items(app: &AppHandle) -> bool {
-    match app.try_state::<Arc<Mutex<ContextManagerService>>>() {
-        Some(context) => context.lock().await.has_context(),
-        None => false,
-    }
-}
-
-async fn gather_model(app: &AppHandle, origin: (i32, i32)) -> PillModel {
+async fn gather_model(app: &AppHandle, origin: (i32, i32)) -> (PillModel, Vec<ContextItem>) {
     let targets = match app.try_state::<Arc<Mutex<SkillService>>>() {
         Some(skills) => pill_targets(skills.lock().await.list_skills()),
         None => pill_targets(&[]),
@@ -329,7 +387,14 @@ async fn gather_model(app: &AppHandle, origin: (i32, i32)) -> PillModel {
         }
         None => (None, false),
     };
-    build_model(targets, pending.as_ref(), locked, &items, current_context_version(), origin)
+    let model = build_model(targets, pending.as_ref(), locked, &items, current_context_version(), origin);
+    (model, items)
+}
+
+fn placement_origin(inner: &Inner) -> (i32, i32) {
+    inner
+        .placement
+        .map_or((0, 0), |p| (p.origin.0.round() as i32, p.origin.1.round() as i32))
 }
 
 fn default_origin(work_area: Rect, size: (u32, u32), scale: f64) -> (i32, i32) {
@@ -480,7 +545,7 @@ impl RecordingWidget {
                 monochromatic: true,
                 update_failed: false,
                 placement: None,
-                has_items: false,
+                item_rows: 0,
                 scale: 1.0,
                 dropdown: None,
                 #[cfg(target_os = "linux")]
@@ -509,11 +574,11 @@ impl RecordingWidget {
             return false;
         };
 
-        let has_items = context_has_items(app).await;
+        let item_rows = gather_model(app, (0, 0)).await.0.item_rows;
         let mut inner = self.inner.lock().await;
         inner.generation += 1;
         inner.session = session;
-        inner.has_items = has_items;
+        inner.item_rows = item_rows;
         inner.scale = 1.0;
         inner.state = WidgetState::Recording;
         inner.elapsed_ms = 0;
@@ -529,11 +594,11 @@ impl RecordingWidget {
 
         let shown = match transport {
             #[cfg(target_os = "linux")]
-            Transport::Shell => show_in_shell(app, settings, pill_size(has_items)).await.map(|(proxy, placement)| {
+            Transport::Shell => show_in_shell(app, settings, pill_size(item_rows)).await.map(|(proxy, placement)| {
                 inner.shell = Some(proxy);
                 inner.placement = Some(placement);
             }),
-            Transport::Window => self.show_window(app, settings, has_items).await.map(|(placement, scale)| {
+            Transport::Window => self.show_window(app, settings, item_rows).await.map(|(placement, scale)| {
                 inner.placement = Some(placement);
                 inner.scale = scale;
             }),
@@ -551,7 +616,7 @@ impl RecordingWidget {
         if transport == Transport::Window {
             push(app, &mut inner, 0.0).await;
         }
-        push_model(app, &mut inner).await;
+        push_current_model(app, &mut inner).await;
         spawn_level_task(app.clone(), session, inner.generation);
         true
     }
@@ -649,10 +714,13 @@ impl RecordingWidget {
         }
         let result = match transport {
             #[cfg(target_os = "linux")]
-            Transport::Shell => match inner.shell.take() {
-                Some(proxy) => proxy.hide_recording_widget().await.map_err(|e| e.to_string()),
-                None => Ok(()),
-            },
+            Transport::Shell => {
+                clear_preview_files(app);
+                match inner.shell.take() {
+                    Some(proxy) => proxy.hide_recording_widget().await.map_err(|e| e.to_string()),
+                    None => Ok(()),
+                }
+            }
             Transport::Window => match app.get_webview_window(WINDOW_LABEL) {
                 Some(window) => window.hide().map_err(|e| e.to_string()),
                 None => Ok(()),
@@ -667,12 +735,12 @@ impl RecordingWidget {
         &self,
         app: &AppHandle,
         settings: WidgetSettings,
-        has_items: bool,
+        item_rows: u32,
     ) -> Result<(Placement, f64), String> {
         let window = app
             .get_webview_window(WINDOW_LABEL)
             .ok_or("recording-widget window not found")?;
-        let logical_size = pill_size(has_items);
+        let logical_size = pill_size(item_rows);
         let (origin, monitor, source) = if settings.at_cursor {
             let (cx, cy) = app
                 .cursor_position()
@@ -736,25 +804,25 @@ impl RecordingWidget {
     }
 
     pub async fn refresh_model(&self, app: &AppHandle) {
-        let has_items = context_has_items(app).await;
         let mut inner = self.inner.lock().await;
         if inner.transport.is_none() {
             return;
         }
-        if has_items != inner.has_items {
-            self.resize_locked(app, &mut inner, has_items);
+        let (model, context_items) = gather_model(app, placement_origin(&inner)).await;
+        if rows_resize(inner.item_rows, model.item_rows) {
+            self.resize_locked(app, &mut inner, model.item_rows);
         }
-        push_model(app, &mut inner).await;
+        push_model(app, &mut inner, model, &context_items).await;
     }
 
-    fn resize_locked(&self, app: &AppHandle, inner: &mut Inner, has_items: bool) {
+    fn resize_locked(&self, app: &AppHandle, inner: &mut Inner, item_rows: u32) {
         if inner.dropdown.take().is_some() {
             let _ = app.emit_to(WINDOW_LABEL, DROPDOWN_CLOSED_EVENT, ());
         }
         let scale = inner.scale;
-        let (width, old_height) = pill_size(inner.has_items);
-        let new_height = pill_size(has_items).1;
-        inner.has_items = has_items;
+        let (width, old_height) = pill_size(inner.item_rows);
+        let new_height = pill_size(item_rows).1;
+        let old_rows = std::mem::replace(&mut inner.item_rows, item_rows);
         let Some(placement) = inner.placement.as_mut() else {
             return;
         };
@@ -766,7 +834,7 @@ impl RecordingWidget {
             placement.work_area,
         );
         log::debug!(
-            "recording widget: resized has_items={has_items} origin={:?}",
+            "recording widget: resized rows {old_rows} -> {item_rows} origin={:?}",
             placement.origin
         );
         if inner.transport != Some(Transport::Window) {
@@ -800,7 +868,7 @@ impl RecordingWidget {
                         } else {
                             position.1 as f64
                         };
-                        let size = physical_size(pill_size(inner.has_items), inner.scale);
+                        let size = physical_size(pill_size(inner.item_rows), inner.scale);
                         let origin = clamp_origin(
                             (position.0 as f64, top),
                             (size.0 as f64, size.1 as f64),
@@ -856,7 +924,7 @@ impl RecordingWidget {
             _ => return Err("recording widget window is not shown".into()),
         };
         let scale = inner.scale;
-        let size = physical_size(pill_size(inner.has_items), scale);
+        let size = physical_size(pill_size(inner.item_rows), scale);
         let pill = (size.0 as f64, size.1 as f64);
         let up = dropdown_opens_up(placement.origin.1, pill.1, placement.work_area);
         let list_height = dropdown_height(rows) * scale;
@@ -874,7 +942,7 @@ impl RecordingWidget {
             return;
         }
         let scale = inner.scale;
-        let size = physical_size(pill_size(inner.has_items), scale);
+        let size = physical_size(pill_size(inner.item_rows), scale);
         let size = (size.0 as f64, size.1 as f64);
         if let Some(placement) = inner.placement.as_mut() {
             let origin = clamp_origin(placement.origin, size, placement.work_area);
@@ -944,34 +1012,110 @@ async fn push(app: &AppHandle, inner: &mut Inner, level: f64) {
     note_update_failure(inner, result);
 }
 
-async fn push_model(app: &AppHandle, inner: &mut Inner) {
+async fn push_current_model(app: &AppHandle, inner: &mut Inner) {
+    let (model, context_items) = gather_model(app, placement_origin(inner)).await;
+    push_model(app, inner, model, &context_items).await;
+}
+
+#[cfg(target_os = "linux")]
+fn preview_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    app.path()
+        .app_cache_dir()
+        .map(|dir| dir.join(super::pill_previews::DIR_NAME))
+        .map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "linux")]
+fn clear_preview_files(app: &AppHandle) {
+    match preview_dir(app) {
+        Ok(dir) => {
+            tauri::async_runtime::spawn_blocking(move || super::pill_previews::clear_previews(&dir));
+        }
+        Err(e) => log::warn!("resolving the pill preview directory failed: {e}"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn sync_preview_files(app: &AppHandle, context_items: &[ContextItem]) -> Vec<String> {
+    let images: Vec<(String, String)> = context_items
+        .iter()
+        .filter_map(|item| match item {
+            ContextItem::Image { data, media_type } => Some((data.clone(), media_type.clone())),
+            ContextItem::Text { .. } => None,
+        })
+        .collect();
+    let failed = vec![String::new(); images.len()];
+    let dir = match preview_dir(app) {
+        Ok(dir) => dir,
+        Err(e) => {
+            log::warn!("resolving the pill preview directory failed: {e}");
+            return failed;
+        }
+    };
+    let synced = {
+        let dir = dir.clone();
+        tauri::async_runtime::spawn_blocking(move || super::pill_previews::sync_previews(&dir, &images)).await
+    };
+    match synced {
+        Ok(Ok(paths)) => {
+            log::debug!("recording widget: synced {} preview files in {}", paths.len(), dir.display());
+            paths.iter().map(|path| path.to_string_lossy().into_owned()).collect()
+        }
+        Ok(Err(e)) => {
+            log::warn!("writing the pill previews in {} failed: {e}", dir.display());
+            failed
+        }
+        Err(e) => {
+            log::warn!("the pill preview task for {} failed: {e}", dir.display());
+            failed
+        }
+    }
+}
+
+async fn push_model(app: &AppHandle, inner: &mut Inner, mut model: PillModel, context_items: &[ContextItem]) {
     let Some(transport) = inner.transport else {
         return;
     };
-    let origin = inner
-        .placement
-        .map_or((0, 0), |p| (p.origin.0.round() as i32, p.origin.1.round() as i32));
-    let mut model = gather_model(app, origin).await;
+    #[cfg(not(target_os = "linux"))]
+    let _ = context_items;
     if let Some(placement) = inner.placement {
-        let pill_height = physical_size(pill_size(inner.has_items), inner.scale).1 as f64;
+        model.x = placement.origin.0.round() as i32;
+        model.y = placement.origin.1.round() as i32;
+        let pill_height = physical_size(pill_size(inner.item_rows), inner.scale).1 as f64;
         model.dropdown_up = dropdown_opens_up(placement.origin.1, pill_height, placement.work_area);
     }
     let result = match transport {
         #[cfg(target_os = "linux")]
         Transport::Shell => match &inner.shell {
-            Some(proxy) => proxy
-                .update_recording_widget_model(
-                    model.targets,
-                    &model.selected_id,
-                    &model.selected_label,
-                    model.target_locked,
-                    model.items,
-                    model.context_version,
-                    model.x,
-                    model.y,
-                )
-                .await
-                .map_err(|e| e.to_string()),
+            Some(proxy) => {
+                let mut paths = sync_preview_files(app, context_items).await.into_iter();
+                let items = model
+                    .items
+                    .into_iter()
+                    .zip(context_items)
+                    .map(|(item, source)| {
+                        let image_path = match source {
+                            ContextItem::Image { .. } => paths.next().unwrap_or_default(),
+                            ContextItem::Text { .. } => String::new(),
+                        };
+                        (item.index, item.kind, item.label, item.preview, image_path)
+                    })
+                    .collect();
+                proxy
+                    .update_recording_widget_model(
+                        model.targets,
+                        &model.selected_id,
+                        &model.selected_label,
+                        model.target_locked,
+                        items,
+                        model.item_rows,
+                        model.context_version,
+                        model.x,
+                        model.y,
+                    )
+                    .await
+                    .map_err(|e| e.to_string())
+            }
             None => Ok(()),
         },
         Transport::Window => app
@@ -1049,7 +1193,7 @@ mod tests {
             monochromatic: true,
             update_failed: false,
             placement: None,
-            has_items: false,
+            item_rows: 0,
             scale: 1.0,
             dropdown: None,
             #[cfg(target_os = "linux")]
@@ -1095,9 +1239,42 @@ mod tests {
     }
 
     #[test]
-    fn items_row_adds_its_height_to_the_pill() {
-        assert_eq!(pill_size(false), (240.0, 80.0));
-        assert_eq!(pill_size(true), (240.0, 112.0));
+    fn item_rows_add_their_height_to_the_pill() {
+        assert_eq!(pill_size(0), (240.0, 80.0));
+        assert_eq!(pill_size(1), (240.0, 112.0));
+        assert_eq!(pill_size(2), (240.0, 138.0));
+        assert_eq!(pill_size(3), (240.0, 164.0));
+    }
+
+    fn labels(count: usize) -> Vec<String> {
+        (1..=count).map(|n| format!("Text #{n}")).collect()
+    }
+
+    #[test]
+    fn chips_wrap_into_at_most_three_rows() {
+        assert_eq!(item_rows(&[], false), 0);
+        assert_eq!(item_rows(&labels(1), false), 1);
+        assert_eq!(item_rows(&labels(3), false), 2);
+        assert_eq!(item_rows(&labels(3), true), 2);
+        assert_eq!(item_rows(&labels(20), false), 3);
+    }
+
+    #[test]
+    fn only_a_row_change_resizes() {
+        assert!(!rows_resize(2, 2));
+        assert!(rows_resize(2, 1));
+    }
+
+    #[test]
+    fn a_long_text_preview_is_cut_on_chars() {
+        let preview = text_preview(&"ą".repeat(400));
+        assert_eq!(preview, format!("{}…", "ą".repeat(300)));
+        assert_eq!(text_preview("a\nb"), "a\nb");
+    }
+
+    #[test]
+    fn an_image_item_has_no_preview() {
+        assert_eq!(pill_items(&[image()])[0].preview, "");
     }
 
     #[test]
@@ -1105,6 +1282,14 @@ mod tests {
         assert_eq!(
             regrow_origin((100.0, 500.0), 80.0, 112.0, 240.0, (0.0, 0.0, 1920.0, 1040.0)),
             (100.0, 468.0)
+        );
+    }
+
+    #[test]
+    fn regrow_from_one_to_three_rows_moves_up_by_the_difference() {
+        assert_eq!(
+            regrow_origin((100.0, 500.0), 112.0, 164.0, 240.0, (0.0, 0.0, 1920.0, 1040.0)),
+            (100.0, 448.0)
         );
     }
 
@@ -1175,9 +1360,12 @@ mod tests {
     #[test]
     fn items_are_labelled_per_kind_in_context_order() {
         let items = pill_items(&[text(), image(), text()]);
-        let labels: Vec<&str> = items.iter().map(|(_, _, label)| label.as_str()).collect();
+        let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
         assert_eq!(labels, ["Text #1", "Image #1", "Text #2"]);
-        assert_eq!(items[1], (1, "image".to_string(), "Image #1".to_string()));
+        assert_eq!(
+            items[1],
+            PillItem { index: 1, kind: "image".into(), label: "Image #1".into(), preview: String::new() }
+        );
     }
 
     #[test]

@@ -1,4 +1,6 @@
 mod clip_store;
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+mod pill_previews;
 mod recorder;
 pub mod reminder;
 pub mod retry;
