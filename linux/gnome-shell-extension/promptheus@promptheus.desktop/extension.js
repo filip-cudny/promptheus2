@@ -16,7 +16,7 @@ const TOAST_GAP = 14;
 const TOAST_OPACITY = 204;
 const TOAST_SHOW_ANIMATION_MS = 150;
 const TOAST_HIDE_ANIMATION_MS = 150;
-const WIDGET_WIDTH = 240;
+const WIDGET_WIDTH = 264;
 const WIDGET_HEIGHT = 80;
 const WIDGET_ROW_HEIGHT = WIDGET_HEIGHT / 2;
 const WIDGET_RADIUS = 16;
@@ -24,7 +24,6 @@ const WIDGET_MAX_ITEM_ROWS = 3;
 const WIDGET_ITEM_ROW_HEIGHT = 22;
 const WIDGET_ITEM_ROW_GAP = 4;
 const WIDGET_ITEMS_ROW_PADDING = 10;
-const WIDGET_PREVIEW_WIDTH = 240;
 const WIDGET_PREVIEW_MAX_HEIGHT = 160;
 const WIDGET_PREVIEW_GAP = 6;
 const WIDGET_PREVIEW_DELAY_MS = 300;
@@ -35,7 +34,7 @@ const WIDGET_DEFAULT_TARGET_LABEL = 'Dictation';
 const WIDGET_PADDING_X = 14;
 const WIDGET_BOTTOM_MARGIN = 24;
 const WIDGET_STATES = ['recording', 'paused', 'processing', 'done'];
-const WIDGET_BAR_FACTORS = [0.55, 0.8, 0.65, 1, 0.75, 0.9, 0.6, 0.85, 0.5];
+const WIDGET_BAR_FACTORS = [0.5, 0.8, 0.65, 1, 0.7, 0.9, 0.55, 0.95, 0.75, 0.85, 0.6, 0.45];
 const WIDGET_BAR_MIN_HEIGHT = 4;
 const WIDGET_BAR_MAX_HEIGHT = 24;
 const WIDGET_BAR_MIN_SCALE = WIDGET_BAR_MIN_HEIGHT / WIDGET_BAR_MAX_HEIGHT;
@@ -43,14 +42,18 @@ const WIDGET_BAR_SCALE_EPSILON = 0.005;
 const WIDGET_BAR_EASE_MS = 60;
 const WIDGET_BAR_WIDTH = 3;
 const WIDGET_BAR_SPACING = 3;
+const WIDGET_WAVE_BAR_WIDTH = 2;
+const WIDGET_WAVE_BAR_SPACING = 1;
 const WIDGET_WAVE_BAR_COUNT = Math.floor(
-    (WIDGET_WIDTH - 2 * WIDGET_PADDING_X + WIDGET_BAR_SPACING) / (WIDGET_BAR_WIDTH + WIDGET_BAR_SPACING));
+    (WIDGET_WIDTH - 2 * WIDGET_PADDING_X + WIDGET_WAVE_BAR_SPACING) / (WIDGET_WAVE_BAR_WIDTH + WIDGET_WAVE_BAR_SPACING));
 const WIDGET_WAVE_AMPLITUDE = WIDGET_BAR_MAX_HEIGHT / 3;
 const WIDGET_WAVE_OPACITY = 150;
 const WIDGET_WAVE_PERIOD_US = 1200 * 1000;
 const WIDGET_WAVE_FRAME_MS = 33;
 const WIDGET_WAVE_STEP = 2 * Math.PI / WIDGET_WAVE_BAR_COUNT;
-const WIDGET_BUTTON_HOVER = 'rgba(255,255,255,0.14)';
+const WIDGET_BUTTON_HOVER = '#3a3a3c';
+const WIDGET_ACTION_SPACING = 4;
+const WIDGET_TARGET_PADDING_X = 8;
 const WIDGET_DRAG_THRESHOLD_PX = 4;
 
 function pointInRect(x, y, rect) {
@@ -591,8 +594,10 @@ export default class PromptheusExtension extends Extension {
             y_align: Clutter.ActorAlign.CENTER,
             style: 'spacing: 10px;',
         });
-        if (state === 'recording' || state === 'paused')
+        if (state === 'recording' || state === 'paused') {
+            content.x_align = Clutter.ActorAlign.FILL;
             this._fillControls(widget, content, state);
+        }
         else if (state === 'processing')
             this._fillWave(widget, content);
         else
@@ -611,25 +616,35 @@ export default class PromptheusExtension extends Extension {
         });
         content.add_child(bars);
         content.add_child(widget.timeLabel);
-        if (state === 'paused')
-            content.add_child(this._widgetActionButton('play', 'resume'));
-        else
-            content.add_child(this._widgetActionButton('pause', 'pause'));
-        content.add_child(this._widgetActionButton('stop', 'stop'));
-        content.add_child(this._widgetActionButton('cancel', 'cancel'));
+        content.add_child(this._widgetActions(
+            state === 'paused'
+                ? this._widgetActionButton('play', 'resume')
+                : this._widgetActionButton('pause', 'pause'),
+            this._widgetActionButton('cancel', 'cancel', 'cancel-hover'),
+            this._widgetActionButton(widget.monochromatic ? 'check-mono' : 'check', 'stop')));
     }
 
-    _widgetBarRow() {
+    _widgetActions(...buttons) {
+        const actions = new St.BoxLayout({
+            x_expand: true,
+            x_align: Clutter.ActorAlign.END,
+            style: `spacing: ${WIDGET_ACTION_SPACING}px;`,
+        });
+        buttons.forEach(button => actions.add_child(button));
+        return actions;
+    }
+
+    _widgetBarRow(spacing = WIDGET_BAR_SPACING) {
         return new St.BoxLayout({
             y_align: Clutter.ActorAlign.CENTER,
-            style: `spacing: ${WIDGET_BAR_SPACING}px; height: ${WIDGET_BAR_MAX_HEIGHT}px;`,
+            style: `spacing: ${spacing}px; height: ${WIDGET_BAR_MAX_HEIGHT}px;`,
         });
     }
 
-    _widgetBar(row, scale) {
+    _widgetBar(row, scale, width = WIDGET_BAR_WIDTH) {
         const bar = new St.Widget({
             y_align: Clutter.ActorAlign.CENTER,
-            style: `width: ${WIDGET_BAR_WIDTH}px; border-radius: 2px; background-color: #e5e5e7;`,
+            style: `width: ${width}px; border-radius: 2px; background-color: #e5e5e7;`,
             height: WIDGET_BAR_MAX_HEIGHT,
             scale_y: scale,
         });
@@ -639,10 +654,10 @@ export default class PromptheusExtension extends Extension {
     }
 
     _fillWave(widget, content) {
-        const row = this._widgetBarRow();
+        const row = this._widgetBarRow(WIDGET_WAVE_BAR_SPACING);
         row.opacity = WIDGET_WAVE_OPACITY;
         widget.waveBars = Array.from({length: WIDGET_WAVE_BAR_COUNT},
-            () => this._widgetBar(row, WIDGET_BAR_MIN_SCALE));
+            () => this._widgetBar(row, WIDGET_BAR_MIN_SCALE, WIDGET_WAVE_BAR_WIDTH));
         content.add_child(row);
         widget.waveStart = GLib.get_monotonic_time();
         this._updateWidgetWave(widget);
@@ -677,10 +692,13 @@ export default class PromptheusExtension extends Extension {
         }));
     }
 
+    _widgetGicon(name) {
+        return new Gio.FileIcon({file: this.dir.get_child('icons').get_child(`recording-${name}.svg`)});
+    }
+
     _widgetIcon(name, size = 16) {
-        const file = this.dir.get_child('icons').get_child(`recording-${name}.svg`);
         return new St.Icon({
-            gicon: new Gio.FileIcon({file}),
+            gicon: this._widgetGicon(name),
             icon_size: size,
             y_align: Clutter.ActorAlign.CENTER,
         });
@@ -702,8 +720,15 @@ export default class PromptheusExtension extends Extension {
         return button;
     }
 
-    _widgetActionButton(iconName, action) {
-        return this._widgetButton(this._widgetIcon(iconName), () => this._emitRecordingWidgetAction(action));
+    _widgetActionButton(iconName, action, hoverIconName = iconName) {
+        const icon = this._widgetIcon(iconName);
+        const button = this._widgetButton(icon, () => this._emitRecordingWidgetAction(action));
+        if (hoverIconName !== iconName) {
+            button.connect('notify::hover', () => {
+                icon.gicon = this._widgetGicon(button.hover ? hoverIconName : iconName);
+            });
+        }
+        return button;
     }
 
     _fillRow2(widget) {
@@ -712,18 +737,26 @@ export default class PromptheusExtension extends Extension {
         const interactive = !locked && widget.state !== 'done';
         if (!interactive) {
             this._closeDropdown(widget);
-            widget.row2.add_child(new St.Label({text: selectedLabel, y_align: Clutter.ActorAlign.CENTER}));
+            widget.row2.style = `height: ${WIDGET_ROW_HEIGHT}px; padding: 0 ${WIDGET_PADDING_X}px;`;
+            widget.row2.add_child(new St.Label({
+                text: selectedLabel,
+                x_expand: true,
+                x_align: Clutter.ActorAlign.CENTER,
+                y_align: Clutter.ActorAlign.CENTER,
+            }));
             return;
         }
+        widget.row2.style = `height: ${WIDGET_ROW_HEIGHT}px; spacing: 10px; ` +
+            `padding: 0 ${WIDGET_PADDING_X}px 0 ${WIDGET_PADDING_X - WIDGET_TARGET_PADDING_X}px;`;
         const content = new St.BoxLayout({style: 'spacing: 4px;'});
-        content.add_child(new St.Label({text: selectedLabel, x_expand: true, y_align: Clutter.ActorAlign.CENTER}));
-        content.add_child(this._widgetIcon(this._dropdownAbove(widget) ? 'chevron-up' : 'chevron-down'));
+        content.add_child(new St.Label({text: selectedLabel, y_align: Clutter.ActorAlign.CENTER}));
+        content.add_child(this._widgetIcon('chevrons-up-down', 14));
         const target = this._widgetButton(content, () => this._toggleDropdown(widget),
-            'height: 28px; border-radius: 14px; padding: 0 8px;');
-        target.x_expand = true;
+            `height: 28px; border-radius: 14px; padding: 0 ${WIDGET_TARGET_PADDING_X}px;`);
         widget.row2.add_child(target);
-        widget.row2.add_child(this._widgetActionButton('paste', 'paste'));
-        widget.row2.add_child(this._widgetActionButton('chat', 'stop_chat'));
+        widget.row2.add_child(this._widgetActions(
+            this._widgetActionButton('paste', 'paste'),
+            this._widgetActionButton('chat', 'stop_chat')));
     }
 
     _fillItems(widget) {
@@ -801,7 +834,7 @@ export default class PromptheusExtension extends Extension {
                 style: `${style} background-image: url("file://${imagePath}"); background-size: contain; ` +
                     'background-position: center; background-repeat: no-repeat;',
             });
-            popover.set_size(WIDGET_PREVIEW_WIDTH, WIDGET_PREVIEW_MAX_HEIGHT);
+            popover.set_size(WIDGET_WIDTH, WIDGET_PREVIEW_MAX_HEIGHT);
         } else {
             const label = new St.Label({text});
             label.clutter_text.line_wrap = true;
@@ -814,9 +847,9 @@ export default class PromptheusExtension extends Extension {
                 clip_to_allocation: true,
             });
             Main.layoutManager.uiGroup.add_child(popover);
-            const innerWidth = WIDGET_PREVIEW_WIDTH - 2 * WIDGET_PREVIEW_PADDING;
+            const innerWidth = WIDGET_WIDTH - 2 * WIDGET_PREVIEW_PADDING;
             const [, natural] = label.get_preferred_height(innerWidth);
-            popover.set_size(WIDGET_PREVIEW_WIDTH,
+            popover.set_size(WIDGET_WIDTH,
                 Math.min(natural + 2 * WIDGET_PREVIEW_PADDING, WIDGET_PREVIEW_MAX_HEIGHT));
         }
         const {actor} = widget;
@@ -852,7 +885,6 @@ export default class PromptheusExtension extends Extension {
             this._closeDropdown(widget);
         else
             this._openDropdown(widget);
-        this._fillRow2(widget);
     }
 
     _openDropdown(widget) {
@@ -877,7 +909,6 @@ export default class PromptheusExtension extends Extension {
                 () => {
                     this._emitRecordingWidgetTargetSelected(id);
                     this._closeDropdown(widget);
-                    this._fillRow2(widget);
                 },
                 `height: ${WIDGET_DROPDOWN_ROW_HEIGHT}px; padding: 0 ${WIDGET_PADDING_X}px; ${weight}`));
         }

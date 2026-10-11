@@ -34,7 +34,7 @@ const CEIL_DB: f64 = -20.0;
 const LEVEL_ATTACK: f64 = 0.6;
 const LEVEL_RELEASE: f64 = 0.2;
 const BOTTOM_MARGIN: f64 = 24.0;
-const PILL_WIDTH: f64 = 240.0;
+const PILL_WIDTH: f64 = 264.0;
 const PILL_HEIGHT: f64 = 80.0;
 const MAX_ITEM_ROWS: u32 = 3;
 const ITEM_ROW_HEIGHT: f64 = 22.0;
@@ -125,7 +125,6 @@ pub struct PillModel {
     pub context_version: u64,
     pub x: i32,
     pub y: i32,
-    pub dropdown_up: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -366,7 +365,6 @@ pub fn build_model(
         context_version,
         x: origin.0,
         y: origin.1,
-        dropdown_up: false,
     }
 }
 
@@ -396,7 +394,6 @@ fn window_payload(model: &PillModel) -> serde_json::Value {
         "contextVersion": model.context_version,
         "x": model.x,
         "y": model.y,
-        "dropdownUp": model.dropdown_up,
     })
 }
 
@@ -1135,8 +1132,6 @@ async fn push_model(app: &AppHandle, inner: &mut Inner, mut model: PillModel, co
     if let Some(placement) = inner.placement {
         model.x = placement.origin.0.round() as i32;
         model.y = placement.origin.1.round() as i32;
-        let pill_height = physical_size(pill_size(inner.item_rows), inner.scale).1 as f64;
-        model.dropdown_up = dropdown_opens_up(placement.origin.1, pill_height, placement.work_area);
     }
     let result = match transport {
         #[cfg(target_os = "linux")]
@@ -1294,10 +1289,10 @@ mod tests {
 
     #[test]
     fn item_rows_add_their_height_to_the_pill() {
-        assert_eq!(pill_size(0), (240.0, 80.0));
-        assert_eq!(pill_size(1), (240.0, 112.0));
-        assert_eq!(pill_size(2), (240.0, 138.0));
-        assert_eq!(pill_size(3), (240.0, 164.0));
+        assert_eq!(pill_size(0), (264.0, 80.0));
+        assert_eq!(pill_size(1), (264.0, 112.0));
+        assert_eq!(pill_size(2), (264.0, 138.0));
+        assert_eq!(pill_size(3), (264.0, 164.0));
     }
 
     fn labels(count: usize) -> Vec<String> {

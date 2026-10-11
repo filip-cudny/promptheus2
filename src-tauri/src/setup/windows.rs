@@ -50,7 +50,7 @@ pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::E
         tauri::WebviewUrl::App("recording-widget.html".into()),
     )
     .title("")
-    .inner_size(240.0, 80.0)
+    .inner_size(264.0, 80.0)
     .resizable(false)
     .decorations(false)
     .transparent(true)

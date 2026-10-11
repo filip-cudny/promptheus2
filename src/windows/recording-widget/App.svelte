@@ -6,14 +6,12 @@
   import { attachConsole, error as logError } from "@tauri-apps/plugin-log";
   import {
     Check,
-    ChevronDown,
-    ChevronUp,
+    ChevronsUpDown,
     ClipboardPaste,
     Image as ImageIcon,
     MessageSquareShare,
     Pause,
     Play,
-    Square,
     Type,
     X,
   } from "lucide-svelte";
@@ -49,15 +47,14 @@
     items: PillItem[];
     itemRows: number;
     contextVersion: number;
-    dropdownUp: boolean;
   }
 
+  const PILL_WIDTH = 264;
   const PILL_HEIGHT = 80;
   const MAX_ITEM_ROWS = 3;
   const ITEM_ROW_HEIGHT = 22;
   const ITEM_ROW_GAP = 4;
   const ITEMS_ROW_PADDING = 10;
-  const PREVIEW_WIDTH = 240;
   const PREVIEW_MAX_HEIGHT = 160;
   const PREVIEW_GAP = 6;
   const PREVIEW_DELAY_MS = 300;
@@ -68,10 +65,12 @@
   const DROPDOWN_ROW_HEIGHT = 28;
   const DROPDOWN_PADDING = 4;
   const DEFAULT_TARGET_LABEL = "Dictation";
-  const BAR_FACTORS = [0.55, 0.8, 0.65, 1, 0.75, 0.95, 0.6, 0.85, 0.5];
+  const BAR_FACTORS = [0.5, 0.8, 0.65, 1, 0.7, 0.9, 0.55, 0.95, 0.75, 0.85, 0.6, 0.45];
   const MIN_BAR = 0.12;
   const DONE_COLOR = "#62A878";
-  const WAVE_BAR_COUNT = 35;
+  const WAVE_BAR_WIDTH = 2;
+  const WAVE_BAR_GAP = 1;
+  const WAVE_BAR_COUNT = Math.floor((PILL_WIDTH - 2 * PADDING_X + WAVE_BAR_GAP) / (WAVE_BAR_WIDTH + WAVE_BAR_GAP));
   const WAVE_PERIOD_MS = 1200;
   const WAVE_BARS = Array.from({ length: WAVE_BAR_COUNT }, (_, i) => (i / WAVE_BAR_COUNT - 1) * WAVE_PERIOD_MS);
 
@@ -89,12 +88,12 @@
     items: [],
     itemRows: 0,
     contextVersion: 0,
-    dropdownUp: false,
   });
   let dropdownOpen = $state(false);
   let overlayUp = $state(false);
   let previewContent = $state<PreviewContent | null>(null);
   let hoveredIndex: number | null = null;
+  let hoveredButton: HTMLButtonElement | null = null;
   let hoverTimer: ReturnType<typeof setTimeout> | undefined;
   let previewToken = 0;
   let previewRequested = false;
@@ -196,9 +195,14 @@
   }
 
   function onPointer(point: { x: number; y: number } | null) {
-    const chip = point
-      ? document.elementFromPoint(point.x, point.y)?.closest<HTMLElement>("[data-item-index]")
-      : null;
+    const element = point ? document.elementFromPoint(point.x, point.y) : null;
+    const button = element?.closest("button") ?? null;
+    if (button !== hoveredButton) {
+      hoveredButton?.classList.remove("hover");
+      button?.classList.add("hover");
+      hoveredButton = button;
+    }
+    const chip = element?.closest<HTMLElement>("[data-item-index]");
     if (!chip) {
       hidePreview();
       return;
@@ -304,17 +308,17 @@
               <Play size={16} />
             </button>
           {/if}
-          <button type="button" class="stop" tabindex="-1" aria-label="Stop" onclick={() => run("toggle_speech_recording")}>
-            <Square size={16} />
-          </button>
-          <button type="button" tabindex="-1" aria-label="Cancel" onclick={() => run("cancel_speech_recording")}>
+          <button type="button" class="cancel" tabindex="-1" aria-label="Cancel" onclick={() => run("cancel_speech_recording")}>
             <X size={16} />
+          </button>
+          <button type="button" tabindex="-1" aria-label="Finish" onclick={() => run("toggle_speech_recording")}>
+            <Check size={16} color={monochromatic ? "currentColor" : DONE_COLOR} />
           </button>
         </div>
       {:else if widgetState === "processing"}
-        <div class="wave" style:--wave-period="{WAVE_PERIOD_MS}ms" data-tauri-drag-region>
+        <div class="wave" style:--wave-period="{WAVE_PERIOD_MS}ms" style:gap="{WAVE_BAR_GAP}px" data-tauri-drag-region>
           {#each WAVE_BARS as delayMs}
-            <span class="wave-bar" style:animation-delay="{delayMs}ms" data-tauri-drag-region></span>
+            <span class="wave-bar" style:width="{WAVE_BAR_WIDTH}px" style:animation-delay="{delayMs}ms" data-tauri-drag-region></span>
           {/each}
         </div>
       {:else}
@@ -334,14 +338,16 @@
           onclick={() => (dropdownOpen ? closeDropdown() : openDropdown())}
         >
           <span class="label">{model.selectedLabel}</span>
-          {#if model.dropdownUp}<ChevronUp size={14} />{:else}<ChevronDown size={14} />{/if}
+          <ChevronsUpDown size={14} />
         </button>
-        <button type="button" tabindex="-1" aria-label="Paste" onclick={() => run("paste_into_recording_widget")}>
-          <ClipboardPaste size={16} />
-        </button>
-        <button type="button" tabindex="-1" aria-label="Stop and chat" onclick={() => run("stop_chat_speech_recording")}>
-          <MessageSquareShare size={16} />
-        </button>
+        <div class="actions">
+          <button type="button" tabindex="-1" aria-label="Paste" onclick={() => run("paste_into_recording_widget")}>
+            <ClipboardPaste size={16} />
+          </button>
+          <button type="button" tabindex="-1" aria-label="Stop and chat" onclick={() => run("stop_chat_speech_recording")}>
+            <MessageSquareShare size={16} />
+          </button>
+        </div>
       {:else}
         <span class="label" data-tauri-drag-region>{model.selectedLabel}</span>
       {/if}
@@ -373,7 +379,6 @@
     <div
       class="preview"
       class:image={previewContent.kind === "image"}
-      style:width="{PREVIEW_WIDTH}px"
       style:max-height="{PREVIEW_MAX_HEIGHT}px"
       style:margin-top={overlayUp ? undefined : `${PREVIEW_GAP}px`}
       style:margin-bottom={overlayUp ? `${PREVIEW_GAP}px` : undefined}
@@ -437,7 +442,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
+    gap: 10px;
   }
 
   .items {
@@ -497,17 +502,19 @@
   }
 
   .target {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
     width: auto;
     height: 28px;
     gap: 4px;
+    margin-left: -8px;
     padding: 0 8px;
     border-radius: 14px;
+    justify-content: flex-start;
   }
 
   .label {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -554,7 +561,8 @@
   .actions {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
+    margin-left: auto;
   }
 
   button {
@@ -571,11 +579,13 @@
     cursor: pointer;
   }
 
-  button:hover {
+  button:hover,
+  button:global(.hover) {
     background: #3a3a3c;
   }
 
-  button.stop {
+  button.cancel:hover,
+  button.cancel:global(.hover) {
     color: #d97373;
   }
 
@@ -589,12 +599,11 @@
     flex: 1;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     height: 24px;
   }
 
   .wave-bar {
-    width: 3px;
     height: 12px;
     border-radius: 2px;
     background: #929294;
