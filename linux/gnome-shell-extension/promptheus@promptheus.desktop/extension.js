@@ -16,7 +16,18 @@ const TOAST_OPACITY = 204;
 const TOAST_SHOW_ANIMATION_MS = 150;
 const TOAST_HIDE_ANIMATION_MS = 150;
 const WIDGET_WIDTH = 240;
-const WIDGET_HEIGHT = 44;
+const WIDGET_HEIGHT = 80;
+const WIDGET_ROW_HEIGHT = WIDGET_HEIGHT / 2;
+const WIDGET_ITEMS_ROW_HEIGHT = 32;
+const WIDGET_RADIUS = 16;
+const WIDGET_ITEM_GAP = 4;
+const WIDGET_ITEM_CHAR_WIDTH = 7;
+const WIDGET_ITEM_CHIP_BASE_WIDTH = 28;
+const WIDGET_ITEM_REMOVE_WIDTH = 16;
+const WIDGET_ITEM_OVERFLOW_WIDTH = 32;
+const WIDGET_DROPDOWN_ROW_HEIGHT = 28;
+const WIDGET_DROPDOWN_PADDING = 4;
+const WIDGET_DEFAULT_TARGET_LABEL = 'Dictation';
 const WIDGET_PADDING_X = 14;
 const WIDGET_BOTTOM_MARGIN = 24;
 const WIDGET_STATES = ['recording', 'paused', 'processing', 'done'];
@@ -55,6 +66,33 @@ function resolveWidgetPosition(hasPosition, x, y, workAreas, pointerArea) {
 function workAreaAt(x, y) {
     const areas = Main.layoutManager.monitors.map((_monitor, i) => Main.layoutManager.getWorkAreaForMonitor(i));
     return areas.find(area => pointInRect(x, y, area)) ?? areas[0];
+}
+
+function emptyWidgetModel() {
+    return {
+        targets: [],
+        selectedId: '',
+        selectedLabel: WIDGET_DEFAULT_TARGET_LABEL,
+        locked: false,
+        items: [],
+        version: 0,
+    };
+}
+
+function visibleWidgetItems(items, locked) {
+    const available = WIDGET_WIDTH - 2 * WIDGET_PADDING_X;
+    const shown = [];
+    let used = 0;
+    for (const [i, item] of items.entries()) {
+        const width = WIDGET_ITEM_CHIP_BASE_WIDTH + item[2].length * WIDGET_ITEM_CHAR_WIDTH +
+            (locked ? 0 : WIDGET_ITEM_REMOVE_WIDTH);
+        const overflow = i < items.length - 1 ? WIDGET_ITEM_GAP + WIDGET_ITEM_OVERFLOW_WIDTH : 0;
+        if (used + width + overflow > available)
+            break;
+        shown.push(item);
+        used += width + WIDGET_ITEM_GAP;
+    }
+    return {shown, hidden: items.length - shown.length};
 }
 
 function formatElapsed(elapsedMs) {
@@ -117,12 +155,29 @@ const INTERFACE_XML = `
       <arg type="d" direction="in" name="level"/>
       <arg type="u" direction="in" name="elapsed_ms"/>
     </method>
+    <method name="UpdateRecordingWidgetModel">
+      <arg type="a(ss)" direction="in" name="targets"/>
+      <arg type="s" direction="in" name="selected_id"/>
+      <arg type="s" direction="in" name="selected_label"/>
+      <arg type="b" direction="in" name="target_locked"/>
+      <arg type="a(uss)" direction="in" name="items"/>
+      <arg type="t" direction="in" name="context_version"/>
+      <arg type="i" direction="in" name="x"/>
+      <arg type="i" direction="in" name="y"/>
+    </method>
     <method name="HideRecordingWidget"/>
     <signal name="ShortcutActivated">
       <arg type="s" name="action"/>
     </signal>
     <signal name="RecordingWidgetAction">
       <arg type="s" name="action"/>
+    </signal>
+    <signal name="RecordingWidgetTargetSelected">
+      <arg type="s" name="id"/>
+    </signal>
+    <signal name="RecordingWidgetItemRemoved">
+      <arg type="u" name="index"/>
+      <arg type="t" name="context_version"/>
     </signal>
     <signal name="RecordingWidgetMoved">
       <arg type="i" name="x"/>
@@ -340,12 +395,16 @@ export default class PromptheusExtension extends Extension {
         widget.monochromatic = monochromatic;
         widget.scales.fill(WIDGET_BAR_MIN_SCALE);
         widget.elapsed = formatElapsed(0);
+        widget.model = emptyWidgetModel();
+        this._closeDropdown(widget);
+        this._fillItems(widget);
         this._setWidgetState(widget, 'recording');
         const monitors = Main.layoutManager.monitors;
         const workAreas = monitors.map((_monitor, i) => Main.layoutManager.getWorkAreaForMonitor(i));
         const pointerArea = Main.layoutManager.getWorkAreaForMonitor(global.display.get_current_monitor());
         const position = resolveWidgetPosition(hasPosition, x, y, workAreas, pointerArea);
         widget.actor.set_position(position.x, position.y);
+        this._applyWidgetSize(widget);
         console.log(`Promptheus: recording widget shown at ${position.x},${position.y} ` +
             `stored=${position.stored}`);
         const area = workAreaAt(position.x, position.y);
@@ -367,6 +426,19 @@ export default class PromptheusExtension extends Extension {
             widget.timeLabel.text = widget.elapsed;
     }
 
+    UpdateRecordingWidgetModel(targets, selectedId, selectedLabel, locked, items, version, x, y) {
+        const widget = this._widget;
+        if (!widget)
+            throw new Error('Recording widget is not shown');
+        widget.model = {targets, selectedId, selectedLabel, locked, items, version};
+        widget.actor.set_position(x, y);
+        this._fillRow2(widget);
+        this._fillItems(widget);
+        this._applyWidgetSize(widget);
+        if (widget.dropdown)
+            this._openDropdown(widget);
+    }
+
     HideRecordingWidget() {
         this._removeRecordingWidget();
     }
@@ -377,6 +449,7 @@ export default class PromptheusExtension extends Extension {
             return;
         this._widget = null;
         this._endWidgetDrag(widget);
+        this._closeDropdown(widget);
         this._clearWidgetContent(widget);
         widget.actor.remove_all_transitions();
         Main.layoutManager.removeChrome(widget.actor);
@@ -388,11 +461,23 @@ export default class PromptheusExtension extends Extension {
         this._dbus.emit_signal('RecordingWidgetAction', new GLib.Variant('(s)', [action]));
     }
 
+    _emitRecordingWidgetTargetSelected(id) {
+        this._dbus.emit_signal('RecordingWidgetTargetSelected', new GLib.Variant('(s)', [id]));
+    }
+
+    _emitRecordingWidgetItemRemoved(index, version) {
+        this._dbus.emit_signal('RecordingWidgetItemRemoved', new GLib.Variant('(ut)', [index, version]));
+    }
+
+    _widgetRow(height) {
+        return new St.BoxLayout({style: `height: ${height}px; padding: 0 ${WIDGET_PADDING_X}px;`});
+    }
+
     _buildRecordingWidget() {
         const actor = new St.BoxLayout({
-            style: `width: ${WIDGET_WIDTH}px; height: ${WIDGET_HEIGHT}px; border-radius: ${WIDGET_HEIGHT / 2}px; ` +
-                `background-color: rgba(28,28,30,0.92); padding: 0 ${WIDGET_PADDING_X}px; color: #e5e5e7; ` +
-                'font-family: "Noto Sans", sans-serif; font-size: 13px;',
+            vertical: true,
+            style: `border-radius: ${WIDGET_RADIUS}px; background-color: rgba(28,28,30,0.92); ` +
+                'color: #e5e5e7; font-family: "Noto Sans", sans-serif; font-size: 13px;',
             reactive: true,
             can_focus: false,
             track_hover: false,
@@ -400,6 +485,11 @@ export default class PromptheusExtension extends Extension {
         const widget = {
             actor,
             state: null,
+            model: emptyWidgetModel(),
+            itemsRow: this._widgetRow(WIDGET_ITEMS_ROW_HEIGHT),
+            row1: this._widgetRow(WIDGET_ROW_HEIGHT),
+            row2: this._widgetRow(WIDGET_ROW_HEIGHT),
+            dropdown: null,
             elapsed: formatElapsed(0),
             scales: WIDGET_BAR_FACTORS.map(() => WIDGET_BAR_MIN_SCALE),
             bars: [],
@@ -409,6 +499,12 @@ export default class PromptheusExtension extends Extension {
             waveId: 0,
             dragId: 0,
         };
+        widget.itemsRow.visible = false;
+        widget.itemsRow.style += ` spacing: ${WIDGET_ITEM_GAP}px;`;
+        widget.row2.style += ' spacing: 6px;';
+        actor.add_child(widget.itemsRow);
+        actor.add_child(widget.row1);
+        actor.add_child(widget.row2);
         actor.connect('button-press-event', (_actor, event) => this._beginWidgetDrag(widget, event));
         Main.layoutManager.addTopChrome(actor);
         return widget;
@@ -430,6 +526,8 @@ export default class PromptheusExtension extends Extension {
                 const [x, y] = e.get_coords();
                 if (!dragging && Math.hypot(x - pressX, y - pressY) <= WIDGET_DRAG_THRESHOLD_PX)
                     return Clutter.EVENT_PROPAGATE;
+                if (!dragging)
+                    this._closeDropdown(widget);
                 dragging = true;
                 widget.actor.set_position(Math.round(x - offsetX), Math.round(y - offsetY));
                 return Clutter.EVENT_STOP;
@@ -448,7 +546,7 @@ export default class PromptheusExtension extends Extension {
 
     _isInWidgetButton(widget, actor) {
         for (let current = actor; current && current !== widget.actor; current = current.get_parent()) {
-            if (current instanceof St.Button)
+            if (current instanceof St.Button || current.isWidgetChip)
                 return true;
         }
         return false;
@@ -475,7 +573,12 @@ export default class PromptheusExtension extends Extension {
         this._stopWidgetWave(widget);
         widget.bars = [];
         widget.timeLabel = null;
-        widget.actor.destroy_all_children();
+        widget.row1.destroy_all_children();
+    }
+
+    _applyWidgetSize(widget) {
+        const height = WIDGET_HEIGHT + (widget.model.items.length > 0 ? WIDGET_ITEMS_ROW_HEIGHT : 0);
+        widget.actor.set_size(WIDGET_WIDTH, height);
     }
 
     _setWidgetState(widget, state) {
@@ -494,7 +597,8 @@ export default class PromptheusExtension extends Extension {
             this._fillWave(widget, content);
         else
             this._fillDone(widget, content);
-        widget.actor.add_child(content);
+        widget.row1.add_child(content);
+        this._fillRow2(widget);
     }
 
     _fillControls(widget, content, state) {
@@ -508,11 +612,11 @@ export default class PromptheusExtension extends Extension {
         content.add_child(bars);
         content.add_child(widget.timeLabel);
         if (state === 'paused')
-            content.add_child(this._widgetButton('play', 'resume'));
+            content.add_child(this._widgetActionButton('play', 'resume'));
         else
-            content.add_child(this._widgetButton('pause', 'pause'));
-        content.add_child(this._widgetButton('stop', 'stop'));
-        content.add_child(this._widgetButton('cancel', 'cancel'));
+            content.add_child(this._widgetActionButton('pause', 'pause'));
+        content.add_child(this._widgetActionButton('stop', 'stop'));
+        content.add_child(this._widgetActionButton('cancel', 'cancel'));
     }
 
     _widgetBarRow() {
@@ -573,30 +677,136 @@ export default class PromptheusExtension extends Extension {
         }));
     }
 
-    _widgetIcon(name) {
+    _widgetIcon(name, size = 16) {
         const file = this.dir.get_child('icons').get_child(`recording-${name}.svg`);
         return new St.Icon({
             gicon: new Gio.FileIcon({file}),
-            icon_size: 16,
+            icon_size: size,
             y_align: Clutter.ActorAlign.CENTER,
         });
     }
 
-    _widgetButton(iconName, action) {
+    _widgetButton(child, onClick, baseStyle = 'width: 28px; height: 28px; border-radius: 14px;') {
         const button = new St.Button({
             can_focus: false,
             reactive: true,
             track_hover: true,
             y_align: Clutter.ActorAlign.CENTER,
-            style: 'width: 28px; height: 28px; border-radius: 14px;',
-            child: this._widgetIcon(iconName),
+            style: baseStyle,
+            child,
         });
         button.connect('notify::hover', () => {
-            button.style = `width: 28px; height: 28px; border-radius: 14px; ` +
-                `background-color: ${button.hover ? WIDGET_BUTTON_HOVER : 'transparent'};`;
+            button.style = `${baseStyle} background-color: ${button.hover ? WIDGET_BUTTON_HOVER : 'transparent'};`;
         });
-        button.connect('clicked', () => this._emitRecordingWidgetAction(action));
+        button.connect('clicked', onClick);
         return button;
+    }
+
+    _widgetActionButton(iconName, action) {
+        return this._widgetButton(this._widgetIcon(iconName), () => this._emitRecordingWidgetAction(action));
+    }
+
+    _fillRow2(widget) {
+        widget.row2.destroy_all_children();
+        const {selectedLabel, locked} = widget.model;
+        const interactive = !locked && widget.state !== 'done';
+        if (!interactive) {
+            this._closeDropdown(widget);
+            widget.row2.add_child(new St.Label({text: selectedLabel, y_align: Clutter.ActorAlign.CENTER}));
+            return;
+        }
+        const content = new St.BoxLayout({style: 'spacing: 4px;'});
+        content.add_child(new St.Label({text: selectedLabel, x_expand: true, y_align: Clutter.ActorAlign.CENTER}));
+        content.add_child(this._widgetIcon(this._dropdownAbove(widget) ? 'chevron-up' : 'chevron-down'));
+        const target = this._widgetButton(content, () => this._toggleDropdown(widget),
+            'height: 28px; border-radius: 14px; padding: 0 8px;');
+        target.x_expand = true;
+        widget.row2.add_child(target);
+        widget.row2.add_child(this._widgetActionButton('paste', 'paste'));
+        widget.row2.add_child(this._widgetActionButton('chat', 'stop_chat'));
+    }
+
+    _fillItems(widget) {
+        const {items, locked, version} = widget.model;
+        widget.itemsRow.destroy_all_children();
+        widget.itemsRow.visible = items.length > 0;
+        const {shown, hidden} = visibleWidgetItems(items, locked);
+        for (const [index, kind, label] of shown)
+            widget.itemsRow.add_child(this._widgetChip(kind, label, locked ? null : () =>
+                this._emitRecordingWidgetItemRemoved(index, version)));
+        if (hidden > 0)
+            widget.itemsRow.add_child(this._widgetChip(null, `+${hidden}`, null));
+    }
+
+    _widgetChip(kind, label, onRemove) {
+        const chip = new St.BoxLayout({
+            y_align: Clutter.ActorAlign.CENTER,
+            style: 'height: 22px; padding: 0 6px; spacing: 4px; border-radius: 11px; ' +
+                'background-color: rgba(255,255,255,0.12); font-size: 11px;',
+        });
+        chip.isWidgetChip = true;
+        if (kind)
+            chip.add_child(this._widgetIcon(`item-${kind}`, 12));
+        chip.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
+        if (onRemove) {
+            chip.add_child(this._widgetButton(this._widgetIcon('item-remove', 12), onRemove,
+                'width: 16px; height: 16px; border-radius: 8px;'));
+        }
+        return chip;
+    }
+
+    _dropdownAbove(widget) {
+        const {actor} = widget;
+        const centreY = actor.y + actor.height / 2;
+        const area = workAreaAt(actor.x + actor.width / 2, centreY);
+        return centreY > area.y + area.height / 2;
+    }
+
+    _toggleDropdown(widget) {
+        if (widget.dropdown)
+            this._closeDropdown(widget);
+        else
+            this._openDropdown(widget);
+        this._fillRow2(widget);
+    }
+
+    _openDropdown(widget) {
+        this._closeDropdown(widget);
+        const {targets, selectedId} = widget.model;
+        if (targets.length === 0)
+            return;
+        const height = targets.length * WIDGET_DROPDOWN_ROW_HEIGHT + 2 * WIDGET_DROPDOWN_PADDING;
+        const dropdown = new St.BoxLayout({
+            vertical: true,
+            reactive: true,
+            can_focus: false,
+            style: `padding: ${WIDGET_DROPDOWN_PADDING}px 0; border-radius: ${WIDGET_RADIUS}px; ` +
+                'background-color: rgba(28,28,30,0.92); color: #e5e5e7; ' +
+                'font-family: "Noto Sans", sans-serif; font-size: 13px;',
+        });
+        dropdown.set_size(WIDGET_WIDTH, height);
+        for (const [id, label] of targets) {
+            const weight = id === selectedId ? 'font-weight: 700;' : '';
+            dropdown.add_child(this._widgetButton(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}),
+                () => {
+                    this._emitRecordingWidgetTargetSelected(id);
+                    this._closeDropdown(widget);
+                    this._fillRow2(widget);
+                },
+                `height: ${WIDGET_DROPDOWN_ROW_HEIGHT}px; padding: 0 ${WIDGET_PADDING_X}px; ${weight}`));
+        }
+        const {actor} = widget;
+        dropdown.set_position(actor.x, this._dropdownAbove(widget) ? actor.y - height : actor.y + actor.height);
+        Main.layoutManager.addTopChrome(dropdown);
+        widget.dropdown = dropdown;
+    }
+
+    _closeDropdown(widget) {
+        if (!widget.dropdown)
+            return;
+        Main.layoutManager.removeChrome(widget.dropdown);
+        widget.dropdown.destroy();
+        widget.dropdown = null;
     }
 
     _easeWidgetBars(widget, level) {
