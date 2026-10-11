@@ -18,6 +18,7 @@ pub enum InvocationSource {
     ContextMenu,
     AlternativeExecute,
     Chat,
+    Pill,
 }
 
 impl InvocationSource {
@@ -26,6 +27,7 @@ impl InvocationSource {
             Self::ContextMenu => "context_menu",
             Self::AlternativeExecute => "alternative_execute",
             Self::Chat => "chat",
+            Self::Pill => "pill",
         }
     }
 }
@@ -35,6 +37,7 @@ impl InvocationSource {
 pub enum OutputRoute {
     Clipboard,
     Chat,
+    ClipboardChat,
 }
 
 impl OutputRoute {
@@ -42,6 +45,7 @@ impl OutputRoute {
         match self {
             Self::Clipboard => "clipboard",
             Self::Chat => "chat",
+            Self::ClipboardChat => "clipboard_chat",
         }
     }
 }
@@ -165,6 +169,19 @@ pub struct HistoryEntry {
 mod tests {
     use super::*;
     use serde_json;
+
+    #[test]
+    fn pill_and_clipboard_chat_round_trip_and_name_themselves() {
+        let source: InvocationSource = serde_json::from_str("\"pill\"").unwrap();
+        assert_eq!(source, InvocationSource::Pill);
+        assert_eq!(serde_json::to_string(&source).unwrap(), "\"pill\"");
+        assert_eq!(source.as_str(), "pill");
+
+        let route: OutputRoute = serde_json::from_str("\"clipboard_chat\"").unwrap();
+        assert_eq!(route, OutputRoute::ClipboardChat);
+        assert_eq!(serde_json::to_string(&route).unwrap(), "\"clipboard_chat\"");
+        assert_eq!(route.as_str(), "clipboard_chat");
+    }
 
     #[test]
     fn test_simple_text_entry_round_trip() {

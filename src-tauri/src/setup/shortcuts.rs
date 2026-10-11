@@ -241,6 +241,7 @@ async fn run_widget_action(app: tauri::AppHandle, action: &str) {
         "pause" => speech::pause_speech_recording(app).await,
         "resume" => speech::resume_speech_recording(app).await,
         "stop" => speech::toggle_speech_recording(app, None).await,
+        "stop_chat" => speech::stop_chat_speech_recording(app).await,
         "cancel" => speech::cancel_speech_recording(app).await,
         "paste" => speech::paste_into_recording_widget(app).await,
         other => {

@@ -132,6 +132,7 @@ pub struct SpeechService {
     recording_action_id: Option<String>,
     pending: Option<PendingPrompt>,
     target_locked: bool,
+    stop_chat: bool,
     audio_buffer: Arc<Mutex<Vec<i16>>>,
     sample_rate: u32,
     stop_sender: Option<mpsc::Sender<()>>,
@@ -173,6 +174,7 @@ impl SpeechService {
             recording_action_id: None,
             pending: None,
             target_locked: false,
+            stop_chat: false,
             audio_buffer: Arc::new(Mutex::new(Vec::new())),
             sample_rate: 16000,
             stop_sender: None,
@@ -363,6 +365,15 @@ impl SpeechService {
             self.pending = None;
         }
         self.target_locked = false;
+        self.stop_chat = false;
+    }
+
+    pub fn request_stop_chat(&mut self) -> Result<(), TargetLocked> {
+        if self.target_locked {
+            return Err(TargetLocked);
+        }
+        self.stop_chat = true;
+        Ok(())
     }
 
     pub fn select_target(&mut self, id: &str, name: &str) -> Result<(), TargetLocked> {
@@ -379,9 +390,9 @@ impl SpeechService {
 
     /// Takes the pending skill and locks the target in one step, so a pill
     /// selection cannot slip in between.
-    pub fn take_pending_prompt(&mut self) -> Option<PendingPrompt> {
+    pub fn take_pending_prompt(&mut self) -> (Option<PendingPrompt>, bool) {
         self.target_locked = true;
-        self.pending.take()
+        (self.pending.take(), self.stop_chat)
     }
 
     /// Manual retries are tracked per history entry rather than through
@@ -470,7 +481,7 @@ mod tests {
         assert!(service.cancel_recording().is_ok());
         assert!(!service.is_recording());
         assert!(!service.is_transcribing());
-        assert_eq!(service.take_pending_prompt(), None);
+        assert_eq!(service.take_pending_prompt().0, None);
     }
 
     #[test]
@@ -534,14 +545,14 @@ mod tests {
     #[test]
     fn pending_prompt_lifecycle() {
         let mut service = SpeechService::new();
-        assert_eq!(service.take_pending_prompt(), None);
+        assert_eq!(service.take_pending_prompt().0, None);
 
         service.set_pending_prompt("prompt-1".into(), "Prompt One".into(), PendingOrigin::ShiftClick);
-        let pending = service.take_pending_prompt().unwrap();
+        let pending = service.take_pending_prompt().0.unwrap();
         assert_eq!(pending.id, "prompt-1");
         assert_eq!(pending.name, "Prompt One");
         assert_eq!(pending.origin, PendingOrigin::ShiftClick);
-        assert_eq!(service.take_pending_prompt(), None);
+        assert_eq!(service.take_pending_prompt().0, None);
     }
 
     #[test]
@@ -605,5 +616,25 @@ mod tests {
         service.set_pending_prompt("fix".into(), "Fix".into(), PendingOrigin::ShiftClick);
         service.reset_target_for_start(Some("other"));
         assert_eq!(service.pending_prompt(), None);
+    }
+
+    #[test]
+    fn the_stop_chat_flag_is_reset_at_a_start_and_returned_by_the_take() {
+        let mut service = SpeechService::new();
+        service.request_stop_chat().unwrap();
+        service.reset_target_for_start(None);
+        assert!(!service.take_pending_prompt().1);
+
+        service.reset_target_for_start(None);
+        service.request_stop_chat().unwrap();
+        assert!(service.take_pending_prompt().1);
+    }
+
+    #[test]
+    fn stop_chat_is_rejected_after_the_take() {
+        let mut service = SpeechService::new();
+        service.take_pending_prompt();
+        assert_eq!(service.request_stop_chat(), Err(TargetLocked));
+        assert!(!service.take_pending_prompt().1);
     }
 }

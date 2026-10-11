@@ -1,6 +1,6 @@
 export type HistoryEntryType = "speech" | "text";
 
-export type InvocationSource = "context_menu" | "alternative_execute" | "chat";
+export type InvocationSource = "context_menu" | "alternative_execute" | "chat" | "pill";
 
 import type { AppliedSkill, NodeUpdate, ToolCall } from "$lib/types/ai";
 import type { ConversationImage } from "$lib/types/conversation";

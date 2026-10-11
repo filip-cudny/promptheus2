@@ -3,6 +3,7 @@ use std::sync::Mutex;
 use serde::Serialize;
 use tauri::{Emitter, Manager};
 
+use crate::models::history::InvocationSource;
 use crate::services::ai_webview;
 use crate::services::dialog::{self, focus_host_window, is_shell_toolbar_label, DialogConfig};
 use crate::Error;
@@ -22,6 +23,7 @@ struct RestoreHistoryEvent {
 struct VoiceInputEvent {
     text: String,
     auto_send: bool,
+    invocation_source: Option<InvocationSource>,
 }
 
 #[derive(Serialize, Clone)]
@@ -40,6 +42,7 @@ struct PendingDialogParams {
     initial_input: Option<String>,
     auto_send_input: bool,
     new_chat: bool,
+    invocation_source: Option<InvocationSource>,
 }
 
 static PENDING: Mutex<Option<PendingDialogParams>> = Mutex::new(None);
@@ -54,6 +57,7 @@ pub struct DialogInitParams {
     initial_input: Option<String>,
     auto_send_input: bool,
     new_chat: bool,
+    invocation_source: Option<InvocationSource>,
 }
 
 #[tauri::command]
@@ -67,6 +71,7 @@ pub async fn open_conversation_dialog(
     initial_input: Option<String>,
     auto_send_input: Option<bool>,
     new_chat: Option<bool>,
+    invocation_source: Option<InvocationSource>,
 ) -> crate::Result<()> {
     let label = "conversation-dialog";
     let last_interaction_only = last_interaction_only.unwrap_or(false);
@@ -91,6 +96,7 @@ pub async fn open_conversation_dialog(
         initial_input: initial_input.clone(),
         auto_send_input,
         new_chat,
+        invocation_source,
     });
 
     if app.get_window(label).is_some() {
@@ -106,6 +112,7 @@ pub async fn open_conversation_dialog(
             &skill_name,
             skill_model.as_deref(),
             new_chat,
+            invocation_source,
         )?;
         return Ok(());
     }
@@ -218,6 +225,7 @@ pub async fn open_conversation_dialog_new_window(
                 initial_input: None,
                 auto_send_input: false,
                 new_chat: false,
+                invocation_source: None,
             });
         }
     }
@@ -264,6 +272,7 @@ pub fn get_dialog_init_params() -> Option<DialogInitParams> {
             initial_input: p.initial_input,
             auto_send_input: p.auto_send_input,
             new_chat: p.new_chat,
+            invocation_source: p.invocation_source,
         })
 }
 
@@ -278,6 +287,7 @@ fn emit_reuse_event(
     skill_name: &str,
     skill_model: Option<&str>,
     new_chat: bool,
+    invocation_source: Option<InvocationSource>,
 ) -> crate::Result<()> {
     if app.get_webview_window(label).is_none() {
         return Err(Error::Other(format!(
@@ -309,6 +319,7 @@ fn emit_reuse_event(
             VoiceInputEvent {
                 text,
                 auto_send: auto_send_input,
+                invocation_source,
             },
         )?;
     } else if !skill_id.is_empty() {

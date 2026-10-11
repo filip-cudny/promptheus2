@@ -127,6 +127,12 @@ struct Inner {
     shell: Option<crate::services::gnome_shell::ShellProxy<'static>>,
 }
 
+impl Inner {
+    fn is_current(&self, generation: u64) -> bool {
+        self.transport.is_some() && self.generation == generation
+    }
+}
+
 pub struct RecordingWidget {
     inner: Mutex<Inner>,
     move_seq: AtomicU64,
@@ -527,10 +533,35 @@ impl RecordingWidget {
         self.transition(app, "processing", WidgetState::Processing).await;
     }
 
+    pub async fn generation(&self) -> u64 {
+        self.inner.lock().await.generation
+    }
+
     pub async fn done(&self, app: &AppHandle) {
+        self.done_if(app, None).await;
+    }
+
+    pub async fn done_if_current(&self, app: &AppHandle, generation: u64) {
+        self.done_if(app, Some(generation)).await;
+    }
+
+    pub async fn close_if_current(&self, app: &AppHandle, generation: u64) {
+        let mut inner = self.inner.lock().await;
+        if inner.is_current(generation) {
+            self.close_locked(app, &mut inner).await;
+        } else {
+            log::debug!("recording widget: close skipped, stale generation={generation}");
+        }
+    }
+
+    async fn done_if(&self, app: &AppHandle, only_generation: Option<u64>) {
         let generation = {
             let mut inner = self.inner.lock().await;
-            if inner.transport.is_none() {
+            let skip = match only_generation {
+                Some(g) => !inner.is_current(g),
+                None => inner.transport.is_none(),
+            };
+            if skip {
                 return;
             }
             log::debug!("recording widget: done session={}", inner.session);
@@ -883,6 +914,38 @@ fn spawn_level_task(app: AppHandle, session: u64, generation: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn inner_with(transport: Option<Transport>, generation: u64, state: WidgetState) -> Inner {
+        Inner {
+            transport,
+            session: 1,
+            state,
+            generation,
+            elapsed_ms: 0,
+            monochromatic: true,
+            update_failed: false,
+            placement: None,
+            has_items: false,
+            scale: 1.0,
+            #[cfg(target_os = "linux")]
+            shell: None,
+        }
+    }
+
+    #[test]
+    fn a_stale_generation_is_not_current_and_leaves_a_newer_pill_unchanged() {
+        let newer = inner_with(Some(Transport::Window), 5, WidgetState::Recording);
+        assert!(!newer.is_current(4));
+        assert!(newer.is_current(5));
+        assert_eq!(newer.state, WidgetState::Recording);
+        assert_eq!(newer.generation, 5);
+    }
+
+    #[test]
+    fn a_closed_pill_is_not_current() {
+        let closed = inner_with(None, 5, WidgetState::Processing);
+        assert!(!closed.is_current(5));
+    }
 
     fn skill(name: &str, display_name: &str, offered_in: Option<Vec<OfferedIn>>) -> Skill {
         Skill {

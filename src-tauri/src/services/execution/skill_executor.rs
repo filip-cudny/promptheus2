@@ -42,13 +42,15 @@ pub async fn run_skill_stream(
     skill_name: String,
     input_override: Option<String>,
     invocation_source: InvocationSource,
+    output_route: OutputRoute,
+    notify_success: bool,
     on_event: Channel<StreamEvent>,
-) -> crate::Result<()> {
+) -> crate::Result<Option<String>> {
     let start_time = Instant::now();
     let active_app = recent_apps.active().await;
     let recent_apps_display = recent_apps.display().await;
 
-    let prepared = {
+    let prepared = match {
         let mut prompt_execution = prompt_execution.lock().await;
         let config_guard = config.lock().await;
         let mut skill_service_guard = skill_service.lock().await;
@@ -67,7 +69,21 @@ pub async fn run_skill_stream(
             &recent_apps_display,
             &skill_name,
             input_override,
-        )?
+        )
+    } {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            if !notify_success {
+                let _ = notifications.notify(
+                    "prompt_execution_error",
+                    NotificationLevel::Error,
+                    "Execution failed",
+                    Some(error.to_string()),
+                    &config.lock().await.settings().notifications,
+                );
+            }
+            return Err(error);
+        }
     };
 
     let live_execution = prompt_execution
@@ -108,7 +124,7 @@ pub async fn run_skill_stream(
 
     match stream_result {
         Ok(result) => {
-            SkillExecutor::record_result(
+            let entry_id = SkillExecutor::record_result(
                 &*history.lock().await,
                 &clipboard,
                 &notifications,
@@ -125,8 +141,10 @@ pub async fn run_skill_stream(
                 &prepared.model_display_name,
                 &prepared.execution_id,
                 invocation_source,
+                output_route,
+                notify_success,
             );
-            Ok(())
+            Ok(Some(entry_id))
         }
         Err(error) => {
             let message = error.to_string();
@@ -141,7 +159,7 @@ pub async fn run_skill_stream(
                 is_cancelled,
             );
             if is_cancelled {
-                Ok(())
+                Ok(None)
             } else {
                 Err(error)
             }
@@ -286,7 +304,9 @@ impl SkillExecutor {
         model_display_name: &str,
         execution_id: &str,
         invocation_source: InvocationSource,
-    ) {
+        output_route: OutputRoute,
+        notify_success: bool,
+    ) -> String {
         let _ = clipboard.set_text(&full_text);
         let now = Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
         let user_node_id = format!("skill-user-{}", Uuid::new_v4());
@@ -351,20 +371,26 @@ impl SkillExecutor {
             None,
             None,
             invocation_source,
-            OutputRoute::Clipboard,
+            output_route,
         );
-        let _ = crate::services::history_events::emit_history_changed(app, Some(added_id), None);
+        let _ = crate::services::history_events::emit_history_changed(
+            app,
+            Some(added_id.clone()),
+            None,
+        );
 
-        let _ = notifications.notify(
-            "prompt_execution_success",
-            NotificationLevel::Success,
-            skill_display_name.to_string(),
-            Some(format!(
-                "{model_display_name} · {:.1}s · copied to clipboard",
-                elapsed.as_secs_f64()
-            )),
-            &config.settings().notifications,
-        );
+        if notify_success {
+            let _ = notifications.notify(
+                "prompt_execution_success",
+                NotificationLevel::Success,
+                skill_display_name.to_string(),
+                Some(format!(
+                    "{model_display_name} · {:.1}s · copied to clipboard",
+                    elapsed.as_secs_f64()
+                )),
+                &config.settings().notifications,
+            );
+        }
 
         prompt_execution.finish_skill_execution();
         let _ = app.emit(
@@ -376,6 +402,7 @@ impl SkillExecutor {
                 cancelled: false,
             },
         );
+        added_id
     }
 
     pub fn record_error(

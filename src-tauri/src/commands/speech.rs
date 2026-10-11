@@ -2,22 +2,29 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Serialize;
+use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
-use crate::models::history::HistoryEntryType;
+use crate::models::history::{HistoryEntryType, InvocationSource, OutputRoute};
 use crate::models::settings::ModelConfig;
 use crate::models::speech::{
     AudioClipInfo, SpeechRecordingStartedEvent, SpeechRecordingStoppedEvent,
     SpeechTranscriptionError, SpeechTranscriptionRetry,
 };
 use crate::commands::settings::apply_settings_reload;
+use crate::services::ai::AiService;
+use crate::services::clipboard::ClipboardService;
 use crate::services::config::{ConfigService, KeytermsDoc};
+use crate::services::context::ContextManagerService;
+use crate::services::execution::skill_executor::run_skill_stream;
+use crate::services::execution::PromptExecutionService;
+use crate::services::recent_apps::RecentAppsState;
 use crate::services::notification::{NotificationLevel, NotificationService};
 use crate::services::skill::SkillService;
 use crate::services::speech::widget::{pill_targets, RecordingWidget};
 use crate::services::speech::{
-    self, AudioClipStore, SpeechError, SpeechService, SttOptions,
+    self, AudioClipStore, PendingOrigin, SpeechError, SpeechService, SttOptions,
 };
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
@@ -128,6 +135,101 @@ async fn notify_retry_started(
     );
 }
 
+async fn open_chat(
+    app: &AppHandle,
+    skill_id: String,
+    history_entry_id: Option<String>,
+    initial_input: Option<String>,
+) {
+    let auto_send_input = initial_input.as_ref().map(|_| true);
+    log::debug!("stop chat: opening the chat, entry={history_entry_id:?}");
+    if let Err(e) = super::conversation_dialog::open_conversation_dialog(
+        app.clone(),
+        skill_id,
+        String::new(),
+        None,
+        history_entry_id,
+        None,
+        initial_input,
+        auto_send_input,
+        None,
+        Some(InvocationSource::Pill),
+    )
+    .await
+    {
+        log::warn!("stop chat: opening the chat failed: {e}");
+    }
+}
+
+async fn run_pill_skill(
+    app: &AppHandle,
+    skill_id: String,
+    text: String,
+    stop_chat: bool,
+    generation: u64,
+) {
+    let widget = app.state::<RecordingWidget>();
+    let route = if stop_chat {
+        OutputRoute::ClipboardChat
+    } else {
+        OutputRoute::Clipboard
+    };
+    log::debug!(
+        "pill skill run: start skill={skill_id} route={} generation={generation}",
+        route.as_str()
+    );
+    let started = std::time::Instant::now();
+    let result = run_skill_stream(
+        app.clone(),
+        Arc::clone(&*app.state::<Arc<Mutex<ConfigService>>>()),
+        (*app.state::<ClipboardService>()).clone(),
+        Arc::clone(&*app.state::<Arc<Mutex<AiService>>>()),
+        Arc::clone(&*app.state::<Arc<Mutex<SkillService>>>()),
+        Arc::clone(&*app.state::<Arc<Mutex<ContextManagerService>>>()),
+        Arc::clone(&*app.state::<Arc<Mutex<SqliteHistoryService>>>()),
+        (*app.state::<NotificationService>()).clone(),
+        Arc::clone(&*app.state::<Arc<Mutex<PromptExecutionService>>>()),
+        Arc::clone(&*app.state::<Arc<RecentAppsState>>()),
+        skill_id.clone(),
+        Some(text),
+        InvocationSource::Pill,
+        route,
+        false,
+        Channel::new(|_| Ok(())),
+    )
+    .await;
+    log::debug!(
+        "pill skill run: end skill={skill_id} ok={} elapsed_ms={} generation={generation}",
+        matches!(result, Ok(Some(_))),
+        started.elapsed().as_millis()
+    );
+
+    match result {
+        Ok(Some(entry_id)) => {
+            widget.done_if_current(app, generation).await;
+            if stop_chat {
+                open_chat(app, skill_id, Some(entry_id), None).await;
+            }
+        }
+        Ok(None) => widget.close_if_current(app, generation).await,
+        Err(e) => {
+            log::warn!("pill skill run failed: {e}");
+            widget.close_if_current(app, generation).await;
+        }
+    }
+}
+
+async fn notify_no_speech(app: &AppHandle, config: &Arc<Mutex<ConfigService>>) {
+    let notification_settings = config.lock().await.settings().notifications.clone();
+    let _ = app.state::<NotificationService>().notify(
+        "speech_transcription_success",
+        NotificationLevel::Error,
+        "No speech detected",
+        Some("No speech was detected in the recording"),
+        &notification_settings,
+    );
+}
+
 #[tauri::command]
 pub async fn toggle_speech_recording(
     app: AppHandle,
@@ -227,6 +329,7 @@ pub async fn toggle_speech_recording(
 
     let (samples, sample_rate) = raw_audio.unwrap();
     widget.processing(&app).await;
+    let generation = widget.generation().await;
     let had_audio = !samples.is_empty();
     let sample_count = samples.len();
     let duration_secs = sample_count as f64 / sample_rate.max(1) as f64;
@@ -347,56 +450,71 @@ pub async fn toggle_speech_recording(
         match result {
             Ok(text) => {
                 let duration_secs = start.elapsed().as_secs_f64();
-                let pending = speech_inner.lock().await.take_pending_prompt();
+                let (pending, stop_chat) = speech_inner.lock().await.take_pending_prompt();
                 widget_inner.refresh_model(&app_clone).await;
                 let mut created_entry_id = None;
 
-                if let Some(pending) = pending {
-                    widget_inner.close(&app_clone).await;
-                    let _ = app_clone.emit(
-                        "speech-alternative-execute",
-                        AlternativeExecutePayload {
-                            skill_id: pending.id,
-                            skill_name: pending.name,
-                            text: text.clone(),
-                        },
-                    );
-                } else {
-                    if let Err(e) = crate::services::clipboard::write_text(&app_clone, &text) {
-                        log::error!("Failed to copy transcription to clipboard: {e}");
-                    }
-
-                    let added_id = history_inner.lock().await.add_entry(
-                        text.clone(),
-                        HistoryEntryType::Speech,
-                        Some(text.clone()),
-                        None,
-                        true,
-                        None,
-                        false,
-                        None,
-                        true,
-                    );
-                    created_entry_id = added_id.clone();
-                    let _ = crate::services::history_events::emit_history_changed(
-                        &app_clone,
-                        added_id,
-                        None,
-                    );
-
-                    if widget_inner.is_shown().await {
-                        widget_inner.done(&app_clone).await;
-                    } else {
-                        let notification_settings =
-                            config_inner.lock().await.settings().notifications.clone();
-                        let duration_display = format!("Processed in {:.1}s", duration_secs);
-                        let _ = notifications_inner.notify(
-                            "speech_transcription_success",
-                            NotificationLevel::Success,
-                            "Speech transcribed",
-                            Some(duration_display),
-                            &notification_settings,
+                match pending {
+                    Some(pending) if pending.origin == PendingOrigin::ShiftClick => {
+                        widget_inner.close(&app_clone).await;
+                        let _ = app_clone.emit(
+                            "speech-alternative-execute",
+                            AlternativeExecutePayload {
+                                skill_id: pending.id,
+                                skill_name: pending.name,
+                                text: text.clone(),
+                            },
                         );
+                    }
+                    Some(_) if text.trim().is_empty() => {
+                        widget_inner.close_if_current(&app_clone, generation).await;
+                        notify_no_speech(&app_clone, &config_inner).await;
+                    }
+                    Some(pending) => {
+                        run_pill_skill(&app_clone, pending.id, text.clone(), stop_chat, generation)
+                            .await;
+                    }
+                    None => {
+                        if let Err(e) = crate::services::clipboard::write_text(&app_clone, &text) {
+                            log::error!("Failed to copy transcription to clipboard: {e}");
+                        }
+
+                        let added_id = history_inner.lock().await.add_entry(
+                            text.clone(),
+                            HistoryEntryType::Speech,
+                            Some(text.clone()),
+                            None,
+                            true,
+                            None,
+                            false,
+                            None,
+                            true,
+                        );
+                        created_entry_id = added_id.clone();
+                        let _ = crate::services::history_events::emit_history_changed(
+                            &app_clone,
+                            added_id,
+                            None,
+                        );
+
+                        if widget_inner.is_shown().await {
+                            widget_inner.done(&app_clone).await;
+                        } else {
+                            let notification_settings =
+                                config_inner.lock().await.settings().notifications.clone();
+                            let duration_display = format!("Processed in {:.1}s", duration_secs);
+                            let _ = notifications_inner.notify(
+                                "speech_transcription_success",
+                                NotificationLevel::Success,
+                                "Speech transcribed",
+                                Some(duration_display),
+                                &notification_settings,
+                            );
+                        }
+
+                        if stop_chat {
+                            open_chat(&app_clone, String::new(), None, Some(text.clone())).await;
+                        }
                     }
                 }
 
@@ -441,7 +559,7 @@ pub async fn toggle_speech_recording(
                 }
 
                 let mut s = speech_inner.lock().await;
-                let had_pending = s.take_pending_prompt().is_some();
+                let had_pending = s.take_pending_prompt().0.is_some();
 
                 let title = if had_pending {
                     "Speech execution cancelled"
@@ -881,6 +999,28 @@ pub async fn remove_recording_widget_item(
         return Ok(());
     }
     super::context::remove_item_for_pill(&app, index as usize, context_version).await
+}
+
+#[tauri::command]
+pub async fn stop_chat_speech_recording(app: AppHandle) -> crate::Result<()> {
+    log::debug!("recording widget intent: stop chat");
+    if !recording_widget_shown(&app, "stop chat").await {
+        return Ok(());
+    }
+    let (recording, requested) = {
+        let speech = app.state::<Arc<Mutex<SpeechService>>>();
+        let mut s = speech.lock().await;
+        (s.is_recording(), s.request_stop_chat())
+    };
+    if requested.is_err() {
+        log::debug!("recording widget intent stop chat ignored: target locked");
+        return Ok(());
+    }
+    log::debug!("stop chat requested, recording={recording}");
+    if recording {
+        toggle_speech_recording(app, None).await?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

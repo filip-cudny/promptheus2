@@ -5,7 +5,7 @@ use tauri::{AppHandle, State};
 use tokio::sync::Mutex;
 
 use crate::models::ai::StreamEvent;
-use crate::models::history::InvocationSource;
+use crate::models::history::{InvocationSource, OutputRoute};
 use crate::models::message::{AppliedSkill, ConversationNodeForExecution, ImageData};
 use crate::services::ai::AiService;
 use crate::services::clipboard::ClipboardService;
@@ -56,9 +56,12 @@ pub async fn execute_skill(
         skill_name,
         input_override,
         invocation_source,
+        OutputRoute::Clipboard,
+        true,
         on_event,
     )
     .await
+    .map(|_| ())
 }
 
 #[allow(clippy::too_many_arguments)]
