@@ -50,7 +50,7 @@
   }
 
   const PILL_WIDTH = 264;
-  const PILL_HEIGHT = 80;
+  const PILL_HEIGHT = 72;
   const MAX_ITEM_ROWS = 3;
   const ITEM_ROW_HEIGHT = 22;
   const ITEM_ROW_GAP = 4;
@@ -65,7 +65,18 @@
   const DROPDOWN_ROW_HEIGHT = 28;
   const DROPDOWN_PADDING = 4;
   const DEFAULT_TARGET_LABEL = "Dictation";
-  const BAR_FACTORS = [0.5, 0.8, 0.65, 1, 0.7, 0.9, 0.55, 0.95, 0.75, 0.85, 0.6, 0.45];
+  const BAR_WIDTH = 3;
+  const BAR_GAP = 3;
+  const TIME_WIDTH = 34;
+  const ROW_GAP = 10;
+  const BUTTON_SIZE = 28;
+  const ACTION_GAP = 4;
+  const ROW1_BUTTONS = 3;
+  const METER_WIDTH =
+    PILL_WIDTH - 2 * PADDING_X - TIME_WIDTH - 2 * ROW_GAP - ROW1_BUTTONS * BUTTON_SIZE - (ROW1_BUTTONS - 1) * ACTION_GAP;
+  const BAR_COUNT = Math.floor((METER_WIDTH + BAR_GAP) / (BAR_WIDTH + BAR_GAP));
+  const BAR_PATTERN = [0.5, 0.8, 0.65, 1, 0.7, 0.9, 0.55, 0.95, 0.75, 0.85, 0.6, 0.45, 0.8, 0.95, 0.6];
+  const BAR_FACTORS = Array.from({ length: BAR_COUNT }, (_, i) => BAR_PATTERN[i % BAR_PATTERN.length]);
   const MIN_BAR = 0.12;
   const DONE_COLOR = "#62A878";
   const WAVE_BAR_WIDTH = 2;
@@ -292,12 +303,12 @@
     {/if}
     <div class="row" style:height="{ROW_HEIGHT}px" data-tauri-drag-region>
       {#if widgetState === "recording" || widgetState === "paused"}
-        <div class="bars" data-tauri-drag-region>
+        <div class="bars" style:gap="{BAR_GAP}px" data-tauri-drag-region>
           {#each BAR_FACTORS as factor}
-            <span class="bar" style:transform="scaleY({barScale(factor)})" data-tauri-drag-region></span>
+            <span class="bar" style:width="{BAR_WIDTH}px" style:transform="scaleY({barScale(factor)})" data-tauri-drag-region></span>
           {/each}
         </div>
-        <span class="time" data-tauri-drag-region>{clock}</span>
+        <span class="time" style:min-width="{TIME_WIDTH}px" data-tauri-drag-region>{clock}</span>
         <div class="actions">
           {#if widgetState === "recording"}
             <button type="button" tabindex="-1" aria-label="Pause" onclick={() => run("pause_speech_recording")}>
@@ -541,12 +552,10 @@
   .bars {
     display: flex;
     align-items: center;
-    gap: 3px;
     height: 24px;
   }
 
   .bar {
-    width: 3px;
     height: 100%;
     border-radius: 2px;
     background: #e5e5e7;
@@ -554,7 +563,6 @@
   }
 
   .time {
-    min-width: 34px;
     font-variant-numeric: tabular-nums;
   }
 

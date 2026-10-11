@@ -17,7 +17,7 @@ const TOAST_OPACITY = 204;
 const TOAST_SHOW_ANIMATION_MS = 150;
 const TOAST_HIDE_ANIMATION_MS = 150;
 const WIDGET_WIDTH = 264;
-const WIDGET_HEIGHT = 80;
+const WIDGET_HEIGHT = 72;
 const WIDGET_ROW_HEIGHT = WIDGET_HEIGHT / 2;
 const WIDGET_RADIUS = 16;
 const WIDGET_MAX_ITEM_ROWS = 3;
@@ -34,7 +34,6 @@ const WIDGET_DEFAULT_TARGET_LABEL = 'Dictation';
 const WIDGET_PADDING_X = 14;
 const WIDGET_BOTTOM_MARGIN = 24;
 const WIDGET_STATES = ['recording', 'paused', 'processing', 'done'];
-const WIDGET_BAR_FACTORS = [0.5, 0.8, 0.65, 1, 0.7, 0.9, 0.55, 0.95, 0.75, 0.85, 0.6, 0.45];
 const WIDGET_BAR_MIN_HEIGHT = 4;
 const WIDGET_BAR_MAX_HEIGHT = 24;
 const WIDGET_BAR_MIN_SCALE = WIDGET_BAR_MIN_HEIGHT / WIDGET_BAR_MAX_HEIGHT;
@@ -42,6 +41,18 @@ const WIDGET_BAR_SCALE_EPSILON = 0.005;
 const WIDGET_BAR_EASE_MS = 60;
 const WIDGET_BAR_WIDTH = 3;
 const WIDGET_BAR_SPACING = 3;
+const WIDGET_TIME_WIDTH = 34;
+const WIDGET_ROW_SPACING = 10;
+const WIDGET_BUTTON_SIZE = 28;
+const WIDGET_ACTION_SPACING = 4;
+const WIDGET_ROW1_BUTTONS = 3;
+const WIDGET_METER_WIDTH = WIDGET_WIDTH - 2 * WIDGET_PADDING_X - WIDGET_TIME_WIDTH - 2 * WIDGET_ROW_SPACING -
+    WIDGET_ROW1_BUTTONS * WIDGET_BUTTON_SIZE - (WIDGET_ROW1_BUTTONS - 1) * WIDGET_ACTION_SPACING;
+const WIDGET_BAR_COUNT = Math.floor(
+    (WIDGET_METER_WIDTH + WIDGET_BAR_SPACING) / (WIDGET_BAR_WIDTH + WIDGET_BAR_SPACING));
+const WIDGET_BAR_PATTERN = [0.5, 0.8, 0.65, 1, 0.7, 0.9, 0.55, 0.95, 0.75, 0.85, 0.6, 0.45, 0.8, 0.95, 0.6];
+const WIDGET_BAR_FACTORS = Array.from({length: WIDGET_BAR_COUNT},
+    (_, i) => WIDGET_BAR_PATTERN[i % WIDGET_BAR_PATTERN.length]);
 const WIDGET_WAVE_BAR_WIDTH = 2;
 const WIDGET_WAVE_BAR_SPACING = 1;
 const WIDGET_WAVE_BAR_COUNT = Math.floor(
@@ -52,7 +63,6 @@ const WIDGET_WAVE_PERIOD_US = 1200 * 1000;
 const WIDGET_WAVE_FRAME_MS = 33;
 const WIDGET_WAVE_STEP = 2 * Math.PI / WIDGET_WAVE_BAR_COUNT;
 const WIDGET_BUTTON_HOVER = '#3a3a3c';
-const WIDGET_ACTION_SPACING = 4;
 const WIDGET_TARGET_PADDING_X = 8;
 const WIDGET_DRAG_THRESHOLD_PX = 4;
 
@@ -592,7 +602,7 @@ export default class PromptheusExtension extends Extension {
             y_expand: true,
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
-            style: 'spacing: 10px;',
+            style: `spacing: ${WIDGET_ROW_SPACING}px;`,
         });
         if (state === 'recording' || state === 'paused') {
             content.x_align = Clutter.ActorAlign.FILL;
@@ -612,7 +622,7 @@ export default class PromptheusExtension extends Extension {
         widget.timeLabel = new St.Label({
             text: widget.elapsed,
             y_align: Clutter.ActorAlign.CENTER,
-            style: 'min-width: 34px;',
+            style: `min-width: ${WIDGET_TIME_WIDTH}px;`,
         });
         content.add_child(bars);
         content.add_child(widget.timeLabel);
@@ -704,7 +714,8 @@ export default class PromptheusExtension extends Extension {
         });
     }
 
-    _widgetButton(child, onClick, baseStyle = 'width: 28px; height: 28px; border-radius: 14px;') {
+    _widgetButton(child, onClick,
+        baseStyle = `width: ${WIDGET_BUTTON_SIZE}px; height: ${WIDGET_BUTTON_SIZE}px; border-radius: ${WIDGET_BUTTON_SIZE / 2}px;`) {
         const button = new St.Button({
             can_focus: false,
             reactive: true,
@@ -746,7 +757,7 @@ export default class PromptheusExtension extends Extension {
             }));
             return;
         }
-        widget.row2.style = `height: ${WIDGET_ROW_HEIGHT}px; spacing: 10px; ` +
+        widget.row2.style = `height: ${WIDGET_ROW_HEIGHT}px; spacing: ${WIDGET_ROW_SPACING}px; ` +
             `padding: 0 ${WIDGET_PADDING_X}px 0 ${WIDGET_PADDING_X - WIDGET_TARGET_PADDING_X}px;`;
         const content = new St.BoxLayout({style: 'spacing: 4px;'});
         content.add_child(new St.Label({text: selectedLabel, y_align: Clutter.ActorAlign.CENTER}));

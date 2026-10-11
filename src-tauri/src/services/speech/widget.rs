@@ -35,7 +35,7 @@ const LEVEL_ATTACK: f64 = 0.6;
 const LEVEL_RELEASE: f64 = 0.2;
 const BOTTOM_MARGIN: f64 = 24.0;
 const PILL_WIDTH: f64 = 264.0;
-const PILL_HEIGHT: f64 = 80.0;
+const PILL_HEIGHT: f64 = 72.0;
 const MAX_ITEM_ROWS: u32 = 3;
 const ITEM_ROW_HEIGHT: f64 = 22.0;
 const ITEM_ROW_GAP: f64 = 4.0;
@@ -1289,10 +1289,10 @@ mod tests {
 
     #[test]
     fn item_rows_add_their_height_to_the_pill() {
-        assert_eq!(pill_size(0), (264.0, 80.0));
-        assert_eq!(pill_size(1), (264.0, 112.0));
-        assert_eq!(pill_size(2), (264.0, 138.0));
-        assert_eq!(pill_size(3), (264.0, 164.0));
+        assert_eq!(pill_size(0), (264.0, 72.0));
+        assert_eq!(pill_size(1), (264.0, 104.0));
+        assert_eq!(pill_size(2), (264.0, 130.0));
+        assert_eq!(pill_size(3), (264.0, 156.0));
     }
 
     fn labels(count: usize) -> Vec<String> {
