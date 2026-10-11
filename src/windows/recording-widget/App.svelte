@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import type { ContextItem } from "$lib/types/context";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { attachConsole, error as logError } from "@tauri-apps/plugin-log";
   import {
@@ -39,8 +40,6 @@
   }
 
   type PreviewContent = { kind: "text"; text: string } | { kind: "image"; src: string };
-
-  type ContextItem = { item_type: "text"; content: string } | { item_type: "image"; data: string; media_type: string };
 
   interface PillModel {
     targets: PillTarget[];
@@ -93,8 +92,7 @@
     dropdownUp: false,
   });
   let dropdownOpen = $state(false);
-  let listUp = $state(false);
-  let previewUp = $state(false);
+  let overlayUp = $state(false);
   let previewContent = $state<PreviewContent | null>(null);
   let hoveredIndex: number | null = null;
   let hoverTimer: ReturnType<typeof setTimeout> | undefined;
@@ -186,7 +184,7 @@
         try {
           const direction = await invoke<string>("set_recording_widget_preview", { open: true });
           previewOpenInBackend = true;
-          previewUp = direction === "up";
+          overlayUp = direction === "up";
         } catch (e) {
           logError(`set_recording_widget_preview failed: ${e}`);
           previewRequested = false;
@@ -220,7 +218,7 @@
         open: true,
         rows: model.targets.length,
       });
-      listUp = direction === "up";
+      overlayUp = direction === "up";
       dropdownOpen = true;
     } catch (e) {
       logError(`set_recording_widget_dropdown failed: ${e}`);
@@ -265,7 +263,7 @@
   onDestroy(() => unlisteners.forEach((unlisten) => unlisten()));
 </script>
 
-<div class="root" class:up={dropdownOpen ? listUp : previewUp} style:--radius="{RADIUS}px">
+<div class="root" class:up={overlayUp} style:--radius="{RADIUS}px">
   <div class="pill" class:mac={isMac} style:height="{pillHeight}px" style:padding="0 {PADDING_X}px" data-tauri-drag-region>
     {#if hasItems}
       <div class="items" style:height="{itemsHeight(model.itemRows)}px" style:gap="{ITEM_ROW_GAP}px" data-tauri-drag-region>
@@ -377,8 +375,8 @@
       class:image={previewContent.kind === "image"}
       style:width="{PREVIEW_WIDTH}px"
       style:max-height="{PREVIEW_MAX_HEIGHT}px"
-      style:margin-top={previewUp ? undefined : `${PREVIEW_GAP}px`}
-      style:margin-bottom={previewUp ? `${PREVIEW_GAP}px` : undefined}
+      style:margin-top={overlayUp ? undefined : `${PREVIEW_GAP}px`}
+      style:margin-bottom={overlayUp ? `${PREVIEW_GAP}px` : undefined}
     >
       {#if previewContent.kind === "image"}
         <img src={previewContent.src} alt="" />
@@ -460,7 +458,7 @@
     box-sizing: border-box;
     flex: none;
     overflow: hidden;
-    padding: 8px 10px;
+    padding: 8px;
     border: 1px solid var(--surface-floating-popover-border);
     border-radius: var(--surface-floating-popover-radius);
     background: var(--surface-floating-popover);
