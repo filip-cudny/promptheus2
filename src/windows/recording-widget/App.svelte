@@ -84,6 +84,7 @@
     dropdownUp: false,
   });
   let dropdownOpen = $state(false);
+  let listUp = $state(false);
   let unlisteners: UnlistenFn[] = [];
 
   const clock = $derived.by(() => {
@@ -127,10 +128,11 @@
   async function openDropdown() {
     if (model.targets.length === 0) return;
     try {
-      await invoke("set_recording_widget_dropdown", {
+      const direction = await invoke<string>("set_recording_widget_dropdown", {
         open: true,
         rows: model.targets.length,
       });
+      listUp = direction === "up";
       dropdownOpen = true;
     } catch (e) {
       logError(`set_recording_widget_dropdown failed: ${e}`);
@@ -172,7 +174,7 @@
   onDestroy(() => unlisteners.forEach((unlisten) => unlisten()));
 </script>
 
-<div class="root" class:up={model.dropdownUp} style:--radius="{RADIUS}px">
+<div class="root" class:up={listUp} style:--radius="{RADIUS}px">
   <div class="pill" class:mac={isMac} style:height="{pillHeight}px" style:padding="0 {PADDING_X}px" data-tauri-drag-region>
     {#if hasItems}
       <div class="row items" style:height="{ITEMS_ROW_HEIGHT}px" data-tauri-drag-region>
