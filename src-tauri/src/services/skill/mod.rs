@@ -377,24 +377,32 @@ fn copy_skill_dirs(src: &Path, dest: &Path) -> Result<(), SkillError> {
 fn write_bundled_defaults(skills_dir: &Path) -> Result<(), SkillError> {
     let defaults = [
         (
+            "text-proofread",
+            include_str!("../../../resources/skills/text-proofread/SKILL.md"),
+        ),
+        (
+            "message-rewrite",
+            include_str!("../../../resources/skills/message-rewrite/SKILL.md"),
+        ),
+        (
             "prompt-refine",
             include_str!("../../../resources/skills/prompt-refine/SKILL.md"),
         ),
         (
-            "prompt-execute",
-            include_str!("../../../resources/skills/prompt-execute/SKILL.md"),
+            "ticket-description",
+            include_str!("../../../resources/skills/ticket-description/SKILL.md"),
         ),
         (
-            "translate-english",
-            include_str!("../../../resources/skills/translate-english/SKILL.md"),
+            "text-polish",
+            include_str!("../../../resources/skills/text-polish/SKILL.md"),
         ),
         (
-            "translate-polish",
-            include_str!("../../../resources/skills/translate-polish/SKILL.md"),
+            "translate",
+            include_str!("../../../resources/skills/translate/SKILL.md"),
         ),
         (
-            "process-with-context",
-            include_str!("../../../resources/skills/process-with-context/SKILL.md"),
+            "assistant",
+            include_str!("../../../resources/skills/assistant/SKILL.md"),
         ),
     ];
 
@@ -694,5 +702,41 @@ mod tests {
         let reloaded = service.get_skill("alpha").unwrap();
         assert_eq!(reloaded.offered_in, Some(vec![OfferedIn::Pill]));
         assert_eq!(reloaded.description.as_deref(), Some("new"));
+    }
+
+    #[test]
+    fn bundled_defaults_match_accepted_set() {
+        let expected = [
+            "text-proofread",
+            "message-rewrite",
+            "prompt-refine",
+            "ticket-description",
+            "text-polish",
+            "translate",
+            "assistant",
+        ];
+        let settings: serde_json::Value =
+            serde_json::from_str(include_str!("../../../resources/default_settings.json")).unwrap();
+        let order: Vec<String> =
+            serde_json::from_value(settings["skills_order"].clone()).unwrap();
+        assert_eq!(order, expected);
+
+        let tmp = TempDir::new().unwrap();
+        write_bundled_defaults(tmp.path()).unwrap();
+        assert_eq!(std::fs::read_dir(tmp.path()).unwrap().count(), expected.len());
+
+        let service = SkillService::load(tmp.path(), None, &order).unwrap();
+        let skills = service.list_skills();
+        let names: Vec<&str> = skills.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, expected);
+        for skill in skills {
+            assert!(!skill.body.contains("user_style_examples"));
+            let offered = if skill.name == "assistant" {
+                Some(vec![OfferedIn::Pill])
+            } else {
+                None
+            };
+            assert_eq!(skill.offered_in, offered, "{}", skill.name);
+        }
     }
 }

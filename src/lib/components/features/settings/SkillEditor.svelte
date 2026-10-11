@@ -457,7 +457,7 @@
     {/if}
     <p class="helper">
       Skills without a model use the Quick Actions surface model. Pick one explicitly to pin a
-      skill (e.g. a longer-context model for <code>process-with-context</code>).
+      skill (e.g. a longer-context model for <code>text-polish</code>).
     </p>
   </section>
 

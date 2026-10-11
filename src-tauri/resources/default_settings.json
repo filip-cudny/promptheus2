@@ -143,11 +143,13 @@
     }
   ],
   "skills_order": [
+    "text-proofread",
+    "message-rewrite",
     "prompt-refine",
-    "prompt-execute",
-    "translate-english",
-    "translate-polish",
-    "process-with-context"
+    "ticket-description",
+    "text-polish",
+    "translate",
+    "assistant"
   ],
   "webview_providers": [
     { "id": "claude", "name": "Claude", "url": "https://claude.ai/" }
