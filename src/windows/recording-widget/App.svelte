@@ -35,7 +35,12 @@
     index: number;
     kind: "text" | "image";
     label: string;
+    preview: string;
   }
+
+  type PreviewContent = { kind: "text"; text: string } | { kind: "image"; src: string };
+
+  type ContextItem = { item_type: "text"; content: string } | { item_type: "image"; data: string; media_type: string };
 
   interface PillModel {
     targets: PillTarget[];
@@ -43,21 +48,24 @@
     selectedLabel: string;
     targetLocked: boolean;
     items: PillItem[];
+    itemRows: number;
     contextVersion: number;
     dropdownUp: boolean;
   }
 
-  const PILL_WIDTH = 240;
   const PILL_HEIGHT = 80;
-  const ITEMS_ROW_HEIGHT = 32;
+  const MAX_ITEM_ROWS = 3;
+  const ITEM_ROW_HEIGHT = 22;
+  const ITEM_ROW_GAP = 4;
+  const ITEMS_ROW_PADDING = 10;
+  const PREVIEW_WIDTH = 240;
+  const PREVIEW_MAX_HEIGHT = 160;
+  const PREVIEW_GAP = 6;
+  const PREVIEW_DELAY_MS = 300;
   const ROW_HEIGHT = PILL_HEIGHT / 2;
   const RADIUS = 16;
   const PADDING_X = 14;
-  const ITEM_GAP = 4;
-  const ITEM_CHAR_WIDTH = 7;
-  const ITEM_CHIP_BASE_WIDTH = 28;
-  const ITEM_REMOVE_WIDTH = 16;
-  const ITEM_OVERFLOW_WIDTH = 32;
+  const CHIP_GAP = 4;
   const DROPDOWN_ROW_HEIGHT = 28;
   const DROPDOWN_PADDING = 4;
   const DEFAULT_TARGET_LABEL = "Dictation";
@@ -80,11 +88,21 @@
     selectedLabel: DEFAULT_TARGET_LABEL,
     targetLocked: false,
     items: [],
+    itemRows: 0,
     contextVersion: 0,
     dropdownUp: false,
   });
   let dropdownOpen = $state(false);
   let listUp = $state(false);
+  let previewUp = $state(false);
+  let previewContent = $state<PreviewContent | null>(null);
+  let hoveredIndex: number | null = null;
+  let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+  let previewToken = 0;
+  let previewRequested = false;
+  let previewOpenInBackend = false;
+  let previewQueue: Promise<void> = Promise.resolve();
+  let contextItems: ContextItem[] | null = null;
   let unlisteners: UnlistenFn[] = [];
 
   const clock = $derived.by(() => {
@@ -95,23 +113,14 @@
 
   const interactive = $derived(!model.targetLocked && widgetState !== "done");
   const hasItems = $derived(model.items.length > 0);
-  const pillHeight = $derived(PILL_HEIGHT + (hasItems ? ITEMS_ROW_HEIGHT : 0));
+  const pillHeight = $derived(PILL_HEIGHT + itemsHeight(model.itemRows));
   const dropdownHeight = $derived(model.targets.length * DROPDOWN_ROW_HEIGHT + 2 * DROPDOWN_PADDING);
 
-  const visibleItems = $derived.by(() => {
-    const available = PILL_WIDTH - 2 * PADDING_X;
-    const shown: PillItem[] = [];
-    let used = 0;
-    for (const [i, item] of model.items.entries()) {
-      const width =
-        ITEM_CHIP_BASE_WIDTH + item.label.length * ITEM_CHAR_WIDTH + (model.targetLocked ? 0 : ITEM_REMOVE_WIDTH);
-      const overflow = i < model.items.length - 1 ? ITEM_GAP + ITEM_OVERFLOW_WIDTH : 0;
-      if (used + width + overflow > available) break;
-      shown.push(item);
-      used += width + ITEM_GAP;
-    }
-    return { shown, hidden: model.items.length - shown.length };
-  });
+  function itemsHeight(rows: number): number {
+    if (rows <= 0) return 0;
+    const clamped = Math.min(rows, MAX_ITEM_ROWS);
+    return clamped * ITEM_ROW_HEIGHT + (clamped - 1) * ITEM_ROW_GAP + ITEMS_ROW_PADDING;
+  }
 
   function barScale(factor: number): number {
     return Math.max(MIN_BAR, Math.min(1, level * factor));
@@ -125,8 +134,87 @@
     }
   }
 
+  function enqueuePreviewCall(task: () => Promise<void>) {
+    previewQueue = previewQueue.then(task);
+  }
+
+  function resetPreviewState() {
+    clearTimeout(hoverTimer);
+    hoveredIndex = null;
+    previewToken++;
+    previewContent = null;
+    previewRequested = false;
+    previewOpenInBackend = false;
+  }
+
+  function hidePreview() {
+    clearTimeout(hoverTimer);
+    hoveredIndex = null;
+    previewToken++;
+    previewContent = null;
+    if (!previewRequested) return;
+    previewRequested = false;
+    enqueuePreviewCall(async () => {
+      await run("set_recording_widget_preview", { open: false });
+      previewOpenInBackend = false;
+    });
+  }
+
+  async function loadPreviewContent(item: PillItem): Promise<PreviewContent | null> {
+    if (item.kind === "text") return { kind: "text", text: item.preview };
+    try {
+      contextItems ??= await invoke<ContextItem[]>("get_context_items");
+    } catch (e) {
+      logError(`get_context_items failed: ${e}`);
+      return null;
+    }
+    const source = contextItems[item.index];
+    if (source?.item_type !== "image") return null;
+    return { kind: "image", src: `data:${source.media_type};base64,${source.data}` };
+  }
+
+  async function showPreview(index: number) {
+    const item = model.items.find((candidate) => candidate.index === index);
+    if (!item || dropdownOpen) return;
+    const token = ++previewToken;
+    const content = await loadPreviewContent(item);
+    if (!content || token !== previewToken || dropdownOpen) return;
+    previewRequested = true;
+    enqueuePreviewCall(async () => {
+      if (token !== previewToken) return;
+      if (!previewOpenInBackend) {
+        try {
+          const direction = await invoke<string>("set_recording_widget_preview", { open: true });
+          previewOpenInBackend = true;
+          previewUp = direction === "up";
+        } catch (e) {
+          logError(`set_recording_widget_preview failed: ${e}`);
+          previewRequested = false;
+          return;
+        }
+      }
+      if (token === previewToken) previewContent = content;
+    });
+  }
+
+  function onPointer(point: { x: number; y: number } | null) {
+    const chip = point
+      ? document.elementFromPoint(point.x, point.y)?.closest<HTMLElement>("[data-item-index]")
+      : null;
+    if (!chip) {
+      hidePreview();
+      return;
+    }
+    const index = Number(chip.dataset.itemIndex);
+    if (index === hoveredIndex) return;
+    clearTimeout(hoverTimer);
+    hoveredIndex = index;
+    hoverTimer = setTimeout(() => showPreview(index), PREVIEW_DELAY_MS);
+  }
+
   async function openDropdown() {
     if (model.targets.length === 0) return;
+    hidePreview();
     try {
       const direction = await invoke<string>("set_recording_widget_dropdown", {
         open: true,
@@ -164,9 +252,12 @@
       }),
       listen<PillModel>("recording-widget-model", (event) => {
         model = event.payload;
+        contextItems = null;
       }),
+      listen<{ x: number; y: number } | null>("recording-widget-pointer", (event) => onPointer(event.payload)),
       listen("recording-widget-dropdown-closed", () => {
         dropdownOpen = false;
+        resetPreviewState();
       }),
     ]);
   });
@@ -174,12 +265,12 @@
   onDestroy(() => unlisteners.forEach((unlisten) => unlisten()));
 </script>
 
-<div class="root" class:up={listUp} style:--radius="{RADIUS}px">
+<div class="root" class:up={dropdownOpen ? listUp : previewUp} style:--radius="{RADIUS}px">
   <div class="pill" class:mac={isMac} style:height="{pillHeight}px" style:padding="0 {PADDING_X}px" data-tauri-drag-region>
     {#if hasItems}
-      <div class="row items" style:height="{ITEMS_ROW_HEIGHT}px" data-tauri-drag-region>
-        {#each visibleItems.shown as item (item.index)}
-          <span class="chip" style:gap="{ITEM_GAP}px">
+      <div class="items" style:height="{itemsHeight(model.itemRows)}px" style:gap="{ITEM_ROW_GAP}px" data-tauri-drag-region>
+        {#each model.items as item (item.index)}
+          <span class="chip" style:gap="{CHIP_GAP}px" data-item-index={item.index}>
             {#if item.kind === "image"}<ImageIcon size={12} />{:else}<Type size={12} />{/if}
             {item.label}
             {#if !model.targetLocked}
@@ -195,9 +286,6 @@
             {/if}
           </span>
         {/each}
-        {#if visibleItems.hidden > 0}
-          <span class="chip">+{visibleItems.hidden}</span>
-        {/if}
       </div>
     {/if}
     <div class="row" style:height="{ROW_HEIGHT}px" data-tauri-drag-region>
@@ -283,6 +371,22 @@
       {/each}
     </div>
   {/if}
+  {#if previewContent}
+    <div
+      class="preview"
+      class:image={previewContent.kind === "image"}
+      style:width="{PREVIEW_WIDTH}px"
+      style:max-height="{PREVIEW_MAX_HEIGHT}px"
+      style:margin-top={previewUp ? undefined : `${PREVIEW_GAP}px`}
+      style:margin-bottom={previewUp ? `${PREVIEW_GAP}px` : undefined}
+    >
+      {#if previewContent.kind === "image"}
+        <img src={previewContent.src} alt="" />
+      {:else}
+        {previewContent.text}
+      {/if}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -338,9 +442,43 @@
     gap: 12px;
   }
 
-  .row.items {
-    justify-content: flex-start;
-    gap: 4px;
+  .items {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    box-sizing: border-box;
+    padding: 5px 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .items::-webkit-scrollbar {
+    display: none;
+  }
+
+  .preview {
+    box-sizing: border-box;
+    flex: none;
+    overflow: hidden;
+    padding: 8px 10px;
+    border: 1px solid var(--surface-floating-popover-border);
+    border-radius: var(--surface-floating-popover-radius);
+    background: var(--surface-floating-popover);
+    color: #e5e5e7;
+    font-size: 12px;
+    white-space: pre-wrap;
+  }
+
+  .preview.image {
+    height: 160px;
+    padding: 0;
+  }
+
+  .preview img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
   }
 
   .chip {
@@ -348,6 +486,7 @@
     align-items: center;
     height: 22px;
     padding: 0 6px;
+    flex: none;
     border-radius: 11px;
     background: rgba(255, 255, 255, 0.12);
     font-size: 11px;
