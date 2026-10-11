@@ -39,7 +39,14 @@
           "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-stop.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-stop.svg",
           "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-cancel.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-cancel.svg",
           "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-check.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-check.svg",
-          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-check-mono.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-check-mono.svg"
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-check-mono.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-check-mono.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-chevron-down.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-chevron-down.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-chevron-up.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-chevron-up.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-paste.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-paste.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-chat.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-chat.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-item-text.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-item-text.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-item-image.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-item-image.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-item-remove.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-item-remove.svg"
         }
       }
     },
