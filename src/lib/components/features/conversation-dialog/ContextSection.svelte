@@ -26,8 +26,8 @@
   let saving = $state(false);
   let confirming = $state<"close" | "clear" | false>(false);
 
-  let localText = $state("");
-  let localImages = $state<ConversationImage[]>([]);
+  let localText = $state(store.contextText);
+  let localImages = $state<ConversationImage[]>(store.contextImages);
 
   let hasContent = $derived(localText.trim().length > 0 || localImages.length > 0);
   let contextHeaderClass = $derived(collapsed && hasContent ? "context-has-content" : "");

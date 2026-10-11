@@ -117,7 +117,7 @@ This avoids feedback loops while preserving the cursor on user typing and resett
 
 `getGlobalContext()` (`stores/conversation.svelte.ts`) reads `get_context_items` and returns `{ text, images }`: non-empty text items joined with `\n` (same rule as `ContextManagerService::get_context`), all images. Two callers:
 
-1. `ContextSection` on mount fills its local text/images from it.
+1. `ContextSection` starts its local text/images from the active tab's stored context (so mounting never overwrites context the store already loaded) and on mount refills them from it.
 2. `store.loadGlobalContextIntoActiveTab()` writes it into the active tab; `handleVoiceInput` awaits it before `sendMessage()` when `autoSend`, then shows the context section collapsed, so the auto-sent message carries the context (new window via `applyInitParams`, open window via the `voice-input` event).
 
 ### Voice-input source
