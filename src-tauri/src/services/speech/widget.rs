@@ -23,6 +23,7 @@ pub const SHELL_POSITION_KEY: &str = "recording_widget.shell_position";
 
 const STATE_EVENT: &str = "recording-widget-state";
 const MODEL_EVENT: &str = "recording-widget-model";
+const PREVIEW_FRAME_HEIGHT: f64 = 166.0;
 const DROPDOWN_CLOSED_EVENT: &str = "recording-widget-dropdown-closed";
 const TICK: Duration = Duration::from_millis(50);
 const DONE_VISIBLE: Duration = Duration::from_secs(1);
@@ -127,10 +128,39 @@ pub struct PillModel {
     pub dropdown_up: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OverlayKind {
+    Dropdown,
+    Preview,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Overlay {
+    pub kind: OverlayKind,
+    pub up: bool,
+    pub height: f64,
+}
+
 #[derive(Debug, Clone, Copy)]
-struct Dropdown {
-    up: bool,
-    list_height: f64,
+pub enum OverlayRequest {
+    Open(Overlay),
+    Close(OverlayKind),
+}
+
+pub fn next_overlay(
+    current: Option<Overlay>,
+    request: OverlayRequest,
+) -> (Option<Overlay>, Option<OverlayKind>) {
+    match request {
+        OverlayRequest::Open(opened) => {
+            let replaced = current.map(|c| c.kind).filter(|kind| *kind != opened.kind);
+            (Some(opened), replaced)
+        }
+        OverlayRequest::Close(kind) => match current {
+            Some(c) if c.kind == kind => (None, Some(kind)),
+            _ => (current, None),
+        },
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -151,7 +181,7 @@ struct Inner {
     placement: Option<Placement>,
     item_rows: u32,
     scale: f64,
-    dropdown: Option<Dropdown>,
+    overlay: Option<Overlay>,
     #[cfg(target_os = "linux")]
     shell: Option<crate::services::gnome_shell::ShellProxy<'static>>,
 }
@@ -547,7 +577,7 @@ impl RecordingWidget {
                 placement: None,
                 item_rows: 0,
                 scale: 1.0,
-                dropdown: None,
+                overlay: None,
                 #[cfg(target_os = "linux")]
                 shell: None,
             }),
@@ -585,7 +615,7 @@ impl RecordingWidget {
         inner.monochromatic = settings.monochromatic;
         inner.update_failed = false;
         inner.placement = None;
-        inner.dropdown = None;
+        inner.overlay = None;
         inner.transport = None;
         #[cfg(target_os = "linux")]
         {
@@ -709,7 +739,7 @@ impl RecordingWidget {
         };
         log::debug!("recording widget: close session={}", inner.session);
         inner.generation += 1;
-        if inner.dropdown.take().is_some() {
+        if inner.overlay.take().is_some() {
             let _ = app.emit_to(WINDOW_LABEL, DROPDOWN_CLOSED_EVENT, ());
         }
         let result = match transport {
@@ -816,7 +846,7 @@ impl RecordingWidget {
     }
 
     fn resize_locked(&self, app: &AppHandle, inner: &mut Inner, item_rows: u32) {
-        if inner.dropdown.take().is_some() {
+        if inner.overlay.take().is_some() {
             let _ = app.emit_to(WINDOW_LABEL, DROPDOWN_CLOSED_EVENT, ());
         }
         let scale = inner.scale;
@@ -861,10 +891,10 @@ impl RecordingWidget {
                 let work_area = work_area_of(&monitor);
                 let mut inner = widget.inner.lock().await;
                 inner.scale = monitor.scale_factor();
-                let origin = match inner.dropdown.take() {
-                    Some(dropdown) => {
-                        let top = if dropdown.up {
-                            position.1 as f64 + dropdown.list_height
+                let origin = match inner.overlay.take() {
+                    Some(overlay) => {
+                        let top = if overlay.up {
+                            position.1 as f64 + overlay.height
                         } else {
                             position.1 as f64
                         };
@@ -875,7 +905,7 @@ impl RecordingWidget {
                             work_area,
                         );
                         let origin = (origin.0.round(), origin.1.round());
-                        log::debug!("recording widget: dropdown closed by drag origin={origin:?} size={size:?}");
+                        log::debug!("recording widget: overlay closed by drag origin={origin:?} size={size:?}");
                         widget.apply_frame(&app, origin, (size.0 as f64, size.1 as f64), inner.scale);
                         let _ = app.emit_to(WINDOW_LABEL, DROPDOWN_CLOSED_EVENT, ());
                         origin
@@ -918,6 +948,27 @@ impl RecordingWidget {
     }
 
     pub async fn open_dropdown(&self, app: &AppHandle, rows: u32) -> Result<bool, String> {
+        self.open_overlay(app, OverlayKind::Dropdown, dropdown_height(rows)).await
+    }
+
+    pub async fn open_preview(&self, app: &AppHandle) -> Result<bool, String> {
+        self.open_overlay(app, OverlayKind::Preview, PREVIEW_FRAME_HEIGHT).await
+    }
+
+    pub async fn close_dropdown(&self, app: &AppHandle) {
+        self.close_overlay(app, OverlayKind::Dropdown).await;
+    }
+
+    pub async fn close_preview(&self, app: &AppHandle) {
+        self.close_overlay(app, OverlayKind::Preview).await;
+    }
+
+    async fn open_overlay(
+        &self,
+        app: &AppHandle,
+        kind: OverlayKind,
+        logical_height: f64,
+    ) -> Result<bool, String> {
         let mut inner = self.inner.lock().await;
         let placement = match (inner.transport, inner.placement) {
             (Some(Transport::Window), Some(placement)) => placement,
@@ -927,27 +978,30 @@ impl RecordingWidget {
         let size = physical_size(pill_size(inner.item_rows), scale);
         let pill = (size.0 as f64, size.1 as f64);
         let up = dropdown_opens_up(placement.origin.1, pill.1, placement.work_area);
-        let list_height = dropdown_height(rows) * scale;
-        let (origin, grown) = grown_frame(placement.origin, pill, list_height, up, placement.work_area);
+        let height = logical_height * scale;
+        let (origin, grown) = grown_frame(placement.origin, pill, height, up, placement.work_area);
         let origin = (origin.0.round(), origin.1.round());
-        log::debug!("recording widget: dropdown open up={up} origin={origin:?} size={grown:?}");
+        log::debug!("recording widget: {kind:?} open up={up} origin={origin:?} size={grown:?}");
         self.apply_frame(app, origin, grown, scale);
-        inner.dropdown = Some(Dropdown { up, list_height });
+        let request = OverlayRequest::Open(Overlay { kind, up, height });
+        inner.overlay = next_overlay(inner.overlay, request).0;
         Ok(up)
     }
 
-    pub async fn close_dropdown(&self, app: &AppHandle) {
+    async fn close_overlay(&self, app: &AppHandle, kind: OverlayKind) {
         let mut inner = self.inner.lock().await;
-        if inner.dropdown.take().is_none() {
+        let (overlay, closed) = next_overlay(inner.overlay, OverlayRequest::Close(kind));
+        if closed.is_none() {
             return;
         }
+        inner.overlay = overlay;
         let scale = inner.scale;
         let size = physical_size(pill_size(inner.item_rows), scale);
         let size = (size.0 as f64, size.1 as f64);
         if let Some(placement) = inner.placement.as_mut() {
             let origin = clamp_origin(placement.origin, size, placement.work_area);
             placement.origin = (origin.0.round(), origin.1.round());
-            log::debug!("recording widget: dropdown close origin={:?} size={size:?}", placement.origin);
+            log::debug!("recording widget: {kind:?} close origin={:?} size={size:?}", placement.origin);
             self.apply_frame(app, placement.origin, size, scale);
         }
     }
@@ -1195,7 +1249,7 @@ mod tests {
             placement: None,
             item_rows: 0,
             scale: 1.0,
-            dropdown: None,
+            overlay: None,
             #[cfg(target_os = "linux")]
             shell: None,
         }
@@ -1326,6 +1380,55 @@ mod tests {
         assert_eq!(
             grown_frame((200.0, 100.0), (480.0, 160.0), 240.0, false, WORK_AREA),
             ((200.0, 100.0), (480.0, 400.0))
+        );
+    }
+
+    #[test]
+    fn the_preview_opens_up_from_a_pill_in_the_lower_half() {
+        assert_eq!(
+            grown_frame((100.0, 900.0), (240.0, 112.0), 166.0, true, (0.0, 0.0, 1920.0, 1040.0)),
+            ((100.0, 734.0), (240.0, 278.0))
+        );
+    }
+
+    #[test]
+    fn the_preview_opens_down_from_a_pill_in_the_upper_half() {
+        assert_eq!(
+            grown_frame((100.0, 100.0), (240.0, 112.0), 166.0, false, (0.0, 0.0, 1920.0, 1040.0)),
+            ((100.0, 100.0), (240.0, 278.0))
+        );
+    }
+
+    fn overlay(kind: OverlayKind) -> Overlay {
+        Overlay { kind, up: false, height: 10.0 }
+    }
+
+    #[test]
+    fn opening_a_preview_replaces_the_dropdown_and_reports_it_closed() {
+        let current = Some(overlay(OverlayKind::Dropdown));
+        let request = OverlayRequest::Open(overlay(OverlayKind::Preview));
+        assert_eq!(
+            next_overlay(current, request),
+            (Some(overlay(OverlayKind::Preview)), Some(OverlayKind::Dropdown))
+        );
+    }
+
+    #[test]
+    fn opening_a_dropdown_replaces_the_preview_and_reports_it_closed() {
+        let current = Some(overlay(OverlayKind::Preview));
+        let request = OverlayRequest::Open(overlay(OverlayKind::Dropdown));
+        assert_eq!(
+            next_overlay(current, request),
+            (Some(overlay(OverlayKind::Dropdown)), Some(OverlayKind::Preview))
+        );
+    }
+
+    #[test]
+    fn closing_a_preview_leaves_an_open_dropdown_unchanged() {
+        let current = Some(overlay(OverlayKind::Dropdown));
+        assert_eq!(
+            next_overlay(current, OverlayRequest::Close(OverlayKind::Preview)),
+            (current, None)
         );
     }
 

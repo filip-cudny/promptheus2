@@ -69,6 +69,12 @@ pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::E
         {
             log::warn!("failed to convert recording-widget to non-activating panel: {e}");
         }
+        if let Err(e) = crate::services::macos_panel::install_pointer_tracking(
+            &recording_widget,
+            app.handle().clone(),
+        ) {
+            log::warn!("failed to install recording-widget pointer tracking: {e}");
+        }
     }
 
     let handle = app.handle().clone();

@@ -4,9 +4,17 @@ use std::ffi::CStr;
 use std::sync::OnceLock;
 
 use objc2::ffi::object_setClass;
+use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, MethodImplementation, Sel};
-use objc2::{class, msg_send, sel};
-use objc2_app_kit::{NSPanel, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
+use objc2::{class, msg_send, sel, AnyThread, MainThreadMarker};
+use objc2_app_kit::{
+    NSEvent, NSPanel, NSTrackingArea, NSTrackingAreaOptions, NSWindow, NSWindowCollectionBehavior,
+    NSWindowStyleMask,
+};
+use tauri::{AppHandle, Emitter};
+
+const POINTER_EVENT: &str = "recording-widget-pointer";
+const POINTER_TARGET: &str = "recording-widget";
 
 extern "C-unwind" fn returns_yes(_: &AnyObject, _: Sel) -> Bool {
     Bool::YES
@@ -205,4 +213,102 @@ pub fn set_frame_physical(
             }
         })
         .map_err(|e| e.to_string())
+}
+
+pub fn top_left_y(location_y: f64, bounds_height: f64, flipped: bool) -> f64 {
+    if flipped {
+        location_y
+    } else {
+        bounds_height - location_y
+    }
+}
+
+static POINTER_APP: OnceLock<AppHandle> = OnceLock::new();
+
+fn emit_pointer(payload: serde_json::Value) {
+    if let Some(app) = POINTER_APP.get() {
+        let _ = app.emit_to(POINTER_TARGET, POINTER_EVENT, payload);
+    }
+}
+
+extern "C-unwind" fn pointer_moved(_: &AnyObject, _: Sel, event: &NSEvent) {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let Some(view) = event.window(mtm).and_then(|window| window.contentView()) else {
+        return;
+    };
+    let point = view.convertPoint_fromView(event.locationInWindow(), None);
+    let y = top_left_y(point.y, view.bounds().size.height, view.isFlipped());
+    log::trace!("recording widget pointer x={} y={y}", point.x);
+    emit_pointer(serde_json::json!({ "x": point.x, "y": y }));
+}
+
+extern "C-unwind" fn pointer_exited(_: &AnyObject, _: Sel, _: &NSEvent) {
+    emit_pointer(serde_json::Value::Null);
+}
+
+fn pointer_owner_class() -> &'static AnyClass {
+    static CLASS: OnceLock<&'static AnyClass> = OnceLock::new();
+    CLASS.get_or_init(|| {
+        let mut builder = ClassBuilder::new(c"PromptheusPointerOwner", class!(NSObject))
+            .expect("PromptheusPointerOwner class registration failed");
+        let moved: extern "C-unwind" fn(_, _, _) = pointer_moved;
+        let exited: extern "C-unwind" fn(_, _, _) = pointer_exited;
+        unsafe {
+            builder.add_method(sel!(mouseMoved:), moved);
+            builder.add_method(sel!(mouseEntered:), moved);
+            builder.add_method(sel!(mouseExited:), exited);
+        }
+        builder.register()
+    })
+}
+
+// WebKit tracks the mouse only in the key window, and the widget panel never
+// becomes key, so the page gets no hover events. A tracking area that is active
+// always reports the pointer to the page as top-left points instead.
+pub fn install_pointer_tracking(window: &tauri::WebviewWindow, app: AppHandle) -> Result<(), String> {
+    if POINTER_APP.set(app).is_err() {
+        return Err("pointer tracking is already installed".into());
+    }
+    let ptr = window.ns_window().map_err(|e| e.to_string())?;
+    if ptr.is_null() {
+        return Err("ns_window pointer is null".into());
+    }
+
+    unsafe {
+        let ns_window: &NSWindow = &*(ptr as *const NSWindow);
+        let view = ns_window.contentView().ok_or("content view is missing")?;
+        let owner: Retained<AnyObject> = msg_send![pointer_owner_class(), new];
+        let options = NSTrackingAreaOptions::ActiveAlways
+            | NSTrackingAreaOptions::MouseMoved
+            | NSTrackingAreaOptions::MouseEnteredAndExited
+            | NSTrackingAreaOptions::InVisibleRect;
+        let area = NSTrackingArea::initWithRect_options_owner_userInfo(
+            NSTrackingArea::alloc(),
+            view.bounds(),
+            options,
+            Some(&owner),
+            None,
+        );
+        view.addTrackingArea(&area);
+        std::mem::forget(owner);
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::top_left_y;
+
+    #[test]
+    fn a_non_flipped_view_measures_y_from_the_bottom() {
+        assert_eq!(top_left_y(30.0, 112.0, false), 82.0);
+    }
+
+    #[test]
+    fn a_flipped_view_already_measures_y_from_the_top() {
+        assert_eq!(top_left_y(30.0, 112.0, true), 30.0);
+    }
 }
