@@ -20,7 +20,6 @@ const WIDGET_WIDTH = 240;
 const WIDGET_HEIGHT = 80;
 const WIDGET_ROW_HEIGHT = WIDGET_HEIGHT / 2;
 const WIDGET_RADIUS = 16;
-const WIDGET_ITEM_GAP = 4;
 const WIDGET_MAX_ITEM_ROWS = 3;
 const WIDGET_ITEM_ROW_HEIGHT = 22;
 const WIDGET_ITEM_ROW_GAP = 4;
@@ -741,7 +740,7 @@ export default class PromptheusExtension extends Extension {
             }),
         });
         for (const [index, kind, label, preview, imagePath] of items) {
-            flow.add_child(this._widgetChip(widget, kind, label, kind === 'image' ? '' : preview, imagePath,
+            flow.add_child(this._widgetChip(widget, kind, label, preview, imagePath,
                 locked ? null : () => this._emitRecordingWidgetItemRemoved(index, version)));
         }
         const scroll = new St.ScrollView({
