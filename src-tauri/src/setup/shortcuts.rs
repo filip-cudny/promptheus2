@@ -142,13 +142,17 @@ async fn run_shell_shortcuts(app: tauri::AppHandle, initial_settings: Settings) 
             Some(signal) = next_signal(&mut widget_moves) => {
                 match signal.args() {
                     Ok(args) => {
-                        crate::services::speech::widget::store_position(
-                            &app,
-                            crate::services::speech::widget::SHELL_POSITION_KEY,
-                            args.x,
-                            args.y,
-                        )
-                        .await;
+                        let placement = crate::services::speech::widget::Placement {
+                            origin: (args.x as f64, args.y as f64),
+                            work_area: (
+                                args.work_x as f64,
+                                args.work_y as f64,
+                                args.work_width as f64,
+                                args.work_height as f64,
+                            ),
+                        };
+                        app.state::<crate::services::speech::widget::RecordingWidget>()
+                            .shell_moved(&app, placement);
                     }
                     Err(e) => log::warn!("invalid RecordingWidgetMoved signal: {e}"),
                 }

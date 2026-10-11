@@ -193,7 +193,7 @@ Pure functions (no struct/state) for translating keymap settings into `tauri-plu
 
 Linux-only D-Bus client for the `com.promptheus.Shell` interface served by the GNOME Shell extension (`linux/gnome-shell-extension/`). Uses `zbus`.
 
-- `ShellProxy` (`#[zbus::proxy]`): `set_shortcuts`, `get_pointer`, `place_window`, `place_window_anchored`, `get_focused_wm_class`, signals `shortcut_activated` and `ready`.
+- `ShellProxy` (`#[zbus::proxy]`): `set_shortcuts`, `get_pointer`, `place_window`, `place_window_anchored`, `get_focused_wm_class`, `show_recording_widget(x, y, has_position, monochromatic) → (x, y, work_x, work_y, work_width, work_height)` (placed origin and work area of the monitor it landed on), signals `shortcut_activated`, `ready`, `recording_widget_action` and `recording_widget_moved(x, y, work_x, work_y, work_width, work_height)`.
 - The session connection lives in a process-wide `OnceLock`, so callers without state (`frontmost_app::detect()`) reach it through `proxy()` (async) or `blocking_proxy()`.
 - `is_gnome_wayland()` is the backend selector: `XDG_SESSION_TYPE=wayland` and `XDG_CURRENT_DESKTOP` contains `GNOME`.
 - `place_window(title, x, y, activate, show)` (context menu) and `place_window_anchored(title, right, bottom, activate, show)` (notification window) are the only callers of `PlaceWindow` and `PlaceWindowAnchored`; both go through `call_placement`. With `show = Some(win)` the call is sent before `win.show()` and the reply awaited after it; with `None` it is a plain call to an already visible window.

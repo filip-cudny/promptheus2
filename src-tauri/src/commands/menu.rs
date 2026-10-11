@@ -12,7 +12,7 @@ use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
 use crate::services::execution::PromptExecutionService;
 use crate::services::menu_coordinator::MenuCoordinator;
-use crate::services::monitor::find_monitor_at;
+use crate::services::monitor::{clamp_origin, find_monitor_at};
 use crate::services::skill::{strip_skill_prefix, SkillService};
 use crate::services::speech::{AudioClipStore, SpeechService};
 use crate::services::sqlite_history::SqliteHistoryService;
@@ -330,6 +330,25 @@ pub async fn show_context_menu_panel(app: tauri::AppHandle) -> crate::Result<()>
         }
         Ok(())
     }
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn clamp_menu_origin(
+    anchor_x: f64,
+    anchor_y: f64,
+    width: f64,
+    height: f64,
+    work_x: f64,
+    work_y: f64,
+    work_width: f64,
+    work_height: f64,
+) -> (f64, f64) {
+    clamp_origin(
+        (anchor_x, anchor_y),
+        (width, height),
+        (work_x, work_y, work_width, work_height),
+    )
 }
 
 #[tauri::command]

@@ -3,12 +3,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 use tokio::sync::Mutex;
 
 use super::reminder::rms;
 use super::SpeechService;
 use crate::services::config::ConfigService;
+use crate::services::monitor::{clamp_origin, find_monitor_at};
 use crate::services::ui_state::UiStateService;
 
 pub const WINDOW_LABEL: &str = "recording-widget";
@@ -25,8 +26,17 @@ const CEIL_DB: f64 = -20.0;
 const LEVEL_ATTACK: f64 = 0.6;
 const LEVEL_RELEASE: f64 = 0.2;
 const BOTTOM_MARGIN: f64 = 24.0;
+const PILL_WIDTH: f64 = 240.0;
+const PILL_HEIGHT: f64 = 44.0;
 
 type Rect = (i32, i32, u32, u32);
+type WorkArea = (f64, f64, f64, f64);
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Placement {
+    pub origin: (f64, f64),
+    pub work_area: WorkArea,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Transport {
@@ -80,6 +90,7 @@ struct WidgetPayload {
 struct WidgetSettings {
     enabled: bool,
     monochromatic: bool,
+    at_cursor: bool,
 }
 
 struct Inner {
@@ -90,6 +101,7 @@ struct Inner {
     elapsed_ms: u32,
     monochromatic: bool,
     update_failed: bool,
+    placement: Option<Placement>,
     #[cfg(target_os = "linux")]
     shell: Option<crate::services::gnome_shell::ShellProxy<'static>>,
 }
@@ -146,6 +158,30 @@ fn default_origin(work_area: Rect, size: (u32, u32), scale: f64) -> (i32, i32) {
     (left, top)
 }
 
+fn physical_size(logical: (f64, f64), scale: f64) -> (u32, u32) {
+    ((logical.0 * scale).round() as u32, (logical.1 * scale).round() as u32)
+}
+
+fn should_store_drag(at_cursor: bool) -> bool {
+    !at_cursor
+}
+
+fn work_area_of(monitor: &tauri::Monitor) -> WorkArea {
+    let work = monitor.work_area();
+    (
+        work.position.x as f64,
+        work.position.y as f64,
+        work.size.width as f64,
+        work.size.height as f64,
+    )
+}
+
+fn log_placement(source: &str, origin: (f64, f64), size: (f64, f64), work_area: WorkArea) {
+    log::debug!(
+        "recording widget: placed from {source} origin={origin:?} size={size:?} work_area={work_area:?}"
+    );
+}
+
 fn is_inside_any(point: (i32, i32), work_areas: &[Rect]) -> bool {
     work_areas.iter().any(|&(x, y, width, height)| {
         point.0 >= x
@@ -194,24 +230,42 @@ async fn widget_settings(app: &AppHandle) -> WidgetSettings {
     WidgetSettings {
         enabled: speech.show_recording_widget,
         monochromatic: speech.monochromatic_widget_icon,
+        at_cursor: speech.recording_widget_at_cursor,
     }
 }
 
 #[cfg(target_os = "linux")]
 async fn show_in_shell(
     app: &AppHandle,
-    monochromatic: bool,
-) -> Result<crate::services::gnome_shell::ShellProxy<'static>, String> {
-    let stored = read_position(app, SHELL_POSITION_KEY).await;
-    let (x, y) = stored.unwrap_or((0, 0));
+    settings: WidgetSettings,
+) -> Result<(crate::services::gnome_shell::ShellProxy<'static>, Placement), String> {
     let proxy = crate::services::gnome_shell::proxy()
         .await
         .map_err(|e| e.to_string())?;
-    proxy
-        .show_recording_widget(x, y, stored.is_some(), monochromatic)
+    let stored = read_position(app, SHELL_POSITION_KEY).await;
+    let (x, y, has_position, source) = if settings.at_cursor {
+        let (px, py, work_x, work_y, work_width, work_height) =
+            proxy.get_pointer().await.map_err(|e| e.to_string())?;
+        let (x, y) = clamp_origin(
+            (px as f64, py as f64),
+            (PILL_WIDTH, PILL_HEIGHT),
+            (work_x as f64, work_y as f64, work_width as f64, work_height as f64),
+        );
+        (x.round() as i32, y.round() as i32, true, "cursor")
+    } else {
+        let (x, y) = stored.unwrap_or((0, 0));
+        (x, y, stored.is_some(), if stored.is_some() { "stored position" } else { "default" })
+    };
+    let (x, y, work_x, work_y, work_width, work_height) = proxy
+        .show_recording_widget(x, y, has_position, settings.monochromatic)
         .await
         .map_err(|e| e.to_string())?;
-    Ok(proxy)
+    let placement = Placement {
+        origin: (x as f64, y as f64),
+        work_area: (work_x as f64, work_y as f64, work_width as f64, work_height as f64),
+    };
+    log_placement(source, placement.origin, (PILL_WIDTH, PILL_HEIGHT), placement.work_area);
+    Ok((proxy, placement))
 }
 
 async fn work_areas(app: &AppHandle) -> Result<Vec<Rect>, String> {
@@ -236,12 +290,17 @@ impl RecordingWidget {
                 elapsed_ms: 0,
                 monochromatic: true,
                 update_failed: false,
+                placement: None,
                 #[cfg(target_os = "linux")]
                 shell: None,
             }),
             move_seq: AtomicU64::new(0),
             programmatic_origin: std::sync::Mutex::new(None),
         }
+    }
+
+    pub async fn placement(&self) -> Option<Placement> {
+        self.inner.lock().await.placement
     }
 
     pub async fn is_shown(&self) -> bool {
@@ -269,6 +328,7 @@ impl RecordingWidget {
         inner.elapsed_ms = 0;
         inner.monochromatic = settings.monochromatic;
         inner.update_failed = false;
+        inner.placement = None;
         inner.transport = None;
         #[cfg(target_os = "linux")]
         {
@@ -277,8 +337,14 @@ impl RecordingWidget {
 
         let shown = match transport {
             #[cfg(target_os = "linux")]
-            Transport::Shell => show_in_shell(app, settings.monochromatic).await.map(|proxy| inner.shell = Some(proxy)),
-            Transport::Window => self.show_window(app).await,
+            Transport::Shell => show_in_shell(app, settings).await.map(|(proxy, placement)| {
+                inner.shell = Some(proxy);
+                inner.placement = Some(placement);
+            }),
+            Transport::Window => self
+                .show_window(app, settings)
+                .await
+                .map(|placement| inner.placement = Some(placement)),
         };
         if let Err(e) = shown {
             log::warn!("showing the recording widget failed, using toasts: {e}");
@@ -376,39 +442,62 @@ impl RecordingWidget {
         }
     }
 
-    async fn show_window(&self, app: &AppHandle) -> Result<(), String> {
+    async fn show_window(&self, app: &AppHandle, settings: WidgetSettings) -> Result<Placement, String> {
         let window = app
             .get_webview_window(WINDOW_LABEL)
             .ok_or("recording-widget window not found")?;
-        let areas = work_areas(app).await?;
-        let stored = read_position(app, WINDOW_POSITION_KEY)
-            .await
-            .filter(|&point| is_inside_any(point, &areas));
-        let origin = match stored {
-            Some(origin) => origin,
-            None => {
-                let (cx, cy) = app
-                    .cursor_position()
-                    .map(|p| (p.x as i32, p.y as i32))
-                    .unwrap_or((0, 0));
-                let monitor = crate::services::monitor::find_monitor_at(app, cx, cy)?;
-                let work = monitor.work_area();
-                let size = window.outer_size().map_err(|e| e.to_string())?;
-                default_origin(
-                    (work.position.x, work.position.y, work.size.width, work.size.height),
-                    (size.width, size.height),
-                    monitor.scale_factor(),
-                )
+        let (origin, work_area, size, source) = if settings.at_cursor {
+            let (cx, cy) = app
+                .cursor_position()
+                .map(|p| (p.x, p.y))
+                .unwrap_or((0.0, 0.0));
+            let monitor = find_monitor_at(app, cx as i32, cy as i32)?;
+            let work_area = work_area_of(&monitor);
+            let size = physical_size((PILL_WIDTH, PILL_HEIGHT), monitor.scale_factor());
+            window
+                .set_size(PhysicalSize::new(size.0, size.1))
+                .map_err(|e| e.to_string())?;
+            let origin = clamp_origin((cx, cy), (size.0 as f64, size.1 as f64), work_area);
+            (origin, work_area, size, "cursor")
+        } else {
+            let areas = work_areas(app).await?;
+            let stored = read_position(app, WINDOW_POSITION_KEY)
+                .await
+                .filter(|&point| is_inside_any(point, &areas));
+            let outer = window.outer_size().map_err(|e| e.to_string())?;
+            let size = (outer.width, outer.height);
+            match stored {
+                Some((x, y)) => {
+                    let monitor = find_monitor_at(app, x, y)?;
+                    ((x as f64, y as f64), work_area_of(&monitor), size, "stored position")
+                }
+                None => {
+                    let (cx, cy) = app
+                        .cursor_position()
+                        .map(|p| (p.x as i32, p.y as i32))
+                        .unwrap_or((0, 0));
+                    let monitor = find_monitor_at(app, cx, cy)?;
+                    let work = monitor.work_area();
+                    let (x, y) = default_origin(
+                        (work.position.x, work.position.y, work.size.width, work.size.height),
+                        size,
+                        monitor.scale_factor(),
+                    );
+                    ((x as f64, y as f64), work_area_of(&monitor), size, "default")
+                }
             }
         };
+        let origin = (origin.0.round(), origin.1.round());
+        log_placement(source, origin, (size.0 as f64, size.1 as f64), work_area);
         *self
             .programmatic_origin
             .lock()
-            .unwrap_or_else(|e| e.into_inner()) = Some(origin);
+            .unwrap_or_else(|e| e.into_inner()) = Some((origin.0 as i32, origin.1 as i32));
         window
-            .set_position(PhysicalPosition::new(origin.0, origin.1))
+            .set_position(PhysicalPosition::new(origin.0 as i32, origin.1 as i32))
             .map_err(|e| e.to_string())?;
-        window.show().map_err(|e| e.to_string())
+        window.show().map_err(|e| e.to_string())?;
+        Ok(Placement { origin, work_area })
     }
 
     fn record_move(&self, app: &AppHandle, position: (i32, i32)) {
@@ -419,15 +508,37 @@ impl RecordingWidget {
         if programmatic == Some(position) {
             return;
         }
-        let seq = self.move_seq.fetch_add(1, Ordering::SeqCst) + 1;
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
-            tokio::time::sleep(MOVE_DEBOUNCE).await;
             let widget = app.state::<RecordingWidget>();
-            if widget.move_seq.load(Ordering::SeqCst) == seq {
-                store_position(&app, WINDOW_POSITION_KEY, position.0, position.1).await;
+            if let Ok(monitor) = find_monitor_at(&app, position.0, position.1) {
+                widget.inner.lock().await.placement = Some(Placement {
+                    origin: (position.0 as f64, position.1 as f64),
+                    work_area: work_area_of(&monitor),
+                });
             }
+            widget.store_drag_debounced(&app, WINDOW_POSITION_KEY, position).await;
         });
+    }
+
+    pub fn shell_moved(&self, app: &AppHandle, placement: Placement) {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let widget = app.state::<RecordingWidget>();
+            widget.inner.lock().await.placement = Some(placement);
+            let position = (placement.origin.0 as i32, placement.origin.1 as i32);
+            widget.store_drag_debounced(&app, SHELL_POSITION_KEY, position).await;
+        });
+    }
+
+    async fn store_drag_debounced(&self, app: &AppHandle, key: &str, position: (i32, i32)) {
+        let seq = self.move_seq.fetch_add(1, Ordering::SeqCst) + 1;
+        tokio::time::sleep(MOVE_DEBOUNCE).await;
+        if self.move_seq.load(Ordering::SeqCst) == seq
+            && should_store_drag(widget_settings(app).await.at_cursor)
+        {
+            store_position(app, key, position.0, position.1).await;
+        }
     }
 }
 
@@ -603,6 +714,27 @@ mod tests {
         assert!(!is_inside_any((100, 1040), &areas));
         assert!(!is_inside_any((-1, 0), &areas));
         assert!(!is_inside_any((5000, 100), &areas));
+    }
+
+    #[test]
+    fn logical_size_converts_to_rounded_physical_size() {
+        assert_eq!(physical_size((240.0, 80.0), 2.0), (480, 160));
+        assert_eq!(physical_size((240.0, 44.0), 1.25), (300, 55));
+    }
+
+    #[test]
+    fn pill_at_the_bottom_right_corner_is_clamped_inside_at_scale_two() {
+        let size = physical_size((240.0, 80.0), 2.0);
+        assert_eq!(
+            clamp_origin((3800.0, 2100.0), (size.0 as f64, size.1 as f64), (0.0, 0.0, 3840.0, 2160.0)),
+            (3360.0, 2000.0)
+        );
+    }
+
+    #[test]
+    fn a_drag_is_stored_only_when_the_widget_does_not_open_at_the_cursor() {
+        assert!(!should_store_drag(true));
+        assert!(should_store_drag(false));
     }
 
     #[test]

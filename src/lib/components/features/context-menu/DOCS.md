@@ -34,7 +34,7 @@ The context menu runs in a **separate Tauri window** (`context-menu` label) with
 | `drivers/useFloatingPanelMutex.svelte.ts` | Mutually exclusive 3-panel state (settings / action menu / chat providers) + anchors |
 | `drivers/useMenuKeyboard.svelte.ts` | `keydown`/`keyup` handler, shifted digits, `shiftHeld` flag |
 | `drivers/useMenuBlurClose.svelte.ts` | Window blur listener, suppressed-blur recheck timer, blur-grace passthrough |
-| `drivers/useMenuPositioning.svelte.ts` | Resize/position window at cursor anchored to skills section, hover-enable gate |
+| `drivers/useMenuPositioning.svelte.ts` | Resize/position window at cursor anchored to skills section (clamp via `clamp_menu_origin`), hover-enable gate |
 | `$lib/services/skillMetadata.svelte.ts` | Singleton cache for `get_skill` metadata + `buildSkillMetaEntries` |
 | `$lib/stores/webviewProviders.svelte.ts` | Webview providers list + `onSettingsChanged` listener + Promptheus prepend |
 | `$lib/stores/modelsMenuData.svelte.ts` | Derived `modelsData`/`modelNames`/`quickActionModel` + capability prefetch + setters |
@@ -59,7 +59,7 @@ Defined in `src-tauri/tauri.conf.json` under `app.windows` with label `context-m
 
 1. Trigger (tray "Show Menu" or future global hotkey) calls `show_context_menu_window` backend command.
 2. Backend positions the window at cursor, emits `show-context-menu` event to the window, then shows and focuses it.
-   - **Extension variant (GNOME Wayland)**: the show payload has `shell_placement: true` (`shellPlacement`) and carries the `GetPointer` result (cursor and work area). `useMenuPositioning` clamps the position to the work area and calls `place_context_menu { x, y, first }` instead of `setPosition` + `show_context_menu_panel` + `focus_context_menu`. `first: true` sends `PlaceWindow` before `win.show()` and awaits the reply; the frontend clears the first-placement flag right after starting that invoke. After the height correction it calls `place_context_menu` with `first: false`. See [linux-wayland-gnome-extension.md](../../../../../docs/gotchas/linux-wayland-gnome-extension.md).
+   - **Extension variant (GNOME Wayland)**: the show payload has `shell_placement: true` (`shellPlacement`) and carries the `GetPointer` result (cursor and work area). `useMenuPositioning` clamps the position to the work area (Rust command `clamp_menu_origin`, `services/monitor.rs::clamp_origin`, shared with the recording widget; no clamp arithmetic in the frontend) and calls `place_context_menu { x, y, first }` instead of `setPosition` + `show_context_menu_panel` + `focus_context_menu`. `first: true` sends `PlaceWindow` before `win.show()` and awaits the reply; the frontend clears the first-placement flag right after starting that invoke. After the height correction it calls `place_context_menu` with `first: false`. See [linux-wayland-gnome-extension.md](../../../../../docs/gotchas/linux-wayland-gnome-extension.md).
 3. Store's `init()` listener catches the event → calls `openMenu()`.
 4. `openMenu()` invokes `get_context_menu_items` command and populates state (window is already visible).
 5. User interacts via keyboard or mouse → executes item via `execute_menu_item` command.

@@ -22,12 +22,12 @@ Interface `com.promptheus.Shell`, object `/com/promptheus/Shell`, served by `org
 | `PlaceWindowAnchored` | `(s title, i right, i bottom, b activate) → b` | keep the frame's bottom-right corner at `(right, bottom)` until the window is unmanaged, optionally activate it |
 | `GetFocusedWmClass` | `() → s` | `wm_class` of the focused window |
 | `ShowToast` | `(s level, s title, s message, b monochromatic) → ()` | draw a toast as a shell actor; `level` is `success`/`error`/`info`/`warning`, empty `message` = no description |
-| `ShowRecordingWidget` | `(i x, i y, b has_position, b monochromatic) → ()` | show the recording widget at `(x, y)` logical stage pixels when `has_position`, else at the default position; `monochromatic` picks the `done` check icon (`recording-check-mono.svg` in the widget foreground or green `recording-check.svg`) |
+| `ShowRecordingWidget` | `(i x, i y, b has_position, b monochromatic) → (i x, i y, i work_x, i work_y, i work_width, i work_height)` | show the recording widget at `(x, y)` logical stage pixels when `has_position`, else at the default position (the extension never clamps; Rust passes a clamped origin when the widget opens at the cursor); returns the placed origin and the work area of the monitor it is on; `monochromatic` picks the `done` check icon (`recording-check-mono.svg` in the widget foreground or green `recording-check.svg`) |
 | `UpdateRecordingWidget` | `(s state, d level, u elapsed_ms) → ()` | `state` is `recording`/`paused`/`processing`/`done`; `level` 0..1 |
 | `HideRecordingWidget` | `() → ()` | remove the widget |
 | `ShortcutActivated` | signal `s action` | an accelerator fired |
 | `RecordingWidgetAction` | signal `s action` | widget button pressed: `pause`, `resume`, `stop` or `cancel` |
-| `RecordingWidgetMoved` | signal `(i x, i y)` | drag released after the pointer moved more than 4 px, logical stage pixels |
+| `RecordingWidgetMoved` | signal `(i x, i y, i work_x, i work_y, i work_width, i work_height)` | drag released after the pointer moved more than 4 px: pill origin and the work area of the monitor it was dropped on, logical stage pixels |
 | `Ready` | signal | the extension is enabled and serving |
 
 ## Pattern

@@ -83,6 +83,7 @@ export interface SpeechToTextConfig {
   keep_audio_on_success: boolean;
   show_recording_widget: boolean;
   monochromatic_widget_icon: boolean;
+  recording_widget_at_cursor: boolean;
 }
 
 export interface AudioClipInfo {

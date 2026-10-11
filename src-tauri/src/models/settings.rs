@@ -254,6 +254,9 @@ pub struct SpeechToTextConfig {
 
     #[serde(default = "default_true")]
     pub monochromatic_widget_icon: bool,
+
+    #[serde(default = "default_true")]
+    pub recording_widget_at_cursor: bool,
 }
 
 impl Default for SpeechToTextConfig {
@@ -269,6 +272,7 @@ impl Default for SpeechToTextConfig {
             keep_audio_on_success: false,
             show_recording_widget: true,
             monochromatic_widget_icon: true,
+            recording_widget_at_cursor: true,
         }
     }
 }
@@ -681,6 +685,12 @@ mod tests {
         let config = SpeechToTextConfig::default();
         assert!(config.show_recording_widget);
         assert_eq!(config.auto_retry_attempts, 3);
+    }
+
+    #[test]
+    fn speech_to_text_defaults_to_opening_the_widget_at_the_cursor() {
+        let surfaces: Surfaces = serde_json::from_str("{}").unwrap();
+        assert!(surfaces.speech_to_text.recording_widget_at_cursor);
     }
 
     #[test]

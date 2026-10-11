@@ -67,6 +67,18 @@
         <label class="check">
           <input
             type="checkbox"
+            checked={config.recording_widget_at_cursor}
+            onchange={(e: Event) =>
+              save({ recording_widget_at_cursor: (e.target as HTMLInputElement).checked })}
+          />
+          <span>Open recording widget at the cursor</span>
+        </label>
+        <p class="muted">
+          The widget opens with its top-left corner at the cursor. Off opens it where you last left it.
+        </p>
+        <label class="check">
+          <input
+            type="checkbox"
             checked={config.monochromatic_widget_icon}
             onchange={(e: Event) =>
               save({ monochromatic_widget_icon: (e.target as HTMLInputElement).checked })}

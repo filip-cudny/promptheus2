@@ -41,7 +41,7 @@ pub trait Shell {
         y: i32,
         has_position: bool,
         monochromatic: bool,
-    ) -> zbus::Result<()>;
+    ) -> zbus::Result<(i32, i32, i32, i32, i32, i32)>;
 
     fn update_recording_widget(
         &self,
@@ -56,7 +56,15 @@ pub trait Shell {
     fn recording_widget_action(&self, action: String) -> zbus::Result<()>;
 
     #[zbus(signal)]
-    fn recording_widget_moved(&self, x: i32, y: i32) -> zbus::Result<()>;
+    fn recording_widget_moved(
+        &self,
+        x: i32,
+        y: i32,
+        work_x: i32,
+        work_y: i32,
+        work_width: i32,
+        work_height: i32,
+    ) -> zbus::Result<()>;
 
     #[zbus(signal)]
     fn shortcut_activated(&self, action: String) -> zbus::Result<()>;

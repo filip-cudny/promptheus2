@@ -47,17 +47,19 @@ export function useMenuPositioning(opts: Opts) {
     const wa = opts.getWorkArea();
     let x = 0, y = 0;
 
-    function positionFromHeight(h: number) {
+    async function positionFromHeight(h: number) {
       if (!wa) return;
       const anchorOffset = getSkillsAnchorOffset();
-      x = wa.cursorX;
-      y = wa.cursorY - anchorOffset;
-      const rightEdge = wa.workX + wa.workWidth;
-      const bottomEdge = wa.workY + wa.workHeight;
-      if (x + MENU_WIDTH > rightEdge) x = rightEdge - MENU_WIDTH;
-      if (y + h > bottomEdge) y = bottomEdge - h;
-      if (x < wa.workX) x = wa.workX;
-      if (y < wa.workY) y = wa.workY;
+      [x, y] = await invoke<[number, number]>("clamp_menu_origin", {
+        anchorX: wa.cursorX,
+        anchorY: wa.cursorY - anchorOffset,
+        width: MENU_WIDTH,
+        height: h,
+        workX: wa.workX,
+        workY: wa.workY,
+        workWidth: wa.workWidth,
+        workHeight: wa.workHeight,
+      });
     }
 
     async function placeThroughShell() {
@@ -70,7 +72,8 @@ export function useMenuPositioning(opts: Opts) {
       const correctedHeight = menuEl!.scrollHeight + 2;
       if (correctedHeight !== height) {
         height = correctedHeight;
-        positionFromHeight(height);
+        await positionFromHeight(height);
+        if (gen !== resizeGeneration || !opts.isVisible()) return;
         await win.setSize(new LogicalSize(MENU_WIDTH, height));
         if (gen !== resizeGeneration || !opts.isVisible()) return;
         await invoke("place_context_menu", { x, y, first: false });
@@ -78,7 +81,8 @@ export function useMenuPositioning(opts: Opts) {
       logDebug(`[ctx-menu] placed through shell at (${x}, ${y}), size ${MENU_WIDTH}x${height}`);
     }
 
-    positionFromHeight(height);
+    await positionFromHeight(height);
+    if (gen !== resizeGeneration || !opts.isVisible()) return;
     hoverEnabled = false;
     await win.setSize(new LogicalSize(MENU_WIDTH, height));
     if (gen !== resizeGeneration || !opts.isVisible()) return;
@@ -98,7 +102,8 @@ export function useMenuPositioning(opts: Opts) {
     const correctedHeight = menuEl.scrollHeight + 2;
     if (correctedHeight !== height) {
       height = correctedHeight;
-      positionFromHeight(height);
+      await positionFromHeight(height);
+      if (gen !== resizeGeneration || !opts.isVisible()) return;
       await win.setSize(new LogicalSize(MENU_WIDTH, height));
       if (gen !== resizeGeneration || !opts.isVisible()) return;
       if (wa) {

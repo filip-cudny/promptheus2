@@ -52,6 +52,11 @@ function resolveWidgetPosition(hasPosition, x, y, workAreas, pointerArea) {
     };
 }
 
+function workAreaAt(x, y) {
+    const areas = Main.layoutManager.monitors.map((_monitor, i) => Main.layoutManager.getWorkAreaForMonitor(i));
+    return areas.find(area => pointInRect(x, y, area)) ?? areas[0];
+}
+
 function formatElapsed(elapsedMs) {
     const seconds = Math.floor(elapsedMs / 1000);
     return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
@@ -100,6 +105,12 @@ const INTERFACE_XML = `
       <arg type="i" direction="in" name="y"/>
       <arg type="b" direction="in" name="has_position"/>
       <arg type="b" direction="in" name="monochromatic"/>
+      <arg type="i" direction="out" name="x"/>
+      <arg type="i" direction="out" name="y"/>
+      <arg type="i" direction="out" name="work_x"/>
+      <arg type="i" direction="out" name="work_y"/>
+      <arg type="i" direction="out" name="work_width"/>
+      <arg type="i" direction="out" name="work_height"/>
     </method>
     <method name="UpdateRecordingWidget">
       <arg type="s" direction="in" name="state"/>
@@ -116,6 +127,10 @@ const INTERFACE_XML = `
     <signal name="RecordingWidgetMoved">
       <arg type="i" name="x"/>
       <arg type="i" name="y"/>
+      <arg type="i" name="work_x"/>
+      <arg type="i" name="work_y"/>
+      <arg type="i" name="work_width"/>
+      <arg type="i" name="work_height"/>
     </signal>
     <signal name="Ready"/>
   </interface>
@@ -333,6 +348,8 @@ export default class PromptheusExtension extends Extension {
         widget.actor.set_position(position.x, position.y);
         console.log(`Promptheus: recording widget shown at ${position.x},${position.y} ` +
             `stored=${position.stored}`);
+        const area = workAreaAt(position.x, position.y);
+        return [position.x, position.y, area.x, area.y, area.width, area.height];
     }
 
     UpdateRecordingWidget(state, level, elapsedMs) {
@@ -441,7 +458,9 @@ export default class PromptheusExtension extends Extension {
         const x = Math.round(widget.actor.x);
         const y = Math.round(widget.actor.y);
         console.log(`Promptheus: recording widget dragged to ${x},${y}`);
-        this._dbus.emit_signal('RecordingWidgetMoved', new GLib.Variant('(ii)', [x, y]));
+        const area = workAreaAt(x, y);
+        this._dbus.emit_signal('RecordingWidgetMoved',
+            new GLib.Variant('(iiiiii)', [x, y, area.x, area.y, area.width, area.height]));
     }
 
     _endWidgetDrag(widget) {

@@ -19,6 +19,22 @@ pub fn find_monitor_at(
     select_monitor(monitors, at_cursor, primary).ok_or_else(|| "no monitor found".to_string())
 }
 
+pub fn clamp_origin(
+    anchor: (f64, f64),
+    size: (f64, f64),
+    work_area: (f64, f64, f64, f64),
+) -> (f64, f64) {
+    let (work_x, work_y, work_width, work_height) = work_area;
+    let (mut x, mut y) = anchor;
+    if x + size.0 > work_x + work_width {
+        x = work_x + work_width - size.0;
+    }
+    if y + size.1 > work_y + work_height {
+        y = work_y + work_height - size.1;
+    }
+    (x.max(work_x), y.max(work_y))
+}
+
 fn contains(x: i32, y: i32, width: u32, height: u32, cx: i32, cy: i32) -> bool {
     cx >= x && cx < x + width as i32 && cy >= y && cy < y + height as i32
 }
@@ -37,6 +53,31 @@ fn select_monitor<M>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clamp_keeps_an_origin_that_fits() {
+        assert_eq!(clamp_origin((100.0, 100.0), (240.0, 80.0), (0.0, 0.0, 1920.0, 1040.0)), (100.0, 100.0));
+    }
+
+    #[test]
+    fn clamp_pulls_a_bottom_right_anchor_inside() {
+        assert_eq!(clamp_origin((1900.0, 1030.0), (240.0, 80.0), (0.0, 0.0, 1920.0, 1040.0)), (1680.0, 960.0));
+    }
+
+    #[test]
+    fn clamp_pushes_a_negative_anchor_to_the_work_origin() {
+        assert_eq!(clamp_origin((-10.0, -10.0), (240.0, 80.0), (0.0, 0.0, 1920.0, 1040.0)), (0.0, 0.0));
+    }
+
+    #[test]
+    fn clamp_respects_a_work_area_offset() {
+        assert_eq!(clamp_origin((3800.0, 50.0), (240.0, 80.0), (1920.0, 0.0, 1920.0, 1080.0)), (3600.0, 50.0));
+    }
+
+    #[test]
+    fn clamp_favours_the_top_left_when_larger_than_the_work_area() {
+        assert_eq!(clamp_origin((10.0, 10.0), (2000.0, 1200.0), (0.0, 0.0, 1920.0, 1040.0)), (0.0, 0.0));
+    }
 
     #[test]
     fn point_inside_rectangle_is_contained() {
