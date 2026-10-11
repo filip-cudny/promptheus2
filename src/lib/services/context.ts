@@ -54,3 +54,17 @@ export async function setContextFromClipboard(): Promise<void> {
 export async function appendContextFromClipboard(): Promise<void> {
   return invoke("append_context_from_clipboard");
 }
+
+export async function getGlobalContext(): Promise<{
+  text: string;
+  images: { data: string; media_type: string }[];
+}> {
+  const items = await getContextItems();
+  const text = items
+    .flatMap((i) => (i.item_type === "text" && i.content ? [i.content] : []))
+    .join("\n");
+  const images = items.flatMap((i) =>
+    i.item_type === "image" ? [{ data: i.data, media_type: i.media_type }] : [],
+  );
+  return { text, images };
+}

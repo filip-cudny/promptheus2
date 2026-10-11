@@ -3,7 +3,7 @@
   import CollapsibleSection from "$lib/components/shared/ui/CollapsibleSection.svelte";
   import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import ContextEditor from "$lib/components/shared/widgets/ContextEditor.svelte";
-  import { getContextItems, appendContext, appendContextImage, clearContext } from "$lib/services/context";
+  import { getGlobalContext, appendContext, appendContextImage, clearContext } from "$lib/services/context";
   import { Save, Check, X, Trash2 } from "lucide-svelte";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
@@ -42,17 +42,7 @@
 
   onMount(async () => {
     try {
-      const items = await getContextItems();
-      for (const item of items) {
-        if (item.item_type === "text") {
-          localText = item.content;
-        } else if (item.item_type === "image") {
-          localImages = [
-            ...localImages,
-            { data: item.data, media_type: item.media_type },
-          ];
-        }
-      }
+      ({ text: localText, images: localImages } = await getGlobalContext());
       if (localText.trim().length > 0 || localImages.length > 0) {
         onHasContent?.();
       }

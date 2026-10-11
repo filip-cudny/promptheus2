@@ -1,9 +1,10 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { InvocationSource } from "$lib/types/history";
 
 export function useConversationDialogIpc(opts: {
   selfTarget: string;
   onRestoreHistory: (entryId: string, lastInteractionOnly?: boolean) => void;
-  onVoiceInput: (text: string, autoSend: boolean) => void;
+  onVoiceInput: (text: string, autoSend: boolean, invocationSource: InvocationSource | null) => void;
   onOpenForSkill: (skillId: string, skillName: string, skillModel: string | null) => void;
   onNewConversation: () => void;
   onActiveProviderCleared: () => void;
@@ -19,9 +20,10 @@ export function useConversationDialogIpc(opts: {
       { target: opts.selfTarget },
     );
 
-    const u2 = await listen<{ text: string; auto_send: boolean }>(
+    const u2 = await listen<{ text: string; auto_send: boolean; invocation_source: InvocationSource | null }>(
       "voice-input",
-      (event) => opts.onVoiceInput(event.payload.text, event.payload.auto_send),
+      (event) =>
+        opts.onVoiceInput(event.payload.text, event.payload.auto_send, event.payload.invocation_source),
       { target: opts.selfTarget },
     );
 

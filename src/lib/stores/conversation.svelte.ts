@@ -37,6 +37,8 @@ import type {
 import { hasUserContent } from "$lib/types";
 import type { ConversationNodeForExecution } from "$lib/types/ai";
 import { invoke } from "@tauri-apps/api/core";
+import { getGlobalContext } from "$lib/services/context";
+import type { InvocationSource } from "$lib/types/history";
 
 export function createEmptyTree(): ConversationTree {
   return {
@@ -897,9 +899,15 @@ export function createConversationStore(
     }
   }
 
-  function markActiveTabAlternativeExecute(): void {
+  function setActiveTabInvocationSource(source: InvocationSource): void {
     const tab = getTab(activeTabId);
-    if (tab) tab.invocation_source = "alternative_execute";
+    if (tab) tab.invocation_source = source;
+  }
+
+  async function loadGlobalContextIntoActiveTab(): Promise<void> {
+    const { text, images } = await getGlobalContext();
+    updateContextText(text);
+    updateContextImages(images);
   }
 
   function setPristineInput(text: string): void {
@@ -1494,7 +1502,8 @@ export function createConversationStore(
     rejectToolCall,
     retryToolCall,
     saveToHistory,
-    markActiveTabAlternativeExecute,
+    setActiveTabInvocationSource,
+    loadGlobalContextIntoActiveTab,
     restoreFromHistory,
     isTabClean,
     destroy,

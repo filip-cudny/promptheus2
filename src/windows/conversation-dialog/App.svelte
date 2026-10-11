@@ -20,6 +20,7 @@
   import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
   import { initTheme } from "$lib/stores/theme.svelte";
   import type { ModelConfig } from "$lib/types";
+  import type { InvocationSource } from "$lib/types/history";
 
   interface DialogInitParams {
     skill_id: string;
@@ -30,6 +31,7 @@
     initial_input: string | null;
     auto_send_input: boolean;
     new_chat: boolean;
+    invocation_source: InvocationSource | null;
   }
 
   const skillsStore = getSkillsStore();
@@ -146,15 +148,30 @@
     }
   }
 
-  function handleVoiceInput(skillId: string, text: string, autoSend: boolean) {
+  async function handleVoiceInput(
+    skillId: string,
+    text: string,
+    autoSend: boolean,
+    invocationSource: InvocationSource | null,
+  ) {
     const currentTab = store.tabs.find((t) => t.tab_id === store.activeTabId);
     if (currentTab && currentTab.tree.current_path.length > 0) {
       store.addTab();
     }
-    store.markActiveTabAlternativeExecute();
+    store.setActiveTabInvocationSource(invocationSource ?? "alternative_execute");
     const inputText = skillId ? `/${skillId} ${text}` : text;
     store.updateInputText(inputText);
-    if (autoSend) store.sendMessage();
+    if (!autoSend) return;
+    if (!contextDisabled) {
+      try {
+        await store.loadGlobalContextIntoActiveTab();
+      } catch (err) {
+        console.error("load global context failed", err);
+      }
+    }
+    const sending = store.sendMessage();
+    await autoShowContextIfNeeded();
+    await sending;
   }
 
   async function applyInitParams(p: DialogInitParams) {
@@ -163,7 +180,7 @@
     } else if (p.history_entry_id) {
       await store.restoreFromHistory(p.history_entry_id, p.last_interaction_only);
     } else if (p.initial_input) {
-      handleVoiceInput(p.skill_id, p.initial_input, p.auto_send_input);
+      await handleVoiceInput(p.skill_id, p.initial_input, p.auto_send_input, p.invocation_source);
     } else if (p.skill_id) {
       store.openForSkill(p.skill_id, p.skill_name, p.skill_model);
     }
@@ -182,7 +199,7 @@
     onRestoreHistory: (entryId, lastInteractionOnly) => {
       store.restoreFromHistory(entryId, lastInteractionOnly);
     },
-    onVoiceInput: (text, autoSend) => handleVoiceInput("", text, autoSend),
+    onVoiceInput: (text, autoSend, source) => handleVoiceInput("", text, autoSend, source),
     onOpenForSkill: (skillId, skillName, skillModel) =>
       store.openForSkill(skillId, skillName, skillModel),
     onNewConversation: () => store.addTab(),
