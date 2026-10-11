@@ -139,6 +139,8 @@ Manages an ordered list of `ContextItem` values (text and/or images) in memory. 
 
 **Key edge case**: `has_context()` checks for Text variant existence; `get_context()` additionally filters out empty-content items. Image-only context returns `None` from `get_context()`.
 
+**Context version and pill**: `commands/context.rs` owns a static `CONTEXT_VERSION`; `current_context_version()` reads it and `emit_context_changed` is the only place that bumps it. After emitting `context-changed` it spawns `RecordingWidget::refresh_model`, which resizes and re-pushes the pill model when the pill is shown. Pill item removal and Paste go through `remove_item_for_pill` / `paste_item_for_pill` there; a removal whose version differs from the current one removes nothing.
+
 ### SqliteHistoryService specifics
 
 Persistent history storage via SQLite. Database file at `{app_data_dir}/history.db`. Survives app restarts.
@@ -195,6 +197,7 @@ Linux-only D-Bus client for the `com.promptheus.Shell` interface served by the G
 
 - `ShellProxy` (`#[zbus::proxy]`): `set_shortcuts`, `get_pointer`, `place_window`, `place_window_anchored`, `get_focused_wm_class`, `show_recording_widget(x, y, has_position, monochromatic) → (x, y, work_x, work_y, work_width, work_height)` (placed origin and work area of the monitor it landed on), signals `shortcut_activated`, `ready`, `recording_widget_action` and `recording_widget_moved(x, y, work_x, work_y, work_width, work_height)`.
 - The session connection lives in a process-wide `OnceLock`, so callers without state (`frontmost_app::detect()`) reach it through `proxy()` (async) or `blocking_proxy()`.
+- Recording pill additions: method `UpdateRecordingWidgetModel(a(ss), s, s, b, a(uss), t, i, i)` (`update_recording_widget_model`: targets, selected id and label, target lock, items, context version, x, y) and signals `RecordingWidgetTargetSelected(s)` / `RecordingWidgetItemRemoved(u, t)` consumed in `setup/shortcuts.rs`; `RecordingWidgetAction` also carries `paste`. Until the extension implements them the call fails and `push_model` logs it once per recording. See [speech/DOCS.md](speech/DOCS.md).
 - `is_gnome_wayland()` is the backend selector: `XDG_SESSION_TYPE=wayland` and `XDG_CURRENT_DESKTOP` contains `GNOME`.
 - `place_window(title, x, y, activate, show)` (context menu) and `place_window_anchored(title, right, bottom, activate, show)` (notification window) are the only callers of `PlaceWindow` and `PlaceWindowAnchored`; both go through `call_placement`. With `show = Some(win)` the call is sent before `win.show()` and the reply awaited after it; with `None` it is a plain call to an already visible window.
 - `frontmost_app` on Wayland reads `GetFocusedWmClass`; it returns an empty string when the extension is unreachable.

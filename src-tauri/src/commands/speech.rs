@@ -14,7 +14,8 @@ use crate::models::speech::{
 use crate::commands::settings::apply_settings_reload;
 use crate::services::config::{ConfigService, KeytermsDoc};
 use crate::services::notification::{NotificationLevel, NotificationService};
-use crate::services::speech::widget::RecordingWidget;
+use crate::services::skill::SkillService;
+use crate::services::speech::widget::{pill_targets, RecordingWidget};
 use crate::services::speech::{
     self, AudioClipStore, SpeechError, SpeechService, SttOptions,
 };
@@ -249,7 +250,7 @@ pub async fn toggle_speech_recording(
         widget.close(&app).await;
         let mut s = speech_state.lock().await;
         s.set_transcribing(false);
-        s.set_pending_prompt(None, None);
+        s.clear_pending_prompt();
         return Ok(());
     }
 
@@ -262,7 +263,7 @@ pub async fn toggle_speech_recording(
             widget.close(&app).await;
             let mut s = speech_state.lock().await;
             s.set_transcribing(false);
-            s.set_pending_prompt(None, None);
+            s.clear_pending_prompt();
             return Err(e.into());
         }
     };
@@ -286,7 +287,7 @@ pub async fn toggle_speech_recording(
             widget.close(&app).await;
             let mut s = speech_state.lock().await;
             s.set_transcribing(false);
-            s.set_pending_prompt(None, None);
+            s.clear_pending_prompt();
             return Err(Error::Speech(e));
         }
     };
@@ -347,15 +348,16 @@ pub async fn toggle_speech_recording(
             Ok(text) => {
                 let duration_secs = start.elapsed().as_secs_f64();
                 let pending = speech_inner.lock().await.take_pending_prompt();
+                widget_inner.refresh_model(&app_clone).await;
                 let mut created_entry_id = None;
 
-                if let Some(skill_id) = pending.0 {
+                if let Some(pending) = pending {
                     widget_inner.close(&app_clone).await;
                     let _ = app_clone.emit(
                         "speech-alternative-execute",
                         AlternativeExecutePayload {
-                            skill_id,
-                            skill_name: pending.1.unwrap_or_default(),
+                            skill_id: pending.id,
+                            skill_name: pending.name,
                             text: text.clone(),
                         },
                     );
@@ -439,7 +441,7 @@ pub async fn toggle_speech_recording(
                 }
 
                 let mut s = speech_inner.lock().await;
-                let had_pending = s.take_pending_prompt().0.is_some();
+                let had_pending = s.take_pending_prompt().is_some();
 
                 let title = if had_pending {
                     "Speech execution cancelled"
@@ -467,7 +469,7 @@ pub async fn toggle_speech_recording(
             Err(e) => {
                 widget_inner.close(&app_clone).await;
                 let message = e.to_string();
-                speech_inner.lock().await.set_pending_prompt(None, None);
+                speech_inner.lock().await.clear_pending_prompt();
 
                 let entry_id = {
                     let history = history_inner.lock().await;
@@ -829,6 +831,65 @@ pub async fn cancel_speech_recording(app: AppHandle) -> crate::Result<()> {
         TranscriptionComplete { text: String::new(), duration_secs: 0.0, entry_id: None },
     );
     Ok(())
+}
+
+async fn recording_widget_shown(app: &AppHandle, intent: &str) -> bool {
+    let shown = app.state::<RecordingWidget>().is_shown().await;
+    if !shown {
+        log::debug!("recording widget intent {intent} ignored: widget not shown");
+    }
+    shown
+}
+
+#[tauri::command]
+pub async fn select_recording_widget_target(app: AppHandle, id: String) -> crate::Result<()> {
+    log::debug!("recording widget intent: select target id={id}");
+    if !recording_widget_shown(&app, "select target").await {
+        return Ok(());
+    }
+    let label = match app.try_state::<Arc<Mutex<SkillService>>>() {
+        Some(skills) => pill_targets(skills.lock().await.list_skills())
+            .into_iter()
+            .find(|(target_id, _)| *target_id == id)
+            .map(|(_, label)| label),
+        None => None,
+    };
+    let Some(label) = label else {
+        log::debug!("recording widget intent select target ignored: unknown id={id}");
+        return Ok(());
+    };
+    let selected = app
+        .state::<Arc<Mutex<SpeechService>>>()
+        .lock()
+        .await
+        .select_target(&id, &label);
+    match selected {
+        Ok(()) => app.state::<RecordingWidget>().refresh_model(&app).await,
+        Err(_) => log::debug!("recording widget intent select target ignored: target locked"),
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn remove_recording_widget_item(
+    app: AppHandle,
+    index: u32,
+    context_version: u64,
+) -> crate::Result<()> {
+    log::debug!("recording widget intent: remove item index={index} version={context_version}");
+    if !recording_widget_shown(&app, "remove item").await {
+        return Ok(());
+    }
+    super::context::remove_item_for_pill(&app, index as usize, context_version).await
+}
+
+#[tauri::command]
+pub async fn paste_into_recording_widget(app: AppHandle) -> crate::Result<()> {
+    log::debug!("recording widget intent: paste");
+    if !recording_widget_shown(&app, "paste").await {
+        return Ok(());
+    }
+    super::context::paste_item_for_pill(&app).await
 }
 
 #[tauri::command]

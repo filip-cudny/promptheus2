@@ -22,6 +22,25 @@ pub use transcriber::{transcribe, SttOptions};
 
 const TOGGLE_DEBOUNCE_MS: u128 = 250;
 
+pub const DICTATION_ID: &str = "__dictation__";
+pub const DICTATION_LABEL: &str = "Dictation";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PendingOrigin {
+    ShiftClick,
+    Pill,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PendingPrompt {
+    pub id: String,
+    pub name: String,
+    pub origin: PendingOrigin,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TargetLocked;
+
 /// Whether a failed transcription is worth sending again unchanged.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -111,8 +130,8 @@ pub struct SpeechService {
     is_recording: bool,
     is_transcribing: bool,
     recording_action_id: Option<String>,
-    pending_skill_id: Option<String>,
-    pending_skill_name: Option<String>,
+    pending: Option<PendingPrompt>,
+    target_locked: bool,
     audio_buffer: Arc<Mutex<Vec<i16>>>,
     sample_rate: u32,
     stop_sender: Option<mpsc::Sender<()>>,
@@ -152,8 +171,8 @@ impl SpeechService {
             is_recording: false,
             is_transcribing: false,
             recording_action_id: None,
-            pending_skill_id: None,
-            pending_skill_name: None,
+            pending: None,
+            target_locked: false,
             audio_buffer: Arc::new(Mutex::new(Vec::new())),
             sample_rate: 16000,
             stop_sender: None,
@@ -171,6 +190,8 @@ impl SpeechService {
         if self.is_recording {
             return Err(SpeechError::AlreadyRecording);
         }
+
+        self.reset_target_for_start(action_id.as_deref());
 
         let device = find_input_device()?;
         let sample_rate = negotiate_sample_rate(&device)?;
@@ -254,7 +275,7 @@ impl SpeechService {
 
     pub fn cancel_recording(&mut self) -> Result<(), SpeechError> {
         self.stop_recording_raw()?;
-        self.set_pending_prompt(None, None);
+        self.clear_pending_prompt();
         Ok(())
     }
 
@@ -317,13 +338,50 @@ impl SpeechService {
         self.recording_action_id.as_deref()
     }
 
-    pub fn set_pending_prompt(&mut self, id: Option<String>, name: Option<String>) {
-        self.pending_skill_id = id;
-        self.pending_skill_name = name;
+    pub fn set_pending_prompt(&mut self, id: String, name: String, origin: PendingOrigin) {
+        self.pending = Some(PendingPrompt { id, name, origin });
     }
 
-    pub fn take_pending_prompt(&mut self) -> (Option<String>, Option<String>) {
-        (self.pending_skill_id.take(), self.pending_skill_name.take())
+    pub fn clear_pending_prompt(&mut self) {
+        self.pending = None;
+    }
+
+    pub fn pending_prompt(&self) -> Option<&PendingPrompt> {
+        self.pending.as_ref()
+    }
+
+    pub fn target_locked(&self) -> bool {
+        self.target_locked
+    }
+
+    /// Keeps only the Shift+click skill that started this very recording.
+    pub fn reset_target_for_start(&mut self, action_id: Option<&str>) {
+        let keep = self.pending.as_ref().is_some_and(|pending| {
+            pending.origin == PendingOrigin::ShiftClick && Some(pending.id.as_str()) == action_id
+        });
+        if !keep {
+            self.pending = None;
+        }
+        self.target_locked = false;
+    }
+
+    pub fn select_target(&mut self, id: &str, name: &str) -> Result<(), TargetLocked> {
+        if self.target_locked {
+            return Err(TargetLocked);
+        }
+        self.pending = (id != DICTATION_ID).then(|| PendingPrompt {
+            id: id.to_string(),
+            name: name.to_string(),
+            origin: PendingOrigin::Pill,
+        });
+        Ok(())
+    }
+
+    /// Takes the pending skill and locks the target in one step, so a pill
+    /// selection cannot slip in between.
+    pub fn take_pending_prompt(&mut self) -> Option<PendingPrompt> {
+        self.target_locked = true;
+        self.pending.take()
     }
 
     /// Manual retries are tracked per history entry rather than through
@@ -407,12 +465,12 @@ mod tests {
         let mut service = SpeechService::new();
         service.is_recording = true;
         service.started_at = Some(Instant::now());
-        service.set_pending_prompt(Some("prompt-1".to_string()), Some("Prompt One".to_string()));
+        service.set_pending_prompt("prompt-1".into(), "Prompt One".into(), PendingOrigin::ShiftClick);
 
         assert!(service.cancel_recording().is_ok());
         assert!(!service.is_recording());
         assert!(!service.is_transcribing());
-        assert_eq!(service.take_pending_prompt(), (None, None));
+        assert_eq!(service.take_pending_prompt(), None);
     }
 
     #[test]
@@ -476,12 +534,76 @@ mod tests {
     #[test]
     fn pending_prompt_lifecycle() {
         let mut service = SpeechService::new();
-        assert_eq!(service.take_pending_prompt(), (None, None));
+        assert_eq!(service.take_pending_prompt(), None);
 
-        service.set_pending_prompt(Some("prompt-1".to_string()), Some("Prompt One".to_string()));
-        let (id, name) = service.take_pending_prompt();
-        assert_eq!(id, Some("prompt-1".to_string()));
-        assert_eq!(name, Some("Prompt One".to_string()));
-        assert_eq!(service.take_pending_prompt(), (None, None));
+        service.set_pending_prompt("prompt-1".into(), "Prompt One".into(), PendingOrigin::ShiftClick);
+        let pending = service.take_pending_prompt().unwrap();
+        assert_eq!(pending.id, "prompt-1");
+        assert_eq!(pending.name, "Prompt One");
+        assert_eq!(pending.origin, PendingOrigin::ShiftClick);
+        assert_eq!(service.take_pending_prompt(), None);
+    }
+
+    #[test]
+    fn selecting_a_skill_sets_the_slot_with_pill_origin() {
+        let mut service = SpeechService::new();
+        service.select_target("fix", "Fix").unwrap();
+        assert_eq!(
+            service.pending_prompt(),
+            Some(&PendingPrompt {
+                id: "fix".into(),
+                name: "Fix".into(),
+                origin: PendingOrigin::Pill
+            })
+        );
+    }
+
+    #[test]
+    fn selecting_plain_dictation_clears_the_slot() {
+        let mut service = SpeechService::new();
+        service.select_target("fix", "Fix").unwrap();
+        service.select_target(DICTATION_ID, DICTATION_LABEL).unwrap();
+        assert_eq!(service.pending_prompt(), None);
+    }
+
+    #[test]
+    fn selection_is_rejected_after_the_take() {
+        let mut service = SpeechService::new();
+        service.select_target("fix", "Fix").unwrap();
+        service.take_pending_prompt();
+        assert!(service.target_locked());
+        assert_eq!(service.select_target("other", "Other"), Err(TargetLocked));
+        assert_eq!(service.pending_prompt(), None);
+    }
+
+    #[test]
+    fn reset_without_shift_click_drops_the_previous_pending_skill() {
+        let mut service = SpeechService::new();
+        service.select_target("fix", "Fix").unwrap();
+        service.take_pending_prompt();
+        service.set_pending_prompt("stale".into(), "Stale".into(), PendingOrigin::Pill);
+        service.reset_target_for_start(None);
+        assert_eq!(service.pending_prompt(), None);
+        assert!(!service.target_locked());
+    }
+
+    #[test]
+    fn reset_with_the_matching_shift_click_keeps_it() {
+        let mut service = SpeechService::new();
+        service.set_pending_prompt("fix".into(), "Fix".into(), PendingOrigin::ShiftClick);
+        service.reset_target_for_start(Some("fix"));
+        assert_eq!(service.pending_prompt().map(|p| p.id.as_str()), Some("fix"));
+    }
+
+    #[test]
+    fn reset_drops_a_pill_selection_and_a_shift_click_for_another_skill() {
+        let mut service = SpeechService::new();
+        service.select_target("fix", "Fix").unwrap();
+        service.reset_target_for_start(Some("fix"));
+        assert_eq!(service.pending_prompt(), None);
+
+        service.set_pending_prompt("fix".into(), "Fix".into(), PendingOrigin::ShiftClick);
+        service.reset_target_for_start(Some("other"));
+        assert_eq!(service.pending_prompt(), None);
     }
 }

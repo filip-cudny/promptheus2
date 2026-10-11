@@ -50,10 +50,29 @@ pub trait Shell {
         elapsed_ms: u32,
     ) -> zbus::Result<()>;
 
+    #[allow(clippy::too_many_arguments)]
+    fn update_recording_widget_model(
+        &self,
+        targets: Vec<(String, String)>,
+        selected_id: &str,
+        selected_label: &str,
+        target_locked: bool,
+        items: Vec<(u32, String, String)>,
+        context_version: u64,
+        x: i32,
+        y: i32,
+    ) -> zbus::Result<()>;
+
     fn hide_recording_widget(&self) -> zbus::Result<()>;
 
     #[zbus(signal)]
     fn recording_widget_action(&self, action: String) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    fn recording_widget_target_selected(&self, id: String) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    fn recording_widget_item_removed(&self, index: u32, context_version: u64) -> zbus::Result<()>;
 
     #[zbus(signal)]
     fn recording_widget_moved(

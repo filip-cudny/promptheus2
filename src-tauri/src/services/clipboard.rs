@@ -67,6 +67,16 @@ impl ClipboardService {
         clipboard.get_image().is_ok()
     }
 
+    pub fn has_file_list(&self) -> bool {
+        let Ok(mut clipboard) = arboard::Clipboard::new() else {
+            return false;
+        };
+        clipboard
+            .get()
+            .file_list()
+            .is_ok_and(|files| !files.is_empty())
+    }
+
     pub fn get_image_base64(&self) -> Result<(String, String), ClipboardError> {
         let mut clipboard = arboard::Clipboard::new()
             .map_err(|e| ClipboardError::Access(e.to_string()))?;
@@ -92,6 +102,24 @@ impl ClipboardService {
             base64::engine::general_purpose::STANDARD.encode(png_bytes.into_inner());
 
         Ok((base64_data, "image/png".into()))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasteKind {
+    Nothing,
+    Image,
+    Text,
+}
+
+/// Files are not pasteable items yet, even when the clipboard also offers an image or text.
+pub fn paste_kind(has_file_list: bool, has_image: bool) -> PasteKind {
+    if has_file_list {
+        PasteKind::Nothing
+    } else if has_image {
+        PasteKind::Image
+    } else {
+        PasteKind::Text
     }
 }
 
@@ -162,6 +190,18 @@ impl ClipboardService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_file_list_blocks_paste_even_with_an_image_or_text() {
+        assert_eq!(paste_kind(true, true), PasteKind::Nothing);
+        assert_eq!(paste_kind(true, false), PasteKind::Nothing);
+    }
+
+    #[test]
+    fn paste_prefers_an_image_over_text() {
+        assert_eq!(paste_kind(false, true), PasteKind::Image);
+        assert_eq!(paste_kind(false, false), PasteKind::Text);
+    }
 
     #[test]
     fn error_display() {

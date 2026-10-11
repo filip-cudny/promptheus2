@@ -123,6 +123,8 @@ async fn run_shell_shortcuts(app: tauri::AppHandle, initial_settings: Settings) 
 
     let mut widget_actions = subscribe_or_warn(proxy.receive_recording_widget_action().await);
     let mut widget_moves = subscribe_or_warn(proxy.receive_recording_widget_moved().await);
+    let mut widget_targets = subscribe_or_warn(proxy.receive_recording_widget_target_selected().await);
+    let mut widget_removals = subscribe_or_warn(proxy.receive_recording_widget_item_removed().await);
 
     loop {
         tokio::select! {
@@ -138,6 +140,34 @@ async fn run_shell_shortcuts(app: tauri::AppHandle, initial_settings: Settings) 
                 tauri::async_runtime::spawn(async move {
                     run_widget_action(app, &action).await;
                 });
+            }
+            Some(signal) = next_signal(&mut widget_targets) => {
+                match signal.args() {
+                    Ok(args) => {
+                        let id = args.id.to_string();
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(e) = crate::commands::speech::select_recording_widget_target(app, id).await {
+                                log::warn!("recording widget target selection failed: {e}");
+                            }
+                        });
+                    }
+                    Err(e) => log::warn!("invalid RecordingWidgetTargetSelected signal: {e}"),
+                }
+            }
+            Some(signal) = next_signal(&mut widget_removals) => {
+                match signal.args() {
+                    Ok(args) => {
+                        let (index, version) = (args.index, args.context_version);
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(e) = crate::commands::speech::remove_recording_widget_item(app, index, version).await {
+                                log::warn!("recording widget item removal failed: {e}");
+                            }
+                        });
+                    }
+                    Err(e) => log::warn!("invalid RecordingWidgetItemRemoved signal: {e}"),
+                }
             }
             Some(signal) = next_signal(&mut widget_moves) => {
                 match signal.args() {
@@ -212,6 +242,7 @@ async fn run_widget_action(app: tauri::AppHandle, action: &str) {
         "resume" => speech::resume_speech_recording(app).await,
         "stop" => speech::toggle_speech_recording(app, None).await,
         "cancel" => speech::cancel_speech_recording(app).await,
+        "paste" => speech::paste_into_recording_widget(app).await,
         other => {
             log::warn!("unknown recording widget action: {other}");
             return;

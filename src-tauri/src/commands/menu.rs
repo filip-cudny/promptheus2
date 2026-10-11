@@ -14,7 +14,7 @@ use crate::services::execution::PromptExecutionService;
 use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::monitor::{clamp_origin, find_monitor_at};
 use crate::services::skill::{strip_skill_prefix, SkillService};
-use crate::services::speech::{AudioClipStore, SpeechService};
+use crate::services::speech::{AudioClipStore, PendingOrigin, SpeechService};
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
 
@@ -220,7 +220,7 @@ pub async fn execute_menu_item(
                 drop(s);
                 return super::speech::toggle_speech_recording(app, None).await;
             }
-            s.set_pending_prompt(Some(item_id.clone()), Some(display_name));
+            s.set_pending_prompt(item_id.clone(), display_name, PendingOrigin::ShiftClick);
             drop(s);
             return super::speech::toggle_speech_recording(app, Some(item_id)).await;
         }
