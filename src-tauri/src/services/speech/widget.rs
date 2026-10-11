@@ -866,12 +866,8 @@ impl RecordingWidget {
 
     pub async fn close_dropdown(&self, app: &AppHandle) {
         let mut inner = self.inner.lock().await;
-        self.close_dropdown_locked(app, &mut inner);
-    }
-
-    fn close_dropdown_locked(&self, app: &AppHandle, inner: &mut Inner) -> bool {
         if inner.dropdown.take().is_none() {
-            return false;
+            return;
         }
         let scale = inner.scale;
         let size = physical_size(pill_size(inner.has_items), scale);
@@ -882,7 +878,6 @@ impl RecordingWidget {
             log::debug!("recording widget: dropdown close origin={:?} size={size:?}", placement.origin);
             self.apply_frame(app, placement.origin, size, scale);
         }
-        true
     }
 
     pub fn shell_moved(&self, app: &AppHandle, placement: Placement) {
