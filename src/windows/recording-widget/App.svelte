@@ -44,6 +44,7 @@
     targetLocked: boolean;
     items: PillItem[];
     contextVersion: number;
+    dropdownUp: boolean;
   }
 
   const PILL_WIDTH = 240;
@@ -80,9 +81,9 @@
     targetLocked: false,
     items: [],
     contextVersion: 0,
+    dropdownUp: false,
   });
   let dropdownOpen = $state(false);
-  let dropdownUp = $state(false);
   let unlisteners: UnlistenFn[] = [];
 
   const clock = $derived.by(() => {
@@ -126,11 +127,10 @@
   async function openDropdown() {
     if (model.targets.length === 0) return;
     try {
-      const direction = await invoke<string>("set_recording_widget_dropdown", {
+      await invoke("set_recording_widget_dropdown", {
         open: true,
         rows: model.targets.length,
       });
-      dropdownUp = direction === "up";
       dropdownOpen = true;
     } catch (e) {
       logError(`set_recording_widget_dropdown failed: ${e}`);
@@ -172,7 +172,7 @@
   onDestroy(() => unlisteners.forEach((unlisten) => unlisten()));
 </script>
 
-<div class="root" class:up={dropdownUp} style:--radius="{RADIUS}px">
+<div class="root" class:up={model.dropdownUp} style:--radius="{RADIUS}px">
   <div class="pill" class:mac={isMac} style:height="{pillHeight}px" style:padding="0 {PADDING_X}px" data-tauri-drag-region>
     {#if hasItems}
       <div class="row items" style:height="{ITEMS_ROW_HEIGHT}px" data-tauri-drag-region>
@@ -246,7 +246,7 @@
           onclick={() => (dropdownOpen ? closeDropdown() : openDropdown())}
         >
           <span class="label">{model.selectedLabel}</span>
-          {#if dropdownUp}<ChevronUp size={14} />{:else}<ChevronDown size={14} />{/if}
+          {#if model.dropdownUp}<ChevronUp size={14} />{:else}<ChevronDown size={14} />{/if}
         </button>
         <button type="button" tabindex="-1" aria-label="Paste" onclick={() => run("paste_into_recording_widget")}>
           <ClipboardPaste size={16} />

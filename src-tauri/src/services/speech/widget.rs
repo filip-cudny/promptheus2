@@ -106,6 +106,7 @@ pub struct PillModel {
     pub context_version: u64,
     pub x: i32,
     pub y: i32,
+    pub dropdown_up: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -278,6 +279,7 @@ pub fn build_model(
         context_version,
         x: origin.0,
         y: origin.1,
+        dropdown_up: false,
     }
 }
 
@@ -299,6 +301,7 @@ fn window_payload(model: &PillModel) -> serde_json::Value {
         "contextVersion": model.context_version,
         "x": model.x,
         "y": model.y,
+        "dropdownUp": model.dropdown_up,
     })
 }
 
@@ -718,11 +721,15 @@ impl RecordingWidget {
         Ok((Placement { origin, work_area }, scale))
     }
 
-    fn set_window_origin(&self, window: &tauri::WebviewWindow, origin: (f64, f64)) -> Result<(), String> {
+    fn mark_programmatic(&self, origin: (f64, f64)) {
         *self
             .programmatic_origin
             .lock()
             .unwrap_or_else(|e| e.into_inner()) = Some((origin.0 as i32, origin.1 as i32));
+    }
+
+    fn set_window_origin(&self, window: &tauri::WebviewWindow, origin: (f64, f64)) -> Result<(), String> {
+        self.mark_programmatic(origin);
         window
             .set_position(PhysicalPosition::new(origin.0 as i32, origin.1 as i32))
             .map_err(|e| e.to_string())
@@ -819,12 +826,9 @@ impl RecordingWidget {
             log::warn!("recording widget frame skipped: window not found");
             return;
         };
-        *self
-            .programmatic_origin
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = Some((origin.0 as i32, origin.1 as i32));
         #[cfg(target_os = "macos")]
         let applied = {
+            self.mark_programmatic(origin);
             let primary_height_points = app
                 .primary_monitor()
                 .ok()
@@ -837,8 +841,8 @@ impl RecordingWidget {
             let _ = scale;
             window
                 .set_size(PhysicalSize::new(size.0 as u32, size.1 as u32))
-                .and_then(|_| window.set_position(PhysicalPosition::new(origin.0 as i32, origin.1 as i32)))
                 .map_err(|e| e.to_string())
+                .and_then(|_| self.set_window_origin(&window, origin))
         };
         if let Err(e) = applied {
             log::warn!("setting the recording widget frame failed: {e}");
@@ -947,7 +951,11 @@ async fn push_model(app: &AppHandle, inner: &mut Inner) {
     let origin = inner
         .placement
         .map_or((0, 0), |p| (p.origin.0.round() as i32, p.origin.1.round() as i32));
-    let model = gather_model(app, origin).await;
+    let mut model = gather_model(app, origin).await;
+    if let Some(placement) = inner.placement {
+        let pill_height = physical_size(pill_size(inner.has_items), inner.scale).1 as f64;
+        model.dropdown_up = dropdown_opens_up(placement.origin.1, pill_height, placement.work_area);
+    }
     let result = match transport {
         #[cfg(target_os = "linux")]
         Transport::Shell => match &inner.shell {
