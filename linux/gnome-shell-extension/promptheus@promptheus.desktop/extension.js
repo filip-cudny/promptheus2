@@ -740,6 +740,7 @@ export default class PromptheusExtension extends Extension {
 
     _widgetChip(kind, label, onRemove) {
         const chip = new St.BoxLayout({
+            reactive: true,
             y_align: Clutter.ActorAlign.CENTER,
             style: 'height: 22px; padding: 0 6px; spacing: 4px; border-radius: 11px; ' +
                 'background-color: rgba(255,255,255,0.12); font-size: 11px;',
