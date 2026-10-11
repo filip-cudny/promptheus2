@@ -1,6 +1,6 @@
 ---
 name: translate
-display_name: Translate PL ↔ EN
+display_name: Translate → PL/EN
 description: Translate Polish text into English and text in any other language into Polish, keeping tone and formatting
 ---
 
