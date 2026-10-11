@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "bundle:linux": "tauri build --bundles deb",
-    "bundle:mac": "tauri build --bundles app,dmg"
+    "bundle:mac": "tauri build --bundles app"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
