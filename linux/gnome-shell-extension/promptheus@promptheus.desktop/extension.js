@@ -4,6 +4,7 @@ import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
 import St from 'gi://St';
 import Clutter from 'gi://Clutter';
+import Pango from 'gi://Pango';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
@@ -18,13 +19,17 @@ const TOAST_HIDE_ANIMATION_MS = 150;
 const WIDGET_WIDTH = 240;
 const WIDGET_HEIGHT = 80;
 const WIDGET_ROW_HEIGHT = WIDGET_HEIGHT / 2;
-const WIDGET_ITEMS_ROW_HEIGHT = 32;
 const WIDGET_RADIUS = 16;
 const WIDGET_ITEM_GAP = 4;
-const WIDGET_ITEM_CHAR_WIDTH = 7;
-const WIDGET_ITEM_CHIP_BASE_WIDTH = 28;
-const WIDGET_ITEM_REMOVE_WIDTH = 16;
-const WIDGET_ITEM_OVERFLOW_WIDTH = 32;
+const WIDGET_MAX_ITEM_ROWS = 3;
+const WIDGET_ITEM_ROW_HEIGHT = 22;
+const WIDGET_ITEM_ROW_GAP = 4;
+const WIDGET_ITEMS_ROW_PADDING = 10;
+const WIDGET_PREVIEW_WIDTH = 240;
+const WIDGET_PREVIEW_MAX_HEIGHT = 160;
+const WIDGET_PREVIEW_GAP = 6;
+const WIDGET_PREVIEW_DELAY_MS = 300;
+const WIDGET_PREVIEW_PADDING = 8;
 const WIDGET_DROPDOWN_ROW_HEIGHT = 28;
 const WIDGET_DROPDOWN_PADDING = 4;
 const WIDGET_DEFAULT_TARGET_LABEL = 'Dictation';
@@ -75,24 +80,15 @@ function emptyWidgetModel() {
         selectedLabel: WIDGET_DEFAULT_TARGET_LABEL,
         locked: false,
         items: [],
+        itemRows: 0,
         version: 0,
     };
 }
 
-function visibleWidgetItems(items, locked) {
-    const available = WIDGET_WIDTH - 2 * WIDGET_PADDING_X;
-    const shown = [];
-    let used = 0;
-    for (const [i, item] of items.entries()) {
-        const width = WIDGET_ITEM_CHIP_BASE_WIDTH + item[2].length * WIDGET_ITEM_CHAR_WIDTH +
-            (locked ? 0 : WIDGET_ITEM_REMOVE_WIDTH);
-        const overflow = i < items.length - 1 ? WIDGET_ITEM_GAP + WIDGET_ITEM_OVERFLOW_WIDTH : 0;
-        if (used + width + overflow > available)
-            break;
-        shown.push(item);
-        used += width + WIDGET_ITEM_GAP;
-    }
-    return {shown, hidden: items.length - shown.length};
+function widgetItemsHeight(rows) {
+    if (rows <= 0)
+        return 0;
+    return rows * WIDGET_ITEM_ROW_HEIGHT + (rows - 1) * WIDGET_ITEM_ROW_GAP + WIDGET_ITEMS_ROW_PADDING;
 }
 
 function formatElapsed(elapsedMs) {
@@ -160,7 +156,8 @@ const INTERFACE_XML = `
       <arg type="s" direction="in" name="selected_id"/>
       <arg type="s" direction="in" name="selected_label"/>
       <arg type="b" direction="in" name="target_locked"/>
-      <arg type="a(uss)" direction="in" name="items"/>
+      <arg type="a(ussss)" direction="in" name="items"/>
+      <arg type="u" direction="in" name="item_rows"/>
       <arg type="t" direction="in" name="context_version"/>
       <arg type="i" direction="in" name="x"/>
       <arg type="i" direction="in" name="y"/>
@@ -426,11 +423,11 @@ export default class PromptheusExtension extends Extension {
             widget.timeLabel.text = widget.elapsed;
     }
 
-    UpdateRecordingWidgetModel(targets, selectedId, selectedLabel, locked, items, version, x, y) {
+    UpdateRecordingWidgetModel(targets, selectedId, selectedLabel, locked, items, itemRows, version, x, y) {
         const widget = this._widget;
         if (!widget)
             throw new Error('Recording widget is not shown');
-        widget.model = {targets, selectedId, selectedLabel, locked, items, version};
+        widget.model = {targets, selectedId, selectedLabel, locked, items, itemRows, version};
         widget.actor.set_position(x, y);
         this._fillRow2(widget);
         this._fillItems(widget);
@@ -450,6 +447,7 @@ export default class PromptheusExtension extends Extension {
         this._widget = null;
         this._endWidgetDrag(widget);
         this._closeDropdown(widget);
+        this._closePreview(widget);
         this._clearWidgetContent(widget);
         widget.actor.remove_all_transitions();
         Main.layoutManager.removeChrome(widget.actor);
@@ -486,7 +484,9 @@ export default class PromptheusExtension extends Extension {
             actor,
             state: null,
             model: emptyWidgetModel(),
-            itemsRow: this._widgetRow(WIDGET_ITEMS_ROW_HEIGHT),
+            itemsRow: this._widgetRow(0),
+            preview: null,
+            previewId: 0,
             row1: this._widgetRow(WIDGET_ROW_HEIGHT),
             row2: this._widgetRow(WIDGET_ROW_HEIGHT),
             dropdown: null,
@@ -500,7 +500,6 @@ export default class PromptheusExtension extends Extension {
             dragId: 0,
         };
         widget.itemsRow.visible = false;
-        widget.itemsRow.style += ` spacing: ${WIDGET_ITEM_GAP}px;`;
         widget.row2.style += ' spacing: 6px;';
         actor.add_child(widget.itemsRow);
         actor.add_child(widget.row1);
@@ -526,8 +525,10 @@ export default class PromptheusExtension extends Extension {
                 const [x, y] = e.get_coords();
                 if (!dragging && Math.hypot(x - pressX, y - pressY) <= WIDGET_DRAG_THRESHOLD_PX)
                     return Clutter.EVENT_PROPAGATE;
-                if (!dragging)
+                if (!dragging) {
                     this._closeDropdown(widget);
+                    this._closePreview(widget);
+                }
                 dragging = true;
                 widget.actor.set_position(Math.round(x - offsetX), Math.round(y - offsetY));
                 return Clutter.EVENT_STOP;
@@ -577,7 +578,7 @@ export default class PromptheusExtension extends Extension {
     }
 
     _applyWidgetSize(widget) {
-        const height = WIDGET_HEIGHT + (widget.model.items.length > 0 ? WIDGET_ITEMS_ROW_HEIGHT : 0);
+        const height = WIDGET_HEIGHT + widgetItemsHeight(widget.model.itemRows);
         widget.actor.set_size(WIDGET_WIDTH, height);
     }
 
@@ -727,33 +728,115 @@ export default class PromptheusExtension extends Extension {
     }
 
     _fillItems(widget) {
-        const {items, locked, version} = widget.model;
+        const {items, locked, itemRows, version} = widget.model;
+        this._closePreview(widget);
         widget.itemsRow.destroy_all_children();
         widget.itemsRow.visible = items.length > 0;
-        const {shown, hidden} = visibleWidgetItems(items, locked);
-        for (const [index, kind, label] of shown)
-            widget.itemsRow.add_child(this._widgetChip(kind, label, locked ? null : () =>
-                this._emitRecordingWidgetItemRemoved(index, version)));
-        if (hidden > 0)
-            widget.itemsRow.add_child(this._widgetChip(null, `+${hidden}`, null));
+        widget.itemsRow.style = `height: ${widgetItemsHeight(itemRows)}px; padding: ${WIDGET_ITEMS_ROW_PADDING / 2}px ${WIDGET_PADDING_X}px;`;
+        const flow = new St.Viewport({
+            layout_manager: new Clutter.FlowLayout({
+                orientation: Clutter.Orientation.HORIZONTAL,
+                column_spacing: WIDGET_ITEM_ROW_GAP,
+                row_spacing: WIDGET_ITEM_ROW_GAP,
+            }),
+        });
+        for (const [index, kind, label, preview, imagePath] of items) {
+            flow.add_child(this._widgetChip(widget, kind, label, kind === 'image' ? '' : preview, imagePath,
+                locked ? null : () => this._emitRecordingWidgetItemRemoved(index, version)));
+        }
+        const scroll = new St.ScrollView({
+            overlay_scrollbars: true,
+            hscrollbar_policy: St.PolicyType.NEVER,
+            vscrollbar_policy: St.PolicyType.AUTOMATIC,
+            x_expand: true,
+            y_expand: true,
+        });
+        scroll.set_child(flow);
+        widget.itemsRow.add_child(scroll);
     }
 
-    _widgetChip(kind, label, onRemove) {
+    _widgetChip(widget, kind, label, text, imagePath, onRemove) {
         const chip = new St.BoxLayout({
             reactive: true,
+            track_hover: true,
             y_align: Clutter.ActorAlign.CENTER,
-            style: 'height: 22px; padding: 0 6px; spacing: 4px; border-radius: 11px; ' +
+            style: `height: ${WIDGET_ITEM_ROW_HEIGHT}px; padding: 0 6px; spacing: 4px; border-radius: 11px; ` +
                 'background-color: rgba(255,255,255,0.12); font-size: 11px;',
         });
         chip.isWidgetChip = true;
-        if (kind)
-            chip.add_child(this._widgetIcon(`item-${kind}`, 12));
+        chip.add_child(this._widgetIcon(`item-${kind}`, 12));
         chip.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
         if (onRemove) {
             chip.add_child(this._widgetButton(this._widgetIcon('item-remove', 12), onRemove,
                 'width: 16px; height: 16px; border-radius: 8px;'));
         }
+        chip.connect('notify::hover', () => {
+            if (chip.hover)
+                this._schedulePreview(widget, chip, text, imagePath);
+            else
+                this._closePreview(widget);
+        });
         return chip;
+    }
+
+    _schedulePreview(widget, chip, text, imagePath) {
+        this._closePreview(widget);
+        if (widget.dropdown || (!text && !imagePath))
+            return;
+        widget.previewId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, WIDGET_PREVIEW_DELAY_MS, () => {
+            widget.previewId = 0;
+            this._showPreview(widget, text, imagePath);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _showPreview(widget, text, imagePath) {
+        if (widget.dropdown)
+            return;
+        const style = 'background-color: #252629; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; ' +
+            'color: #e5e5e7; font-family: "Noto Sans", sans-serif; font-size: 12px;';
+        let popover;
+        if (imagePath) {
+            popover = new St.Widget({
+                reactive: false,
+                style: `${style} background-image: url("file://${imagePath}"); background-size: contain; ` +
+                    'background-position: center; background-repeat: no-repeat;',
+            });
+            popover.set_size(WIDGET_PREVIEW_WIDTH, WIDGET_PREVIEW_MAX_HEIGHT);
+        } else {
+            const label = new St.Label({text});
+            label.clutter_text.line_wrap = true;
+            label.clutter_text.line_wrap_mode = Pango.WrapMode.WORD_CHAR;
+            label.clutter_text.ellipsize = Pango.EllipsizeMode.NONE;
+            popover = new St.Bin({
+                reactive: false,
+                style: `${style} padding: ${WIDGET_PREVIEW_PADDING}px;`,
+                child: label,
+                clip_to_allocation: true,
+            });
+            const innerWidth = WIDGET_PREVIEW_WIDTH - 2 * WIDGET_PREVIEW_PADDING;
+            const [, natural] = label.get_preferred_height(innerWidth);
+            popover.set_size(WIDGET_PREVIEW_WIDTH,
+                Math.min(natural + 2 * WIDGET_PREVIEW_PADDING, WIDGET_PREVIEW_MAX_HEIGHT));
+        }
+        const {actor} = widget;
+        const y = this._dropdownAbove(widget)
+            ? actor.y - popover.height - WIDGET_PREVIEW_GAP
+            : actor.y + actor.height + WIDGET_PREVIEW_GAP;
+        popover.set_position(actor.x, y);
+        Main.layoutManager.uiGroup.add_child(popover);
+        widget.preview = popover;
+    }
+
+    _closePreview(widget) {
+        if (widget.previewId) {
+            GLib.Source.remove(widget.previewId);
+            widget.previewId = 0;
+        }
+        if (widget.preview) {
+            widget.preview.destroy();
+            widget.preview = null;
+        }
     }
 
     _dropdownAbove(widget) {
@@ -773,6 +856,7 @@ export default class PromptheusExtension extends Extension {
 
     _openDropdown(widget) {
         this._closeDropdown(widget);
+        this._closePreview(widget);
         const {targets, selectedId} = widget.model;
         if (targets.length === 0)
             return;
