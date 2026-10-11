@@ -741,7 +741,7 @@ impl RecordingWidget {
     }
 
     fn resize_locked(&self, app: &AppHandle, inner: &mut Inner, has_items: bool) {
-        if self.close_dropdown_locked(app, inner) {
+        if inner.dropdown.take().is_some() {
             let _ = app.emit_to(WINDOW_LABEL, DROPDOWN_CLOSED_EVENT, ());
         }
         let scale = inner.scale;
@@ -767,18 +767,7 @@ impl RecordingWidget {
         }
         let origin = placement.origin;
         let size = physical_size((width, new_height), scale);
-        let applied = app
-            .get_webview_window(WINDOW_LABEL)
-            .ok_or_else(|| "recording-widget window not found".to_string())
-            .and_then(|window| {
-                window
-                    .set_size(PhysicalSize::new(size.0, size.1))
-                    .map_err(|e| e.to_string())?;
-                self.set_window_origin(&window, origin)
-            });
-        if let Err(e) = applied {
-            log::warn!("resizing the recording widget failed: {e}");
-        }
+        self.apply_frame(app, origin, (size.0 as f64, size.1 as f64), scale);
     }
 
     fn record_move(&self, app: &AppHandle, position: (i32, i32)) {
