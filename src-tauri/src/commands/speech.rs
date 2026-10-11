@@ -989,6 +989,22 @@ pub async fn select_recording_widget_target(app: AppHandle, id: String) -> crate
 }
 
 #[tauri::command]
+pub async fn set_recording_widget_dropdown(
+    app: AppHandle,
+    open: bool,
+    rows: u32,
+) -> crate::Result<&'static str> {
+    log::debug!("recording widget intent: dropdown open={open} rows={rows}");
+    let widget = app.state::<RecordingWidget>();
+    if !open {
+        widget.close_dropdown(&app).await;
+        return Ok("down");
+    }
+    let up = widget.open_dropdown(&app, rows).await?;
+    Ok(if up { "up" } else { "down" })
+}
+
+#[tauri::command]
 pub async fn remove_recording_widget_item(
     app: AppHandle,
     index: u32,

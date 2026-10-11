@@ -23,6 +23,7 @@ pub const SHELL_POSITION_KEY: &str = "recording_widget.shell_position";
 
 const STATE_EVENT: &str = "recording-widget-state";
 const MODEL_EVENT: &str = "recording-widget-model";
+const DROPDOWN_CLOSED_EVENT: &str = "recording-widget-dropdown-closed";
 const TICK: Duration = Duration::from_millis(50);
 const DONE_VISIBLE: Duration = Duration::from_secs(1);
 const MOVE_DEBOUNCE: Duration = Duration::from_millis(500);
@@ -35,6 +36,8 @@ const BOTTOM_MARGIN: f64 = 24.0;
 const PILL_WIDTH: f64 = 240.0;
 const PILL_HEIGHT: f64 = 80.0;
 const ITEMS_ROW_HEIGHT: f64 = 32.0;
+const DROPDOWN_ROW_HEIGHT: f64 = 28.0;
+const DROPDOWN_PADDING: f64 = 4.0;
 
 type Rect = (i32, i32, u32, u32);
 type WorkArea = (f64, f64, f64, f64);
@@ -105,6 +108,12 @@ pub struct PillModel {
     pub y: i32,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct Dropdown {
+    up: bool,
+    list_height: f64,
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 struct WidgetSettings {
     enabled: bool,
@@ -123,6 +132,7 @@ struct Inner {
     placement: Option<Placement>,
     has_items: bool,
     scale: f64,
+    dropdown: Option<Dropdown>,
     #[cfg(target_os = "linux")]
     shell: Option<crate::services::gnome_shell::ShellProxy<'static>>,
 }
@@ -195,6 +205,26 @@ pub fn regrow_origin(
         (width, new_height),
         work_area,
     )
+}
+
+pub fn dropdown_opens_up(pill_origin_y: f64, pill_height: f64, work_area: WorkArea) -> bool {
+    pill_origin_y + pill_height / 2.0 > work_area.1 + work_area.3 / 2.0
+}
+
+pub fn dropdown_height(rows: u32) -> f64 {
+    rows as f64 * DROPDOWN_ROW_HEIGHT + 2.0 * DROPDOWN_PADDING
+}
+
+pub fn grown_frame(
+    origin: (f64, f64),
+    size: (f64, f64),
+    list_height: f64,
+    up: bool,
+    work_area: WorkArea,
+) -> ((f64, f64), (f64, f64)) {
+    let grown = (size.0, size.1 + list_height);
+    let top = if up { origin.1 - list_height } else { origin.1 };
+    (clamp_origin((origin.0, top), grown, work_area), grown)
 }
 
 pub fn pill_targets(skills: &[Skill]) -> Vec<(String, String)> {
@@ -449,6 +479,7 @@ impl RecordingWidget {
                 placement: None,
                 has_items: false,
                 scale: 1.0,
+                dropdown: None,
                 #[cfg(target_os = "linux")]
                 shell: None,
             }),
@@ -486,6 +517,7 @@ impl RecordingWidget {
         inner.monochromatic = settings.monochromatic;
         inner.update_failed = false;
         inner.placement = None;
+        inner.dropdown = None;
         inner.transport = None;
         #[cfg(target_os = "linux")]
         {
@@ -609,6 +641,9 @@ impl RecordingWidget {
         };
         log::debug!("recording widget: close session={}", inner.session);
         inner.generation += 1;
+        if inner.dropdown.take().is_some() {
+            let _ = app.emit_to(WINDOW_LABEL, DROPDOWN_CLOSED_EVENT, ());
+        }
         let result = match transport {
             #[cfg(target_os = "linux")]
             Transport::Shell => match inner.shell.take() {
@@ -706,6 +741,9 @@ impl RecordingWidget {
     }
 
     fn resize_locked(&self, app: &AppHandle, inner: &mut Inner, has_items: bool) {
+        if self.close_dropdown_locked(app, inner) {
+            let _ = app.emit_to(WINDOW_LABEL, DROPDOWN_CLOSED_EVENT, ());
+        }
         let scale = inner.scale;
         let (width, old_height) = pill_size(inner.has_items);
         let new_height = pill_size(has_items).1;
@@ -754,14 +792,108 @@ impl RecordingWidget {
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
             let widget = app.state::<RecordingWidget>();
+            let mut stored = position;
             if let Ok(monitor) = find_monitor_at(&app, position.0, position.1) {
-                widget.inner.lock().await.placement = Some(Placement {
-                    origin: (position.0 as f64, position.1 as f64),
-                    work_area: work_area_of(&monitor),
-                });
+                let work_area = work_area_of(&monitor);
+                let mut inner = widget.inner.lock().await;
+                inner.scale = monitor.scale_factor();
+                let origin = match inner.dropdown.take() {
+                    Some(dropdown) => {
+                        let top = if dropdown.up {
+                            position.1 as f64 + dropdown.list_height
+                        } else {
+                            position.1 as f64
+                        };
+                        let size = physical_size(pill_size(inner.has_items), inner.scale);
+                        let origin = clamp_origin(
+                            (position.0 as f64, top),
+                            (size.0 as f64, size.1 as f64),
+                            work_area,
+                        );
+                        let origin = (origin.0.round(), origin.1.round());
+                        log::debug!("recording widget: dropdown closed by drag origin={origin:?} size={size:?}");
+                        widget.apply_frame(&app, origin, (size.0 as f64, size.1 as f64), inner.scale);
+                        let _ = app.emit_to(WINDOW_LABEL, DROPDOWN_CLOSED_EVENT, ());
+                        origin
+                    }
+                    None => (position.0 as f64, position.1 as f64),
+                };
+                inner.placement = Some(Placement { origin, work_area });
+                stored = (origin.0 as i32, origin.1 as i32);
             }
-            widget.store_drag_debounced(&app, WINDOW_POSITION_KEY, position).await;
+            widget.store_drag_debounced(&app, WINDOW_POSITION_KEY, stored).await;
         });
+    }
+
+    fn apply_frame(&self, app: &AppHandle, origin: (f64, f64), size: (f64, f64), scale: f64) {
+        let Some(window) = app.get_webview_window(WINDOW_LABEL) else {
+            log::warn!("recording widget frame skipped: window not found");
+            return;
+        };
+        *self
+            .programmatic_origin
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some((origin.0 as i32, origin.1 as i32));
+        #[cfg(target_os = "macos")]
+        let applied = {
+            let primary_height_points = app
+                .primary_monitor()
+                .ok()
+                .flatten()
+                .map_or(0.0, |m| m.size().height as f64 / m.scale_factor());
+            crate::services::macos_panel::set_frame_physical(&window, origin, size, scale, primary_height_points)
+        };
+        #[cfg(not(target_os = "macos"))]
+        let applied = {
+            let _ = scale;
+            window
+                .set_size(PhysicalSize::new(size.0 as u32, size.1 as u32))
+                .and_then(|_| window.set_position(PhysicalPosition::new(origin.0 as i32, origin.1 as i32)))
+                .map_err(|e| e.to_string())
+        };
+        if let Err(e) = applied {
+            log::warn!("setting the recording widget frame failed: {e}");
+        }
+    }
+
+    pub async fn open_dropdown(&self, app: &AppHandle, rows: u32) -> Result<bool, String> {
+        let mut inner = self.inner.lock().await;
+        let placement = match (inner.transport, inner.placement) {
+            (Some(Transport::Window), Some(placement)) => placement,
+            _ => return Err("recording widget window is not shown".into()),
+        };
+        let scale = inner.scale;
+        let size = physical_size(pill_size(inner.has_items), scale);
+        let pill = (size.0 as f64, size.1 as f64);
+        let up = dropdown_opens_up(placement.origin.1, pill.1, placement.work_area);
+        let list_height = dropdown_height(rows) * scale;
+        let (origin, grown) = grown_frame(placement.origin, pill, list_height, up, placement.work_area);
+        let origin = (origin.0.round(), origin.1.round());
+        log::debug!("recording widget: dropdown open up={up} origin={origin:?} size={grown:?}");
+        self.apply_frame(app, origin, grown, scale);
+        inner.dropdown = Some(Dropdown { up, list_height });
+        Ok(up)
+    }
+
+    pub async fn close_dropdown(&self, app: &AppHandle) {
+        let mut inner = self.inner.lock().await;
+        self.close_dropdown_locked(app, &mut inner);
+    }
+
+    fn close_dropdown_locked(&self, app: &AppHandle, inner: &mut Inner) -> bool {
+        if inner.dropdown.take().is_none() {
+            return false;
+        }
+        let scale = inner.scale;
+        let size = physical_size(pill_size(inner.has_items), scale);
+        let size = (size.0 as f64, size.1 as f64);
+        if let Some(placement) = inner.placement.as_mut() {
+            let origin = clamp_origin(placement.origin, size, placement.work_area);
+            placement.origin = (origin.0.round(), origin.1.round());
+            log::debug!("recording widget: dropdown close origin={:?} size={size:?}", placement.origin);
+            self.apply_frame(app, placement.origin, size, scale);
+        }
+        true
     }
 
     pub fn shell_moved(&self, app: &AppHandle, placement: Placement) {
@@ -927,6 +1059,7 @@ mod tests {
             placement: None,
             has_items: false,
             scale: 1.0,
+            dropdown: None,
             #[cfg(target_os = "linux")]
             shell: None,
         }
@@ -988,6 +1121,34 @@ mod tests {
         assert_eq!(
             regrow_origin((100.0, 10.0), 80.0, 112.0, 240.0, (0.0, 0.0, 1920.0, 1040.0)),
             (100.0, 0.0)
+        );
+    }
+
+    const WORK_AREA: WorkArea = (0.0, 0.0, 3840.0, 2160.0);
+
+    #[test]
+    fn a_pill_in_the_upper_half_opens_the_dropdown_down() {
+        assert!(!dropdown_opens_up(900.0, 160.0, WORK_AREA));
+    }
+
+    #[test]
+    fn a_pill_in_the_lower_half_opens_the_dropdown_up() {
+        assert!(dropdown_opens_up(1800.0, 160.0, WORK_AREA));
+    }
+
+    #[test]
+    fn the_dropdown_grows_upward_keeping_the_bottom_edge() {
+        assert_eq!(
+            grown_frame((200.0, 1800.0), (480.0, 160.0), 240.0, true, WORK_AREA),
+            ((200.0, 1560.0), (480.0, 400.0))
+        );
+    }
+
+    #[test]
+    fn the_dropdown_grows_downward_keeping_the_top_edge() {
+        assert_eq!(
+            grown_frame((200.0, 100.0), (480.0, 160.0), 240.0, false, WORK_AREA),
+            ((200.0, 100.0), (480.0, 400.0))
         );
     }
 

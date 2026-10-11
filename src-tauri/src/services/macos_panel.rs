@@ -172,3 +172,37 @@ pub fn make_key_without_activating(window: &tauri::WebviewWindow) -> Result<(), 
 
     Ok(())
 }
+
+// Move and resize the panel in one `setFrame:display:` call on the main thread.
+// Input is Tauri's top-left physical px; Cocoa wants points with a bottom-left
+// origin measured from the primary screen's height.
+pub fn set_frame_physical(
+    window: &tauri::WebviewWindow,
+    origin: (f64, f64),
+    size: (f64, f64),
+    scale: f64,
+    primary_height_points: f64,
+) -> Result<(), String> {
+    let target = window.clone();
+    window
+        .run_on_main_thread(move || {
+            let ptr = match target.ns_window() {
+                Ok(ptr) if !ptr.is_null() => ptr,
+                _ => {
+                    log::warn!("setFrame skipped: ns_window unavailable");
+                    return;
+                }
+            };
+            let height = size.1 / scale;
+            unsafe {
+                let ns_window: &NSWindow = &*(ptr as *const NSWindow);
+                let mut frame = ns_window.frame();
+                frame.origin.x = origin.0 / scale;
+                frame.origin.y = primary_height_points - origin.1 / scale - height;
+                frame.size.width = size.0 / scale;
+                frame.size.height = height;
+                ns_window.setFrame_display(frame, true);
+            }
+        })
+        .map_err(|e| e.to_string())
+}
