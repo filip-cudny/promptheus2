@@ -257,6 +257,21 @@ pub struct SpeechToTextConfig {
 
     #[serde(default = "default_true")]
     pub recording_widget_at_cursor: bool,
+
+    #[serde(default)]
+    pub recording_widget_anchor: PillAnchor,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum PillAnchor {
+    #[default]
+    AboveRight,
+    AboveCenter,
+    AboveLeft,
+    BelowRight,
+    BelowCenter,
+    BelowLeft,
 }
 
 impl Default for SpeechToTextConfig {
@@ -273,6 +288,7 @@ impl Default for SpeechToTextConfig {
             show_recording_widget: true,
             monochromatic_widget_icon: true,
             recording_widget_at_cursor: true,
+            recording_widget_anchor: PillAnchor::default(),
         }
     }
 }
@@ -691,6 +707,29 @@ mod tests {
     fn speech_to_text_defaults_to_opening_the_widget_at_the_cursor() {
         let surfaces: Surfaces = serde_json::from_str("{}").unwrap();
         assert!(surfaces.speech_to_text.recording_widget_at_cursor);
+    }
+
+    #[test]
+    fn speech_to_text_defaults_to_the_above_right_anchor() {
+        let surfaces: Surfaces = serde_json::from_str("{}").unwrap();
+        assert_eq!(surfaces.speech_to_text.recording_widget_anchor, PillAnchor::AboveRight);
+        assert_eq!(SpeechToTextConfig::default().recording_widget_anchor, PillAnchor::AboveRight);
+    }
+
+    #[test]
+    fn pill_anchor_round_trips_as_snake_case() {
+        for (anchor, name) in [
+            (PillAnchor::AboveRight, "above_right"),
+            (PillAnchor::AboveCenter, "above_center"),
+            (PillAnchor::AboveLeft, "above_left"),
+            (PillAnchor::BelowRight, "below_right"),
+            (PillAnchor::BelowCenter, "below_center"),
+            (PillAnchor::BelowLeft, "below_left"),
+        ] {
+            let json = format!("\"{name}\"");
+            assert_eq!(serde_json::to_string(&anchor).unwrap(), json);
+            assert_eq!(serde_json::from_str::<PillAnchor>(&json).unwrap(), anchor);
+        }
     }
 
     #[test]

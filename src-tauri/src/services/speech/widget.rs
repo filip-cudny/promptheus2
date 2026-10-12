@@ -10,6 +10,7 @@ use super::reminder::rms;
 use super::{PendingPrompt, SpeechService, DICTATION_ID, DICTATION_LABEL};
 use crate::commands::context::current_context_version;
 use crate::models::context::ContextItem;
+use crate::models::settings::PillAnchor;
 use crate::models::skill::{is_offered_in, OfferedIn, Skill};
 use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
@@ -163,6 +164,7 @@ struct WidgetSettings {
     enabled: bool,
     monochromatic: bool,
     at_cursor: bool,
+    anchor: PillAnchor,
 }
 
 struct Inner {
@@ -176,6 +178,7 @@ struct Inner {
     placement: Option<Placement>,
     item_rows: u32,
     scale: f64,
+    grows_down: bool,
     overlay: Option<Overlay>,
     #[cfg(target_os = "linux")]
     shell: Option<crate::services::gnome_shell::ShellProxy<'static>>,
@@ -261,15 +264,47 @@ pub fn text_preview(content: &str) -> String {
     }
 }
 
+pub fn anchored_origin(
+    cursor: (f64, f64),
+    size: (f64, f64),
+    anchor: PillAnchor,
+    work_area: WorkArea,
+) -> (f64, f64) {
+    let x = match anchor {
+        PillAnchor::AboveRight | PillAnchor::BelowRight => cursor.0,
+        PillAnchor::AboveCenter | PillAnchor::BelowCenter => cursor.0 - size.0 / 2.0,
+        PillAnchor::AboveLeft | PillAnchor::BelowLeft => cursor.0 - size.0,
+    };
+    let y = match anchor {
+        PillAnchor::AboveRight | PillAnchor::AboveCenter | PillAnchor::AboveLeft => cursor.1 - size.1,
+        PillAnchor::BelowRight | PillAnchor::BelowCenter | PillAnchor::BelowLeft => cursor.1,
+    };
+    clamp_origin((x, y), size, work_area)
+}
+
+fn grows_down(settings: WidgetSettings) -> bool {
+    settings.at_cursor
+        && matches!(
+            settings.anchor,
+            PillAnchor::BelowRight | PillAnchor::BelowCenter | PillAnchor::BelowLeft
+        )
+}
+
 pub fn regrow_origin(
     origin: (f64, f64),
     old_height: f64,
     new_height: f64,
     width: f64,
+    grows_down: bool,
     work_area: WorkArea,
 ) -> (f64, f64) {
+    let top = if grows_down {
+        origin.1
+    } else {
+        origin.1 + old_height - new_height
+    };
     clamp_origin(
-        (origin.0, origin.1 + old_height - new_height),
+        (origin.0, top),
         (width, new_height),
         work_area,
     )
@@ -429,9 +464,15 @@ fn work_area_of(monitor: &tauri::Monitor) -> WorkArea {
     )
 }
 
-fn log_placement(source: &str, origin: (f64, f64), size: (f64, f64), work_area: WorkArea) {
+fn log_placement(
+    source: &str,
+    anchor: PillAnchor,
+    origin: (f64, f64),
+    size: (f64, f64),
+    work_area: WorkArea,
+) {
     log::debug!(
-        "recording widget: placed from {source} origin={origin:?} size={size:?} work_area={work_area:?}"
+        "recording widget: placed from {source} anchor={anchor:?} origin={origin:?} size={size:?} work_area={work_area:?}"
     );
 }
 
@@ -484,6 +525,7 @@ async fn widget_settings(app: &AppHandle) -> WidgetSettings {
         enabled: speech.show_recording_widget,
         monochromatic: speech.monochromatic_widget_icon,
         at_cursor: speech.recording_widget_at_cursor,
+        anchor: speech.recording_widget_anchor,
     }
 }
 
@@ -500,9 +542,10 @@ async fn show_in_shell(
     let (x, y, has_position) = if settings.at_cursor {
         let (px, py, work_x, work_y, work_width, work_height) =
             proxy.get_pointer().await.map_err(|e| e.to_string())?;
-        let (x, y) = clamp_origin(
+        let (x, y) = anchored_origin(
             (px as f64, py as f64),
             size,
+            settings.anchor,
             (work_x as f64, work_y as f64, work_width as f64, work_height as f64),
         );
         (x.round() as i32, y.round() as i32, true)
@@ -525,7 +568,7 @@ async fn show_in_shell(
     } else {
         "default"
     };
-    log_placement(source, placement.origin, size, placement.work_area);
+    log_placement(source, settings.anchor, placement.origin, size, placement.work_area);
     Ok((proxy, placement))
 }
 
@@ -554,6 +597,7 @@ impl RecordingWidget {
                 placement: None,
                 item_rows: 0,
                 scale: 1.0,
+                grows_down: false,
                 overlay: None,
                 #[cfg(target_os = "linux")]
                 shell: None,
@@ -587,6 +631,7 @@ impl RecordingWidget {
         inner.session = session;
         inner.item_rows = item_rows;
         inner.scale = 1.0;
+        inner.grows_down = grows_down(settings);
         inner.state = WidgetState::Recording;
         inner.elapsed_ms = 0;
         inner.monochromatic = settings.monochromatic;
@@ -795,9 +840,14 @@ impl RecordingWidget {
         window
             .set_size(PhysicalSize::new(size.0, size.1))
             .map_err(|e| e.to_string())?;
-        let origin = clamp_origin(origin, (size.0 as f64, size.1 as f64), work_area);
+        let size_f = (size.0 as f64, size.1 as f64);
+        let origin = if settings.at_cursor {
+            anchored_origin(origin, size_f, settings.anchor, work_area)
+        } else {
+            clamp_origin(origin, size_f, work_area)
+        };
         let origin = (origin.0.round(), origin.1.round());
-        log_placement(source, origin, (size.0 as f64, size.1 as f64), work_area);
+        log_placement(source, settings.anchor, origin, (size.0 as f64, size.1 as f64), work_area);
         self.set_window_origin(&window, origin)?;
         Ok((Placement { origin, work_area }, scale))
     }
@@ -844,6 +894,7 @@ impl RecordingWidget {
             old_height * scale,
             new_height * scale,
             width * scale,
+            inner.grows_down,
             placement.work_area,
         );
         log::debug!(
@@ -1237,6 +1288,7 @@ mod tests {
             placement: None,
             item_rows: 0,
             scale: 1.0,
+            grows_down: false,
             overlay: None,
             #[cfg(target_os = "linux")]
             shell: None,
@@ -1326,7 +1378,7 @@ mod tests {
     #[test]
     fn regrow_keeps_the_bottom_edge() {
         assert_eq!(
-            regrow_origin((100.0, 500.0), 80.0, 112.0, 240.0, (0.0, 0.0, 1920.0, 1040.0)),
+            regrow_origin((100.0, 500.0), 80.0, 112.0, 240.0, false, (0.0, 0.0, 1920.0, 1040.0)),
             (100.0, 468.0)
         );
     }
@@ -1334,7 +1386,7 @@ mod tests {
     #[test]
     fn regrow_from_one_to_three_rows_moves_up_by_the_difference() {
         assert_eq!(
-            regrow_origin((100.0, 500.0), 112.0, 164.0, 240.0, (0.0, 0.0, 1920.0, 1040.0)),
+            regrow_origin((100.0, 500.0), 112.0, 164.0, 240.0, false, (0.0, 0.0, 1920.0, 1040.0)),
             (100.0, 448.0)
         );
     }
@@ -1342,9 +1394,33 @@ mod tests {
     #[test]
     fn regrow_is_clamped_to_the_work_area_top() {
         assert_eq!(
-            regrow_origin((100.0, 10.0), 80.0, 112.0, 240.0, (0.0, 0.0, 1920.0, 1040.0)),
+            regrow_origin((100.0, 10.0), 80.0, 112.0, 240.0, false, (0.0, 0.0, 1920.0, 1040.0)),
             (100.0, 0.0)
         );
+    }
+
+    #[test]
+    fn regrow_growing_down_keeps_the_top_edge() {
+        let area = (0.0, 0.0, 1920.0, 1040.0);
+        assert_eq!(regrow_origin((100.0, 500.0), 72.0, 104.0, 264.0, true, area), (100.0, 500.0));
+        assert_eq!(regrow_origin((100.0, 1000.0), 72.0, 104.0, 264.0, true, area), (100.0, 936.0));
+        assert_eq!(regrow_origin((100.0, 500.0), 72.0, 104.0, 264.0, false, area), (100.0, 468.0));
+    }
+
+    #[test]
+    fn anchored_origin_places_the_pill_by_anchor() {
+        let area = (0.0, 0.0, 1920.0, 1040.0);
+        let at = |anchor, cursor| anchored_origin(cursor, (264.0, 72.0), anchor, area);
+        assert_eq!(at(PillAnchor::AboveRight, (500.0, 500.0)), (500.0, 428.0));
+        assert_eq!(at(PillAnchor::AboveCenter, (500.0, 500.0)), (368.0, 428.0));
+        assert_eq!(at(PillAnchor::AboveLeft, (500.0, 500.0)), (236.0, 428.0));
+        assert_eq!(at(PillAnchor::BelowRight, (500.0, 500.0)), (500.0, 500.0));
+        assert_eq!(at(PillAnchor::BelowCenter, (500.0, 500.0)), (368.0, 500.0));
+        assert_eq!(at(PillAnchor::BelowLeft, (500.0, 500.0)), (236.0, 500.0));
+        assert_eq!(at(PillAnchor::AboveRight, (500.0, 30.0)), (500.0, 0.0));
+        assert_eq!(at(PillAnchor::BelowCenter, (500.0, 1000.0)), (368.0, 968.0));
+        assert_eq!(at(PillAnchor::AboveLeft, (100.0, 500.0)), (0.0, 428.0));
+        assert_eq!(at(PillAnchor::BelowRight, (1800.0, 500.0)), (1656.0, 500.0));
     }
 
     const WORK_AREA: WorkArea = (0.0, 0.0, 3840.0, 2160.0);
