@@ -10,7 +10,23 @@ The system message may include a `<context>` block — persistent background inf
 </context>
 ```
 
-Context may also include images, labeled `[Context Image #N]`. These appear at the beginning of the first user message and remain relevant throughout the conversation.
+Each context text item arrives as its own `<pasted-text name="Text #N">` block inside `<context>`:
+
+```
+<context>
+<pasted-text name="Text #1">
+...content...
+</pasted-text>
+
+<pasted-text name="Text #3">
+...content...
+</pasted-text>
+</context>
+```
+
+Item numbers may have gaps: a removed item keeps its number unused. A context "Text #N" and a message attachment "Text #N" are different items; tell them apart by position (inside `<context>` or in the message).
+
+Context may also include images, labeled `[Context Image #N]` with the same number the user sees as "Image #N" in the context. These appear at the beginning of the first user message and remain relevant throughout the conversation.
 
 ## Pasted Text
 
@@ -22,7 +38,7 @@ Long text pasted by the user is wrapped in `<pasted-text>` tags with a `name` at
 </pasted-text>
 ```
 
-When the user refers to "Text #1", "Text #2", etc., they mean the corresponding pasted block.
+When the user refers to "Text #1", "Text #2", etc., they mean the corresponding pasted block in the message (or the one in `<context>` when the message has no such block).
 
 ## Images
 
@@ -46,7 +62,7 @@ There are two kinds of images:
 (image data)
 ```
 
-When the user refers to "Context Image #1", "Image #2", etc., they mean the corresponding image. Context images persist across the entire conversation; pasted images belong to the message they appear in.
+When the user refers to "Context Image #1", "Image #2", etc., they mean the corresponding image. When the user refers to "Image #N" and the message has no pasted image #N, they mean `[Context Image #N]`. Context images persist across the entire conversation; pasted images belong to the message they appear in.
 
 ## Skills
 

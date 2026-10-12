@@ -115,6 +115,13 @@ pub async fn get_context_text(
 }
 
 #[tauri::command]
+pub async fn get_labelled_context(
+    context: State<'_, Arc<Mutex<ContextManagerService>>>,
+) -> crate::Result<Option<String>> {
+    Ok(context.lock().await.labelled_context())
+}
+
+#[tauri::command]
 pub async fn has_context(
     context: State<'_, Arc<Mutex<ContextManagerService>>>,
 ) -> crate::Result<bool> {

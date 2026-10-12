@@ -44,6 +44,10 @@ impl MenuItemProvider for ContextMenuProvider {
     }
 }
 
+pub fn pasted_text_block(number: impl std::fmt::Display, content: &str) -> String {
+    format!("<pasted-text name=\"Text #{number}\">\n{content}\n</pasted-text>")
+}
+
 pub struct ContextManagerService {
     items: Vec<ContextItem>,
     next_text_number: u32,
@@ -80,6 +84,23 @@ impl ContextManagerService {
             None
         } else {
             Some(text_items.join("\n"))
+        }
+    }
+
+    pub fn labelled_context(&self) -> Option<String> {
+        let blocks: Vec<String> = self
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                ContextItem::Text { number, content } => Some(pasted_text_block(*number, content)),
+                _ => None,
+            })
+            .collect();
+
+        if blocks.is_empty() {
+            None
+        } else {
+            Some(blocks.join("\n\n"))
         }
     }
 
@@ -363,6 +384,32 @@ mod tests {
 
         svc.append_context("b".into());
         assert_eq!(numbers(&svc), [("image", 1), ("text", 1)]);
+    }
+
+    #[test]
+    fn labelled_context_names_each_text_by_its_number() {
+        let mut svc = service();
+        svc.append_context("one".into());
+        svc.append_context("two".into());
+        svc.append_context("".into());
+        svc.remove_item(1);
+
+        assert_eq!(
+            svc.labelled_context(),
+            Some(
+                "<pasted-text name=\"Text #1\">\none\n</pasted-text>\n\n<pasted-text name=\"Text #3\">\n\n</pasted-text>"
+                    .into()
+            )
+        );
+    }
+
+    #[test]
+    fn labelled_context_is_none_without_text() {
+        let mut svc = service();
+        assert_eq!(svc.labelled_context(), None);
+
+        svc.append_context_image("img".into(), "image/png".into());
+        assert_eq!(svc.labelled_context(), None);
     }
 
     #[test]

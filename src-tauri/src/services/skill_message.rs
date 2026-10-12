@@ -8,7 +8,7 @@ use crate::models::message::{
     MessageContent, NodeUpdate, ProcessedMessage,
 };
 use crate::models::skill::Skill;
-use crate::services::context::ContextManagerService;
+use crate::services::context::{pasted_text_block, ContextManagerService};
 use crate::services::placeholder_registry::{substitute, PlaceholderContext};
 use crate::services::skill::{SkillError, SkillService};
 
@@ -93,11 +93,9 @@ pub fn prepare_skill_messages(
 ) -> Vec<ProcessedMessage> {
     let mut messages = Vec::new();
 
-    let system_content = if !context.get_context_or_default("").is_empty() {
-        let ctx = context.get_context_or_default("");
-        format!("{system_prompt}\n\n<context>\n{ctx}\n</context>")
-    } else {
-        system_prompt.to_string()
+    let system_content = match context.labelled_context() {
+        Some(ctx) => format!("{system_prompt}\n\n<context>\n{ctx}\n</context>"),
+        None => system_prompt.to_string(),
     };
 
     messages.push(ProcessedMessage {
@@ -111,13 +109,11 @@ pub fn prepare_skill_messages(
 
     if context.has_images() {
         let mut parts = Vec::new();
-        let mut img_index = 1;
         for item in &context.get_items() {
-            if let ContextItem::Image { data, media_type, .. } = item {
+            if let ContextItem::Image { number, data, media_type } = item {
                 parts.push(ContentPart::Text {
-                    text: format!("[Context Image #{img_index}]"),
+                    text: format!("[Context Image #{number}]"),
                 });
-                img_index += 1;
                 parts.push(ContentPart::ImageUrl {
                     image_url: ImageUrlData {
                         url: format!("data:{media_type};base64,{data}"),
@@ -329,13 +325,7 @@ pub fn build_messages_from_tree(
                     .text_attachments
                     .iter()
                     .enumerate()
-                    .map(|(i, t)| {
-                        format!(
-                            "<pasted-text name=\"Text #{}\">\n{}\n</pasted-text>",
-                            i + 1,
-                            t
-                        )
-                    })
+                    .map(|(i, t)| pasted_text_block(i + 1, t))
                     .collect();
                 let attachments_block = wrapped.join("\n\n");
                 text_content = if text_content.is_empty() {
@@ -545,6 +535,41 @@ mod tests {
             assert!(text.contains("background info"));
         } else {
             panic!("expected text content for system message");
+        }
+    }
+
+    #[test]
+    fn prepare_messages_label_items_by_number() {
+        let skill = test_skill("test", "Test body.");
+        let mut context = ContextManagerService::new();
+        context.append_context("first".into());
+        context.append_context_image("a".into(), "image/png".into());
+        context.append_context_image("b".into(), "image/png".into());
+        context.append_context("second".into());
+        context.append_context("third".into());
+        context.remove_item(1);
+        context.remove_item(2);
+        let messages = prepare_skill_messages(
+            "System.",
+            &skill,
+            "input",
+            &context,
+            &PlaceholderContext::empty(),
+        );
+
+        let MessageContent::Text(ref system) = messages[0].content else {
+            panic!("expected text content for system message");
+        };
+        assert_eq!(system.matches("<context>").count(), 1);
+        assert!(system.contains("<pasted-text name=\"Text #1\">\nfirst\n</pasted-text>"));
+        assert!(system.contains("<pasted-text name=\"Text #3\">\nthird\n</pasted-text>"));
+        assert!(!system.contains("Text #2"));
+
+        match &messages[1].content {
+            MessageContent::Parts(parts) => {
+                assert!(matches!(&parts[0], ContentPart::Text { text } if text == "[Context Image #2]"));
+            }
+            _ => panic!("expected parts content for user message with images"),
         }
     }
 

@@ -133,6 +133,8 @@ Manages an ordered list of `ContextItem` values (text and/or images) in memory. 
 
 **Text methods**: `set_context` (replace all), `append_context`, `get_context` (concatenates non-empty text with `\n`, returns `None` if no text), `has_context` (true if any Text items), `get_context_or_default`.
 
+**Labelled context**: `labelled_context()` returns `None` without text items, otherwise one `<pasted-text name="Text #{number}">\n{content}\n</pasted-text>` block per text item (empty content included, images skipped) joined with `\n\n`; `pasted_text_block` builds a block and is shared with chat message attachments. Consumers: skill prompts (`prepare_skill_messages` wraps it as `{system_prompt}\n\n<context>\n{blocks}\n</context>` in the system message and labels context images `[Context Image #{number}]` in the user message) and command `get_labelled_context`. `get_context()` stays the raw `\n` join without tags and serves "Copy context text" (`get_context_text`) and `{{context}}`.
+
 **Image methods**: `set_context_image` (replace all), `append_context_image`, `has_images`.
 
 **Numbers**: each item gets a per-kind `number` (`Text #n`, `Image #n`) from two counters: assigned on add, kept on `remove_item`, reset to 1 by `clear` and by every replace (`set_context`, `set_context_image`, so also `set_context_from_clipboard` and the `set_context_value` hotkey). Pill, context menu and context editor label items from it. Context hotkeys emit `context-changed` through `emit_context_changed` (version bump, pill refresh).

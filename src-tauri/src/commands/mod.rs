@@ -59,6 +59,7 @@ macro_rules! handlers {
             // === context ===
             $crate::commands::context::get_context_items,
             $crate::commands::context::get_context_text,
+            $crate::commands::context::get_labelled_context,
             $crate::commands::context::has_context,
             $crate::commands::context::has_context_images,
             $crate::commands::context::set_context,
