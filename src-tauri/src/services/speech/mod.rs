@@ -133,6 +133,7 @@ pub struct SpeechService {
     is_transcribing: bool,
     recording_action_id: Option<String>,
     pending: Option<PendingPrompt>,
+    taken: Option<PendingPrompt>,
     target_locked: bool,
     stop_chat: bool,
     audio_buffer: Arc<Mutex<Vec<i16>>>,
@@ -175,6 +176,7 @@ impl SpeechService {
             is_transcribing: false,
             recording_action_id: None,
             pending: None,
+            taken: None,
             target_locked: false,
             stop_chat: false,
             audio_buffer: Arc::new(Mutex::new(Vec::new())),
@@ -354,6 +356,14 @@ impl SpeechService {
         self.pending.as_ref()
     }
 
+    pub fn shown_target(&self) -> Option<&PendingPrompt> {
+        if self.target_locked {
+            self.taken.as_ref()
+        } else {
+            self.pending.as_ref()
+        }
+    }
+
     pub fn target_locked(&self) -> bool {
         self.target_locked
     }
@@ -394,7 +404,8 @@ impl SpeechService {
     /// selection cannot slip in between.
     pub fn take_pending_prompt(&mut self) -> (Option<PendingPrompt>, bool) {
         self.target_locked = true;
-        (self.pending.take(), self.stop_chat)
+        self.taken = self.pending.take();
+        (self.taken.clone(), self.stop_chat)
     }
 
     /// Manual retries are tracked per history entry rather than through

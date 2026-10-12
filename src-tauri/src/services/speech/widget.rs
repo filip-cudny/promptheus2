@@ -410,7 +410,7 @@ async fn gather_model(app: &AppHandle, origin: (i32, i32)) -> (PillModel, Vec<Co
     let (pending, locked) = match &speech {
         Some(speech) => {
             let speech = speech.lock().await;
-            (speech.pending_prompt().cloned(), speech.target_locked())
+            (speech.shown_target().cloned(), speech.target_locked())
         }
         None => (None, false),
     };
@@ -1490,11 +1490,23 @@ mod tests {
     fn the_model_is_locked_only_after_the_take() {
         let mut speech = SpeechService::new();
         let model = |speech: &SpeechService| {
-            build_model(vec![], speech.pending_prompt(), speech.target_locked(), &[], 0, (0, 0))
+            build_model(vec![], speech.shown_target(), speech.target_locked(), &[], 0, (0, 0))
         };
         assert!(!model(&speech).target_locked);
         speech.take_pending_prompt();
         assert!(model(&speech).target_locked);
+    }
+
+    #[test]
+    fn the_taken_skill_stays_on_the_locked_pill() {
+        let mut speech = SpeechService::new();
+        speech.select_target("assistant", "Assistant").unwrap();
+        speech.take_pending_prompt();
+        let model = build_model(vec![], speech.shown_target(), speech.target_locked(), &[], 0, (0, 0));
+        assert_eq!((model.selected_id.as_str(), model.selected_label.as_str()), ("assistant", "Assistant"));
+        assert!(model.target_locked);
+        speech.set_pending_prompt("fix".into(), "Fix".into(), crate::services::speech::PendingOrigin::ShiftClick);
+        assert_eq!(speech.shown_target().map(|p| p.id.as_str()), Some("assistant"));
     }
 
     #[test]
