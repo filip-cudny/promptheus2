@@ -28,9 +28,9 @@ pub enum ConfigError {
 
 ### Service lifecycle
 
-Services are plain structs (not singletons). They are created once at startup in `setup/state.rs` and placed into Tauri managed state, most behind `Arc<Mutex<…>>`; `ClipboardService`, `NotificationService`, `ImageStorage`, `RecordingWidget`, `McpRegistry` and `AudioClipStore` are managed without a `Mutex`. The command layer is responsible for locking and calling service methods.
+Services are plain structs (not singletons). They are created once at startup in `setup/state.rs` and placed into Tauri managed state. Services that commands mutate are behind `Arc<Mutex<…>>`; others are managed without a `Mutex` (for example `ClipboardService`, `SettingsSync`, `McpRegistry`), so check `setup/state.rs` for the exact managed type before calling `state::<T>()`. The command layer is responsible for locking and calling service methods.
 
-- **Constructor**: services backed by files use `Service::load(args)` (`ConfigService`, `SkillService`, `UiStateService`); the others use `new`.
+- **Constructor**: no single rule; `ConfigService`, `SkillService` and `UiStateService` use `Service::load(args)`, most others `new`, `Database` uses `open` and `McpRegistry` uses `start_all`.
 - **Persistence**: no service exposes a public `save`. `ConfigService` writes inside `mutate`; `UiStateService` mutators write their file themselves.
 - **Reload**: `ConfigService::reload` re-reads `settings.json`, replacing in-memory state.
 
@@ -127,7 +127,7 @@ Persistent history storage via SQLite. Database file at `{app_data_dir}/history.
 
 ### Hotkeys specifics
 
-Mostly free functions translating keymap settings into `tauri-plugin-global-shortcut`-compatible shortcut strings; the one state is `ShortcutActionMap` (shortcut → action, behind an `RwLock`), used by `reload_shortcuts` and `execute_hotkey_action`.
+Mostly free functions translating keymap settings into `tauri-plugin-global-shortcut`-compatible shortcut strings; the one state is `ShortcutActionMap` (shortcut → action, behind an `RwLock`), written by `reload_shortcuts` and read by the global-shortcut handler in `setup/shortcuts.rs`, which then calls `execute_hotkey_action`.
 
 **OS-aware translation**: `translate_shortcut(shortcut, os)` converts config format (`"cmd+f1"`) to plugin format (`"Command+F1"`). The `os` parameter (`"macos"` or anything else, in practice `"linux"`) affects only `cmd`: `Command` on macOS, `Super` otherwise.
 
