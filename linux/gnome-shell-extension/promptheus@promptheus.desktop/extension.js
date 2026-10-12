@@ -57,9 +57,8 @@ const WIDGET_BAR_PATTERN = [0.5, 0.8, 0.65, 1, 0.7, 0.9, 0.55, 0.95, 0.75, 0.85,
 const WIDGET_BAR_FACTORS = Array.from({length: WIDGET_BAR_COUNT},
     (_, i) => WIDGET_BAR_PATTERN[i % WIDGET_BAR_PATTERN.length]);
 const WIDGET_WAVE_BAR_WIDTH = 2;
-const WIDGET_WAVE_BAR_SPACING = 1;
 const WIDGET_WAVE_BAR_COUNT = Math.floor(
-    (WIDGET_WIDTH - 2 * WIDGET_PADDING_X + WIDGET_WAVE_BAR_SPACING) / (WIDGET_WAVE_BAR_WIDTH + WIDGET_WAVE_BAR_SPACING));
+    (WIDGET_WIDTH - 2 * WIDGET_PADDING_X + WIDGET_BAR_SPACING) / (WIDGET_WAVE_BAR_WIDTH + WIDGET_BAR_SPACING));
 const WIDGET_WAVE_HEIGHT = 24;
 const WIDGET_WAVE_MIN_SCALE = WIDGET_BAR_MIN_HEIGHT / WIDGET_WAVE_HEIGHT;
 const WIDGET_WAVE_AMPLITUDE = WIDGET_WAVE_HEIGHT / 3;
@@ -669,7 +668,7 @@ export default class PromptheusExtension extends Extension {
     }
 
     _fillWave(widget, content) {
-        const row = this._widgetBarRow(WIDGET_WAVE_BAR_SPACING, WIDGET_WAVE_HEIGHT);
+        const row = this._widgetBarRow(WIDGET_BAR_SPACING, WIDGET_WAVE_HEIGHT);
         row.opacity = WIDGET_WAVE_OPACITY;
         widget.waveBars = Array.from({length: WIDGET_WAVE_BAR_COUNT},
             () => this._widgetBar(row, WIDGET_WAVE_MIN_SCALE, WIDGET_WAVE_BAR_WIDTH, WIDGET_WAVE_HEIGHT));

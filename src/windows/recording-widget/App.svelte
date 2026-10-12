@@ -80,8 +80,7 @@
   const MIN_BAR = 0.12;
   const DONE_COLOR = "#62A878";
   const WAVE_BAR_WIDTH = 2;
-  const WAVE_BAR_GAP = 1;
-  const WAVE_BAR_COUNT = Math.floor((PILL_WIDTH - 2 * PADDING_X + WAVE_BAR_GAP) / (WAVE_BAR_WIDTH + WAVE_BAR_GAP));
+  const WAVE_BAR_COUNT = Math.floor((PILL_WIDTH - 2 * PADDING_X + BAR_GAP) / (WAVE_BAR_WIDTH + BAR_GAP));
   const WAVE_PERIOD_MS = 1200;
   const WAVE_BARS = Array.from({ length: WAVE_BAR_COUNT }, (_, i) => (i / WAVE_BAR_COUNT - 1) * WAVE_PERIOD_MS);
 
@@ -327,7 +326,7 @@
           </button>
         </div>
       {:else if widgetState === "processing"}
-        <div class="wave" style:--wave-period="{WAVE_PERIOD_MS}ms" style:gap="{WAVE_BAR_GAP}px" data-tauri-drag-region>
+        <div class="wave" style:--wave-period="{WAVE_PERIOD_MS}ms" style:gap="{BAR_GAP}px" data-tauri-drag-region>
           {#each WAVE_BARS as delayMs}
             <span class="wave-bar" style:width="{WAVE_BAR_WIDTH}px" style:animation-delay="{delayMs}ms" data-tauri-drag-region></span>
           {/each}
