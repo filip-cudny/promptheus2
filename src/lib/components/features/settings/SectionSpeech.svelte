@@ -2,6 +2,7 @@
   import SettingsSection from "./SettingsSection.svelte";
   import FormRow from "$lib/components/shared/ui/FormRow.svelte";
   import NumberInput from "$lib/components/shared/ui/NumberInput.svelte";
+  import PillAnchorPicker from "./PillAnchorPicker.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { updateSpeechToTextConfig } from "$lib/services/settings";
   import { error as logError } from "@tauri-apps/plugin-log";
@@ -74,8 +75,14 @@
           <span>Open recording widget at the cursor</span>
         </label>
         <p class="muted">
-          The widget opens with its top-left corner at the cursor. Off opens it where you last left it.
+          The widget opens on the picked side of the cursor and grows away from it when context is added.
+          Off opens it where you last left it.
         </p>
+        <PillAnchorPicker
+          value={config.recording_widget_anchor}
+          disabled={!config.recording_widget_at_cursor}
+          onchange={(a) => save({ recording_widget_anchor: a })}
+        />
         <label class="check">
           <input
             type="checkbox"

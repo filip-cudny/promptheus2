@@ -84,7 +84,16 @@ export interface SpeechToTextConfig {
   show_recording_widget: boolean;
   monochromatic_widget_icon: boolean;
   recording_widget_at_cursor: boolean;
+  recording_widget_anchor: PillAnchor;
 }
+
+export type PillAnchor =
+  | "above_right"
+  | "above_center"
+  | "above_left"
+  | "below_right"
+  | "below_center"
+  | "below_left";
 
 export interface AudioClipInfo {
   has_audio: boolean;
