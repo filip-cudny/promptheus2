@@ -285,7 +285,7 @@
         {#each model.items as item (item.index)}
           <span class="chip" style:gap="{CHIP_GAP}px" data-item-index={item.index}>
             {#if item.kind === "image"}<ImageIcon size={12} />{:else}<Type size={12} />{/if}
-            {item.label}
+            <span class="chip-label">{item.label}</span>
             {#if !model.targetLocked}
               <button
                 type="button"
@@ -457,9 +457,9 @@
   }
 
   .items {
-    display: flex;
-    flex-wrap: wrap;
-    align-content: flex-start;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-content: start;
     box-sizing: border-box;
     padding: 5px 0;
     overflow-y: auto;
@@ -499,15 +499,24 @@
     display: flex;
     align-items: center;
     height: 22px;
+    min-width: 0;
     padding: 0 6px;
-    flex: none;
     border-radius: 11px;
     background: rgba(255, 255, 255, 0.12);
     font-size: 11px;
     white-space: nowrap;
   }
 
+  .chip-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .chip-remove {
+    flex: none;
     width: 16px;
     height: 16px;
   }

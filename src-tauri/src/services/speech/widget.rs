@@ -40,11 +40,7 @@ const MAX_ITEM_ROWS: u32 = 3;
 const ITEM_ROW_HEIGHT: f64 = 22.0;
 const ITEM_ROW_GAP: f64 = 4.0;
 const ITEMS_ROW_PADDING: f64 = 10.0;
-const ITEM_CHIP_BASE_WIDTH: f64 = 28.0;
-const ITEM_CHAR_WIDTH: f64 = 7.0;
-const ITEM_REMOVE_WIDTH: f64 = 16.0;
-const ITEM_GAP: f64 = 4.0;
-const ITEMS_AVAILABLE_WIDTH: f64 = PILL_WIDTH - 2.0 * 14.0;
+const ITEM_COLUMNS: usize = 2;
 const PREVIEW_CHARS: usize = 300;
 const DROPDOWN_ROW_HEIGHT: f64 = 28.0;
 const DROPDOWN_PADDING: f64 = 4.0;
@@ -236,20 +232,8 @@ pub fn smooth_level(previous: f64, target: f64) -> f64 {
     previous + (target - previous) * rate
 }
 
-pub fn item_rows(labels: &[String], locked: bool) -> u32 {
-    let remove = if locked { 0.0 } else { ITEM_REMOVE_WIDTH };
-    let mut rows = 0;
-    let mut used = 0.0;
-    for label in labels {
-        let width = ITEM_CHIP_BASE_WIDTH + ITEM_CHAR_WIDTH * label.chars().count() as f64 + remove;
-        if rows > 0 && used + ITEM_GAP + width <= ITEMS_AVAILABLE_WIDTH {
-            used += ITEM_GAP + width;
-        } else {
-            rows += 1;
-            used = width;
-        }
-    }
-    rows.min(MAX_ITEM_ROWS)
+pub fn item_rows(count: usize) -> u32 {
+    (count.div_ceil(ITEM_COLUMNS) as u32).min(MAX_ITEM_ROWS)
 }
 
 pub fn items_height(rows: u32) -> f64 {
@@ -354,13 +338,12 @@ pub fn build_model(
         None => (DICTATION_ID.to_string(), DICTATION_LABEL.to_string()),
     };
     let items = pill_items(context_items);
-    let labels: Vec<String> = items.iter().map(|item| item.label.clone()).collect();
     PillModel {
         targets,
         selected_id,
         selected_label,
         target_locked,
-        item_rows: item_rows(&labels, target_locked),
+        item_rows: item_rows(items.len()),
         items,
         context_version,
         x: origin.0,
@@ -1308,17 +1291,13 @@ mod tests {
         assert_eq!(pill_size(3), (264.0, 156.0));
     }
 
-    fn labels(count: usize) -> Vec<String> {
-        (1..=count).map(|n| format!("Text #{n}")).collect()
-    }
-
     #[test]
-    fn chips_wrap_into_at_most_three_rows() {
-        assert_eq!(item_rows(&[], false), 0);
-        assert_eq!(item_rows(&labels(1), false), 1);
-        assert_eq!(item_rows(&labels(3), false), 2);
-        assert_eq!(item_rows(&labels(3), true), 2);
-        assert_eq!(item_rows(&labels(20), false), 3);
+    fn chips_fill_two_columns_up_to_three_rows() {
+        assert_eq!(item_rows(0), 0);
+        assert_eq!(item_rows(1), 1);
+        assert_eq!(item_rows(2), 1);
+        assert_eq!(item_rows(3), 2);
+        assert_eq!(item_rows(7), 3);
     }
 
     #[test]

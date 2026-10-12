@@ -24,6 +24,8 @@ const WIDGET_MAX_ITEM_ROWS = 3;
 const WIDGET_ITEM_ROW_HEIGHT = 22;
 const WIDGET_ITEM_ROW_GAP = 4;
 const WIDGET_ITEMS_ROW_PADDING = 10;
+const WIDGET_ITEM_COLUMNS = 2;
+const WIDGET_CHIP_WIDTH = (WIDGET_WIDTH - 2 * WIDGET_PADDING_X - (WIDGET_ITEM_COLUMNS - 1) * WIDGET_ITEM_ROW_GAP) / WIDGET_ITEM_COLUMNS;
 const WIDGET_PREVIEW_MAX_HEIGHT = 160;
 const WIDGET_PREVIEW_GAP = 6;
 const WIDGET_PREVIEW_DELAY_MS = 300;
@@ -778,17 +780,16 @@ export default class PromptheusExtension extends Extension {
         widget.itemsRow.destroy_all_children();
         widget.itemsRow.visible = items.length > 0;
         widget.itemsRow.style = `height: ${widgetItemsHeight(itemRows)}px; padding: ${WIDGET_ITEMS_ROW_PADDING / 2}px ${WIDGET_PADDING_X}px;`;
-        const flow = new St.Viewport({
-            layout_manager: new Clutter.FlowLayout({
-                orientation: Clutter.Orientation.HORIZONTAL,
-                column_spacing: WIDGET_ITEM_ROW_GAP,
-                row_spacing: WIDGET_ITEM_ROW_GAP,
-            }),
-        });
-        for (const [index, kind, label, preview, imagePath] of items) {
-            flow.add_child(this._widgetChip(widget, kind, label, preview, imagePath,
+        const grid = new St.BoxLayout({vertical: true, style: `spacing: ${WIDGET_ITEM_ROW_GAP}px;`});
+        let line = null;
+        items.forEach(([index, kind, label, preview, imagePath], position) => {
+            if (position % WIDGET_ITEM_COLUMNS === 0) {
+                line = new St.BoxLayout({style: `spacing: ${WIDGET_ITEM_ROW_GAP}px;`});
+                grid.add_child(line);
+            }
+            line.add_child(this._widgetChip(widget, kind, label, preview, imagePath,
                 locked ? null : () => this._emitRecordingWidgetItemRemoved(index, version)));
-        }
+        });
         const scroll = new St.ScrollView({
             overlay_scrollbars: true,
             hscrollbar_policy: St.PolicyType.NEVER,
@@ -796,7 +797,7 @@ export default class PromptheusExtension extends Extension {
             x_expand: true,
             y_expand: true,
         });
-        scroll.set_child(flow);
+        scroll.set_child(grid);
         widget.itemsRow.add_child(scroll);
     }
 
@@ -805,12 +806,14 @@ export default class PromptheusExtension extends Extension {
             reactive: true,
             track_hover: true,
             y_align: Clutter.ActorAlign.CENTER,
-            style: `height: ${WIDGET_ITEM_ROW_HEIGHT}px; padding: 0 6px; spacing: 4px; border-radius: 11px; ` +
+            style: `width: ${WIDGET_CHIP_WIDTH}px; height: ${WIDGET_ITEM_ROW_HEIGHT}px; padding: 0 6px; spacing: 4px; border-radius: 11px; ` +
                 'background-color: rgba(255,255,255,0.12); font-size: 11px;',
         });
         chip.isWidgetChip = true;
         chip.add_child(this._widgetIcon(`item-${kind}`, 12));
-        chip.add_child(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}));
+        const labelActor = new St.Label({text: label, x_expand: true, y_align: Clutter.ActorAlign.CENTER});
+        labelActor.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+        chip.add_child(labelActor);
         if (onRemove) {
             chip.add_child(this._widgetButton(this._widgetIcon('item-remove', 12), onRemove,
                 'width: 16px; height: 16px; border-radius: 8px;'));
