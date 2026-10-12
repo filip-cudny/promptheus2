@@ -52,7 +52,7 @@ Strategies (`lib.rs:123-130`, behaviour in `rotate`, `lib.rs:206-226`):
 
 - `KeepAll`: renames the full file to a dated name, keeps every file
 - `KeepOne`: deletes the full file, so only the current log survives
-- `KeepSome(usize)`: keeps that many files, the current one included, removing the oldest
+- `KeepSome(usize)`: keeps that many dated old files plus the current log, removing the oldest
 
 Change them with `.max_file_size(..)` and `.rotation_strategy(..)` on the builder in `log.rs`.
 

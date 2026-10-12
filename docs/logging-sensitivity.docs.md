@@ -17,12 +17,10 @@ Log only metadata instead:
 
 ```rust
 // WRONG
-log::debug!("clipboard content: {}", clipboard_text);
-log::debug!("API key: {}", api_key);
+log::debug!("responses: complete response={}", response_text);
 
 // RIGHT
-log::debug!("clipboard read: {} chars", clipboard_text.len());
-log::debug!("API key source: {:?}", key_source);
+log::debug!("responses: complete response_len={}", response_text.len());
 ```
 
 ## Debug level only
@@ -36,7 +34,6 @@ log::debug!("API key source: {:?}", key_source);
 | API errors | error code, status | response body (may echo user input) |
 
 ```rust
-log::debug!("completion: model={}, messages={}, max_tokens={}", model_id, messages.len(), params.max_tokens);
 log::debug!("execute_menu_item: id={item_id}, shift={shift_pressed}");
 ```
 
