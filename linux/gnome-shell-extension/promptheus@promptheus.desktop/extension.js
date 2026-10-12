@@ -537,6 +537,15 @@ export default class PromptheusExtension extends Extension {
         let dragging = false;
         widget.dragId = global.stage.connect('captured-event', (_stage, e) => {
             const type = e.type();
+            const primaryLifted = type === Clutter.EventType.MOTION &&
+                !(e.get_state() & Clutter.ModifierType.BUTTON1_MASK);
+            if (type === Clutter.EventType.BUTTON_RELEASE || primaryLifted) {
+                this._endWidgetDrag(widget);
+                if (!dragging)
+                    return Clutter.EVENT_PROPAGATE;
+                this._emitRecordingWidgetMoved(widget);
+                return Clutter.EVENT_STOP;
+            }
             if (type === Clutter.EventType.MOTION) {
                 const [x, y] = e.get_coords();
                 if (!dragging && Math.hypot(x - pressX, y - pressY) <= WIDGET_DRAG_THRESHOLD_PX)
@@ -547,13 +556,6 @@ export default class PromptheusExtension extends Extension {
                 }
                 dragging = true;
                 widget.actor.set_position(Math.round(x - offsetX), Math.round(y - offsetY));
-                return Clutter.EVENT_STOP;
-            }
-            if (type === Clutter.EventType.BUTTON_RELEASE) {
-                this._endWidgetDrag(widget);
-                if (!dragging)
-                    return Clutter.EVENT_PROPAGATE;
-                this._emitRecordingWidgetMoved(widget);
                 return Clutter.EVENT_STOP;
             }
             return Clutter.EVENT_PROPAGATE;
