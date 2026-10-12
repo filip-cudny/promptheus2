@@ -78,7 +78,7 @@ Bundle identifier: `com.promptheus.desktop`. App config and data live under the 
 | macOS    | `~/Library/Application Support/com.promptheus.desktop/` |
 | Linux    | `~/.config/com.promptheus.desktop/` |
 
-API keys are read from `<config directory>/.env` first; then a `.env` found in the working directory or any parent (in development, `promptheus-tauri/.env`) is loaded and overrides it. The full settings schema lives in [`src-tauri/src/models/DOCS.md`](src-tauri/src/models/DOCS.md).
+API keys are read from `<config directory>/.env` first; then a `.env` found in the working directory or any parent (in development, `promptheus-tauri/.env`) is loaded and overrides it. The full settings schema is the `Settings` struct in `src-tauri/src/models/settings.rs`.
 
 ## Project layout
 
