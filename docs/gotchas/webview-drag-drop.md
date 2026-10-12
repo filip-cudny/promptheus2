@@ -17,7 +17,7 @@ intercepts file drops at the native layer and turns them into Rust-side
 drop zone (e.g. Claude.ai project-creation "add documents", ChatGPT attachments) sees no
 `dragenter`/`dragover`/`drop` and nothing happens.
 
-`disable_drag_drop_handler()` turns the native interception off, so WebKitGTK/WebView2
+`disable_drag_drop_handler()` turns the native interception off, so WebKitGTK/WKWebView
 delivers standard **HTML5 drag-and-drop** to the page and the site handles the file itself.
 The method's own Tauri doc comment: *"This is required to use HTML5 drag and drop APIs on the
 frontend."*

@@ -6,15 +6,19 @@ Any `#[tauri::command]` that performs blocking work (clipboard, filesystem, subp
 
 ## Why
 
-Tauri 2 routes commands through different executors based on signature:
+The `#[tauri::command]` macro picks the execution context from the attribute and the signature. Sources: `tauri-macros-2.5.5/src/command/wrapper.rs`, `tauri-2.10.3/src/ipc/mod.rs`.
 
-| Form | Runs on |
-|---|---|
-| `#[tauri::command] pub fn ...` | **Main thread** (GTK loop on Linux) |
-| `#[tauri::command(async)] pub fn ...` | `tauri::async_runtime::spawn_blocking` worker |
-| `#[tauri::command] pub async fn ...` | tokio task on the async runtime |
+| Form | Runs on | Source |
+|---|---|---|
+| `#[tauri::command] pub fn ...` | Inline in the IPC invoke handler, which runs on the main thread (GTK loop on Linux) | `wrapper.rs:359-390` (`body_blocking`: calls the function, then `kind.block(result, resolver)`) |
+| `#[tauri::command(async)] pub fn ...` | tokio task on the async runtime (`async_runtime::spawn`), a worker thread | `wrapper.rs:226`, `wrapper.rs:316-350` (`body_async` wraps the call in an `async move` block), `ipc/mod.rs:371-385` (`respond_async_serialized_inner` → `crate::async_runtime::spawn`) |
+| `#[tauri::command] pub async fn ...` | Same tokio task | same lines |
 
-Sync commands run on main thread by design — Tauri needs that thread to safely touch the WebView (GTK is not thread-safe). The cost: any blocking call in a sync command stalls the GUI.
+`(async)` on a sync `fn` does not use the blocking pool: the body runs on a regular tokio worker.
+
+Consequence: `(async)` moves a blocking call off the GTK main thread, so the GUI stays responsive. The call still blocks the tokio worker it runs on, and `async fn` commands that call blocking code do the same. Known blocking `async` commands: `set_context_from_clipboard` and `append_context_from_clipboard` (`commands/context.rs:210-245`, arboard reads through `ClipboardService`), `copy_last_interaction` and `copy_history_entry_content` (`commands/history.rs:290`, `:331`; `ClipboardService::set_text` waits for the `wl-copy`/`xclip` child in `services/clipboard.rs` `set_text_subprocess`). They block a tokio worker, not the GUI.
+
+Sync commands run on the main thread because Tauri needs that thread to touch the WebView (GTK is not thread-safe). Any blocking call in a sync command stalls the GUI.
 
 On Linux X11 there's an additional self-deadlock path. `arboard::Clipboard::get_text()` sends a `SelectionRequest` to the clipboard owner and blocks waiting for `SelectionNotify`. If our own WebKitGTK webview owns the selection (because the user just copied something inside the app), that request must be serviced by **our** GTK event loop — which is blocked inside `arboard`. After ~4 seconds arboard times out. Repeated invocations serialize; pressing the shortcut 5–6 times produces 20+ second freezes.
 
@@ -31,14 +35,21 @@ The heartbeat tick measures `app_handle.run_on_main_thread(...)` callback latenc
 
 ```rust
 #[tauri::command(async)]
-pub fn get_clipboard_text() -> Result<String, String> {
-    let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
-    let text = clipboard.get_text().map_err(|e| e.to_string())?;
-    Ok(text)
+pub fn get_clipboard_text() -> crate::Result<String> {
+    let mut clipboard = arboard::Clipboard::new()
+        .map_err(|e| Error::Other(e.to_string()))?;
+    let text = clipboard
+        .get_text()
+        .map_err(|e| Error::Other(e.to_string()))?;
+    let trimmed = text.trim().to_string();
+    if trimmed.is_empty() {
+        return Err(Error::Other("clipboard is empty".into()));
+    }
+    Ok(trimmed)
 }
 ```
 
-The `(async)` attribute moves execution off the main thread without forcing a rewrite to `async fn`. State access via `state.blocking_lock()` continues to work because the worker thread is blocking-friendly.
+The `(async)` attribute moves execution off the main thread without forcing a rewrite to `async fn`. `state.blocking_lock()` on a tokio `Mutex` panics when called inside an async context, which includes `(async)` commands (they run as tokio tasks); use `.lock().await` in `async fn`, and no code uses `blocking_lock()`.
 
 ## When to apply
 

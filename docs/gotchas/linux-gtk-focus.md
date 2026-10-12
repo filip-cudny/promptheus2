@@ -2,7 +2,7 @@
 
 ## Rule
 
-On Linux, never rely on Tauri's `set_focus()` alone to bring a window forward. Use `gdk_window().present_with_time(timestamp)` with a **real X11 timestamp** obtained from `gdkx11::functions::x11_get_server_time()`. Reference implementation: `focus_context_menu` in `src-tauri/src/commands/menu.rs`.
+On Linux, never rely on Tauri's `set_focus()` alone to bring a window forward. Use `gdk_window().present_with_time(timestamp)` with a **real X11 timestamp** obtained from `gdkx11::functions::x11_get_server_time()`. Implementations: `focus_context_menu` in `src-tauri/src/commands/menu.rs` and `present_on_main` in `src-tauri/src/services/dialog.rs` (same downcast, `x11_get_server_time`, `present_with_time`; returns an error when the window is not an X11 window).
 
 This applies to X11 windows. On GNOME Wayland the app is a native Wayland client, `x11_get_server_time` is unavailable and activation goes through the GNOME Shell extension — see [linux-wayland-gnome-extension.md](linux-wayland-gnome-extension.md).
 
@@ -19,13 +19,15 @@ To pass the WM's "is this user-initiated?" check, the timestamp must come from a
 ```rust
 #[cfg(target_os = "linux")]
 {
-    use gdkx11::functions::x11_get_server_time;
-    use gtk::prelude::GtkWindowExt;
+    use gtk::glib::object::Cast;
+    use gtk::prelude::{GtkWindowExt, WidgetExt};
 
-    if let Some(gtk_window) = window.gtk_window().ok() {
+    if let Ok(gtk_window) = window.gtk_window() {
         if let Some(gdk_window) = gtk_window.window() {
-            let timestamp = unsafe { x11_get_server_time(&gdk_window) };
-            gtk_window.present_with_time(timestamp);
+            if let Ok(x11_window) = gdk_window.downcast::<gdkx11::X11Window>() {
+                let timestamp = gdkx11::functions::x11_get_server_time(&x11_window);
+                gtk_window.present_with_time(timestamp);
+            }
         }
     }
 }

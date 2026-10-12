@@ -2,13 +2,13 @@
 
 ## Rule
 
-The manual `Shift+Cmd+V` keydown branch in `src/lib/components/prompt/InputArea.svelte → handleKeydown` must be gated on **`isMac && e.metaKey`**, never `(e.metaKey || e.ctrlKey)`. On Linux/Windows the native browser `paste` event must run instead. This has ping-ponged between platforms multiple times.
+The manual `Shift+Cmd+V` keydown branch in `src/lib/components/features/conversation-dialog/InputArea.svelte → handleKeydown` must be gated on **`isMac && e.metaKey`**, never `(e.metaKey || e.ctrlKey)`. On Linux the native browser `paste` event must run instead. This has ping-ponged between platforms multiple times.
 
 ## Why each platform needs a different path
 
-**macOS:** WebKit doesn't reliably fire a usable `paste` event for `Cmd+Shift+V`. That shortcut is system-bound to "Paste and Match Style"; depending on WebKit version, either no `paste` event reaches JS, or the event arrives with already-stripped `clipboardData` that we can't override. The manual `invoke("get_clipboard_text")` path uses NSPasteboard via `arboard` — fast, reliable, no deadlock risk (NSPasteboard is brokered, not peer-to-peer).
+**macOS:** WebKit doesn't reliably fire a usable `paste` event for `Cmd+Shift+V`. That shortcut is system-bound to "Paste and Match Style"; depending on WebKit version, either no `paste` event reaches JS, or the event arrives with already-stripped `clipboardData` that we can't override. The manual path (`readClipboardForEditable()` in `src/lib/services/clipboardPaste.ts`, `invoke("get_clipboard_text")` then `get_clipboard_image`) uses NSPasteboard via `arboard` — fast, reliable, no deadlock risk (NSPasteboard is brokered, not peer-to-peer).
 
-**Linux/Windows:** The browser fires a normal `paste` event for `Shift+Ctrl+V`. `handleEditablePaste` already reads `e.clipboardData.getData("text/plain")` (instant, in-memory, no IPC, no X11) and honors `skipTextAttachment: shiftHeld` — exactly the desired raw-text behavior. Calling `arboard` from a Linux Tauri command re-introduces a self-deadlock with the WebKit webview's own X11 selection ownership, which can freeze the app for many seconds. See [tauri-command-threading.md](tauri-command-threading.md).
+**Linux:** The browser fires a normal `paste` event for `Shift+Ctrl+V`. `handleEditablePaste` already reads `e.clipboardData.getData("text/plain")` (instant, in-memory, no IPC, no X11) and honors `skipTextAttachment: shiftHeld` — exactly the desired raw-text behavior. Calling `arboard` from a Linux Tauri command re-introduces a self-deadlock with the WebKit webview's own X11 selection ownership, which can freeze the app for many seconds. See [tauri-command-threading.md](tauri-command-threading.md).
 
 ## What the code looks like
 
@@ -18,17 +18,15 @@ const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform)
 async function handleKeydown(e: KeyboardEvent) {
   if (isMac && e.key.toLowerCase() === "v" && e.shiftKey && e.metaKey) {
     e.preventDefault();
-    try {
-      const text = await invoke<string>("get_clipboard_text");
-      if (text) { document.execCommand("insertText", false, text); return; }
-    } catch {}
-    try {
-      const [data, mediaType] = await invoke<[string, string]>("get_clipboard_image");
-      if (data) localImages = [...localImages, { data, media_type: mediaType }];
-    } catch {}
+    const result = await readClipboardForEditable();
+    if (result?.kind === "text") {
+      document.execCommand("insertText", false, result.text);
+    } else if (result?.kind === "image") {
+      sync.localImages = [...sync.localImages, { data: result.data, media_type: result.mediaType }];
+    }
     return;
   }
-  // ... rest of handler; native paste event handles Linux/Windows
+  // ... rest of handler; native paste event handles Linux
 }
 ```
 
@@ -66,8 +64,8 @@ type), then:
 - **image** → `navigator.clipboard.read()` finds the `image/*`, builds a `File`, and
   re-dispatches a synthetic `paste` with populated `clipboardData`.
 - **no image** (our-process text) → asks the host via the router sentinel
-  (`kind=request_paste_text`). Rust reads the clipboard with `ClipboardService::get_text()`
-  (arboard) on the `spawn_blocking` router worker — **off** the GTK main thread, so no X11
+  (`kind=request_paste_text`). Rust reads the clipboard with `ClipboardService::get_text_raw()`
+  (arboard) in `deliver_clipboard_text_to_webview` (`palette.rs`), on the blocking-pool router worker started in the `on_navigation` handlers of `lifecycle.rs` and `provider_swap.rs` — **off** the GTK main thread, so no X11
   self-deadlock — and `eval`s `window.__promptheus.__deliverPasteText(text)` back into the
   webview, which re-dispatches a synthetic `text/plain` paste.
 
@@ -88,17 +86,17 @@ called `preventDefault`), manually insert via `setRangeText`+`input` event (inpu
 skips the manual insert, so no double paste.
 
 **Guards — do not remove:**
-- Skip when `e.clipboardData.files.length > 0` (image already delivered, e.g. macOS/Windows).
+- Skip when `e.clipboardData.files.length > 0` (image already delivered, e.g. macOS).
 - Skip when any `text/*` type is present (normal text paste — leave it alone).
 - The synthetic event carries `files` (image) or a `text/plain` type (text), so the listener
   short-circuits on its own re-dispatch (no loop).
-- The host bridge reads the clipboard on the router's `spawn_blocking` worker, never on a
+- The host bridge reads the clipboard on the router's blocking-pool worker, never on a
   sync `#[tauri::command]` / the GTK main thread — keep it that way (see
   [tauri-command-threading.md](tauri-command-threading.md)).
 
 **Why this does not reintroduce the X11 arboard deadlock:** the image path reads on the JS
 side via WebKit's own clipboard pipeline (no `arboard` at all); the text path reads
-`arboard` only on the router's `spawn_blocking` worker, never on a sync `#[tauri::command]`
+`arboard` only on the router's blocking-pool worker, never on a sync `#[tauri::command]`
 or the GTK main thread. Neither issues an X11 `SelectionRequest` from the main loop — this
 is the "Cleaner alternative" in [tauri-command-threading.md](tauri-command-threading.md).
 
@@ -111,10 +109,10 @@ embedded webview, and `enable_clipboard_access()` alone unlocks `read()`.
 
 - Touching `InputArea.svelte → handleKeydown` or its paste/keydown logic.
 - Touching `src/lib/utils/paste.ts` (`handleEditablePaste`, `getImageFromPasteEvent`).
-- Touching any Tauri clipboard command (`get_clipboard_text`, `get_clipboard_image`, `set_clipboard_text`).
+- Touching any Tauri clipboard command (`get_clipboard_text`, `get_clipboard_image`).
 - Touching `services/ai_webview/scripts.rs` paste injection or the `request_paste_text` host bridge in `palette.rs`.
 - Investigating "image/text paste does nothing in Claude/ChatGPT webview", "transcription result won't paste", or any "paste freezes" / "paste does nothing" report.
 
 ## Related
 
-- [tauri-command-threading.md](tauri-command-threading.md) — why the Linux `arboard` path freezes the app and why the backend commands are now `(async)`.
+- [tauri-command-threading.md](tauri-command-threading.md) — why the Linux `arboard` path freezes the app and why the backend clipboard commands are `(async)`.
