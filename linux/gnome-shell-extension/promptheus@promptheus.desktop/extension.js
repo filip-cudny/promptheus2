@@ -26,6 +26,7 @@ const WIDGET_ITEM_ROW_GAP = 4;
 const WIDGET_ITEMS_ROW_PADDING = 10;
 const WIDGET_ITEM_COLUMNS = 2;
 const WIDGET_CHIP_WIDTH = (WIDGET_WIDTH - 2 * WIDGET_PADDING_X - (WIDGET_ITEM_COLUMNS - 1) * WIDGET_ITEM_ROW_GAP) / WIDGET_ITEM_COLUMNS;
+const WIDGET_CHIP_PADDING_X = 6;
 const WIDGET_PREVIEW_MAX_HEIGHT = 160;
 const WIDGET_PREVIEW_GAP = 6;
 const WIDGET_PREVIEW_DELAY_MS = 300;
@@ -806,7 +807,7 @@ export default class PromptheusExtension extends Extension {
             reactive: true,
             track_hover: true,
             y_align: Clutter.ActorAlign.CENTER,
-            style: `width: ${WIDGET_CHIP_WIDTH}px; height: ${WIDGET_ITEM_ROW_HEIGHT}px; padding: 0 6px; spacing: 4px; border-radius: 11px; ` +
+            style: `width: ${WIDGET_CHIP_WIDTH - 2 * WIDGET_CHIP_PADDING_X}px; height: ${WIDGET_ITEM_ROW_HEIGHT}px; padding: 0 ${WIDGET_CHIP_PADDING_X}px; spacing: 4px; border-radius: 11px; ` +
                 'background-color: rgba(255,255,255,0.12); font-size: 11px;',
         });
         chip.isWidgetChip = true;
