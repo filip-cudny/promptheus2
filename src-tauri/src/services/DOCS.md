@@ -28,7 +28,7 @@ pub enum ConfigError {
 
 ### Service lifecycle
 
-Services are plain structs (not singletons). They are created once at startup in `setup/state.rs` and placed into Tauri managed state. Services that commands mutate are behind `Arc<Mutex<…>>`; others are managed without a `Mutex` (for example `ClipboardService`, `SettingsSync`, `McpRegistry`), so check `setup/state.rs` for the exact managed type before calling `state::<T>()`. The command layer is responsible for locking and calling service methods.
+Services are plain structs (not singletons). They are created once at startup in `setup/state.rs` and placed into Tauri managed state. Services whose methods take `&mut self` are behind `Arc<Mutex<…>>`; the others are managed without an outer `Mutex` (for example `ClipboardService`, `McpRegistry`, `RecordingWidget`, `SettingsSync`): they expose only `&self` methods and lock internally where they hold mutable state. Check `setup/state.rs` for the exact managed type before calling `state::<T>()`. The command layer is responsible for locking and calling service methods.
 
 - **Constructor**: no single rule; `ConfigService`, `SkillService` and `UiStateService` use `Service::load(args)`, most others `new`, `Database` uses `open` and `McpRegistry` uses `start_all`.
 - **Persistence**: no service exposes a public `save`. `ConfigService` writes inside `mutate`; `UiStateService` mutators write their file themselves.
