@@ -3,7 +3,6 @@ import { listen } from "@tauri-apps/api/event";
 import { error as logError } from "@tauri-apps/plugin-log";
 import { executeSkill } from "$lib/services/promptExecution";
 import type { InvocationSource } from "$lib/types/history";
-import { openConversationDialog } from "$lib/services/conversationDialog";
 
 let _isExecuting = $state(false);
 let _executionId = $state<string | null>(null);
@@ -106,17 +105,10 @@ async function init() {
     skill_name: string;
     text: string;
   }>("speech-alternative-execute", (event) => {
-    const { skill_id, skill_name, text } = event.payload;
-    const isChat = skill_id === "__chat__";
-    if (isChat) {
-      openConversationDialog("", "", undefined, undefined, text, false).catch(
-        (e) => logError("Failed to open dialog for voice input: " + e),
-      );
-    } else {
-      startExecution(skill_id, "alternative_execute", text).catch((e) =>
-        logError("Failed to execute skill from voice input: " + e),
-      );
-    }
+    const { skill_id, text } = event.payload;
+    startExecution(skill_id, "alternative_execute", text).catch((e) =>
+      logError("Failed to execute skill from voice input: " + e),
+    );
   });
 }
 

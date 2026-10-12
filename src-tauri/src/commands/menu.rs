@@ -204,15 +204,11 @@ pub async fn execute_menu_item(
     }
 
     if shift_pressed {
-        let display_name = if item_id == "__chat__" {
-            Some("Chat".to_string())
-        } else {
-            skill_service
-                .lock()
-                .await
-                .get_skill(&item_id)
-                .map(|sk| sk.display_name.clone())
-        };
+        let display_name = skill_service
+            .lock()
+            .await
+            .get_skill(&item_id)
+            .map(|sk| sk.display_name.clone());
 
         if let Some(display_name) = display_name {
             let mut s = speech.lock().await;

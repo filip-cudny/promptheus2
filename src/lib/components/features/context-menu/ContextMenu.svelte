@@ -206,12 +206,9 @@
         <MenuSeparator />
       {/if}
       {#if section.sectionId === "chat"}
-        {@const chatRecording = menu.chatRecording}
-        {@const chatDisabled = menu.recording && !chatRecording}
+        {@const chatDisabled = menu.recording}
         <ChatRow
-          recording={chatRecording}
           disabled={chatDisabled}
-          selected={chatRecording}
           bind:rowEl={chatRowEl}
           onhover={() => { if (positioning.hoverEnabled) menu.setSelectedIndex(-1); }}
           oncontextmenu={(e) => {
@@ -220,12 +217,8 @@
             e.stopPropagation();
             panels.openChatProviders();
           }}
-          onclick={async (e) => {
+          onclick={async () => {
             if (chatDisabled) return;
-            if (chatRecording || e.shiftKey) {
-              await menu.toggleChatRecording();
-              return;
-            }
             await menu.closeMenu();
             await focusOrOpenChat();
           }}
@@ -333,11 +326,16 @@
               <SkillActionMenu
                 recording={recordingThis}
                 {micDisabled}
+                runDisabled={executingThis || recordingThis || !item.enabled}
                 tooltip={item.tooltip}
                 {metaEntries}
                 onOpenInDialog={() => {
                   panels.closeActionMenu();
                   void menu.openDialogForItem(globalIndex);
+                }}
+                onRunInDialog={() => {
+                  panels.closeActionMenu();
+                  void menu.executeItem(globalIndex, true);
                 }}
                 onAlternativeExecute={() => {
                   panels.closeActionMenu();

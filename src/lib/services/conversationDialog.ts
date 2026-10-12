@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { InvocationSource } from "$lib/types/history";
 
 export async function openConversationDialog(
   skillId: string,
@@ -9,6 +10,7 @@ export async function openConversationDialog(
   autoSendInput?: boolean,
   newChat?: boolean,
   skillModel?: string | null,
+  invocationSource?: InvocationSource,
 ): Promise<void> {
   await invoke("open_conversation_dialog", {
     skillId,
@@ -19,6 +21,7 @@ export async function openConversationDialog(
     initialInput: initialInput ?? null,
     autoSendInput: autoSendInput ?? false,
     newChat: newChat ?? false,
+    invocationSource: invocationSource ?? null,
   });
 }
 

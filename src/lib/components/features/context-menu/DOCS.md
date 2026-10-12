@@ -26,10 +26,10 @@ The context menu runs in a **separate Tauri window** (`context-menu` label) with
 | `components/MenuEmptyState.svelte` | "No items available" fallback |
 | `components/MenuSeparator.svelte` | 1px section divider |
 | `components/MenuItemRow.svelte` | Generic row (icon + prompt-number + label + executing/recording state) |
-| `components/ChatRow.svelte` | Chat row (icon + label + recording toggle) |
+| `components/ChatRow.svelte` | Chat row (icon + label) |
 | `components/SettingsToggleRow.svelte` | Chevron + "Settings" toggle row |
-| `components/FooterHint.svelte` | Bottom hint (`⇧ voice input · right-click for actions`) |
-| `components/SkillActionMenu.svelte` | Floating panel content for skill RMB action menu (open in dialog / mic / metadata) |
+| `components/FooterHint.svelte` | Bottom hint (`⇧ run in dialog · right-click for actions`) |
+| `components/SkillActionMenu.svelte` | Floating panel content for skill RMB action menu (open in dialog / run in dialog / run with transcription / metadata) |
 | `components/SettingsPanel.svelte` | Floating panel content for Settings (quick action model + STT model selectors) |
 | `drivers/useFloatingPanelMutex.svelte.ts` | Mutually exclusive 3-panel state (settings / action menu / chat providers) + anchors |
 | `drivers/useMenuKeyboard.svelte.ts` | `keydown`/`keyup` handler, shifted digits, `shiftHeld` flag |
@@ -70,12 +70,14 @@ Defined in `src-tauri/tauri.conf.json` under `app.windows` with label `context-m
 | Key | Action |
 |-----|--------|
 | Arrow Up/Down | Move selection highlight |
-| Enter | Execute selected item (Shift+Enter for alternative execution) |
+| Enter | Execute selected item (Shift+Enter runs a skill in the dialog on the clipboard text) |
 | Escape | Close menu (closes any open floating panel first) |
 | 1-9 | Quick-select item by position (multi-digit debounced at 300ms) |
-| Shift+1-9 | Same as above with alternative execution flag |
+| Shift+1-9 | Same as above; runs the numbered skill in the dialog on the clipboard text |
 
 All keyboard handling lives in `drivers/useMenuKeyboard.svelte.ts`.
+
+Shift on a skill (click, Enter, digit, or the action-menu item) is "Run in dialog": the text comes from `get_clipboard_text`, `openConversationDialog` opens or reuses the dialog with auto-send, source `alternative_execute`. An empty or unreadable clipboard falls back to "Open in dialog". Shift on the skill being recorded stops the recording. "Run with transcription" in the action menu is the voice run. Shift+click on Chat is a normal click.
 
 ## Floating panels
 
@@ -84,7 +86,7 @@ Three mutually exclusive panels (`drivers/useFloatingPanelMutex.svelte.ts`):
 | Panel | Trigger | Contents |
 |-------|---------|----------|
 | Settings | LMB on Settings toggle row | `SettingsPanel` — quick action model + STT model |
-| Skill action menu | RMB on a skill row | `SkillActionMenu` — open in dialog / run with transcription / metadata |
+| Skill action menu | RMB on a skill row | `SkillActionMenu` — open in dialog / run in dialog / run with transcription / metadata |
 | Chat providers | RMB on Chat row | `ProviderMenuList` — Promptheus + webview providers |
 
 Closing the Settings or Skill action menu triggers `menu.resumeClose()` to release the suppression any inner control (e.g. ModelSelector) may have set.

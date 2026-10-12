@@ -18,8 +18,6 @@ import {
   handleNumberInput,
   getAllSkillItems,
   getSkillItems,
-  isRecordingChat,
-  toggleChatRecording,
   openDialogForItem,
   refreshItems,
   init,
@@ -52,9 +50,6 @@ export function useContextMenu() {
     get skillItems() {
       return getSkillItems();
     },
-    get chatRecording() {
-      return isRecordingChat();
-    },
     setSelectedIndex,
     closeMenu,
     suppressClose,
@@ -66,7 +61,6 @@ export function useContextMenu() {
     executeSelected,
     startAlternativeExecution,
     handleNumberInput,
-    toggleChatRecording,
     openDialogForItem,
     refreshItems,
     init,

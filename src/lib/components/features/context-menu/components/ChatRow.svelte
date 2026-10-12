@@ -1,11 +1,9 @@
 <script lang="ts">
-  import { MessageSquare, Square } from "lucide-svelte";
+  import { MessageSquare } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
   type Props = {
-    recording: boolean;
     disabled: boolean;
-    selected: boolean;
     rowEl?: HTMLElement;
     onclick: (e: MouseEvent) => void;
     oncontextmenu: (e: MouseEvent) => void;
@@ -13,9 +11,7 @@
   };
 
   let {
-    recording,
     disabled,
-    selected,
     rowEl = $bindable(),
     onclick,
     oncontextmenu,
@@ -26,18 +22,13 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class="chat-row"
-  class:selected
   role="menuitem"
   bind:this={rowEl}
   onmouseenter={onhover}
   {oncontextmenu}
 >
   <button class="chat-button" class:disabled {onclick}>
-    {#if recording}
-      <Square size={ICON_SIZE.md} />
-    {:else}
-      <MessageSquare size={ICON_SIZE.md} />
-    {/if}
+    <MessageSquare size={ICON_SIZE.md} />
     <span>Chat</span>
   </button>
 </div>
@@ -48,8 +39,7 @@
     align-items: center;
   }
 
-  .chat-row:hover,
-  .chat-row.selected {
+  .chat-row:hover {
     background: var(--surface-overlay);
   }
 

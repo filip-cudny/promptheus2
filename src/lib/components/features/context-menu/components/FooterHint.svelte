@@ -6,7 +6,7 @@
 
 <div class="footer-hint" class:active={shiftHeld}>
   <span class="footer-hint-key"><ArrowBigUp size={12} strokeWidth={2.25} /></span>
-  <span>voice input</span>
+  <span>run in dialog</span>
   <span class="footer-hint-sep">·</span>
   <span>right-click for actions</span>
 </div>

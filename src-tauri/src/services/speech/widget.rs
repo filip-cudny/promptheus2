@@ -1472,14 +1472,14 @@ mod tests {
     }
 
     #[test]
-    fn a_shift_click_chat_is_selected_even_when_not_a_target() {
+    fn a_shift_click_skill_is_selected_even_when_not_a_target() {
         let pending = PendingPrompt {
-            id: "__chat__".into(),
-            name: "Chat".into(),
+            id: "summarize".into(),
+            name: "Summarize".into(),
             origin: crate::services::speech::PendingOrigin::ShiftClick,
         };
         let model = build_model(pill_targets(&[]), Some(&pending), false, &[], 1, (0, 0));
-        assert_eq!(model.selected_label, "Chat");
+        assert_eq!(model.selected_label, "Summarize");
         assert!(!model.targets.iter().any(|(id, _)| id == &model.selected_id));
     }
 

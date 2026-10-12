@@ -4,7 +4,7 @@ import { error } from "@tauri-apps/plugin-log";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { MenuItem } from "$lib/types/menu";
 import { startExecution, isExecuting, getExecutingSkillId, cancelExecution } from "$lib/stores/execution.svelte";
-import { openConversationDialogNewWindow } from "$lib/services/conversationDialog";
+import { openConversationDialog, openConversationDialogNewWindow } from "$lib/services/conversationDialog";
 
 interface WorkArea {
   cursorX: number;
@@ -251,18 +251,7 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
     }
 
     if (shiftPressed) {
-      _isRecording = true;
-      _recordingSkillId = skillId;
-      try {
-        await invoke("execute_menu_item", {
-          itemId,
-          shiftPressed: true,
-        });
-      } catch (e) {
-        error("Failed to start speech recording for prompt: " + e);
-        clearRecordingState();
-      }
-      await refreshItems();
+      await runInDialog(index, skillId, data.skill_name ?? item.label);
       return;
     }
 
@@ -308,6 +297,24 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
   }
 
   await closeMenu();
+}
+
+async function runInDialog(index: number, skillId: string, skillName: string) {
+  let text: string;
+  try {
+    text = await invoke<string>("get_clipboard_text");
+  } catch (e) {
+    error(`Run in dialog: clipboard read failed for ${skillId}: ${e}`);
+    await openDialogForItem(index);
+    return;
+  }
+  const skillModel = await fetchSkillModel(skillId);
+  await closeMenu();
+  try {
+    await openConversationDialog(skillId, skillName, undefined, false, text, true, false, skillModel, "alternative_execute");
+  } catch (e) {
+    error(`Run in dialog: failed to open dialog for ${skillId}: ${e}`);
+  }
 }
 
 async function executeSelected(shiftPressed: boolean = false) {
@@ -370,7 +377,7 @@ function handleNumberInput(digit: string, isAlternative: boolean) {
       const targetIndex = _items.indexOf(targetItem);
       _selectedIndex = targetIndex;
       if (isAlternative) {
-        startAlternativeExecution(targetIndex);
+        executeItem(targetIndex, true);
       } else {
         executeItem(targetIndex);
       }
@@ -381,41 +388,6 @@ function handleNumberInput(digit: string, isAlternative: boolean) {
 function clearNumberBuffer() {
   if (numberTimer) clearTimeout(numberTimer);
   numberBuffer = "";
-}
-
-const CHAT_RECORDING_ID = "__chat__";
-
-function isRecordingChat(): boolean {
-  return _isRecording && _recordingSkillId === CHAT_RECORDING_ID;
-}
-
-async function toggleChatRecording() {
-  if (isRecordingChat()) {
-    clearRecordingState();
-    try {
-      await invoke("execute_menu_item", {
-        itemId: CHAT_RECORDING_ID,
-        shiftPressed: true,
-      });
-    } catch (e) {
-      error("Failed to stop chat speech recording: " + e);
-    }
-    await closeMenu();
-    return;
-  }
-
-  _isRecording = true;
-  _recordingSkillId = CHAT_RECORDING_ID;
-  try {
-    await invoke("execute_menu_item", {
-      itemId: CHAT_RECORDING_ID,
-      shiftPressed: true,
-    });
-  } catch (e) {
-    error("Failed to start chat speech recording: " + e);
-    clearRecordingState();
-  }
-  await refreshItems();
 }
 
 function getAllSkillItems(): MenuItem[] {
@@ -525,6 +497,16 @@ function destroy() {
   }
 }
 
+async function fetchSkillModel(skillId: string): Promise<string | null> {
+  try {
+    const skill = await invoke<{ model?: string | null }>("get_skill", { name: skillId });
+    return skill?.model ?? null;
+  } catch (e) {
+    error(`get_skill failed for ${skillId}: ${e}`);
+    return null;
+  }
+}
+
 async function openDialogForItem(index: number) {
   const item = _items[index];
   if (!item || item.item_type !== "skill") return;
@@ -532,13 +514,7 @@ async function openDialogForItem(index: number) {
   if (!data?.skill_id) return;
   const skillId = data.skill_id;
   const skillName = data.skill_name ?? item.label;
-  let skillModel: string | null = null;
-  try {
-    const skill = await invoke<{ model?: string | null }>("get_skill", { name: skillId });
-    skillModel = skill?.model ?? null;
-  } catch (e) {
-    error(`get_skill failed for ${skillId}: ${e}`);
-  }
+  const skillModel = await fetchSkillModel(skillId);
   await closeMenu();
   await openConversationDialogNewWindow(undefined, undefined, skillId, skillName, skillModel);
 }
@@ -568,8 +544,6 @@ export {
   clearNumberBuffer,
   getAllSkillItems,
   getSkillItems,
-  isRecordingChat,
-  toggleChatRecording,
   openDialogForItem,
   refreshItems,
   init,
