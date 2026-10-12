@@ -625,7 +625,7 @@ impl RecordingWidget {
                 inner.shell = Some(proxy);
                 inner.placement = Some(placement);
             }),
-            Transport::Window => self.show_window(app, settings, item_rows).await.map(|(placement, scale)| {
+            Transport::Window => self.place_window(app, settings, item_rows).await.map(|(placement, scale)| {
                 inner.placement = Some(placement);
                 inner.scale = scale;
             }),
@@ -644,6 +644,13 @@ impl RecordingWidget {
             push(app, &mut inner, 0.0).await;
         }
         push_current_model(app, &mut inner).await;
+        if transport == Transport::Window {
+            if let Err(e) = reveal_window(app) {
+                log::warn!("showing the recording widget failed, using toasts: {e}");
+                inner.transport = None;
+                return false;
+            }
+        }
         spawn_level_task(app.clone(), session, inner.generation);
         true
     }
@@ -758,7 +765,7 @@ impl RecordingWidget {
         }
     }
 
-    async fn show_window(
+    async fn place_window(
         &self,
         app: &AppHandle,
         settings: WidgetSettings,
@@ -812,7 +819,6 @@ impl RecordingWidget {
         let origin = (origin.0.round(), origin.1.round());
         log_placement(source, origin, (size.0 as f64, size.1 as f64), work_area);
         self.set_window_origin(&window, origin)?;
-        window.show().map_err(|e| e.to_string())?;
         Ok((Placement { origin, work_area }, scale))
     }
 
@@ -1031,6 +1037,13 @@ fn note_update_failure(inner: &mut Inner, result: Result<(), String>) {
             log::warn!("updating the recording widget failed: {e}");
         }
     }
+}
+
+fn reveal_window(app: &AppHandle) -> Result<(), String> {
+    app.get_webview_window(WINDOW_LABEL)
+        .ok_or("recording-widget window not found")?
+        .show()
+        .map_err(|e| e.to_string())
 }
 
 async fn push(app: &AppHandle, inner: &mut Inner, level: f64) {
