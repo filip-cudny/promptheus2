@@ -2,62 +2,14 @@
 
 Business logic layer. Services own state and behavior; Tauri commands delegate to them.
 
-## Directory Structure
+## Layout
 
-```
-services/
-├── mod.rs               # Module declarations
-├── ai/                  # AiService — multi-provider LLM completions (streaming + sync)
-│   ├── mod.rs           #   AiService orchestrator, AiError enum
-│   ├── provider.rs      #   AiProvider trait, CompletionRequest, StreamChunk
-│   ├── openai.rs        #   OpenAiProvider — reqwest-based OpenAI implementation
-│   └── sse.rs           #   Lightweight SSE line parser for reqwest byte streams
-├── ai_webview/          # AiWebviewState + provider window management
-│   ├── mod.rs           #   AiWebviewState (shared mutex maps), public API re-exports
-│   ├── lifecycle.rs     #   Window/webview creation, teardown, media permissions
-│   ├── provider_swap.rs #   Hosted/standalone provider swap, active-changed events
-│   ├── palette.rs       #   Palette open/close + router-message handling
-│   ├── cold_suspend.rs  #   Idle tracking, suspend-to-blank, lifecycle toasts
-│   └── scripts.rs       #   Initialization JS (dark-mode shim + palette keybind)
-├── clipboard.rs         # ClipboardService — text and image clipboard operations
-├── config/              # ConfigService — settings load/validate/save/mutate
-│   ├── mod.rs           #   ConfigService struct + load/save/reload + mutators; SurfaceKind
-│   ├── loader.rs        #   File I/O, env-var loading, default-asset initialisation
-│   ├── migrator.rs      #   Legacy schema migration (default_model → surfaces, inline → file)
-│   ├── prompts.rs       #   PromptKind enum + PromptStore (file I/O + path safety)
-│   ├── defaults.rs      #   Surface-default backfill + Settings validation
-│   └── tests.rs         #   Integration tests using ConfigService::load with TempDir
-├── context.rs           # ContextManagerService — ordered context items (text/image)
-├── database.rs          # Database — SQLite connection, schema creation, migrations
-├── sqlite_history/      # SqliteHistoryService — persistent history storage via SQLite
-│   ├── mod.rs           #   SqliteHistoryService CRUD + public API
-│   ├── codec.rs         #   TreeJson, row→entry mapping, summary builders (pure)
-│   └── tests.rs         #   CRUD integration tests against an in-memory database
-├── gnome_shell/         # GNOME Shell extension D-Bus client (Linux)
-│   └── mod.rs           #   Shell proxy, OnceLock connection, is_gnome_wayland, place_window, place_window_anchored, show_toast
-├── hotkeys.rs           # Hotkey translation and OS-filtered binding resolution
-├── image_storage.rs     # ImageStorage — temp image file save/load for conversation history
-├── mcp/                 # MCP client — rmcp-based tool server management
-│   ├── mod.rs           #   Re-exports McpClient, McpError
-│   └── client.rs        #   McpClient wrapper, McpError enum
-├── menu_coordinator.rs  # MenuCoordinator — aggregates menu providers into ordered sections
-├── notification.rs      # NotificationService — event-gated notifications
-├── placeholder.rs       # PlaceholderService — template variable substitution and image injection
-├── execution.rs         # PromptExecutionService — execution state machine (cancel, streaming, model resolution)
-├── settings_sync/       # SettingsSync — git sync of the symlinked settings repo
-│   ├── mod.rs           #   SettingsSync engine, SyncHooks trait, SyncStatus, one sync cycle
-│   ├── git.rs           #   GitRunner — non-interactive git CLI with timeout and login-shell env
-│   ├── detect.rs        #   detect() — repo, stage paths and branch from the config dir symlinks
-│   └── tests.rs         #   Cycle and detection tests on temp bare repo + two clones
-├── skill/               # SkillService — file-based skill loading + DB-backed versioning
-│   ├── mod.rs           #   SkillService load/list/sync_versions; SkillError
-│   └── parser.rs        #   YAML frontmatter + body splitter (pure)
-├── speech/              # SpeechService — recording + transcription
-│   ├── mod.rs           #   SpeechService state machine, SpeechError
-│   ├── recorder.rs      #   cpal device discovery, sample-rate negotiation, WAV encoding
-│   └── transcriber.rs   #   HTTP transcribe() for OpenAI/ElevenLabs + SttOptions
-└── DOCS.md
-```
+One file or directory per service; the file name is the service name. Directories where a file's place does not follow from its name:
+
+- `ai/` — `provider.rs` (`AiProvider`, `CompletionRequest`, `StreamChunk`), `openai.rs` (Completions) and `openai_responses.rs` (Responses), `encoder.rs` (per-API capability encoding), `sse.rs` (SSE line parser)
+- `execution/` — `lifecycle.rs` (`PromptExecutionService`, `ExecutionError`), `skill_executor.rs` and `conversation_executor.rs` (message preparation and result recording), `stream.rs` (stream and tool loop)
+- `settings_sync/` — `git.rs` (`GitRunner`), `detect.rs`, `reload.rs`
+- `speech/` — see [speech/DOCS.md](speech/DOCS.md); `mcp/` — see [mcp/DOCS.md](mcp/DOCS.md)
 
 ## Conventions
 
@@ -76,7 +28,7 @@ pub enum ConfigError {
 
 ### Service lifecycle
 
-Services are plain structs (not singletons). They are created once at startup and placed into Tauri managed state behind `Mutex`. The command layer is responsible for locking and calling service methods.
+Services are plain structs (not singletons). They are created once at startup in `setup/state.rs` and placed into Tauri managed state behind `Mutex`. The command layer is responsible for locking and calling service methods.
 
 - **Constructor**: `Service::load(args) -> Result<Self, ServiceError>` — reads from disk, validates, returns ready-to-use instance.
 - **Persistence**: `save(&self)` writes to disk. Mutation methods do **not** auto-save — the command layer decides when to persist.
@@ -88,9 +40,9 @@ Services are plain structs (not singletons). They are created once at startup an
 
 ### ClipboardService specifics
 
-Uses the `arboard` crate for cross-platform clipboard access (text and images). No Tauri dependency — keeps the service layer framework-independent.
+Reads text and images with the `arboard` crate; writes text through `write_text` (below). The struct holds `app: Option<AppHandle>` (`None` only in tests, via `without_app`): with an app, `set_text` goes through `write_text`; without, through `arboard`.
 
-**Key pattern — no stored clipboard handle**: `arboard::Clipboard` is not `Send`/`Sync`, so it cannot be held across await points or stored in shared state. Each method creates a fresh `arboard::Clipboard` instance per call. The `ClipboardService` struct itself is a unit struct.
+**Key pattern — no stored clipboard handle**: `arboard::Clipboard` is not `Send`/`Sync`, so it cannot be held across await points or stored in shared state. Each read creates a fresh `arboard::Clipboard` per call.
 
 **Error variants**:
 - `Unavailable` — clipboard is empty or content can't be read (soft error)
@@ -99,21 +51,19 @@ Uses the `arboard` crate for cross-platform clipboard access (text and images). 
 
 **Image pipeline**: `arboard::ImageData` (raw RGBA pixels) → `image::ImageBuffer` → PNG encode → base64 string. Returns `(base64_data, media_type)` tuple.
 
-**Methods**: `new`, `get_text`, `set_text`, `is_empty`, `has_image`, `get_image_base64`.
+**Reads**: `get_text` trims and fails with `Unavailable` on empty; `get_text_raw` returns the text untouched (the raw-paste path); `has_image`, `has_file_list` and `get_image_base64` serve the paste-kind logic. `paste_kind(has_file_list, has_image)` decides what a paste into the context does: file list → nothing (files are not pasteable items, even when an image or text is also offered), else image, else text.
 
-**Linux text writes**: `write_text` pipes the text to `wl-copy` when `WAYLAND_DISPLAY` is set, else to `xclip -selection clipboard`. When the tool is missing it logs `warn` (`clipboard subprocess failed`) and falls back to `tauri-plugin-clipboard-manager`; on GNOME Wayland that fallback writes the XWayland clipboard and the text does not reach Wayland apps, without an error. The `.deb` therefore depends on `wl-clipboard` (`bundle.linux.deb.depends` in `src-tauri/tauri.conf.json`).
+**Linux text writes**: `write_text` pipes the text to `wl-copy` when `WAYLAND_DISPLAY` is set, else to `xclip -selection clipboard`. When the tool is missing it logs `warn` (`clipboard subprocess failed`) and falls back to `tauri_plugin_clipboard_manager`; on GNOME Wayland that fallback writes the XWayland clipboard and the text does not reach Wayland apps, without an error. The `.deb` therefore depends on `wl-clipboard` (`bundle.linux.deb.depends` in `src-tauri/tauri.conf.json`).
 
 ### ConfigService specifics
 
-**Load sequence**: `load_env()` -> read JSON -> deserialize -> `migrate_model_params()` -> `load_api_keys()` -> `validate()`.
-
-**API key sanitization**: the write deep-clones settings before writing. Env-sourced model keys and speech model keys are stripped. Direct API keys are preserved.
+**Load sequence** (`ConfigService::load`): `load_env` (`<config dir>/.env`, then `dotenvy::dotenv_override()` from the working directory and its parents, both overriding the process environment; sets `CONFIG_DIR`) → default assets copied when `settings.json` is missing → read and `parse_and_migrate` (schema migration in `migrator.rs`) → legacy prompt file moves and defaults → `migrate_model_params` → capability sanitizing → `ensure_surface_defaults` → `validate` → `write`. A model's `api_key` is a literal key or a `${VAR}` reference, resolved at use by `ModelConfig::resolved_api_key`; `write` serializes the settings as they are, with no key stripping.
 
 **Mutations go through `ConfigService::mutate`**: it reloads `settings.json` when its bytes differ from the last read or written, runs the closure, then writes. No public `save` exists. A reload inside `mutate` is applied to runtime state by `commands::settings::apply_settings_reload`, called after the config guard is dropped. A failed reload fails the mutation and writes nothing. `settings.json` is written in place with `std::fs::write` because it may be a symlink into the settings repo; a temp-file rename would replace the symlink and stop sync.
 
-**Mutation methods**: `add_model`, `update_model` (upsert), `delete_model`, `add_prompt`, `update_prompt`, `delete_prompt`, `reorder_prompts`, `update_notifications`, `update_keymaps`, `update_menu_section_order`, `update_setting`. STT models live in the same `models` list (discriminated by `ModelConfig.model_type = Stt`) — use `add_model`/`update_model`/`delete_model`. `settings.speech_to_text_model: Option<String>` holds the id of the currently selected STT model; resolve via `ConfigService::resolve_stt_model()`.
+**Mutators**: `update_*` and `add_model`/`update_model` (upsert)/`delete_model` change the in-memory settings only; they run inside `mutate`. STT models live in the same `models` list (discriminated by `ModelConfig.model_type = Stt`). The selected STT model is `surfaces.speech_to_text.model_id`; resolve it with `ConfigService::resolve_stt_model()`. Prompts are not settings entries: they are files (below).
 
-**Prompt files**: All prompts live as `.md` files under `<config_dir>/prompts/{base,surfaces}/`. JSON config holds only paths. Six `PromptKind`s — `System`, `AboutYou`, `Environment`, `InputFormat`, `TitleGeneration`, `SpeechToText`. Read via `config.read_prompt(kind)` / write via `config.write_prompt(kind, content)`. `PromptStore` enforces path safety: relative-only, no `..`, must end with `.md`/`.markdown`, env-var refs (`${VAR}`) resolved at read time. Migrator extracts inline-string prompts from legacy `settings.json` into files on first load and renames legacy field names (`system_prompt` → `system`, `environment_section` → `environment`, `about_me` → `about_you`). The `prompts/base/about_me.md` file is renamed to `about_you.md` on disk; the historical `system.md` default `"You are a helpful assistant."` is replaced with the new anti-sycophancy default (user-edited content is not touched). Only `Environment` substitutes `{{date}}/{{time}}/{{timezone}}/{{os}}/{{active_app}}/{{recent_apps}}` placeholders — other prompts are sent verbatim.
+**Prompt files**: All prompts live as `.md` files under `<config_dir>/prompts/{base,surfaces}/`. JSON config holds only paths. Six `PromptKind`s — `System`, `AboutYou`, `Environment`, `InputFormat`, `TitleGeneration`, `SpeechToText`. Read via `config.read_prompt(kind)` / write via `config.write_prompt(kind, content)`. `PromptStore` enforces path safety: relative-only, no `..`, must end with `.md`/`.markdown`, env-var refs resolved (`config/path.rs`) before those checks. Migrator extracts inline-string prompts from legacy `settings.json` into files on first load and renames legacy field names (`system_prompt` → `system`, `environment_section` → `environment`, `about_me` → `about_you`). The `prompts/base/about_me.md` file is renamed to `about_you.md` on disk; the historical `system.md` default `"You are a helpful assistant."` is replaced with the new anti-sycophancy default (user-edited content is not touched). Only `Environment` substitutes `{{date}}`/`{{time}}`/`{{timezone}}`/`{{os}}`/`{{active_app}}`/`{{recent_apps}}` placeholders (`placeholder_registry.rs`) — other prompts are sent verbatim.
 
 **System prompt assembly**: `build_system_prompt_base` composes the runtime system message as XML-tagged sections joined with `\n\n` (no `---` separators). Order: raw system prompt → `<user_context>` (contains `Name: {preferred_name}` + about_you body) → `<environment>` → `<input_format>`. Empty/whitespace-only sections are dropped entirely; the `Name:` line is dropped if `preferred_name` is empty. `preferred_name` is a top-level `Settings` field (default empty, trimmed and clamped to 60 chars on `update_setting`).
 
@@ -131,17 +81,11 @@ Manages an ordered list of `ContextItem` values (text and/or images) in memory. 
 
 **Constructor**: `ContextManagerService::new()` — returns an empty service.
 
-**Text methods**: `set_context` (replace all), `append_context`, `get_context` (concatenates non-empty text with `\n`, returns `None` if no text), `has_context` (true if any Text items), `get_context_or_default`.
-
 **Labelled context**: `labelled_context()` returns `None` without text items, otherwise one `<pasted-text name="Text #{number}">\n{content}\n</pasted-text>` block per text item (empty content included, images skipped) joined with `\n\n`; `pasted_text_block` builds a block and is shared with chat message attachments. Consumers: skill prompts (`prepare_skill_messages` wraps it as `{system_prompt}\n\n<context>\n{blocks}\n</context>` in the system message and labels context images `[Context Image #{number}]` in the user message) and command `get_labelled_context`. `get_context()` stays the raw `\n` join without tags and serves "Copy context text" (`get_context_text`) and `{{context}}`.
 
-**Image methods**: `set_context_image` (replace all), `append_context_image`, `has_images`.
+**Numbers**: each item gets a per-kind `number` (`Text #n`, `Image #n`) from two counters (`next_text_number`, `next_image_number`): assigned on add, kept on `remove_item`, reset to 1 by `clear` and by every replace (`set_context`, `set_context_image`, so also `set_context_from_clipboard` and the `set_context_value` hotkey). Pill, context menu and context editor label items from it. Context hotkeys emit `context-changed` through `emit_context_changed` (version bump, pill refresh).
 
-**Numbers**: each item gets a per-kind `number` (`Text #n`, `Image #n`) from two counters: assigned on add, kept on `remove_item`, reset to 1 by `clear` and by every replace (`set_context`, `set_context_image`, so also `set_context_from_clipboard` and the `set_context_value` hotkey). Pill, context menu and context editor label items from it. Context hotkeys emit `context-changed` through `emit_context_changed` (version bump, pill refresh).
-
-**General methods**: `clear`, `get_items` (cloned), `remove_item(index) -> bool`, `item_count`, `has_text_or_images`, `is_empty`.
-
-**Key edge case**: `has_context()` checks for Text variant existence; `get_context()` additionally filters out empty-content items. Image-only context returns `None` from `get_context()`.
+**`has_context` semantics**: `has_context()` is `!items.is_empty()`, so it is true for an image-only context; `get_context()` concatenates the non-empty text items with `\n` and returns `None` when there are none, so an image-only context returns `None` from it. Use `has_images()` / `get_context()` when the kind matters.
 
 **Context version and pill**: `commands/context.rs` owns a static `CONTEXT_VERSION`; `current_context_version()` reads it and `emit_context_changed` is the only place that bumps it. After emitting `context-changed` it spawns `RecordingWidget::refresh_model`, which resizes and re-pushes the pill model when the pill is shown. Pill item removal and Paste go through `remove_item_for_pill` / `paste_item_for_pill` there; a removal whose version differs from the current one removes nothing.
 
@@ -177,21 +121,21 @@ Persistent history storage via SQLite. Database file at `{app_data_dir}/history.
 
 **Compaction**: `DELETE` never shrinks the SQLite file — freed pages land on the freelist and the database is in WAL mode, so a bulk delete also inflates `history.db-wal`. `compact_after_bulk_delete()` runs after any bulk delete (retention change, `clear_history`): first `PRAGMA wal_checkpoint(TRUNCATE)` (cheap, no exclusive lock), then `VACUUM` only if `reclaimable > 100 MB` **and** `freelist_count / page_count > 0.25` — the conjunction avoids vacuuming a tiny database on ratio alone, or a multi-GB one where 100 MB is noise. `vacuum()` is also exposed unconditionally through the `compact_history_database` command for the manual "Compact database" button. `VACUUM` needs ~2× the database size on disk and holds an exclusive lock, so it never runs on the startup sweep or on the insert path. Both commands wrap the blocking work in `tokio::task::block_in_place` (lock is acquired with `.await` first — nesting `block_on` inside a runtime thread would panic). `storage_stats()` reports `page_count * page_size` and `freelist_count * page_size` — all three pragmas are database-header reads (O(1)), so the settings UI can refresh them on every `history-changed` event for free. Deliberately excludes an entry count: `SELECT COUNT(*)` is a full scan and `history-changed` fires on every prompt execution.
 
-**Methods**: `new`, `set_retention_days`, `enforce_retention`, `storage_stats`, `checkpoint_wal`, `vacuum`, `compact_after_bulk_delete`, `add_entry`, `add_conversation_entry`, `update_conversation_entry`, `get_history`, `get_entry_by_id`, `get_last_item_by_type`, `get_last_quick_action`, `get_conversation_data`, `resolve_full_content`, `update_entry_title`, `clear`, `entry_count`.
+**Full-text search**: `conversations_fts` (FTS5 over `title`, `skill_name`, `input_content`, `output_content`) is kept in sync by the `conversations_fts_ai`/`_ad`/`_au` triggers; `search_fts` joins it to `conversations` on `rowid` and orders by `bm25` (weights 10, 5, 2, 1). The query string reaches `MATCH` as given, so callers (`history_search.rs`) must build a valid FTS5 expression. `conn()` exposes the connection for those callers.
 
-**Error enum**: `HistoryError` with variants `EntryNotFound(String)` and `Database(rusqlite::Error)`.
+**Error enum**: `HistoryError` with variants `EntryNotFound(String)` and `Database(rusqlite::Error)`. `update_entry_result` and `delete_entry` return `EntryNotFound` for an unknown id.
 
 ### Hotkeys specifics
 
 Pure functions (no struct/state) for translating keymap settings into `tauri-plugin-global-shortcut`-compatible shortcut strings.
 
-**OS-aware translation**: `translate_shortcut(shortcut, os)` converts config format (`"cmd+f1"`) to plugin format (`"Command+F1"`). The `os` parameter (`"macos"`, `"linux"`, `"windows"`) affects modifier mapping — `cmd` becomes `Command` on macOS, `Super` on Linux/Windows.
+**OS-aware translation**: `translate_shortcut(shortcut, os)` converts config format (`"cmd+f1"`) to plugin format (`"Command+F1"`). The `os` parameter (`"macos"` or anything else, in practice `"linux"`) affects only `cmd`: `Command` on macOS, `Super` otherwise.
 
 **OS filtering**: `get_active_bindings(settings)` returns only bindings from `KeymapGroup` entries whose `context` matches the current OS (`std::env::consts::OS`). Returns `Vec<(translated_shortcut, action_name)>`.
 
 **Validation**: shortcuts with fewer than 2 parts (no modifier) return `None` and are silently skipped.
 
-**Key translation rules**: `cmd`→`Command`/`Super`, `ctrl`→`Control`, `shift`→`Shift`, `alt`→`Alt`, `meta`/`super`→`Super`. Key names: `f1`-`f20` uppercased, single letters uppercased, named keys mapped (`space`→`Space`, `esc`→`Escape`, `up`→`ArrowUp`, etc.).
+**Key translation rules**: `cmd`→`Command`/`Super`, `ctrl`→`Control`, `shift`→`Shift`, `alt`→`Alt`, `meta`/`super`→`Super`. Key names: `f<N>` uppercased, single letters uppercased, named keys mapped (`space`→`Space`, `esc`→`Escape`, `up`→`ArrowUp`, etc.).
 
 **Backends**: on GNOME Wayland (`gnome_shell::is_gnome_wayland()`) shortcuts are grabbed by the GNOME Shell extension; elsewhere by `tauri-plugin-global-shortcut`. `to_gtk_accelerator` converts the `get_active_bindings` output (`Control+F1`, `ArrowUp`) to GTK accelerators (`<Control>F1`, `Up`) for the extension; an unknown key returns `None`. `setup/shortcuts.rs` selects the backend. See [linux-wayland-gnome-extension.md](../../../docs/gotchas/linux-wayland-gnome-extension.md).
 
@@ -199,9 +143,9 @@ Pure functions (no struct/state) for translating keymap settings into `tauri-plu
 
 Linux-only D-Bus client for the `com.promptheus.Shell` interface served by the GNOME Shell extension (`linux/gnome-shell-extension/`). Uses `zbus`.
 
-- `ShellProxy` (`#[zbus::proxy]`): `set_shortcuts`, `get_pointer`, `place_window`, `place_window_anchored`, `get_focused_wm_class`, `show_recording_widget(x, y, has_position, monochromatic) → (x, y, work_x, work_y, work_width, work_height)` (placed origin and work area of the monitor it landed on), signals `shortcut_activated`, `ready`, `recording_widget_action` and `recording_widget_moved(x, y, work_x, work_y, work_width, work_height)`.
+- `Shell` (`#[zbus::proxy]`, interface `com.promptheus.Shell`): `SetShortcuts`, `GetPointer`, `PlaceWindow`, `PlaceWindowAnchored`, `GetFocusedWmClass`, `ShowToast(level, title, message, monochromatic)`, `ShowRecordingWidget(x, y, has_position, monochromatic) → (x, y, work_x, work_y, work_width, work_height)` (placed origin and work area of the monitor it landed on), `UpdateRecordingWidget(state, level, elapsed_ms)`, `HideRecordingWidget`; signals `ShortcutActivated`, `Ready`, `RecordingWidgetAction` and `RecordingWidgetMoved(x, y, work_x, work_y, work_width, work_height)`.
 - The session connection lives in a process-wide `OnceLock`, so callers without state (`frontmost_app::detect()`) reach it through `proxy()` (async) or `blocking_proxy()`.
-- Recording pill additions: method `UpdateRecordingWidgetModel(a(ss), s, s, b, a(ussss), u, t, i, i)` (`update_recording_widget_model`: targets, selected id and label, target lock, items `(index, kind, label, preview, image_path)`, item rows, context version, x, y; no dropdown direction, decision #28) and signals `RecordingWidgetTargetSelected(s)` / `RecordingWidgetItemRemoved(u, t)` consumed in `setup/shortcuts.rs`; `RecordingWidgetAction` also carries `paste` and `stop_chat`. A failed call is logged once per recording by `push_model`. See [speech/DOCS.md](speech/DOCS.md).
+- Recording pill additions: method `UpdateRecordingWidgetModel(a(ss), s, s, b, a(ussss), u, t, i, i)` (`update_recording_widget_model`: targets, selected id and label, target lock, items `(index, kind, label, preview, image_path)`, item rows, context version, x, y; no dropdown direction: the model carries none, see [speech/DOCS.md](speech/DOCS.md)) and signals `RecordingWidgetTargetSelected(s)` / `RecordingWidgetItemRemoved(u, t)` consumed in `setup/shortcuts.rs`; `RecordingWidgetAction` also carries `paste` and `stop_chat`. A failed call is logged once per recording by `push_model`. See [speech/DOCS.md](speech/DOCS.md).
 - `is_gnome_wayland()` is the backend selector: `XDG_SESSION_TYPE=wayland` and `XDG_CURRENT_DESKTOP` contains `GNOME`.
 - `place_window(title, x, y, activate, show)` (context menu) and `place_window_anchored(title, right, bottom, activate, show)` (notification window) are the only callers of `PlaceWindow` and `PlaceWindowAnchored`; both go through `call_placement`. With `show = Some(win)` the call is sent before `win.show()` and the reply awaited after it; with `None` it is a plain call to an already visible window.
 - `frontmost_app` on Wayland reads `GetFocusedWmClass`; it returns an empty string when the extension is unreachable.
@@ -209,7 +153,7 @@ Linux-only D-Bus client for the `com.promptheus.Shell` interface served by the G
 
 ### ImageStorage specifics
 
-Manages temporary image files for conversation history. Saves base64-encoded image data to disk and loads it back, matching the original `image_storage.py` behavior.
+Manages temporary image files for conversation history. Saves base64-encoded image data to disk and loads it back.
 
 **Temp directory**: `{app_data_dir}/temp_images/`. Created on `initialize()`, which clears any existing files first (called on app startup).
 
@@ -227,8 +171,6 @@ Manages temporary image files for conversation history. Saves base64-encoded ima
 
 **Error variants**: `Io` (filesystem errors), `Base64Decode` (invalid base64 input).
 
-**Methods**: `new`, `initialize`, `save_image`, `load_image`, `cleanup`.
-
 ### NotificationService specifics
 
 Holds an `AppHandle`. Unlike other services, this one depends on the Tauri runtime.
@@ -236,21 +178,19 @@ Holds an `AppHandle`. Unlike other services, this one depends on the Tauri runti
 
 **Display**: `notify()` calls `commands::notification::show_notification`. On GNOME Wayland it routes to the extension's `ShowToast` (falling back to the notification webview window if the call fails); elsewhere it uses the notification webview window. See `docs/gotchas/linux-wayland-gnome-extension.md`.
 
-**`is_event_enabled` mapping**: maps 13 string event names (e.g., `"prompt_execution_success"`, `"clipboard_copy"`) to the corresponding bool field on `NotificationEvents`. Unknown event names return `true` (safe default — show rather than hide).
-
-**Methods**: `new(AppHandle)`, `notify(event_name, level, title, message, settings)`.
+**`is_event_enabled` mapping**: maps the string event names (13) (e.g., `"prompt_execution_success"`, `"clipboard_copy"`) to the corresponding bool field on `NotificationEvents`. Unknown event names return `true` (safe default — show rather than hide).
 
 ### MenuCoordinator specifics
 
 Aggregates `MenuItemProvider` trait implementors (defined in `traits.rs`) into a flat, ordered list of `MenuItem`s. Section order comes from `ConfigService.settings().menu_section_order`.
 
-**Built-in virtual sections**: `"prompts"` and `"settings"` are handled directly (not via providers). Prompts are built from config, with dynamic providers (ContextMenuProvider, LastInteractionMenuProvider, SpeechMenuProvider) excluded. Settings builds model and prompt toggle items.
+**Built-in virtual sections**: `"chat"`, `"skills"` (alias `"prompts"`), `"models"` and `"settings"` are handled directly (not via providers). Skills come from the registered providers with the dynamic ones (`ContextMenuProvider`, `LastInteractionMenuProvider`, `SpeechMenuProvider`) excluded; `models` and `settings` are built from `ConfigService`. The ids `speech`, `lastInteraction` and `context` map to the dynamic providers' names.
 
 **Provider sections**: Any other section ID queries registered providers whose `section_id()` matches. Providers are added at startup via `add_provider()`.
 
 **Separator placement**: A `separator_after = true` flag is set on the last item of each non-final section. No trailing separator.
 
-**Methods**: `new`, `add_provider`, `get_menu_items(&config)`, `refresh_all`.
+`update_context_items` pushes context items to the `ContextMenuProvider`; `providers_mut` gives access to the registered providers.
 
 **Testing**: Unit tests cover section ordering, separator placement, empty-provider skipping, dynamic-provider exclusion, and settings section content. Tests use mock providers implementing `MenuItemProvider`.
 
@@ -272,8 +212,6 @@ Resolves `{{name}}` template variables in prompt messages before they are sent t
 3. For the last message, if `context_mgr.has_images()`, content is converted to `MessageContent::Parts` with text + image data URIs (`data:{media_type};base64,{data}`). Empty text is omitted from parts.
 4. `ClipboardUnavailable` errors propagate immediately; other processor errors silently replace with `""`.
 
-**Validation methods**: `has_placeholders()`, `find_invalid_placeholders()` (regex-based), `get_placeholder_info()`, `get_available_placeholders()`.
-
 **Testing**: Tests use mock processors (registered via the trait) to avoid system clipboard dependency. `ContextManagerService` is used directly since it's in-memory. `ClipboardService` is passed but unused by mock processors.
 
 ### AiService specifics
@@ -282,12 +220,13 @@ Multi-provider LLM service. Lives in `ai/` subdirectory with one file per provid
 
 **Provider trait** (`provider.rs`): `AiProvider` defines `complete(CompletionRequest) -> Result<String>` and `complete_stream(CompletionRequest) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk>>>>>`. Providers are framework-independent — no Tauri imports.
 
-**Provider registry**: `AiService::new(models)` iterates `ModelConfig` entries, matches on the `Provider` enum, and creates the appropriate provider. Models with missing API keys or unsupported providers are tracked in `unavailable_models` (graceful degradation — the app still starts).
+**Provider registry**: `AiService::new(models)` iterates `ModelConfig` entries and matches on the `Provider` enum. Only `Provider::Openai` builds a client; `Anthropic`, `Gemini` and `ElevenLabs` models are recorded in `unavailable_models` with a reason ("provider not yet supported", "speech-to-text only"), as are OpenAI models whose provider fails to build (missing API key). The app still starts.
+
+**API mode**: the model's `ApiMode` picks the provider and the capability encoder: `Responses` → `OpenAiResponsesProvider` (`{base_url}/responses`) with `OpenAiResponsesEncoder`, `Completions` → `OpenAiProvider` (`{base_url}/chat/completions`) with `OpenAiCompletionsEncoder`.
 
 **Adding a new provider**:
 1. Create `services/ai/<provider>.rs` implementing `AiProvider`.
-2. Add a match arm in `AiService::new()` for the new `Provider` variant.
-3. Add the variant to `Provider` enum in `models/settings.rs` and `types/index.ts`.
+2. Replace the `unavailable_models` arm of `AiService::new()` for that `Provider` variant (the variant already exists in `models/settings.rs`).
 
 **Streaming architecture**: The `complete_stream` trait method returns an owned `Stream`. The Tauri command layer (`commands/ai.rs`) bridges this to a `tauri::ipc::Channel<StreamEvent>`. The per-service `AiService` lock is released (via clone of the cheap `Arc`-backed handle) before stream iteration to avoid holding it for the duration of the HTTP response.
 
@@ -295,26 +234,21 @@ Multi-provider LLM service. Lives in `ai/` subdirectory with one file per provid
 
 **Error variants**: `ModelNotFound`, `ModelUnavailable`, `Authentication`, `Connection`, `RateLimit`, `ApiStatus { status, message }`, `Stream`, `Request`.
 
-**OpenAiProvider** (`openai.rs`): Sends requests to `{base_url}/chat/completions`. Default base URL: `https://api.openai.com/v1`. Supports any OpenAI-compatible endpoint via the `base_url` config field. Model parameters (temperature, max_tokens, etc.) are merged into the request body when present.
+**OpenAiProvider** (`openai.rs`) and **OpenAiResponsesProvider** (`openai_responses.rs`): Default base URL: `https://api.openai.com/v1`. Supports any OpenAI-compatible endpoint via the `base_url` config field. Model parameters (temperature, max_tokens, etc.) are merged into the request body when present.
 
 ### PromptExecutionService specifics
 
-Orchestrates the full prompt execution pipeline: validate → resolve prompt → process placeholders → call AI → deliver result. Lives in `execution.rs`.
+Holds the state of the running skill execution and the live (streaming chat) execution; the message preparation lives in `skill_executor.rs` and `conversation_executor.rs`, the stream and tool loop in `stream.rs`. Lives in `execution/`.
 
-**Execution state tracking**: `is_executing: bool` and `current_execution_id: Option<String>`. Guards against concurrent execution — `start_execution()` returns `ExecutionError::AlreadyExecuting` if already busy.
+**Execution state**: one skill execution at a time. Starting while one runs returns `ExecutionError::AlreadyExecuting`; starting creates an execution id (UUID) and a `watch` cancel channel; finishing clears both and the live execution. `is_busy()` and `executing_skill_id()` report it, `cancel_execution()` signals the cancel channel. The live execution (`LiveExecution`, `start_live`, `cancel_live`, `clear_live`) has its own cancel channel and an `ExecutionSnapshot` of the streamed text.
 
-**Constructor**: `PromptExecutionService::new()` — creates idle service.
+**Model resolution** (associated functions, take `&ConfigService`): an explicit model id must exist in `models`, else `ModelNotFound`; without one, `resolve_model` falls back to `surfaces.chat.generation.model_id`, `resolve_quick_action_model` to `surfaces.quick_actions.generation.model_id` then the chat model, `resolve_title_generation_model` to `surfaces.title_generation.generation.model_id` then the chat model.
 
-**State methods**: `is_busy()`, `current_execution_id()`, `start_execution() -> Result<String, ExecutionError>` (generates UUID), `finish_execution()`.
-
-**Resolution methods** (associated functions, take `&ConfigService`):
-- `resolve_model(config, model_id)` — validates explicit model ID or falls back to `default_model`
-
-**Error enum**: `ExecutionError` with variants `AlreadyExecuting`, `ModelNotFound(String)`, `ClipboardError(String)`, `AiError(String)`.
+**Error enum**: `ExecutionError` with variants `AlreadyExecuting` and `ModelNotFound(String)`.
 
 ### Adding a new service
 
 1. Create `services/<name>.rs` with error enum + struct + impl.
 2. Add `pub mod <name>;` to `services/mod.rs`.
-3. Wire into Tauri managed state in `lib.rs` (Task 4 pattern).
+3. Wire into Tauri managed state in `setup/state.rs`.
 4. Add tests using `tempfile` for any file I/O.

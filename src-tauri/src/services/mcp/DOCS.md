@@ -2,26 +2,15 @@
 
 MCP (Model Context Protocol) client module. Thin wrapper around the `rmcp` crate (official Rust MCP SDK) for spawning and communicating with MCP tool servers over stdio.
 
-## Files
-
-```
-mcp/
-├── mod.rs       # Module declarations, re-exports McpClient, McpError
-├── client.rs    # McpClient struct, McpError enum
-└── DOCS.md
-```
+`mod.rs` re-exports `McpError` and `McpRegistry`; `McpClient` is reached as `client::McpClient`. `McpRegistry` (`registry.rs`) starts every configured server (`start_all`), indexes tools by qualified name `<server>.<tool>` (a duplicate is skipped with a `warn` log) and routes `call_tool` to the owning server.
 
 ## McpClient
 
 Wraps `rmcp::RunningService<RoleClient, ()>`. Each instance manages one MCP server child process.
 
-**Lifecycle**: `start()` spawns the process and completes the MCP initialize handshake (handled by rmcp). `shutdown()` drops the service, closing the transport and signaling the server to exit.
+**Lifecycle**: `start(server_name, command, args, env, timeout_secs, tool_timeouts)` spawns the process (with the login-shell environment from `shell_env`) and completes the MCP initialize handshake (handled by rmcp). `shutdown(self)` drops the service, closing the transport and signaling the server to exit.
 
-**Methods**:
-- `start(server_name, command, args, env)` — spawn server process, return connected client
-- `list_tools()` — paginated tool listing via `peer().list_all_tools()`
-- `call_tool(name, arguments)` — execute tool with configurable timeout (per-tool override → server default → 180s)
-- `shutdown(self)` — consume client, drop service
+**Timeouts**: `call_tool` uses the per-tool entry of `tool_timeouts`, else `timeout_secs` (the `McpServerConfig` default is 180 s). Expiry returns `McpError::Timeout`.
 
 ## McpError
 
