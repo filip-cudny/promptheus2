@@ -302,7 +302,7 @@
     {/if}
     <div class="row" style:height="{ROW_HEIGHT}px" data-tauri-drag-region>
       {#if widgetState === "recording" || widgetState === "paused"}
-        <div class="bars" style:gap="{BAR_GAP}px" data-tauri-drag-region>
+        <div class="bars" class:paused={widgetState === "paused"} style:gap="{BAR_GAP}px" data-tauri-drag-region>
           {#each BAR_FACTORS as factor}
             <span class="bar" style:width="{BAR_WIDTH}px" style:transform="scaleY({barScale(factor)})" data-tauri-drag-region></span>
           {/each}
@@ -446,6 +446,7 @@
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
   }
 
   .row {
@@ -530,9 +531,11 @@
     padding: 0 8px;
     border-radius: 14px;
     justify-content: flex-start;
+    color: #929294;
   }
 
   .label {
+    color: #929294;
     flex: 0 1 auto;
     min-width: 0;
     overflow: hidden;
@@ -568,6 +571,10 @@
     border-radius: 2px;
     background: #e5e5e7;
     transition: transform 120ms ease-out;
+  }
+
+  .bars.paused .bar {
+    background: #929294;
   }
 
   .time {
@@ -609,6 +616,20 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    animation: status-enter 180ms cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  @keyframes status-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.85);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .status {
+      animation: none;
+    }
   }
 
   .wave {

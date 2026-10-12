@@ -63,6 +63,8 @@ const WIDGET_WAVE_HEIGHT = 24;
 const WIDGET_WAVE_MIN_SCALE = WIDGET_BAR_MIN_HEIGHT / WIDGET_WAVE_HEIGHT;
 const WIDGET_WAVE_AMPLITUDE = WIDGET_WAVE_HEIGHT / 3;
 const WIDGET_WAVE_OPACITY = 150;
+const WIDGET_DONE_ENTER_MS = 180;
+const WIDGET_DONE_ENTER_SCALE = 0.85;
 const WIDGET_WAVE_PERIOD_US = 1200 * 1000;
 const WIDGET_WAVE_FRAME_MS = 33;
 const WIDGET_WAVE_STEP = 2 * Math.PI / WIDGET_WAVE_BAR_COUNT;
@@ -491,7 +493,8 @@ export default class PromptheusExtension extends Extension {
         const actor = new St.BoxLayout({
             vertical: true,
             style: `border-radius: ${WIDGET_RADIUS}px; background-color: rgba(28,28,30,0.92); ` +
-                'color: #e5e5e7; font-family: "Noto Sans", sans-serif; font-size: 13px;',
+                'color: #e5e5e7; font-family: "Noto Sans", sans-serif; font-size: 13px; ' +
+                'box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);',
             reactive: true,
             can_focus: false,
             track_hover: false,
@@ -619,11 +622,25 @@ export default class PromptheusExtension extends Extension {
         else
             this._fillDone(widget, content);
         widget.row1.add_child(content);
+        if (state === 'done') {
+            content.set_pivot_point(0.5, 0.5);
+            content.set_scale(WIDGET_DONE_ENTER_SCALE, WIDGET_DONE_ENTER_SCALE);
+            content.opacity = 0;
+            content.ease({
+                scale_x: 1,
+                scale_y: 1,
+                opacity: 255,
+                duration: WIDGET_DONE_ENTER_MS,
+                mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
+            });
+        }
         this._fillRow2(widget);
     }
 
     _fillControls(widget, content, state) {
         const bars = this._widgetBarRow();
+        if (state === 'paused')
+            bars.opacity = WIDGET_WAVE_OPACITY;
         widget.bars = widget.scales.map(scale => this._widgetBar(bars, scale));
         widget.timeLabel = new St.Label({
             text: widget.elapsed,
@@ -760,12 +777,14 @@ export default class PromptheusExtension extends Extension {
                 x_expand: true,
                 x_align: Clutter.ActorAlign.CENTER,
                 y_align: Clutter.ActorAlign.CENTER,
+                opacity: WIDGET_WAVE_OPACITY,
             }));
             return;
         }
         widget.row2.style = `height: ${WIDGET_ROW_HEIGHT}px; spacing: ${WIDGET_ROW_SPACING}px; ` +
             `padding: 0 ${WIDGET_PADDING_X}px 0 ${WIDGET_PADDING_X - WIDGET_TARGET_PADDING_X}px;`;
         const content = new St.BoxLayout({style: 'spacing: 4px;'});
+        content.opacity = WIDGET_WAVE_OPACITY;
         content.add_child(new St.Label({text: selectedLabel, y_align: Clutter.ActorAlign.CENTER}));
         content.add_child(this._widgetIcon('chevrons-up-down', 14));
         const target = this._widgetButton(content, () => this._toggleDropdown(widget),
