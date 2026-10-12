@@ -25,6 +25,7 @@ export interface ConversationNode {
 export interface ConversationImage {
   data: string;
   media_type: string;
+  number?: number;
 }
 
 export interface ConversationTree {

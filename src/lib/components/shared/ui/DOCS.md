@@ -53,6 +53,7 @@ For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconPro
 
 - Props: `images: ConversationImage[]` (bindable), `readonly: boolean`.
 - Renders nothing when `images` is empty.
+- Chip label is `Image #{image.number ?? position + 1}`: the optional `number` of `ConversationImage` wins, the 1-based position is the fallback.
 - Each chip shows a 40×40 thumbnail from the base64 data URI. Delete button removes the image from the bound array.
 - Import `ConversationImage` from `$lib/types/conversation`.
 

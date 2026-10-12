@@ -129,7 +129,7 @@ impl PlaceholderService {
                 }
 
                 for item in &context_mgr.get_items() {
-                    if let ContextItem::Image { data, media_type } = item {
+                    if let ContextItem::Image { data, media_type, .. } = item {
                         parts.push(ContentPart::ImageUrl {
                             image_url: ImageUrlData {
                                 url: format!("data:{media_type};base64,{data}"),

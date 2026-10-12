@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::RwLock;
 
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 use tokio::sync::Mutex;
 
 use crate::commands;
@@ -318,7 +318,9 @@ async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
                 return;
             }
             let notification_settings = config.lock().await.settings().notifications.clone();
-            let _ = app.emit("context-changed", ());
+            if let Err(e) = commands::context::emit_context_changed(app) {
+                log::warn!("emitting context-changed failed: {}", e);
+            }
             let _ = notifications.notify(
                 "context_set",
                 NotificationLevel::Success,
@@ -350,7 +352,9 @@ async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
                 return;
             }
             let notification_settings = config.lock().await.settings().notifications.clone();
-            let _ = app.emit("context-changed", ());
+            if let Err(e) = commands::context::emit_context_changed(app) {
+                log::warn!("emitting context-changed failed: {}", e);
+            }
             let _ = notifications.notify(
                 "context_append",
                 NotificationLevel::Success,
@@ -362,7 +366,9 @@ async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
         "clear_context" => {
             context.lock().await.clear();
             let notification_settings = config.lock().await.settings().notifications.clone();
-            let _ = app.emit("context-changed", ());
+            if let Err(e) = commands::context::emit_context_changed(app) {
+                log::warn!("emitting context-changed failed: {}", e);
+            }
             let _ = notifications.notify(
                 "context_cleared",
                 NotificationLevel::Success,

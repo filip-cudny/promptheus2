@@ -32,9 +32,9 @@
 </script>
 
 {#each images as image, idx}
-  <AttachmentChip label="Image #{idx + 1}" {readonly} {variant} onclick={() => onopen?.(image)} onremove={() => removeImage(idx)}>
+  <AttachmentChip label="Image #{image.number ?? idx + 1}" {readonly} {variant} onclick={() => onopen?.(image)} onremove={() => removeImage(idx)}>
     {#snippet content()}
-      <img src={thumbnailSrc(image)} alt="Attached image {idx + 1}" class="chip-thumbnail" />
+      <img src={thumbnailSrc(image)} alt="Attached image {image.number ?? idx + 1}" class="chip-thumbnail" />
     {/snippet}
   </AttachmentChip>
 {/each}

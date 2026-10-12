@@ -46,19 +46,24 @@ impl MenuItemProvider for ContextMenuProvider {
 
 pub struct ContextManagerService {
     items: Vec<ContextItem>,
+    next_text_number: u32,
+    next_image_number: u32,
 }
 
 impl ContextManagerService {
     pub fn new() -> Self {
-        Self { items: Vec::new() }
+        Self { items: Vec::new(), next_text_number: 1, next_image_number: 1 }
     }
 
     pub fn set_context(&mut self, value: String) {
-        self.items = vec![ContextItem::Text { content: value }];
+        self.clear();
+        self.append_context(value);
     }
 
     pub fn append_context(&mut self, value: String) {
-        self.items.push(ContextItem::Text { content: value });
+        let number = self.next_text_number;
+        self.next_text_number += 1;
+        self.items.push(ContextItem::Text { number, content: value });
     }
 
     pub fn get_context(&self) -> Option<String> {
@@ -66,7 +71,7 @@ impl ContextManagerService {
             .items
             .iter()
             .filter_map(|item| match item {
-                ContextItem::Text { content } if !content.is_empty() => Some(content.as_str()),
+                ContextItem::Text { content, .. } if !content.is_empty() => Some(content.as_str()),
                 _ => None,
             })
             .collect();
@@ -87,11 +92,14 @@ impl ContextManagerService {
     }
 
     pub fn set_context_image(&mut self, data: String, media_type: String) {
-        self.items = vec![ContextItem::Image { data, media_type }];
+        self.clear();
+        self.append_context_image(data, media_type);
     }
 
     pub fn append_context_image(&mut self, data: String, media_type: String) {
-        self.items.push(ContextItem::Image { data, media_type });
+        let number = self.next_image_number;
+        self.next_image_number += 1;
+        self.items.push(ContextItem::Image { number, data, media_type });
     }
 
     pub fn has_images(&self) -> bool {
@@ -102,6 +110,8 @@ impl ContextManagerService {
 
     pub fn clear(&mut self) {
         self.items.clear();
+        self.next_text_number = 1;
+        self.next_image_number = 1;
     }
 
     pub fn get_items(&self) -> Vec<ContextItem> {
@@ -218,9 +228,9 @@ mod tests {
 
         let items = svc.get_items();
         assert_eq!(items.len(), 4);
-        assert!(matches!(&items[0], ContextItem::Text { content } if content == "text1"));
+        assert!(matches!(&items[0], ContextItem::Text { content, .. } if content == "text1"));
         assert!(matches!(&items[1], ContextItem::Image { data, .. } if data == "img1"));
-        assert!(matches!(&items[2], ContextItem::Text { content } if content == "text2"));
+        assert!(matches!(&items[2], ContextItem::Text { content, .. } if content == "text2"));
         assert!(matches!(&items[3], ContextItem::Image { data, .. } if data == "img2"));
     }
 
@@ -235,7 +245,7 @@ mod tests {
         assert!(svc.has_context());
         assert!(svc.has_images());
         assert!(
-            matches!(&svc.get_items()[0], ContextItem::Image { data, media_type } if data == "new_img" && media_type == "image/jpeg")
+            matches!(&svc.get_items()[0], ContextItem::Image { data, media_type, .. } if data == "new_img" && media_type == "image/jpeg")
         );
     }
 
@@ -300,6 +310,61 @@ mod tests {
         assert!(svc.has_text_or_images());
     }
 
+    fn numbers(svc: &ContextManagerService) -> Vec<(&'static str, u32)> {
+        svc.get_items()
+            .iter()
+            .map(|item| match item {
+                ContextItem::Text { number, .. } => ("text", *number),
+                ContextItem::Image { number, .. } => ("image", *number),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn numbers_are_per_kind_and_survive_removal() {
+        let mut svc = service();
+        svc.append_context("a".into());
+        svc.append_context_image("i".into(), "image/png".into());
+        svc.append_context("b".into());
+        assert_eq!(numbers(&svc), [("text", 1), ("image", 1), ("text", 2)]);
+
+        svc.remove_item(0);
+        assert_eq!(numbers(&svc), [("image", 1), ("text", 2)]);
+
+        svc.append_context("c".into());
+        assert_eq!(numbers(&svc), [("image", 1), ("text", 2), ("text", 3)]);
+    }
+
+    #[test]
+    fn clear_resets_numbers() {
+        let mut svc = service();
+        svc.append_context("a".into());
+        svc.append_context("b".into());
+        svc.clear();
+        svc.append_context("c".into());
+        assert_eq!(numbers(&svc), [("text", 1)]);
+    }
+
+    #[test]
+    fn set_context_numbers_the_item_one() {
+        let mut svc = service();
+        svc.append_context("a".into());
+        svc.append_context("b".into());
+        svc.set_context("c".into());
+        assert_eq!(numbers(&svc), [("text", 1)]);
+    }
+
+    #[test]
+    fn set_context_image_resets_text_numbers() {
+        let mut svc = service();
+        svc.append_context("a".into());
+        svc.set_context_image("i".into(), "image/png".into());
+        assert_eq!(numbers(&svc), [("image", 1)]);
+
+        svc.append_context("b".into());
+        assert_eq!(numbers(&svc), [("image", 1), ("text", 1)]);
+    }
+
     #[test]
     fn provider_name_matches_dynamic_providers() {
         let provider = ContextMenuProvider::new();
@@ -326,9 +391,11 @@ mod tests {
         let mut provider = ContextMenuProvider::new();
         provider.update_items(vec![
             ContextItem::Text {
+                number: 1,
                 content: "hello".into(),
             },
             ContextItem::Image {
+                number: 1,
                 data: "img_data".into(),
                 media_type: "image/png".into(),
             },

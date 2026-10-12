@@ -305,19 +305,16 @@ pub fn pill_targets(skills: &[Skill]) -> Vec<(String, String)> {
 }
 
 pub fn pill_items(items: &[ContextItem]) -> Vec<PillItem> {
-    let (mut texts, mut images) = (0, 0);
     items
         .iter()
         .enumerate()
         .map(|(index, item)| {
             let (kind, label, preview) = match item {
-                ContextItem::Text { content } => {
-                    texts += 1;
-                    ("text", format!("Text #{texts}"), text_preview(content))
+                ContextItem::Text { number, content } => {
+                    ("text", format!("Text #{number}"), text_preview(content))
                 }
-                ContextItem::Image { .. } => {
-                    images += 1;
-                    ("image", format!("Image #{images}"), String::new())
+                ContextItem::Image { number, .. } => {
+                    ("image", format!("Image #{number}"), String::new())
                 }
             };
             PillItem { index: index as u32, kind: kind.to_string(), label, preview }
@@ -1087,7 +1084,7 @@ async fn sync_preview_files(app: &AppHandle, context_items: &[ContextItem]) -> V
     let images: Vec<(String, String)> = context_items
         .iter()
         .filter_map(|item| match item {
-            ContextItem::Image { data, media_type } => Some((data.clone(), media_type.clone())),
+            ContextItem::Image { data, media_type, .. } => Some((data.clone(), media_type.clone())),
             ContextItem::Text { .. } => None,
         })
         .collect();
@@ -1276,11 +1273,19 @@ mod tests {
     }
 
     fn text() -> ContextItem {
-        ContextItem::Text { content: "t".into() }
+        numbered_text(1)
     }
 
     fn image() -> ContextItem {
-        ContextItem::Image { data: "d".into(), media_type: "image/png".into() }
+        numbered_image(1)
+    }
+
+    fn numbered_text(number: u32) -> ContextItem {
+        ContextItem::Text { number, content: "t".into() }
+    }
+
+    fn numbered_image(number: u32) -> ContextItem {
+        ContextItem::Image { number, data: "d".into(), media_type: "image/png".into() }
     }
 
     #[test]
@@ -1449,13 +1454,21 @@ mod tests {
 
     #[test]
     fn items_are_labelled_per_kind_in_context_order() {
-        let items = pill_items(&[text(), image(), text()]);
+        let items = pill_items(&[numbered_text(1), numbered_image(1), numbered_text(2)]);
         let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
         assert_eq!(labels, ["Text #1", "Image #1", "Text #2"]);
         assert_eq!(
             items[1],
             PillItem { index: 1, kind: "image".into(), label: "Image #1".into(), preview: String::new() }
         );
+    }
+
+    #[test]
+    fn labels_keep_item_numbers_after_a_removal() {
+        let items = pill_items(&[numbered_text(2), numbered_text(3)]);
+        let labels: Vec<&str> = items.iter().map(|item| item.label.as_str()).collect();
+        assert_eq!(labels, ["Text #2", "Text #3"]);
+        assert_eq!(items[0].index, 0);
     }
 
     #[test]

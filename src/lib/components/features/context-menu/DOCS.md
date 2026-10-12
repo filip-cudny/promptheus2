@@ -100,8 +100,8 @@ Renders when `item.item_type === "context"`. Extracts `ContextItem[]` from `item
 | Element | Description |
 |---------|-------------|
 | Section header | Collapsible, shows "Context" label + item count badge |
-| Text chip | Truncated text preview (first 50 chars) |
-| Image chip | Shows format label (PNG/JPEG/etc.) derived from media type |
+| Text chip | `Text #{number}` then the truncated text preview (first 50 chars) |
+| Image chip | One `ImageChipBar` per image, labelled `Image #{number}` from the item's `number` |
 | Replace button | Replaces context with clipboard content via `setContextFromClipboard()` |
 | Append button | Appends clipboard content to context via `appendContextFromClipboard()` |
 | Edit button | Toggles inline edit mode with `ContextEditor` component |

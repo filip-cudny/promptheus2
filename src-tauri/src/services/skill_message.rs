@@ -113,7 +113,7 @@ pub fn prepare_skill_messages(
         let mut parts = Vec::new();
         let mut img_index = 1;
         for item in &context.get_items() {
-            if let ContextItem::Image { data, media_type } = item {
+            if let ContextItem::Image { data, media_type, .. } = item {
                 parts.push(ContentPart::Text {
                     text: format!("[Context Image #{img_index}]"),
                 });

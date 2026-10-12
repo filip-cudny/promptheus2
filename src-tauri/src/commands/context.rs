@@ -21,7 +21,7 @@ pub fn current_context_version() -> u64 {
     CONTEXT_VERSION.load(Ordering::Relaxed)
 }
 
-fn emit_context_changed(app: &AppHandle) -> crate::Result<()> {
+pub(crate) fn emit_context_changed(app: &AppHandle) -> crate::Result<()> {
     let version = CONTEXT_VERSION.fetch_add(1, Ordering::Relaxed) + 1;
     app.emit("context-changed", ContextChangedEvent { version })?;
     let app = app.clone();

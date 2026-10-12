@@ -135,6 +135,8 @@ Manages an ordered list of `ContextItem` values (text and/or images) in memory. 
 
 **Image methods**: `set_context_image` (replace all), `append_context_image`, `has_images`.
 
+**Numbers**: each item gets a per-kind `number` (`Text #n`, `Image #n`) from two counters: assigned on add, kept on `remove_item`, reset to 1 by `clear` and by every replace (`set_context`, `set_context_image`, so also `set_context_from_clipboard` and the `set_context_value` hotkey). Pill, context menu and context editor label items from it. Context hotkeys emit `context-changed` through `emit_context_changed` (version bump, pill refresh).
+
 **General methods**: `clear`, `get_items` (cloned), `remove_item(index) -> bool`, `item_count`, `has_text_or_images`, `is_empty`.
 
 **Key edge case**: `has_context()` checks for Text variant existence; `get_context()` additionally filters out empty-content items. Image-only context returns `None` from `get_context()`.

@@ -34,7 +34,8 @@
     if (readonly || disabled) return;
     const image = await getImageFromPasteEvent(e);
     if (image) {
-      images = [...images, image];
+      const number = Math.max(0, ...images.map((existing) => existing.number ?? 0)) + 1;
+      images = [...images, { ...image, number }];
     }
   }
 </script>

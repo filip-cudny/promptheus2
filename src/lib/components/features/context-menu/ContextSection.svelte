@@ -105,6 +105,7 @@
                 <Copy size={ICON_SIZE.md} />
               {/if}
             </span>
+            <span class="chip-number">Text #{item.number}</span>
             <span class="chip-text">{truncateText(item.content)}</span>
             <button class="chip-remove" onclick={(e) => { e.stopPropagation(); onRemoveItem(idx); }}>
               <X size={11} strokeWidth={2.5} />
@@ -112,7 +113,7 @@
           </Chip>
         {:else if item.item_type === "image"}
           <ImageChipBar
-            images={[{ data: item.data, media_type: item.media_type }]}
+            images={[{ data: item.data, media_type: item.media_type, number: item.number }]}
             variant="small"
             onremove={() => onRemoveItem(idx)}
             onopen={(image) => onOpenImagePreview(image.data, image.media_type)}
@@ -182,6 +183,11 @@
     display: flex;
     align-items: center;
     flex-shrink: 0;
+  }
+
+  .chip-number {
+    flex-shrink: 0;
+    font-weight: 600;
   }
 
   .chip-text {

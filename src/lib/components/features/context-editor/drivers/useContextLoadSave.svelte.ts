@@ -18,7 +18,7 @@ export function useContextLoadSave() {
       if (item.item_type === "text") {
         text += (text ? "\n" : "") + item.content;
       } else if (item.item_type === "image") {
-        images.push({ data: item.data, media_type: item.media_type });
+        images.push({ data: item.data, media_type: item.media_type, number: item.number });
       }
     }
     return { text, images };

@@ -10,7 +10,7 @@ models/
 ├── settings.rs     # Full settings.json schema (Settings + sub-structs)
 ├── menu.rs         # MenuItemType enum, MenuItem struct
 ├── execution.rs    # ErrorCode enum, ExecutionResult struct
-├── context.rs      # ContextItem tagged enum (Text / Image variants)
+├── context.rs      # ContextItem tagged enum (Text / Image variants, each with a per-kind `number`)
 ├── skill.rs        # SkillFrontmatter, Skill, SkillSummary, SkillFull, OfferedIn
 ├── message.rs      # ProcessedMessage, MessageContent, ContentPart — LLM message format
 └── history.rs      # HistoryEntryType, InvocationSource, OutputRoute, HistoryEntry,
@@ -54,7 +54,7 @@ Non-settings model files define types that cross the Rust↔TypeScript IPC bound
 | `message.rs` | `types/ai.ts` | `untagged` on `MessageContent`, `tag = "type"` on `ContentPart` |
 | `history.rs` | `types/history.ts` | `rename_all = "lowercase"` on `HistoryEntryType`; `rename_all = "snake_case"` on `InvocationSource` (`types/history.ts`, values `context_menu`, `alternative_execute`, `chat`, `pill`); `OutputRoute` values `clipboard`, `chat`, `clipboard_chat`; `OutputRoute` has no TS counterpart |
 
-TypeScript mirrors use `T | null` for `Option<T>` and `unknown` for `serde_json::Value`. `ContextItem` is a discriminated union (not an interface with optional fields).
+TypeScript mirrors use `T | null` for `Option<T>` and `unknown` for `serde_json::Value`. `ContextItem` is a discriminated union (not an interface with optional fields); both members carry `number` (per-kind, assigned by `ContextManagerService`).
 
 ### Settings struct hierarchy
 
