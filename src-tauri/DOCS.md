@@ -80,7 +80,6 @@ When adding a command: add the `pub mod` line at the top of `commands/mod.rs`, t
 Pick the right primitive — getting this wrong deadlocks or freezes the app:
 
 - **Service state held across `.await` → `tokio::sync::Mutex`.** This is the default for anything reachable from an async command.
-- **Service state held across `.await` → `tokio::sync::Mutex`.** This is the default for anything reachable from an async command.
 - **`std::sync::Mutex` is allowed only for short, await-free guards** — typical examples are the command-local statics that swap an `Option`, e.g. in `commands/notification.rs`, `commands/text_preview.rs`, `commands/conversation_dialog.rs`.
 - **When a `std::sync::Mutex` lives on a service struct** (e.g. `services/ai_webview` snapshot maps), every guard **must drop before any `.await`**. Holding a sync mutex across `.await` deadlocks the runtime; holding it across a streamed response stalls every other command.
 
@@ -115,7 +114,7 @@ Pick the right channel for each direction:
 
 Default to commands. Reach for `app.emit*` only for true one-to-many notifications. Streamed results (AI completions, skill execution, generation events) belong on `Channel<T>` — typed, scoped to the invoke call, and back-pressure-friendly. The reference implementation is `commands/ai.rs` + `commands/execution_stream.rs`.
 
-**Do not pair `Channel<T>` with `app.emit` for the same call.** Pick one. The Channel is the source of truth for call-scoped events; layering a global broadcast on top means subscribers can't tell which run finished, and consumers end up de-duplicating in two places.
+**Call-scoped events go on the `Channel<T>`, not on `app.emit`.** The one exception is the run lifecycle: `services/execution/skill_executor.rs` emits `execution-started` and `execution-completed` with `app.emit` in addition to the Channel, for listeners outside the invoking window. Do not broadcast other per-call events: subscribers can't tell which run they belong to.
 
 ### Async
 
@@ -128,7 +127,7 @@ Default to commands. Reach for `app.emit*` only for true one-to-many notificatio
 ### Models
 
 - All structs crossing the IPC boundary derive `serde::Serialize` and/or `serde::Deserialize`.
-- Rust uses `snake_case`, JS uses `camelCase` — `#[serde(rename_all = "camelCase")]` on the struct handles conversion.
+- Model structs serialize in `snake_case` and their TypeScript mirrors keep `snake_case` field names; `rename_all` appears on enums (see `src/models/DOCS.md`) and on the `camelCase` payload in `services/speech/widget.rs`.
 
 ### Provider Pattern
 
@@ -180,7 +179,7 @@ Because the app is tray-only with multiple short-lived windows, cross-window coo
 - `capabilities/default.json` declares permissions for the app's webviews.
 - Our own `#[tauri::command]`s do **not** need a capability entry — those checks apply only to plugin APIs and the core API surface exposed to the webview.
 - When adding a Tauri plugin, add its permissions here (e.g., `"clipboard-manager:default"`).
-- **`fs:allow-read-text-file` and `fs:allow-write-text-file` are granted bare, with no scope entries.** The plugin allows a path only if it is in the scope built from the permission's scope entries (none here; `plugins.fs.scope` in `tauri.conf.json` is empty too) or in the runtime fs scope (`tauri-plugin-fs-2.5.1/src/commands.rs:1538-1572`, `src/lib.rs:489-490` starts it empty). The dialog plugin's `open` and `save` add each picked file, and each picked folder, to that runtime scope (`tauri-plugin-dialog-2.7.1/src/commands.rs:160-180` folders, `:192-212` files, `:250-254` save). So these two permissions reach only paths the user picked in a file dialog during the running session. Do not add other `fs:*` permissions, and do not add scope entries, without a reason: any window can then touch those paths without a picker.
+- **`fs:allow-read-text-file` and `fs:allow-write-text-file` are granted bare, with no scope entries.** The plugin allows a path only if it is in the scope built from the permission's scope entries (none here; `tauri.conf.json` has `"plugins": {}`, and the fs plugin config accepts no scope key, `tauri-plugin-fs-2.5.1/src/config.rs`) or in the runtime fs scope (`tauri-plugin-fs-2.5.1/src/commands.rs:1538-1572`, `src/lib.rs:489-490` starts it empty). The dialog plugin's `open` and `save` add each picked file, and each picked folder, to that runtime scope (`tauri-plugin-dialog-2.7.1/src/commands.rs:160-180` folders, `:192-212` files, `:250-254` save). So these two permissions reach only paths the user picked in a file dialog during the running session. Do not add other `fs:*` permissions, and do not add scope entries, without a reason: any window can then touch those paths without a picker.
 - Split `default.json` per feature once it grows past ~50 lines or two windows have non-overlapping needs (e.g. extract `settings.json` for the settings dialog so the context-menu window doesn't inherit settings-only permissions).
 
 ### Configuration

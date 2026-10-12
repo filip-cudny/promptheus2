@@ -29,9 +29,9 @@ For fields where the type's `Default` is correct (`false`, `0`, `None`, empty `V
 
 ### IPC model structs
 
-Non-settings model files define types that cross the Rust↔TypeScript IPC boundary. Each has a hand-written TypeScript mirror in `src/lib/types/` (e.g. `context.rs` → `types/context.ts`, `message.rs` → `types/ai.ts`); a type with no mirror there is not sent to the frontend (e.g. `OutputRoute`). Change both sides in the same change.
+Non-settings model files define types that cross the Rust↔TypeScript IPC boundary. Each has a hand-written TypeScript mirror in `src/lib/types/` (e.g. `context.rs` → `types/context.ts`, `message.rs` → `types/ai.ts`); event payloads emitted from services or commands (e.g. `HistoryChangedEvent`, mirrored in `src/lib/services/events.ts`) are mirrored next to their listener instead. Change both sides in the same change.
 
-- Enums use `rename_all = "snake_case"` unless a mirror says otherwise: `HistoryEntryType` and `ContextItem` use `"lowercase"`.
+- Enums use `rename_all = "snake_case"` or `"lowercase"`; the attribute on the type decides, and the TS mirror must use the same strings.
 - `ContextItem` is an internally tagged enum (`tag = "item_type"`), mirrored as a discriminated union, not an interface with optional fields; both members carry `number`, assigned per kind by `ContextManagerService`.
 - `MessageContent` is `untagged`; `ContentPart` is tagged with `tag = "type"`.
 - `Option<T>` maps to `T | null`, except where the Rust field is skipped when `None`: `ImageData.number` is `number?: number` (`types/ai.ts`). `serde_json::Value` maps to `unknown`.
