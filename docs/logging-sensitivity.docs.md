@@ -37,8 +37,7 @@ log::debug!("API key source: {:?}", key_source);
 
 ```rust
 log::debug!("completion: model={}, messages={}, max_tokens={}", model_id, messages.len(), params.max_tokens);
-log::info!("skill {} executed in {:.1}s, {} tokens", skill_id, elapsed, token_count);
-log::debug!("setting updated: {}", setting_key);
+log::debug!("execute_menu_item: id={item_id}, shift={shift_pressed}");
 ```
 
 ## Safe to log (any level)

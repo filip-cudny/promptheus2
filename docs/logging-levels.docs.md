@@ -1,18 +1,18 @@
 # Log Levels Reference
 
-When to use each level, with examples from the codebase.
+When to use each level, with real log lines from the codebase.
 
 ## Error
 
 Something failed, operation cannot continue.
 
 ```rust
-log::error!("failed to load settings: {}", e);
-log::error!("AI request failed for model {}: {}", model_id, e);
+log::error!("show_notification failed: {e}");            // commands/notification.rs
+log::error!("Failed to copy transcription to clipboard: {e}");   // commands/speech.rs
 ```
 
 ```typescript
-error("Prompt execution failed: " + message);
+logError(`drain_pending_notifications failed: ${e}`);    // useNotificationDrain.svelte.ts
 ```
 
 Use for: unrecoverable failures, service initialization errors, operations needing user intervention.
@@ -22,8 +22,8 @@ Use for: unrecoverable failures, service initialization errors, operations needi
 Unexpected but the app continues.
 
 ```rust
-log::warn!("model '{}' unavailable: {}", model.id, e);
-log::warn!("invalid shortcut {}: {}", shortcut_str, e);
+log::warn!("invalid shortcut {}: {}", shortcut_str, e);   // setup/shortcuts.rs
+log::warn!("unhandled menu item: {item_id}");            // commands/menu.rs
 ```
 
 Use for: recoverable errors, fallback paths, missing optional config, failed non-critical features.
@@ -33,9 +33,8 @@ Use for: recoverable errors, fallback paths, missing optional config, failed non
 High-level events confirming the app works.
 
 ```rust
-log::info!("config loaded from {}", config_dir.display());
-log::info!("registered shortcut: {} -> {}", shortcut_str, action);
-log::info!("skill {} executed in {:.1}s, {} tokens", skill_id, elapsed, token_count);
+log::info!("config loaded from {}", config_dir.display());   // setup/init.rs
+log::info!("registered shortcut: {} -> {}", shortcut_str, action);   // setup/shortcuts.rs
 ```
 
 Use for: lifecycle events, config loaded/saved, user-triggered actions (log action, not content), counts and durations.
@@ -45,8 +44,8 @@ Use for: lifecycle events, config loaded/saved, user-triggered actions (log acti
 Useful during development, too noisy for production.
 
 ```rust
-log::debug!("completion request: model={}, messages={}", model_id, msg_count);
-log::debug!("config key changed: {}", key_name);
+log::debug!("context menu: refreshing {} skills", skill_summaries.len());   // commands/menu.rs
+log::debug!("execute_menu_item: id={item_id}, shift={shift_pressed}");      // commands/menu.rs
 ```
 
 Use for: request metadata (IDs, sizes — not content), state transitions, branch decisions.
@@ -56,7 +55,7 @@ Use for: request metadata (IDs, sizes — not content), state transitions, branc
 Deep debugging only. Almost never enabled.
 
 ```rust
-log::trace!("SSE line: {:?}", line_type);
+log::trace!("responses: SSE event len={}", data.len());   // services/ai/openai_responses.rs
 ```
 
 Use for: function entry/exit in hot paths, raw protocol data. Enable only when hunting a specific bug.
