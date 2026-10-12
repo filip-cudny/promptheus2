@@ -1,17 +1,17 @@
 # Promptheus Tauri — Documentation Index
 
-Top-level index of all `DOCS.md` files in the project. Updated incrementally as new areas are documented.
+Top-level index of the documentation files in the project. Updated incrementally as new areas are documented.
 
 ## Project Structure
 
 - [README.md](README.md) — landing, quick start, configuration, development commands
-- [src/DOCS.md](src/DOCS.md) — Svelte frontend: components, stores, services
-- [src-tauri/DOCS.md](src-tauri/DOCS.md) — Rust backend: commands, services, models
-- [src-tauri/src/models/DOCS.md](src-tauri/src/models/DOCS.md) — Data structures, serde conventions, settings schema
-- [src-tauri/src/services/DOCS.md](src-tauri/src/services/DOCS.md) — Service layer: ClipboardService, ConfigService, error handling, lifecycle
-- [src-tauri/src/services/mcp/DOCS.md](src-tauri/src/services/mcp/DOCS.md) — MCP client: rmcp wrapper, McpClient, McpError
-- [src-tauri/src/services/speech/DOCS.md](src-tauri/src/services/speech/DOCS.md) — Speech: recording, transcription retry/backoff, audio clip retention, events
-- [src/lib/components/shared/ui/DOCS.md](src/lib/components/shared/ui/DOCS.md) — Dumb UI primitives: toast overlay, shared components
+- [src/DOCS.md](src/DOCS.md) — Svelte frontend: layout and conventions
+- [src-tauri/DOCS.md](src-tauri/DOCS.md) — Rust backend: layout and conventions
+- [src-tauri/src/models/DOCS.md](src-tauri/src/models/DOCS.md) — Data structures: derive standard, stable `settings.json`, settings schema
+- [src-tauri/src/services/DOCS.md](src-tauri/src/services/DOCS.md) — Service layer: service file layout and conventions
+- [src-tauri/src/services/mcp/DOCS.md](src-tauri/src/services/mcp/DOCS.md) — MCP client: rmcp wrapper, McpClient, McpRegistry, McpError
+- [src-tauri/src/services/speech/DOCS.md](src-tauri/src/services/speech/DOCS.md) — Speech: failure model, audio clips, retry concurrency, commands, events, recording widget
+- [src/lib/components/shared/ui/DOCS.md](src/lib/components/shared/ui/DOCS.md) — Presentational UI primitives and their conventions
 - [src/lib/components/features/context-menu/DOCS.md](src/lib/components/features/context-menu/DOCS.md) — Context menu popup window: sections, keyboard nav, item execution
 - [src/lib/components/features/settings/DOCS.md](src/lib/components/features/settings/DOCS.md) — Settings dialog: sidebar nav, auto-save sections, models editor
 - [src/lib/components/features/conversation-dialog/DOCS.md](src/lib/components/features/conversation-dialog/DOCS.md) — Chat window: composer, bubbles, sidebar, palette, tool calls
@@ -20,7 +20,8 @@ Top-level index of all `DOCS.md` files in the project. Updated incrementally as 
 - [docs/logging-sensitivity.docs.md](docs/logging-sensitivity.docs.md) — Data sensitivity tiers and per-module redaction rules
 - [docs/logging-config.docs.md](docs/logging-config.docs.md) — Environment config, targets, rotation, performance
 - [docs/gotchas/tauri-command-threading.md](docs/gotchas/tauri-command-threading.md) — Sync Tauri commands run on GTK main thread; use `(async)` for blocking work
-- [docs/gotchas/paste-handler.md](docs/gotchas/paste-handler.md) — Shift+Cmd/Ctrl+V raw paste: Mac uses arboard invoke, Linux uses native paste event
+- [docs/gotchas/paste-handler.md](docs/gotchas/paste-handler.md) — Shift+Cmd/Ctrl+V raw paste: Mac vs non-Mac paths, empty-`DataTransfer` paste into AI webviews
+- [docs/gotchas/webview-drag-drop.md](docs/gotchas/webview-drag-drop.md) — AI webview builders must call `.disable_drag_drop_handler()` to receive file drops
 - [docs/gotchas/linux-gtk-focus.md](docs/gotchas/linux-gtk-focus.md) — `present_with_time` with real X11 timestamp from `x11_get_server_time`
 - [docs/gotchas/linux-wayland-gnome-extension.md](docs/gotchas/linux-wayland-gnome-extension.md) — GNOME Wayland: shortcuts, positioning and focus through the GNOME Shell extension (D-Bus `com.promptheus.Shell`)
 - [docs/gotchas/linux-webkit-opacity.md](docs/gotchas/linux-webkit-opacity.md) — CSS opacity ignored on transparent WebKitGTK; use GTK `set_opacity()` instead

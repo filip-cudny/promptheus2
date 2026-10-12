@@ -70,23 +70,23 @@ Run from `promptheus-tauri/src-tauri/`:
 |---------|-------------|
 | `pnpm tauri dev` | Run the full Tauri app in dev mode (frontend + backend) |
 | `pnpm tauri build` | Production bundle |
-| `pnpm bundle:linux` | Production `.deb` only (installs the GNOME Shell extension to `/usr/share/gnome-shell/extensions/`); output in the cargo target dir from `.cargo/config.toml` (`release/bundle/deb/`) |
-| `pnpm bundle:mac` | Production `.app` and `.dmg` only |
+| `pnpm bundle:linux` | Production `.deb` only (installs the GNOME Shell extension to `/usr/share/gnome-shell/extensions/`); output in `release/bundle/deb/` of the cargo `target-dir` set in an untracked root `.cargo/config.toml`, else `src-tauri/target/release/bundle/deb/` |
+| `pnpm bundle:mac` | Production `.app` only |
 
 ### Workflow rules
 
 - `pnpm check` does **not** exist — use `npx svelte-check`.
 - `cargo` commands must run from `src-tauri/`, not the project root.
 - `pnpm` commands run from the project root (`promptheus-tauri/`).
-- Every HTML window must be listed in `vite.config.ts` → `rollupOptions.input` and added to `src-tauri/capabilities/default.json` → `"windows"`. Missing the first → empty white window in production. Missing the second → all `invoke()` calls fail silently.
-- `invoke()` naming: command names are **snake_case** (matches Rust fn name), parameter names are **camelCase** (e.g. `invoke("get_context_menu_items", { itemId, shiftPressed })`). Recurring source of silent failures.
+- Every HTML window must be listed in `vite.config.ts` → `rollupOptions.input` and added to `src-tauri/capabilities/default.json` → `"windows"` (child webviews such as `conversation-dialog` and `shell-toolbar` go in `"webviews"`). Missing the first → empty white window in production. Missing the second → all `invoke()` calls fail silently.
+- `invoke()` naming: command names are **snake_case** (matches Rust fn name), parameter names are **camelCase** (e.g. `invoke("execute_menu_item", { itemId, shiftPressed })`). Recurring source of silent failures.
 
 ### Platform & architecture gotchas
 
 These are recurring traps — each lives in its own file with full background, symptom, and fix pattern. Load the file when working in the listed area; otherwise leave it.
 
 - [`docs/gotchas/tauri-command-threading.md`](docs/gotchas/tauri-command-threading.md) — sync `#[tauri::command]` runs on the GTK main thread on Linux; blocking calls freeze the whole app. **Load when:** writing or modifying any `#[tauri::command]` that touches clipboard, filesystem, subprocess, network, or X11/GTK APIs.
-- [`docs/gotchas/paste-handler.md`](docs/gotchas/paste-handler.md) — `Shift+Cmd/Ctrl+V` raw-text paste needs a Mac vs Linux/Windows split; has regressed multiple times. Also covers the WebKitGTK empty-`DataTransfer` paste workaround for AI webviews (legacy path drops image and arboard-written text → image re-read via async Clipboard API, text via `request_paste_text` host bridge, both re-dispatched). **Load when:** touching `InputArea.svelte → handleKeydown`, `src/lib/utils/paste.ts`, any clipboard Tauri command, `services/ai_webview/scripts.rs` paste injection or the `request_paste_text` host bridge in `palette.rs`, or investigating paste freezes / paste-does-nothing / "image or transcription text won't paste in Claude/ChatGPT webview" reports.
+- [`docs/gotchas/paste-handler.md`](docs/gotchas/paste-handler.md) — `Shift+Cmd/Ctrl+V` raw-text paste needs a Mac vs non-Mac split; has regressed multiple times. Also covers the WebKitGTK empty-`DataTransfer` paste workaround for AI webviews (legacy path drops image and arboard-written text → image re-read via async Clipboard API, text via `request_paste_text` host bridge, both re-dispatched). **Load when:** touching `InputArea.svelte → handleKeydown`, `src/lib/utils/paste.ts`, any clipboard Tauri command, `services/ai_webview/scripts.rs` paste injection or the `request_paste_text` host bridge in `palette.rs`, or investigating paste freezes / paste-does-nothing / "image or transcription text won't paste in Claude/ChatGPT webview" reports.
 - [`docs/gotchas/webview-drag-drop.md`](docs/gotchas/webview-drag-drop.md) — Tauri's OS-level drag-drop handler intercepts file drops before the hosted page sees them; AI-webview builders must call `.disable_drag_drop_handler()` to get HTML5 drag-and-drop. **Load when:** adding/modifying a `WebviewWindowBuilder`/`WebviewBuilder` that loads external provider content, or investigating "can't drop files into Claude/ChatGPT webview".
 - [`docs/gotchas/linux-gtk-focus.md`](docs/gotchas/linux-gtk-focus.md) — `set_focus()` is rejected by GNOME/KWin as a focus-steal; need `present_with_time` with a real `x11_get_server_time` timestamp. **Load when:** adding a window that grabs focus, or investigating "window appears but no keyboard focus" on Linux.
 - [`docs/gotchas/linux-wayland-gnome-extension.md`](docs/gotchas/linux-wayland-gnome-extension.md) — native Wayland clients on GNOME get no global shortcuts, window positioning or activation from GTK/Tauri; a GNOME Shell extension (`com.promptheus.Shell` on the session bus) grabs shortcuts, reads the pointer and focused app, and places the context menu. **Load when:** touching global shortcuts, window positioning or focus on Linux, or the GNOME Shell extension (`linux/gnome-shell-extension/`, `services/gnome_shell/`).

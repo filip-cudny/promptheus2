@@ -9,13 +9,15 @@ Pre-1.0. No public binaries yet — build from source.
 ## Features
 
 - Tray-only desktop app with a global-hotkey context menu over the focused app's clipboard/selection.
-- Streaming chat against multiple providers: OpenAI (Responses + Completions APIs), Anthropic, Gemini, and any OpenAI-compatible endpoint (vLLM, MiniMax, local servers).
-- Custom prompts with template variables and external file references.
-- Skills runtime with an MCP client (rmcp) for external tool servers.
+- Streaming chat against the OpenAI Responses and Completions APIs and any OpenAI-compatible endpoint (vLLM, MiniMax, local servers).
+- AI provider webviews: chat with provider web apps in their own windows.
+- Prompts as skills with `{{placeholder}}` variables.
+- MCP client (rmcp) for external tool servers.
 - Speech-to-text — both as an alternate input in chat and a standalone dictation flow (OpenAI Whisper or ElevenLabs).
+- Voice recording pill, with a GNOME Shell extension on GNOME Wayland.
 - Persistent conversation history in SQLite with full-text search.
 - Multi-window UI: context menu, conversation dialog, command palette, history browser, settings.
-- Cross-platform: macOS, Linux, Windows.
+- Platforms: macOS and Linux.
 
 ## Quick start
 
@@ -45,7 +47,7 @@ sudo apt install -y \
   build-essential curl wget file \
   libssl-dev libgtk-3-dev libayatana-appindicator3-dev \
   librsvg2-dev libwebkit2gtk-4.1-dev \
-  libjavascriptcoregtk-4.1-dev libsoup-3.0-dev
+  libjavascriptcoregtk-4.1-dev libsoup-3.0-dev libasound2-dev
 ```
 
 ### Linux (Fedora)
@@ -54,7 +56,7 @@ sudo apt install -y \
 sudo dnf install -y \
   gcc-c++ openssl-devel gtk3-devel \
   libappindicator-gtk3-devel librsvg2-devel \
-  webkit2gtk4.1-devel javascriptcoregtk4.1-devel libsoup3-devel
+  webkit2gtk4.1-devel javascriptcoregtk4.1-devel libsoup3-devel alsa-lib-devel
 ```
 
 ### Linux (Arch)
@@ -62,7 +64,7 @@ sudo dnf install -y \
 ```bash
 sudo pacman -S --needed \
   base-devel openssl gtk3 libappindicator-gtk3 \
-  librsvg webkit2gtk-4.1 libsoup3
+  librsvg webkit2gtk-4.1 libsoup3 alsa-lib
 ```
 
 </details>
@@ -75,9 +77,8 @@ Bundle identifier: `com.promptheus.desktop`. App config and data live under the 
 |----------|------------------|
 | macOS    | `~/Library/Application Support/com.promptheus.desktop/` |
 | Linux    | `~/.config/com.promptheus.desktop/` |
-| Windows  | `%APPDATA%\com.promptheus.desktop\` |
 
-In development, a `.env` file at the repository root (`promptheus-tauri/.env`) is picked up by `pnpm tauri dev`. The full settings schema lives in [`src-tauri/src/models/DOCS.md`](src-tauri/src/models/DOCS.md).
+API keys are read from `<config directory>/.env` first; then a `.env` found in the working directory or any parent (in development, `promptheus-tauri/.env`) is loaded and overrides it. The full settings schema lives in [`src-tauri/src/models/DOCS.md`](src-tauri/src/models/DOCS.md).
 
 ## Project layout
 
