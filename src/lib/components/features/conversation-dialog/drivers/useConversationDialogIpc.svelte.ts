@@ -4,7 +4,13 @@ import type { InvocationSource } from "$lib/types/history";
 export function useConversationDialogIpc(opts: {
   selfTarget: string;
   onRestoreHistory: (entryId: string, lastInteractionOnly?: boolean) => void;
-  onVoiceInput: (text: string, autoSend: boolean, invocationSource: InvocationSource | null) => void;
+  onVoiceInput: (
+    text: string,
+    skillId: string,
+    skillModel: string | null,
+    autoSend: boolean,
+    invocationSource: InvocationSource | null,
+  ) => void;
   onOpenForSkill: (skillId: string, skillName: string, skillModel: string | null) => void;
   onNewConversation: () => void;
   onActiveProviderCleared: () => void;
@@ -20,10 +26,22 @@ export function useConversationDialogIpc(opts: {
       { target: opts.selfTarget },
     );
 
-    const u2 = await listen<{ text: string; auto_send: boolean; invocation_source: InvocationSource | null }>(
+    const u2 = await listen<{
+      text: string;
+      skill_id: string;
+      skill_model: string | null;
+      auto_send: boolean;
+      invocation_source: InvocationSource | null;
+    }>(
       "voice-input",
       (event) =>
-        opts.onVoiceInput(event.payload.text, event.payload.auto_send, event.payload.invocation_source),
+        opts.onVoiceInput(
+          event.payload.text,
+          event.payload.skill_id,
+          event.payload.skill_model,
+          event.payload.auto_send,
+          event.payload.invocation_source,
+        ),
       { target: opts.selfTarget },
     );
 

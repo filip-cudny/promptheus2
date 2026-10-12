@@ -122,4 +122,8 @@ This avoids feedback loops while preserving the cursor on user typing and resett
 
 ### Voice-input source
 
-`DialogInitParams` and the `voice-input` payload carry a nullable `invocation_source`. `handleVoiceInput` calls `store.setActiveTabInvocationSource(source ?? "alternative_execute")`: the pill sends `pill`, the Shift+click `__chat__` path sends none and stays `alternative_execute`.
+`DialogInitParams` and the `voice-input` payload carry `skill_id`, `skill_model` and a nullable `invocation_source`. `handleVoiceInput` builds `/<skill_id> <text>` (plain text for an empty id), calls `store.setActiveTabInvocationSource(source ?? "alternative_execute")` and, for a non-empty `skill_model`, `store.setActiveTabModelId(skill_model)` (the active tab only, not `updateModelId`). Sources: the pill sends `pill`, the context menu's "Run in dialog" sends `alternative_execute`.
+
+`open_conversation_dialog` writes `PENDING` only when it creates the window; the reuse branch delivers by event, so a later new window never re-sends old input.
+
+Accepted limit: when the one global live-stream slot is set, a new dialog window reconnects (`tryReconnect`) and skips `get_dialog_init_params`, so an auto-send request ("Run in dialog", the pill's "Stop and chat") opens the dialog without sending.

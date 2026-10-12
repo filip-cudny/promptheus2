@@ -151,6 +151,7 @@
   async function handleVoiceInput(
     skillId: string,
     text: string,
+    skillModel: string | null,
     autoSend: boolean,
     invocationSource: InvocationSource | null,
   ) {
@@ -159,6 +160,7 @@
       store.addTab();
     }
     store.setActiveTabInvocationSource(invocationSource ?? "alternative_execute");
+    if (skillModel) store.setActiveTabModelId(skillModel);
     const inputText = skillId ? `/${skillId} ${text}` : text;
     store.updateInputText(inputText);
     if (!autoSend) return;
@@ -180,7 +182,7 @@
     } else if (p.history_entry_id) {
       await store.restoreFromHistory(p.history_entry_id, p.last_interaction_only);
     } else if (p.initial_input) {
-      await handleVoiceInput(p.skill_id, p.initial_input, p.auto_send_input, p.invocation_source);
+      await handleVoiceInput(p.skill_id, p.initial_input, p.skill_model, p.auto_send_input, p.invocation_source);
     } else if (p.skill_id) {
       store.openForSkill(p.skill_id, p.skill_name, p.skill_model);
     }
@@ -199,7 +201,8 @@
     onRestoreHistory: (entryId, lastInteractionOnly) => {
       store.restoreFromHistory(entryId, lastInteractionOnly);
     },
-    onVoiceInput: (text, autoSend, source) => handleVoiceInput("", text, autoSend, source),
+    onVoiceInput: (text, skillId, skillModel, autoSend, source) =>
+      handleVoiceInput(skillId, text, skillModel, autoSend, source),
     onOpenForSkill: (skillId, skillName, skillModel) =>
       store.openForSkill(skillId, skillName, skillModel),
     onNewConversation: () => store.addTab(),

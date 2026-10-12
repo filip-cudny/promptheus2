@@ -22,6 +22,8 @@ struct RestoreHistoryEvent {
 #[derive(Serialize, Clone)]
 struct VoiceInputEvent {
     text: String,
+    skill_id: String,
+    skill_model: Option<String>,
     auto_send: bool,
     invocation_source: Option<InvocationSource>,
 }
@@ -87,18 +89,6 @@ pub async fn open_conversation_dialog(
         geometry_key: "conversation-dialog".into(),
     };
 
-    *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(PendingDialogParams {
-        skill_id: skill_id.clone(),
-        skill_name: skill_name.clone(),
-        skill_model: skill_model.clone(),
-        history_entry_id: history_entry_id.clone(),
-        last_interaction_only,
-        initial_input: initial_input.clone(),
-        auto_send_input,
-        new_chat,
-        invocation_source,
-    });
-
     if app.get_window(label).is_some() {
         surface_conversation_dialog(&app, label);
         emit_reuse_event(
@@ -116,6 +106,18 @@ pub async fn open_conversation_dialog(
         )?;
         return Ok(());
     }
+
+    *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(PendingDialogParams {
+        skill_id: skill_id.clone(),
+        skill_name: skill_name.clone(),
+        skill_model: skill_model.clone(),
+        history_entry_id: history_entry_id.clone(),
+        last_interaction_only,
+        initial_input: initial_input.clone(),
+        auto_send_input,
+        new_chat,
+        invocation_source,
+    });
 
     let (_, _created) = dialog::open_or_focus(&app, &config)
         .await
@@ -318,6 +320,8 @@ fn emit_reuse_event(
             "voice-input",
             VoiceInputEvent {
                 text,
+                skill_id: skill_id.to_string(),
+                skill_model: skill_model.map(|s| s.to_string()),
                 auto_send: auto_send_input,
                 invocation_source,
             },

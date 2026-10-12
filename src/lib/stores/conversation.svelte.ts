@@ -928,6 +928,11 @@ export function createConversationStore(
     if (tab) tab.invocation_source = source;
   }
 
+  function setActiveTabModelId(modelId: string): void {
+    const tab = getTab(activeTabId);
+    if (tab) tab.model_id = modelId;
+  }
+
   async function loadGlobalContextIntoActiveTab(): Promise<void> {
     const { text, images } = await getGlobalContext();
     updateContextText(text);
@@ -1527,6 +1532,7 @@ export function createConversationStore(
     retryToolCall,
     saveToHistory,
     setActiveTabInvocationSource,
+    setActiveTabModelId,
     loadGlobalContextIntoActiveTab,
     restoreFromHistory,
     isTabClean,
