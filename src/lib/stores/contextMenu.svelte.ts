@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { error } from "@tauri-apps/plugin-log";
+import { error, warn } from "@tauri-apps/plugin-log";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { MenuItem } from "$lib/types/menu";
 import { startExecution, isExecuting, getExecutingSkillId, cancelExecution } from "$lib/stores/execution.svelte";
@@ -304,7 +304,7 @@ async function runInDialog(index: number, skillId: string, skillName: string) {
   try {
     text = await invoke<string>("get_clipboard_text");
   } catch (e) {
-    error(`Run in dialog: clipboard read failed for ${skillId}: ${e}`);
+    warn(`Run in dialog: clipboard read failed for ${skillId}: ${e}`);
     await openDialogForItem(index);
     return;
   }
@@ -376,11 +376,7 @@ function handleNumberInput(digit: string, isAlternative: boolean) {
       if (!targetItem.enabled && !(_isRecording && _recordingSkillId === (targetItem.data as { skill_id: string } | null)?.skill_id)) return;
       const targetIndex = _items.indexOf(targetItem);
       _selectedIndex = targetIndex;
-      if (isAlternative) {
-        executeItem(targetIndex, true);
-      } else {
-        executeItem(targetIndex);
-      }
+      executeItem(targetIndex, isAlternative);
     }
   }, NUMBER_DEBOUNCE_MS);
 }
