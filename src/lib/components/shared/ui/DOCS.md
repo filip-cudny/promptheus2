@@ -6,7 +6,7 @@ Reusable UI primitives shared across features. See [src/DOCS.md](../../../../DOC
 
 ### Component patterns
 
-- Files here are presentational: they import no stores, services or `invoke()`, only types from `$lib/types`, constants, pure helpers from `$lib/utils` and sibling `ui/` components. Components that need state or IPC go in `shared/widgets/`.
+- Files here are presentational: they import no stores, services or `invoke()`. Besides types, constants, `$lib/utils` helpers and sibling `ui/` components they use only rendering libraries (`morphdom` and `mermaid` in `MarkdownRenderer`). Components that need state or IPC go in `shared/widgets/`; the exception is `ThinkingBlock`, which calls the Tauri plugins `opener`, `dialog` and `fs` directly (open a link, save and write a file).
 - Scoped `<style>` blocks for all CSS — no global style leakage.
 - Custom Svelte transitions defined inline when built-in transitions (`fade`, `fly`) don't match the required animation curve (e.g., capped opacity).
 
