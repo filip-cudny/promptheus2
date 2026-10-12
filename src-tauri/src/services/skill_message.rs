@@ -338,9 +338,15 @@ pub fn build_messages_from_tree(
             if has_context_images || has_node_images {
                 let mut parts = Vec::new();
                 if has_context_images {
-                    for (i, img) in context_images.iter().enumerate() {
+                    let max_number = context_images.iter().filter_map(|img| img.number).max().unwrap_or(0);
+                    let mut unnumbered = 0;
+                    for img in context_images {
+                        let number = img.number.unwrap_or_else(|| {
+                            unnumbered += 1;
+                            max_number + unnumbered
+                        });
                         parts.push(ContentPart::Text {
-                            text: format!("[Context Image #{}]", i + 1),
+                            text: format!("[Context Image #{number}]"),
                         });
                         parts.push(ContentPart::ImageUrl {
                             image_url: ImageUrlData {
@@ -728,6 +734,7 @@ mod tests {
         let ctx_images = vec![ImageData {
             data: "abc123".into(),
             media_type: "image/png".into(),
+            number: None,
         }];
         let messages = build_messages_from_tree(&nodes, &ctx_images, &HashMap::new());
         match &messages[0].content {
@@ -774,9 +781,53 @@ mod tests {
         let ctx_images = vec![ImageData {
             data: "abc".into(),
             media_type: "image/png".into(),
+            number: None,
         }];
         let messages = build_messages_from_tree(&nodes, &ctx_images, &HashMap::new());
         assert!(matches!(&messages[0].content, MessageContent::Parts(_)));
         assert!(matches!(&messages[2].content, MessageContent::Text(_)));
+    }
+
+    #[test]
+    fn build_messages_context_image_labels_keep_numbers() {
+        let nodes = vec![ConversationNodeForExecution {
+            node_id: "1".into(),
+            role: "user".into(),
+            content: "q".into(),
+            images: vec![],
+            text_attachments: vec![],
+            updates: vec![],
+            applied_skills: vec![],
+        }];
+        let labels = |numbers: &[Option<u32>]| -> Vec<String> {
+            let imgs: Vec<ImageData> = numbers
+                .iter()
+                .map(|&number| ImageData {
+                    data: "d".into(),
+                    media_type: "image/png".into(),
+                    number,
+                })
+                .collect();
+            match &build_messages_from_tree(&nodes, &imgs, &HashMap::new())[0].content {
+                MessageContent::Parts(parts) => parts
+                    .iter()
+                    .filter_map(|p| match p {
+                        ContentPart::Text { text } if text.starts_with("[Context Image") => {
+                            Some(text.clone())
+                        }
+                        _ => None,
+                    })
+                    .collect(),
+                _ => panic!("expected parts"),
+            }
+        };
+        assert_eq!(
+            labels(&[Some(2), None, Some(5)]),
+            ["[Context Image #2]", "[Context Image #6]", "[Context Image #5]"]
+        );
+        assert_eq!(
+            labels(&[None, None]),
+            ["[Context Image #1]", "[Context Image #2]"]
+        );
     }
 }

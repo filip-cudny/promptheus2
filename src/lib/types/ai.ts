@@ -60,6 +60,7 @@ export interface ProcessedMessage {
 export interface ImageData {
   data: string;
   media_type: string;
+  number?: number;
 }
 
 export interface AppliedSkill {

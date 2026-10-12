@@ -5,7 +5,7 @@
   import ContextEditor from "$lib/components/shared/widgets/ContextEditor.svelte";
   import { appendContext, appendContextImage, clearContext } from "$lib/services/context";
   import { Save, Check, X, Trash2 } from "lucide-svelte";
-  import { getGlobalContext, type createConversationStore } from "$lib/stores/conversation.svelte";
+  import { getGlobalContext, unwrapContextBlocks, type createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
 
   let {
@@ -58,9 +58,11 @@
       for (const img of localImages) {
         await appendContextImage(img.data, img.media_type);
       }
-      if (localText.trim()) {
-        await appendContext(localText);
+      const savedText = unwrapContextBlocks(localText);
+      if (savedText.trim()) {
+        await appendContext(savedText);
       }
+      ({ text: localText, images: localImages } = await getGlobalContext());
     } finally {
       saving = false;
     }

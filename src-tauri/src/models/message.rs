@@ -47,6 +47,8 @@ pub struct ProcessedMessage {
 pub struct ImageData {
     pub data: String,
     pub media_type: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub number: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

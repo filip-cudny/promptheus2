@@ -413,6 +413,48 @@ fn image_round_trip() {
 }
 
 #[test]
+fn context_images_read_back_with_numbers_from_image_index() {
+    let svc = make_svc();
+    let nodes = make_nodes("hi", "hello");
+    let image_data = BASE64.encode(b"data");
+    let ctx = |image_index| ImagePayload {
+        node_id: None,
+        image_index,
+        data: image_data.clone(),
+        media_type: "image/png".into(),
+    };
+
+    let save = |images: Vec<ImagePayload>| {
+        svc.add_conversation_entry(
+            "ctx".into(),
+            None,
+            None,
+            true,
+            None,
+            nodes.clone(),
+            Some("u1".into()),
+            vec!["u1".into(), "a1".into()],
+            false,
+            None,
+            images,
+            None,
+            None,
+            InvocationSource::ContextMenu,
+            OutputRoute::Clipboard,
+        )
+    };
+
+    let id = save(vec![ctx(1), ctx(4)]);
+    let conv = svc.get_entry_by_id(&id).unwrap().conversation_data.unwrap();
+    let numbers: Vec<_> = conv.context_images.iter().map(|i| i.number).collect();
+    assert_eq!(numbers, [Some(2), Some(5)]);
+
+    let id = save(vec![ctx(0)]);
+    let conv = svc.get_entry_by_id(&id).unwrap().conversation_data.unwrap();
+    assert_eq!(conv.context_images[0].number, Some(1));
+}
+
+#[test]
 fn image_cascade_delete() {
     let svc = make_svc();
     let nodes = make_nodes("hi", "hello");

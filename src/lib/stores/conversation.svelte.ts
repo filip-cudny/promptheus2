@@ -37,7 +37,7 @@ import type {
 import { hasUserContent } from "$lib/types";
 import type { ConversationNodeForExecution } from "$lib/types/ai";
 import { invoke } from "@tauri-apps/api/core";
-import { getContextItems } from "$lib/services/context";
+import { getContextItems, getLabelledContext } from "$lib/services/context";
 import type { InvocationSource } from "$lib/types/history";
 
 export async function getGlobalContext(): Promise<{
@@ -45,13 +45,21 @@ export async function getGlobalContext(): Promise<{
   images: ConversationImage[];
 }> {
   const items = await getContextItems();
-  const text = items
-    .flatMap((i) => (i.item_type === "text" && i.content ? [i.content] : []))
-    .join("\n");
+  const text = (await getLabelledContext()) ?? "";
   const images = items.flatMap((i) =>
-    i.item_type === "image" ? [{ data: i.data, media_type: i.media_type }] : [],
+    i.item_type === "image"
+      ? [{ data: i.data, media_type: i.media_type, number: i.number }]
+      : [],
   );
   return { text, images };
+}
+
+export function unwrapContextBlocks(text: string): string {
+  return text.replace(
+    /<pasted-text name="Text #\d+">\n([\s\S]*?)\n<\/pasted-text>(\n\n(?=<pasted-text name="Text #\d+">))?/g,
+    (_block, content: string, separator?: string) =>
+      separator ? `${content}\n` : content,
+  );
 }
 
 export function createEmptyTree(): ConversationTree {
@@ -231,7 +239,7 @@ function collectImages(tab: TabState): ImagePayload[] {
   for (let i = 0; i < tab.context_images.length; i++) {
     images.push({
       node_id: null,
-      image_index: i,
+      image_index: (tab.context_images[i].number ?? i + 1) - 1,
       data: tab.context_images[i].data,
       media_type: tab.context_images[i].media_type,
     });
@@ -351,6 +359,7 @@ export function createConversationStore(
     const contextImages = activeTab.context_images.map((img) => ({
       data: img.data,
       media_type: img.media_type,
+      number: img.number,
     }));
     const tabId = activeTab.tab_id;
 
@@ -404,6 +413,7 @@ export function createConversationStore(
       const contextImages = tab.context_images.map((img) => ({
         data: img.data,
         media_type: img.media_type,
+        number: img.number,
       }));
 
       const callbacks: ExecutionCallbacks = {

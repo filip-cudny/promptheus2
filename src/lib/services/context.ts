@@ -9,6 +9,10 @@ export async function getContextText(): Promise<string | null> {
   return invoke("get_context_text");
 }
 
+export async function getLabelledContext(): Promise<string | null> {
+  return invoke("get_labelled_context");
+}
+
 export async function hasContext(): Promise<boolean> {
   return invoke("has_context");
 }

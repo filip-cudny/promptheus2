@@ -300,21 +300,22 @@ impl SqliteHistoryService {
         if let Some(mut conv_data) = conversation_data {
             let mut img_stmt = conn
                 .prepare(
-                    "SELECT node_id, data, mime_type FROM conversation_images
+                    "SELECT node_id, data, mime_type, image_index FROM conversation_images
                      WHERE conversation_id = ?1 ORDER BY image_index",
                 )
                 .ok()?;
 
-            let images: Vec<(Option<String>, Vec<u8>, String)> = img_stmt
-                .query_map([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            let images: Vec<(Option<String>, Vec<u8>, String, u32)> = img_stmt
+                .query_map([id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))
                 .ok()?
                 .filter_map(|r| r.ok())
                 .collect();
 
-            for (node_id, data, mime_type) in images {
-                let image_data = ImageData {
+            for (node_id, data, mime_type, image_index) in images {
+                let mut image_data = ImageData {
                     data: BASE64.encode(&data),
                     media_type: mime_type,
+                    number: None,
                 };
                 match node_id {
                     Some(nid) => conv_data
@@ -322,7 +323,10 @@ impl SqliteHistoryService {
                         .entry(nid)
                         .or_default()
                         .push(image_data),
-                    None => conv_data.context_images.push(image_data),
+                    None => {
+                        image_data.number = Some(image_index + 1);
+                        conv_data.context_images.push(image_data);
+                    }
                 }
             }
 

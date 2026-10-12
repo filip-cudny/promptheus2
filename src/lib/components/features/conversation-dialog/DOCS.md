@@ -115,7 +115,7 @@ This avoids feedback loops while preserving the cursor on user typing and resett
 
 ### Global context loading
 
-`getGlobalContext()` (`stores/conversation.svelte.ts`) reads `get_context_items` and returns `{ text, images }`: non-empty text items joined with `\n` (same rule as `ContextManagerService::get_context`), all images. Two callers:
+`getGlobalContext()` (`stores/conversation.svelte.ts`) reads `get_context_items` and `get_labelled_context` and returns `{ text, images }`: `text` is the labelled `<pasted-text name="Text #N">` blocks (empty without text items), `images` carry the item `number`. The numbers go into the chat prompt (`[Context Image #N]`), token count, execution and history (`image_index = number - 1`). `ContextSection.saveContext` runs `unwrapContextBlocks` on the field (only `<pasted-text name="Text #N">` blocks; text outside them is kept; the `\n\n` between consecutive blocks becomes `\n`), saves it as one text item and reloads the tab from `getGlobalContext()`. Two callers:
 
 1. `ContextSection` starts its local text/images from the active tab's stored context (so mounting never overwrites context the store already loaded) and on mount refills them from it.
 2. `store.loadGlobalContextIntoActiveTab()` writes it into the active tab; `handleVoiceInput` awaits it before `sendMessage()` when `autoSend`, then shows the context section collapsed, so the auto-sent message carries the context (new window via `applyInitParams`, open window via the `voice-input` event).
