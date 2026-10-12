@@ -2,26 +2,11 @@
 
 Data structures used across the app. See parent [`src-tauri/DOCS.md`](../../DOCS.md) for general conventions (serde derives, `rename_all`).
 
-## Directory Structure
-
-```
-models/
-├── mod.rs          # Module declarations
-├── settings.rs     # Full settings.json schema (Settings + sub-structs)
-├── menu.rs         # MenuItemType enum, MenuItem struct
-├── execution.rs    # ErrorCode enum, ExecutionResult struct
-├── context.rs      # ContextItem tagged enum (Text / Image variants, each with a per-kind `number`)
-├── skill.rs        # SkillFrontmatter, Skill, SkillSummary, SkillFull, OfferedIn
-├── message.rs      # ProcessedMessage, MessageContent, ContentPart — LLM message format
-└── history.rs      # HistoryEntryType, InvocationSource, OutputRoute, HistoryEntry,
-                    #   ConversationHistoryData, SerializedConversationNode, ImagePayload
-```
-
 ## Conventions
 
 ### Derive standard
 
-All model structs derive `Debug, Clone, Serialize, Deserialize`. Add `Default` when the struct has meaningful defaults. Add `PartialEq` only when needed for comparisons (e.g., enums used in assertions).
+Model structs derive `Debug, Clone` and `Serialize` / `Deserialize` as the direction they cross requires. Add `Default` when the struct has meaningful defaults. Add `PartialEq` only when needed for comparisons (e.g., enums used in assertions).
 
 ### Stable `settings.json`
 
@@ -44,28 +29,12 @@ For fields where the type's `Default` is correct (`false`, `0`, `None`, empty `V
 
 ### IPC model structs
 
-Non-settings model files define types that cross the Rust↔TypeScript IPC boundary. Each Rust file has a TypeScript mirror in `src/lib/types/`:
+Non-settings model files define types that cross the Rust↔TypeScript IPC boundary. Each has a hand-written TypeScript mirror in `src/lib/types/` (e.g. `context.rs` → `types/context.ts`, `message.rs` → `types/ai.ts`); a type with no mirror there is not sent to the frontend (e.g. `OutputRoute`). Change both sides in the same change.
 
-| Rust file | TypeScript file | Serde strategy |
-|-----------|----------------|----------------|
-| `menu.rs` | `types/menu.ts` | `rename_all = "snake_case"` on `MenuItemType` |
-| `execution.rs` | `types/execution.ts` | `rename_all = "snake_case"` on `ErrorCode` |
-| `context.rs` | `types/context.ts` | `tag = "item_type"` + `rename_all = "lowercase"` — internally tagged enum |
-| `message.rs` | `types/ai.ts` | `untagged` on `MessageContent`, `tag = "type"` on `ContentPart`; `ImageData.number` (optional, context images only) |
-| `history.rs` | `types/history.ts` | `rename_all = "lowercase"` on `HistoryEntryType`; `rename_all = "snake_case"` on `InvocationSource` (`types/history.ts`, values `context_menu`, `alternative_execute`, `chat`, `pill`); `OutputRoute` values `clipboard`, `chat`, `clipboard_chat`; `OutputRoute` has no TS counterpart |
-
-TypeScript mirrors use `T | null` for `Option<T>` and `unknown` for `serde_json::Value`. `ContextItem` is a discriminated union (not an interface with optional fields); both members carry `number` (per-kind, assigned by `ContextManagerService`).
-
-### Settings struct hierarchy
-
-`Settings` is the root. Sub-structs are not nested modules — all live in `settings.rs`:
-
-- `Settings` — top-level, one per app
-- `ModelConfig`, `ApiKeySource`, `Provider`, `ModelParameters` — AI model configuration
-- `SpeechToTextModel` — STT model
-- `KeymapGroup` — OS-specific hotkey bindings (`HashMap<String, String>`)
-- `NotificationSettings`, `NotificationEvents`, `NotificationColors` — notification config
-- `DescriptionGenerator` — auto-description model + prompt
+- Enums use `rename_all = "snake_case"` unless a mirror says otherwise: `HistoryEntryType` and `ContextItem` use `"lowercase"`.
+- `ContextItem` is an internally tagged enum (`tag = "item_type"`), mirrored as a discriminated union, not an interface with optional fields; both members carry `number`, assigned per kind by `ContextManagerService`.
+- `MessageContent` is `untagged`; `ContentPart` is tagged with `tag = "type"`.
+- `Option<T>` maps to `T | null`, except where the Rust field is skipped when `None`: `ImageData.number` is `number?: number` (`types/ai.ts`). `serde_json::Value` maps to `unknown`.
 
 ### Adding new settings fields
 

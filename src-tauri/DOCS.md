@@ -1,83 +1,43 @@
 # Backend (Rust + Tauri 2)
 
-## Directory Structure
+## Layout
+
+Directories follow their names (`commands/`, `services/`, `models/`, `providers/`, `setup/`). Files whose place does not follow from their name:
 
 ```
 src-tauri/
-├── tauri.conf.json             # Tauri config (windows, build, bundle, plugins)
-├── Cargo.toml                  # Rust dependencies
-├── build.rs                    # Tauri build script
-├── capabilities/               # Permission capabilities for windows
-│   └── default.json
-├── icons/                      # App icons (generated via `pnpm tauri icon`)
+├── .cargo/config.toml          # tracked; sets CXXFLAGS (see Dependency hygiene)
+├── Info.plist                  # macOS bundle keys merged into the .app
+├── entitlements.plist          # macOS code-signing entitlements
+├── resources/                  # files bundled into the app
 └── src/
-    ├── main.rs                 # 3-line shim — calls `app_lib::run()`
-    ├── lib.rs                  # `pub fn run()` entry point: plugins, setup hook, invoke handler
-    ├── error.rs                # Crate-wide `Error` enum + `Result<T>` alias
-    ├── traits.rs               # Cross-module abstractions
-    ├── setup/                  # App-init wiring, called from `lib.rs` setup hook
-    │   ├── init.rs             # Top-level orchestrator
-    │   ├── state.rs            # `app.manage(...)` calls — one per service
-    │   ├── windows.rs          # Window/webview creation
-    │   ├── tray.rs / menu.rs   # System tray + native menu
-    │   ├── shortcuts.rs        # Global hotkey registration
-    │   ├── background.rs       # `tauri::async_runtime::spawn` background tasks (heartbeat, AI webview cold-suspend, audio clip sweeper, settings sync loop)
-    │   └── log.rs              # Logging plugin config
-    ├── commands/               # IPC surface — thin adapters, no business logic
-    │   ├── mod.rs              # `pub mod` re-exports + `handlers!` macro
-    │   ├── ai.rs / ai_webview.rs
-    │   ├── execution_stream.rs / execution_control.rs / execution_generation.rs
-    │   ├── prompts.rs / skills.rs / mcp.rs
-    │   ├── settings.rs / settings_dialog.rs / settings_sync.rs
-    │   ├── history.rs / history_dialog.rs
-    │   ├── context.rs / context_editor.rs
-    │   ├── menu.rs / provider_menu.rs / dock.rs
-    │   ├── conversation_dialog.rs / image_preview.rs / text_preview.rs
-    │   ├── notification.rs / clipboard.rs / speech.rs
-    │   └── tokenizer.rs / ui_state.rs
-    ├── services/               # Business logic — no Tauri imports, unit-testable
-    │   ├── ai/                 # Provider trait + per-provider implementations
-    │   ├── ai_webview/         # AI webview lifecycle, cold-suspend
-    │   ├── config/             # Settings load/save, hot-reload, migrator
-    │   ├── execution/          # Skill executor, streaming, tool-call orchestration
-    │   ├── mcp/                # MCP client, server registry
-    │   ├── skill/              # Skill loader + parser
-    │   ├── speech/             # Audio capture + transcription
-    │   ├── sqlite_history/     # History persistence + codec
-    │   ├── frontmost_app/      # Per-OS frontmost-app detection
-    │   ├── menu_coordinator.rs # Aggregates menu providers into ordered sections
-    │   └── …                   # placeholder, notification, clipboard, hotkeys, etc.
-    ├── models/                 # Serde types crossing the IPC boundary
-    └── providers/              # Menu item generators implementing `MenuItemProvider`
+    ├── main.rs                 # shim — calls `app_lib::run()`
+    ├── lib.rs                  # `pub fn run()`: plugins, setup hook, invoke handler
+    └── setup/                  # app-init wiring, called from the `lib.rs` setup hook
 ```
 
 ## Conventions
 
 ### Entry points: `lib.rs` is the app, `main.rs` is a stub
 
-`main.rs` is a 3-line shim (`fn main() { app_lib::run() }`) — mobile builds compile the crate as a library and never see it. All real wiring lives in `lib.rs::run()` (`#[cfg_attr(mobile, tauri::mobile_entry_point)]`), which delegates to the `setup/` module so the `Builder` chain stays under ~50 lines.
+`main.rs` only sets `windows_subsystem` and calls `app_lib::run()`. All real wiring lives in `lib.rs::run()`, which delegates to `setup/` (`setup::init::run` is the `Builder::setup` hook).
 
 When adding plugins, state, or background tasks: extend the right `setup/` submodule, not `lib.rs` itself.
 
 ### Commands vs Services
 
-- **Commands** (`commands/`) — thin Tauri `#[tauri::command]` handlers. Deserialize args, call a service, return `crate::Result<T>`. No business logic.
-- **Services** (`services/`) — pure business logic. No Tauri imports. Unit-testable in isolation.
+- **Commands** (`commands/`) — thin Tauri `#[tauri::command]` handlers. Deserialize args, call a service, return `crate::Result<T>`.
+- **Services** (`services/`) — business logic. Services that own windows, events or other Tauri resources take `AppHandle` and use `tauri::` types; logic that needs none stays free of them and is unit-tested in isolation.
 
 ```rust
 // commands/prompts.rs
-use std::sync::Arc;
-use tauri::State;
-use tokio::sync::Mutex;
-use crate::{models::ExecutionResult, services::PromptService, Result};
-
 #[tauri::command]
-pub async fn execute_prompt(
-    svc: State<'_, Arc<Mutex<PromptService>>>,
-    prompt_id: String,
-    input: String,
-) -> Result<ExecutionResult> {
-    svc.lock().await.execute(&prompt_id, &input).await
+pub async fn get_prompt(
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+    kind: PromptKind,
+) -> crate::Result<PromptDoc> {
+    let config = config.lock().await;
+    Ok(build_prompt_doc(&config, kind))
 }
 ```
 
@@ -85,11 +45,12 @@ pub async fn execute_prompt(
 
 A command file deserializes input, looks up state, calls a service, returns the result. Inside `commands/` do **not**:
 
-- Define module-level `static` state (move it to a service struct managed in `setup::state`).
 - Implement business helpers (move to `services/`).
 - Build response payloads with inline `serde_json::json!` (define a `models/` struct or extend an existing one).
 
-If a command file grows past ~300 LOC or starts holding its own state machine, the logic belongs in a service. Current offenders worth refactoring as we touch them: `commands/conversation_dialog.rs`, `commands/speech.rs`, `commands/menu.rs`.
+Command-local `static`s are allowed for transient window state that is handed from one command to the next (e.g. the `PENDING` slot of `commands/notification.rs`, `commands/text_preview.rs`, `commands/conversation_dialog.rs`, `commands/image_preview.rs`) or for version counters (`SETTINGS_VERSION` in `commands/settings.rs`); state with its own lifecycle belongs in a service managed in `setup::state`.
+
+If a command file starts holding its own state machine, the logic belongs in a service.
 
 #### Splitting a module
 
@@ -119,7 +80,8 @@ When adding a command: add the `pub mod` line at the top of `commands/mod.rs`, t
 Pick the right primitive — getting this wrong deadlocks or freezes the app:
 
 - **Service state held across `.await` → `tokio::sync::Mutex`.** This is the default for anything reachable from an async command.
-- **`std::sync::Mutex` is allowed only for short, await-free guards** — typical examples are command-local statics that swap an `Option`, e.g. `commands/notification.rs`, `commands/text_preview.rs`, `commands/conversation_dialog.rs`.
+- **Service state held across `.await` → `tokio::sync::Mutex`.** This is the default for anything reachable from an async command.
+- **`std::sync::Mutex` is allowed only for short, await-free guards** — typical examples are the command-local statics that swap an `Option`, e.g. in `commands/notification.rs`, `commands/text_preview.rs`, `commands/conversation_dialog.rs`.
 - **When a `std::sync::Mutex` lives on a service struct** (e.g. `services/ai_webview` snapshot maps), every guard **must drop before any `.await`**. Holding a sync mutex across `.await` deadlocks the runtime; holding it across a streamed response stalls every other command.
 
 Cross-reference: see `docs/gotchas/tauri-command-threading.md` for the related GTK-thread issue on Linux sync commands.
@@ -153,7 +115,7 @@ Pick the right channel for each direction:
 
 Default to commands. Reach for `app.emit*` only for true one-to-many notifications. Streamed results (AI completions, skill execution, generation events) belong on `Channel<T>` — typed, scoped to the invoke call, and back-pressure-friendly. The reference implementation is `commands/ai.rs` + `commands/execution_stream.rs`.
 
-**Do not pair `Channel<T>` with `app.emit` for the same call.** Pick one. The Channel is the source of truth for call-scoped events; layering a global broadcast on top means subscribers can't tell which run finished, and consumers end up de-duplicating in two places. (See `services/execution/skill_executor.rs` and `commands/speech.rs` — both have legacy duplicate-broadcast paths queued for cleanup.)
+**Do not pair `Channel<T>` with `app.emit` for the same call.** Pick one. The Channel is the source of truth for call-scoped events; layering a global broadcast on top means subscribers can't tell which run finished, and consumers end up de-duplicating in two places.
 
 ### Async
 
@@ -175,14 +137,13 @@ Menu content is assembled from pluggable providers (`providers/`):
 - Each provider implements `MenuItemProvider` and returns `Vec<MenuItem>`.
 - Providers are registered at startup and queried when the menu is shown.
 - Adding a new menu section = adding a new provider.
-
 ### Logging
 
-Uses `tauri-plugin-log` with the standard Rust `log` crate. Logs go to stdout, a log file (in the app data directory), and the webview console.
+Uses `tauri-plugin-log` (`setup/log.rs`) with the standard Rust `log` crate. Logs go to stdout, a log file in Tauri's `LogDir`, and the webview console.
 
 - Rust: use `log::{info, warn, error, debug}` macros directly.
 - Frontend: `import { error, info, warn } from "@tauri-apps/plugin-log"`.
-- Both `main.ts` and `context-menu-main.ts` call `attachConsole()` to bridge Rust logs into browser devtools.
+- `attachConsole()` bridges Rust logs into browser devtools; it is called in `src/windows/{main,context-menu,conversation-dialog}/entry.ts` and in the `App.svelte` of `notification` and `recording-widget`.
 - Default level is `Info` globally, `Debug` for the app crate. Override with `RUST_LOG` env var.
 - Log at decision points and errors, not at every function boundary.
 
@@ -212,14 +173,14 @@ This is a **tray-only app** — no main window opens on startup. On macOS, activ
 
 When showing a window from a background context (e.g., global hotkey), call `app.show()` on macOS before `win.show()` to activate the app and ensure the window appears in front.
 
-Because the app is tray-only with multiple short-lived windows, cross-window coordination via `app.emit_to(label, …)` is legitimate (e.g. `prompts.rs`, `provider_menu.rs`, `conversation_dialog.rs`). That is **not** the events-as-substitute-for-commands anti-pattern — there is no single window from which to drive a command. Within a single window, prefer `invoke`.
+Because the app is tray-only with multiple short-lived windows, cross-window coordination via events is legitimate (`app.emit_to(label, …)` in `provider_menu.rs`, `conversation_dialog.rs`; the app-wide `app.emit("prompt-changed", …)` in `prompts.rs`). That is **not** the events-as-substitute-for-commands anti-pattern — there is no single window from which to drive a command. Within a single window, prefer `invoke`.
 
 ### Capabilities
 
 - `capabilities/default.json` declares permissions for the app's webviews.
 - Our own `#[tauri::command]`s do **not** need a capability entry — those checks apply only to plugin APIs and the core API surface exposed to the webview.
 - When adding a Tauri plugin, add its permissions here (e.g., `"clipboard-manager:default"`).
-- **Always scope `fs:*` permissions with explicit paths.** Never grant a bare `fs:allow-write-text-file` — narrow scopes (`$APPCONFIG/*`, `$APPDATA/promptheus/**`) are mandatory, otherwise any window can write any file the user can.
+- **`fs:allow-read-text-file` and `fs:allow-write-text-file` are granted bare, with no scope entries.** The plugin allows a path only if it is in the scope built from the permission's scope entries (none here; `plugins.fs.scope` in `tauri.conf.json` is empty too) or in the runtime fs scope (`tauri-plugin-fs-2.5.1/src/commands.rs:1538-1572`, `src/lib.rs:489-490` starts it empty). The dialog plugin's `open` and `save` add each picked file, and each picked folder, to that runtime scope (`tauri-plugin-dialog-2.7.1/src/commands.rs:160-180` folders, `:192-212` files, `:250-254` save). So these two permissions reach only paths the user picked in a file dialog during the running session. Do not add other `fs:*` permissions, and do not add scope entries, without a reason: any window can then touch those paths without a picker.
 - Split `default.json` per feature once it grows past ~50 lines or two windows have non-overlapping needs (e.g. extract `settings.json` for the settings dialog so the context-menu window doesn't inherit settings-only permissions).
 
 ### Configuration
@@ -239,7 +200,7 @@ Placeholders supported in any field that goes through `resolve_env_refs` (which 
 
 - `${VAR}` — any process env var (loaded from the user's shell + `<config_dir>/.env`).
 - `${CONFIG_DIR}` — the resolved `app_config_dir`. Set by `services/config/loader::load_env` after dotenv processing, so it is reliable and not user-overridable from `.env`. Useful in MCP `args`/`env` to point at config-bundled data without hardcoding `/Users/...`. **Has no effect in config-relative fields** — `${CONFIG_DIR}/foo.md` expands to an absolute path and is rejected; write `foo.md` instead.
-- `${HOME}` — provided by the OS on Unix. Not synthesized by the app, so on Windows callers get whatever the environment provides.
+- `${HOME}` — provided by the OS environment; not synthesized by the app.
 
 Cwd is **not** part of either contract. Tauri inherits the launch cwd (Finder/launchd give `/`); MCP child processes inherit ours. Never write a relative path expecting `cwd`-relative resolution — there is no consistent cwd to be relative to.
 
@@ -253,6 +214,6 @@ Cwd is **not** part of either contract. Tauri inherits the launch cwd (Finder/la
 
 ### Testing
 
-- Services are plain Rust structs with no Tauri dependency — unit-test them like any library. ~30 service files have `#[cfg(test)]` blocks; that's the expected pattern.
+- Services are plain Rust structs — unit-test them with `#[cfg(test)]` blocks like any library; that's the expected pattern.
 - Commands themselves are too thin to test directly. If a command holds enough logic to warrant a test, that logic belongs in a service.
 - For integration tests that need an `AppHandle`, use `tauri::test::mock_app()` — adopt only when a specific test demands it; we currently don't ship integration tests.
