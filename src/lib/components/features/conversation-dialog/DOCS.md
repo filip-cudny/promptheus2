@@ -16,7 +16,7 @@ Each entrypoint is a thin orchestrator. IPC, listeners, timers, and pagination l
 
 Files whose role does not follow from the name:
 
-- `AssistantBubble.svelte`, `UserBubble.svelte`, `InputArea.svelte`, `TabSidebar.svelte` — orchestrators; the bubbles' edit segments go through `drivers/useEditSegments`.
+- `AssistantBubble.svelte`, `UserBubble.svelte`, `InputArea.svelte`, `TabSidebar.svelte` — orchestrators; `AssistantBubble` edits its segments through `drivers/useEditSegments`, `UserBubble` through `BubbleEditField` and `SkillEditable` with its own `editMode`/`editText`.
 - `ContextSection.svelte` — inline context bar (text/image chips + clear/edit).
 - `sidebarItems.ts` — pure helpers building `SidebarItem[]` from tabs + history.
 - `$lib/utils/historySearchSnippet.ts` — `displayName`, `snippetFor`, `formatTimestamp` for `ChatPalette`.
@@ -24,15 +24,6 @@ Files whose role does not follow from the name:
 - `components/ToolCall*.svelte` — pieces of `tool-call/ToolCallItem`; `ToolCallDetails` imports `tool-call/ToolResultRenderer`.
 - `drivers/useConversationDialogIpc.svelte.ts` — the dialog's IPC listeners.
 - `drivers/useInputSync.svelte.ts` — local↔store sync for text/images/text attachments (see "Input sync"); `drivers/useSidebarMutex.svelte.ts` — see "Sidebar mutex".
-
-### Services used
-
-| Service | Used by |
-|---------|---------|
-| `$lib/services/clipboardPaste.ts` | `InputArea` (Mac `Shift+Cmd+V` raw-text/image branch) |
-| `$lib/services/fileSave.ts` | `AssistantBubble`, `tool-call/ToolResultRenderer` (Mermaid SVG export) |
-| `$lib/services/windowPreviews.ts` | `InputArea`, `UserBubble` (open text/image preview windows) |
-| `$lib/services/history.ts` | `TabSidebar` (`updateHistoryEntryTitle`, `deleteHistoryEntry`) |
 
 ## Layer contracts
 

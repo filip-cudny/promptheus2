@@ -22,7 +22,7 @@ Store files use `.svelte.ts` extension to enable rune syntax outside components.
 
 ### Window entries
 
-This is a multi-window Tauri app. Every window has its own HTML at the project root and a matching folder under `src/windows/<window-name>/`:
+This is a multi-window Tauri app. Every window has its own HTML at the project root (`index.html` for `main`) and, except the static `palette-backdrop.html`, a matching folder under `src/windows/<window-name>/`:
 
 - `entry.ts` — mounts the root component (`mount(App, { target: ... })`).
 - `App.svelte` — root component for that window. Keep thin; pull feature UI from `lib/components/`.
@@ -46,7 +46,7 @@ Adding a new window:
 ### Services (IPC Layer)
 
 - `lib/services/` has one file per domain (`settings.ts`, `history.ts`, `ai.ts`, …) wrapping `invoke()` with typed signatures.
-- Components call services, not `invoke()`; this keeps the IPC boundary explicit. Preference, not enforced: direct calls exist in `ContextMenu.svelte`, `shared/widgets/ContextEditor.svelte`, `ContextEditorView.svelte`, `windows/provider-menu/App.svelte` and `windows/conversation-dialog/App.svelte` (`get_dialog_init_params`).
+- Components call services, not `invoke()`; this keeps the IPC boundary explicit. Preference, not enforced: direct calls exist in `ContextMenu.svelte`, `shared/widgets/ContextEditor.svelte`, `ContextEditorView.svelte`, `windows/provider-menu/App.svelte`, `windows/recording-widget/App.svelte` and `windows/conversation-dialog/App.svelte` (`get_dialog_init_params`).
 
 ### Types
 

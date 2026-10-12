@@ -6,7 +6,7 @@ Reusable UI primitives shared across features. See [src/DOCS.md](../../../../DOC
 
 ### Component patterns
 
-- Files here are presentational: they import no stores, services or `invoke()`, only types from `$lib/types` and constants. Components that need state or IPC go in `shared/widgets/`.
+- Files here are presentational: they import no stores, services or `invoke()`, only types from `$lib/types`, constants, pure helpers from `$lib/utils` and sibling `ui/` components. Components that need state or IPC go in `shared/widgets/`.
 - Scoped `<style>` blocks for all CSS — no global style leakage.
 - Custom Svelte transitions defined inline when built-in transitions (`fade`, `fly`) don't match the required animation curve (e.g., capped opacity).
 
@@ -58,7 +58,7 @@ Lives in `shared/widgets/ContextEditor.svelte` (it calls `invoke("open_image_pre
 
 ### MarkdownRenderer
 
-- `onopen` and `onsavesvg` are optional callbacks (open a link/image, save a Mermaid SVG).
+- `onopen` and `onsavesvg` are optional callbacks (open a link, save a Mermaid SVG).
 - Uses `marked` + `highlight.js` via `$lib/utils/markdown.ts` to render markdown with syntax-highlighted code blocks.
 - `renderMarkdown` always highlights code blocks (`highlight.js`, auto-detecting the language when none is given); the renderer's `isStreaming` only paces how much of `content` is shown, not highlighting.
 - Code copy: each code block gets a "Copy" button with a `data-copy-index` attribute. Click handler uses event delegation on the container div to copy the raw code block content to clipboard.
