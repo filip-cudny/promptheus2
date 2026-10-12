@@ -52,9 +52,6 @@ macro_rules! handlers {
             $crate::commands::ai_webview::set_window_title,
             // === clipboard ===
             $crate::commands::clipboard::get_clipboard_text,
-            $crate::commands::clipboard::set_clipboard_text,
-            $crate::commands::clipboard::clipboard_is_empty,
-            $crate::commands::clipboard::clipboard_has_image,
             $crate::commands::clipboard::get_clipboard_image,
             // === context ===
             $crate::commands::context::get_context_items,

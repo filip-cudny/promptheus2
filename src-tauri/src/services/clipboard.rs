@@ -56,10 +56,6 @@ impl ClipboardService {
             .map_err(|e| ClipboardError::Access(e.to_string()))
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.get_text().is_err()
-    }
-
     pub fn has_image(&self) -> bool {
         let Ok(mut clipboard) = arboard::Clipboard::new() else {
             return false;

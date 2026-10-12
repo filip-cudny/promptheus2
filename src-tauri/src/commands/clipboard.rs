@@ -17,25 +17,6 @@ pub fn get_clipboard_text() -> crate::Result<String> {
     Ok(trimmed)
 }
 
-#[tauri::command]
-pub fn set_clipboard_text(
-    clipboard: State<'_, ClipboardService>,
-    content: String,
-) -> crate::Result<()> {
-    clipboard.set_text(&content)?;
-    Ok(())
-}
-
-#[tauri::command]
-pub fn clipboard_is_empty(clipboard: State<'_, ClipboardService>) -> crate::Result<bool> {
-    Ok(clipboard.is_empty())
-}
-
-#[tauri::command]
-pub fn clipboard_has_image(clipboard: State<'_, ClipboardService>) -> crate::Result<bool> {
-    Ok(clipboard.has_image())
-}
-
 #[tauri::command(async)]
 pub fn get_clipboard_image(
     clipboard: State<'_, ClipboardService>,
