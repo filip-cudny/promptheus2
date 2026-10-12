@@ -69,7 +69,7 @@
   }
 
   .cursor {
-    grid-column: 2;
+    grid-column: 1 / -1;
     display: flex;
     align-items: center;
     justify-content: center;
