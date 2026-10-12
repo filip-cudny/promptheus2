@@ -131,7 +131,7 @@
     top: var(--space-3);
   }
 
-  .tile[class$="_right"] .pill {
+  .tile[class*="_right"] .pill {
     left: 50%;
   }
 
