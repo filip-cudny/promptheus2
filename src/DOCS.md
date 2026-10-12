@@ -1,57 +1,11 @@
 # Frontend (Svelte 5 + TypeScript)
 
-## Directory Structure
+## Layout
 
-```
-src/
-├── windows/                    # One folder per Tauri window — entry.ts + App.svelte
-│   ├── main/                   # Default app window (index.html)
-│   ├── context-menu/           # Borderless popup menu
-│   ├── conversation-dialog/
-│   ├── shell-toolbar/
-│   ├── provider-menu/
-│   ├── palette/
-│   ├── context-editor/
-│   ├── history-dialog/
-│   ├── settings-dialog/
-│   ├── image-preview/
-│   ├── text-preview/
-│   ├── recording-widget/       # Floating recording widget (X11/macOS transport)
-│   └── notification/
-├── lib/
-│   ├── components/             # UI components
-│   │   ├── shared/
-│   │   │   ├── ui/             # Dumb styling primitives (buttons, inputs, dialogs)
-│   │   │   └── widgets/        # Smart shared composites (ModelSelector, SkillEditable, ContextEditor, ProviderMenuList)
-│   │   └── features/
-│   │       ├── context-menu/   # Context menu window
-│   │       ├── conversation-dialog/ # Chat window
-│   │       ├── settings/       # Settings panels
-│   │       └── history/        # History browser
-│   ├── stores/                 # Reactive state (Svelte 5 runes)
-│   │   ├── menu.svelte.ts      # Menu items, selection state
-│   │   ├── execution.svelte.ts # Execution state, streaming
-│   │   ├── history.svelte.ts   # History entries
-│   │   ├── context.svelte.ts   # Context items (text + images)
-│   │   └── settings.svelte.ts  # App configuration
-│   ├── services/               # Tauri IPC wrappers
-│   │   ├── ai.ts               # AI completions (sync + streaming via Channel)
-│   │   ├── settings.ts         # Settings CRUD
-│   │   ├── context.ts          # Context items CRUD
-│   │   ├── history.ts          # History entries CRUD
-│   │   └── events.ts           # Tauri event listeners
-│   ├── types/                  # TypeScript type definitions
-│   │   ├── index.ts            # Re-exports all type modules + Settings, ModelConfig, etc.
-│   │   ├── ai.ts               # StreamEvent, ProcessedMessage, ContentPart
-│   │   ├── menu.ts             # MenuItem, MenuItemType
-│   │   ├── execution.ts        # ErrorCode
-│   │   ├── context.ts          # ContextItem
-│   │   └── history.ts          # HistoryEntry, ConversationHistoryData, LastInteractionData
-│   └── utils/                  # Helpers
-│       ├── markdown.ts         # Markdown rendering
-│       └── theme.ts            # Colors, spacing, styling tokens
-└── styles/                     # Global CSS
-```
+- `windows/<name>/` — one folder per window: `entry.ts` + `App.svelte`.
+- `lib/components/shared/ui/` — presentational primitives; `shared/widgets/` — reusable composites with state or IPC; `features/<feature>/` — feature UI.
+- `lib/stores/` — rune stores (`*.svelte.ts`); `lib/services/` — per-domain `invoke()` wrappers and event listeners; `lib/types/` — types mirroring Rust structs; `lib/utils/`, `lib/constants/`.
+- `styles/theme.css` — CSS variables; `styles/global.css` — global styles.
 
 ## Conventions
 
@@ -78,28 +32,26 @@ Adding a new window:
 1. Create `<name>.html` at project root with `<script type="module" src="/src/windows/<name>/entry.ts">`.
 2. Create `src/windows/<name>/{entry.ts, App.svelte}`.
 3. Add the HTML to `vite.config.ts → rollupOptions.input`.
-4. Add the window label to `src-tauri/capabilities/default.json → windows`.
-5. Define the window in `src-tauri/tauri.conf.json` (or create it programmatically) with the same label.
+4. Add the window label to `src-tauri/capabilities/default.json → windows` (child webviews go in `webviews`).
+5. Build the window in Rust (`src-tauri/src/setup/windows.rs` for windows created at startup); `tauri.conf.json` has `"windows": []`.
 
 ### Components
 
 - One component per file, organized by feature domain.
-- Dumb reusable primitives go in `lib/components/shared/ui/` (no state machines, no feature concepts).
+- Dumb reusable primitives go in `lib/components/shared/ui/` (no state machines, no feature concepts; no file there imports stores, services or `invoke`).
 - Smart shared composites (state + logic, but reusable across features) go in `lib/components/shared/widgets/`.
 - Feature-specific UI lives under `lib/components/features/<feature>/`. No cross-feature imports — pull into `shared/widgets/` if a component is needed by two features.
 - Keep components thin — business logic lives in stores and services.
 
 ### Services (IPC Layer)
 
-- `lib/services/api.ts` wraps `invoke()` with typed function signatures.
-- Frontend never calls `invoke()` directly from components — always through services.
-- This keeps the IPC boundary explicit and testable.
+- `lib/services/` has one file per domain (`settings.ts`, `history.ts`, `ai.ts`, …) wrapping `invoke()` with typed signatures.
+- Components call services, not `invoke()`; this keeps the IPC boundary explicit. Preference, not enforced: direct calls exist in `ContextMenu.svelte`, `shared/widgets/ContextEditor.svelte`, `ContextEditorView.svelte`, `windows/provider-menu/App.svelte` and `windows/conversation-dialog/App.svelte` (`get_dialog_init_params`).
 
 ### Types
 
-- `lib/types/index.ts` mirrors Rust serializable structs.
-- The Rust structs use default serde field names (snake_case), so TypeScript types also use snake_case.
-- When adding a new Rust command/struct, update types here too.
+- `lib/types/` mirrors Rust serializable structs; update it when adding a Rust command or struct.
+- Mirrors use the default serde field names (snake_case), so the TypeScript fields are snake_case too. Exception: `types/toolResult.ts` is camelCase.
 - The `$lib` alias resolves to `src/lib/` (configured in `vite.config.ts` and `tsconfig.json`).
 
 ### Services (AI)
@@ -110,11 +62,9 @@ Adding a new window:
 
 ### Services (History)
 
-- `lib/services/history.ts` — typed wrappers for history Tauri commands (`getHistory`, `addHistoryEntry`, `addConversationEntry`, `updateConversationEntry`, `getLastInteraction`, `clearHistory`, `copyLastInteraction`, `copyHistoryEntryContent`).
-- `lib/stores/history.svelte.ts` — reactive store via `getHistoryStore()`. Listens to `"history-changed"` events, exposes `entries`, `count`, `isEmpty`, `lastTextEntry`, `lastSpeechEntry`. Call `init()` on mount, `destroy()` on teardown.
+- `lib/stores/history.svelte.ts` — reactive store via `getHistoryStore()`. Listens to `"history-changed"` events. Call `init()` on mount, `destroy()` on teardown.
 
 ### Services (Settings)
 
-- `lib/services/settings.ts` — typed wrappers for all settings Tauri commands.
 - `lib/services/events.ts` — Tauri event listener helpers (e.g., `onSettingsChanged`, `onHistoryChanged`).
-- Invoke parameter names must match Rust command parameter names exactly (snake_case).
+- `invoke()` command names are snake_case (the Rust fn name); parameter names are camelCase (e.g. `{ providerId }`).

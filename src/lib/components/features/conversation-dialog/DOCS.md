@@ -9,69 +9,21 @@ Each entrypoint is a thin orchestrator. IPC, listeners, timers, and pagination l
 - **Orchestrators** (top-level files in this dir) — wire props to drivers and primitives. May call services.
 - **Dumb primitives** (`components/`) — pure presentation, own `<style>`, take props + callbacks. **No** `invoke()`, `services/`, or `stores/` imports.
 - **Drivers** (`drivers/*.svelte.ts`) — runes-based logic (state machines, IPC, listeners, timers). **No** JSX or CSS.
-- **Tool-call subsystem** (`tool-call/`) — self-contained renderers for tool invocation UI. Only `AssistantBubble` reaches into it (via `ToolCallGroup`); the rest is internal.
+- **Tool-call subsystem** (`tool-call/`) — self-contained renderers for tool invocation UI. Only `AssistantBubble` reaches into it (via `ToolCallGroup`), apart from `components/ToolCallDetails`; the rest is internal.
 - **Services** (`$lib/services/`) — IPC adapters and external-system wrappers.
 
 ## Files
 
-| File | Role |
-|------|------|
-| `AssistantBubble.svelte` | Orchestrator — markdown, tool-call grouping, edit segments via `useEditSegments` |
-| `AttachMenu.svelte` | Plus-button dropdown (context + tool toggles) |
-| `ChatPalette.svelte` | Cmd+K palette wrapping `useHistorySearch` |
-| `ContextSection.svelte` | Inline context bar (text/image chips + clear/edit) |
-| `ConversationArea.svelte` | Scroll container + auto-scroll via `useAutoScroll` |
-| `InputArea.svelte` | Orchestrator — composer, attachments, tools, model select |
-| `TabSidebar.svelte` | Orchestrator — list + rename + delete via mutex driver |
-| `ToolChip.svelte` | Active tool dismissable chip |
-| `UserBubble.svelte` | Orchestrator — read/edit user message + attachments |
-| `sidebarItems.ts` | Pure helpers building `SidebarItem[]` from tabs + history |
-| `$lib/utils/historySearchSnippet.ts` | `displayName`, `snippetFor`, `formatTimestamp` for `ChatPalette` |
+Files whose role does not follow from the name:
 
-### `tool-call/`
-
-Self-contained tool-invocation renderer. External entrypoint: `ToolCallGroup` (used by `AssistantBubble`).
-
-| File | Role |
-|------|------|
-| `ToolCallGroup.svelte` | Header (`Running tools` shimmer / `Used N tools` summary) + items |
-| `ToolCallItem.svelte` | Single tool call — header, status, expand, retry |
-| `ToolResultRenderer.svelte` | Tool output (envelope / json / text/markdown) |
-| `SearchResultsRenderer.svelte` | Web search XML envelope renderer |
-| `JsonNode.svelte` | Recursive JSON renderer |
-| `XmlNodeRenderer.svelte` | Recursive XML renderer |
-
-### `components/`
-
-| File | Used by |
-|------|---------|
-| `AttachmentRow.svelte` | `InputArea`, `UserBubble` |
-| `BranchNav.svelte` | `AssistantBubble` |
-| `BubbleActionsFooter.svelte` | `AssistantBubble`, `UserBubble` |
-| `BubbleEditField.svelte` | `AssistantBubble`, `UserBubble` |
-| `ErrorBanner.svelte` | `AssistantBubble` |
-| `InlineRenameInput.svelte` | `TabSidebar` |
-| `ProcessingIndicator.svelte` | `AssistantBubble`, `tool-call/ToolCallGroup` |
-| `SidebarItemRow.svelte` | `TabSidebar` |
-| `SidebarMoreMenu.svelte` | `TabSidebar` |
-| `TabSidebarHeader.svelte` | `TabSidebar` |
-| `ToolCallApprovalActions.svelte` | `tool-call/ToolCallItem` (pending state) |
-| `ToolCallDetails.svelte` | `tool-call/ToolCallItem` (expanded view) |
-| `ToolCallHeader.svelte` | `tool-call/ToolCallItem` |
-| `ToolCallReadOnlyChip.svelte` | `AssistantBubble` (edit mode) |
-
-### `drivers/`
-
-| File | What it owns |
-|------|--------------|
-| `useAutoScroll.svelte.ts` | scroll-to-bottom, manual-scroll-up gate, `loadMore` with prevHeight correction |
-| `useConversationsList.svelte.ts` | `getConversations` pagination + `history-changed` listener |
-| `useEditSegments.svelte.ts` | parse / build / rebuild bubble edit segments + textareaRefs auto-resize |
-| `useElapsedTimer.svelte.ts` | live elapsed-seconds via `setInterval` while active, frozen on completion |
-| `useInputSync.svelte.ts` | local↔store sync for text/images/textAttachments + `lastDomText` race protection + `SkillEditable` resync on tab change |
-| `useMcpTools.svelte.ts` | `list_mcp_tools` + `mcp-ready` listener; exposes `webSearchQualifiedId` |
-| `useSidebarMutex.svelte.ts` | mutually exclusive menu / rename / confirm-delete state |
-| `useTextAttachmentBridge.svelte.ts` | `text-attachment-updated` listener — patches local attachments by index |
+- `AssistantBubble.svelte`, `UserBubble.svelte`, `InputArea.svelte`, `TabSidebar.svelte` — orchestrators; the bubbles' edit segments go through `drivers/useEditSegments`.
+- `ContextSection.svelte` — inline context bar (text/image chips + clear/edit).
+- `sidebarItems.ts` — pure helpers building `SidebarItem[]` from tabs + history.
+- `$lib/utils/historySearchSnippet.ts` — `displayName`, `snippetFor`, `formatTimestamp` for `ChatPalette`.
+- `tool-call/` — self-contained tool-invocation renderer; external entrypoint `ToolCallGroup` (used by `AssistantBubble`).
+- `components/ToolCall*.svelte` — pieces of `tool-call/ToolCallItem`; `ToolCallDetails` imports `tool-call/ToolResultRenderer`.
+- `drivers/useConversationDialogIpc.svelte.ts` — the dialog's IPC listeners.
+- `drivers/useInputSync.svelte.ts` — local↔store sync for text/images/text attachments (see "Input sync"); `drivers/useSidebarMutex.svelte.ts` — see "Sidebar mutex".
 
 ### Services used
 
@@ -86,7 +38,7 @@ Self-contained tool-invocation renderer. External entrypoint: `ToolCallGroup` (u
 
 - `components/*` and `$lib/components/shared/ui/*` **must not** import `services/`, `stores/`, or `invoke()`. Take props, emit callbacks.
 - `drivers/*.svelte.ts` are pure runes — **no JSX, no CSS**. May call `invoke()`, attach window listeners, run timers, use `$effect`.
-- `tool-call/*` is internal beyond `ToolCallGroup`; outside the dir, only import `tool-call/ToolCallGroup.svelte`.
+- `tool-call/*` is internal beyond `ToolCallGroup`; outside the dir, import only `tool-call/ToolCallGroup.svelte` (exception: `components/ToolCallDetails.svelte` imports `tool-call/ToolResultRenderer.svelte`).
 - Orchestrators wire it all up: instantiate drivers, pass adapters as callbacks, render primitives.
 - Mutex `open*` methods atomically clear other states (no `closeMenu(); editingId = …` two-step that desyncs).
 
@@ -126,4 +78,4 @@ This avoids feedback loops while preserving the cursor on user typing and resett
 
 `open_conversation_dialog` writes `PENDING` only when it creates the window; the reuse branch delivers by event, so a later new window never re-sends old input.
 
-Accepted limit: when the one global live-stream slot is set, a new dialog window reconnects (`tryReconnect`) and skips `get_dialog_init_params`, so an auto-send request ("Run in dialog", the pill's "Stop and chat") opens the dialog without sending.
+Accepted limit: when the one global live-stream slot is set, a new dialog window reconnects (`tryReconnect`) and ignores the result of `get_dialog_init_params` (it still invokes it), so an auto-send request ("Run in dialog", the pill's "Stop and chat") opens the dialog without sending.

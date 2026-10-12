@@ -2,39 +2,11 @@
 
 Settings dialog window — sidebar navigation + per-section content. Lives in its own Tauri window (`settings-dialog` label, entry `settings-dialog.html` → `src/windows/settings-dialog/App.svelte`).
 
-Design principles are codified in [`migration/settings-ux.md`](../../../../../migration/settings-ux.md). This doc captures the patterns actually applied here so new sections stay consistent.
+This doc captures the patterns applied here so new sections stay consistent.
 
-## Directory Structure
+Files whose role does not follow from the name: `SettingsSidebar.svelte` exports the `SettingsSection` union and `SIDEBAR_ITEMS`; `SettingsContent.svelte` routes `activeSection` to a `Section*` component; `SettingsSection.svelte` is the shared section shell, not a section.
 
-```
-settings/
-├── SettingsSidebar.svelte         # Left nav, exports SettingsSection union + SIDEBAR_ITEMS
-├── SettingsContent.svelte         # Routes activeSection → Section component
-├── SettingsSection.svelte         # Shared shell (title + hint + actions / scrollable body / optional footer)
-├── SectionModels.svelte           # Models section: list pane + editor pane
-├── SectionAppearance.svelte       # Theme toggle
-├── SectionHistory.svelte          # History retention window (presets + custom days, confirm before pruning) + storage card (size / reclaimable / Compact database)
-├── PillAnchorPicker.svelte        # Radio mock-up picking which of 6 sides of the cursor the recording pill opens on
-├── SectionSpeech.svelte           # STT recording widget (show, open at the cursor + anchor picker, monochromatic "Copied" icon) + failure handling: transcription attempts, audio retention hours, keep-audio-on-success
-├── SectionSync.svelte             # Git settings sync: state, repo path, branch, last sync, "Sync now" (reads status via `$lib/services/settingsSync`)
-├── SectionPromptBase.svelte       # Preferred name field + System / about_you / environment / input_format prompts (tabbed)
-├── SectionSurfacePrompts.svelte   # Title generation + STT prompt + STT keyterms (tabbed)
-├── SttKeytermsEditor.svelte       # STT keyterms file editor (chip view + raw text fallback)
-├── PromptEditor.svelte            # Per-prompt editor (load/edit/autosave + Cmd+S, no Save button)
-├── EnvPlaceholdersPopover.svelte  # On-demand popover of {{date}}/{{time}}/... chips for environment.md
-├── ModelList.svelte               # Grouped model list, "Add" split-button (text/STT)
-├── ModelEditor.svelte             # Single-model form: basic / connection / capabilities / parameters / danger
-├── ParametersKnown.svelte         # Sliders + toggles for OpenAI-style known params
-├── ParametersCustom.svelte        # Free-form key/type/value rows for arbitrary params
-└── EnvRefChip.svelte              # ${ENV_VAR} reference indicator (resolved/missing)
-```
-
-Surrounding pieces (not in this dir):
-
-- `src/windows/settings-dialog/App.svelte` — root: mounts sidebar + active section, calls `store.init()` / `store.destroy()`.
-- `src/lib/stores/settings.svelte.ts` — single shared rune store (`getSettingsStore()`); subscribes to backend `settings-changed` events.
-- `src/lib/services/settings.ts` — typed `invoke()` wrappers for `get_settings`, `update_model`, etc.
-- `src/lib/services/settingsDialog.ts` — `openSettingsWindow(section?)` + `checkEnvVar(name)`.
+The root is `src/windows/settings-dialog/App.svelte` (calls `store.init()` / `store.destroy()`); state lives in the single rune store `getSettingsStore()` (`$lib/stores/settings.svelte.ts`), which subscribes to the backend `settings-changed` event.
 
 ## Conventions
 
@@ -42,7 +14,7 @@ Surrounding pieces (not in this dir):
 
 1. Add the id to the `SettingsSection` union and `SIDEBAR_ITEMS` array in `SettingsSidebar.svelte`. Set `enabled: true` only when the section actually renders.
 2. Create `Section<Name>.svelte` here and branch on it in `SettingsContent.svelte`'s `{#if activeSection === ...}`.
-3. Read state from `getSettingsStore()` — never `invoke("get_settings")` directly from a component.
+3. Read state from `getSettingsStore()` — never `invoke("get_settings")` from a component.
 4. Write through `$lib/services/settings.ts` helpers; the store auto-refreshes on the backend's `settings-changed` event.
 
 Disabled sidebar items group under a "Coming soon" heading at the bottom of the nav (rendered smaller and faded), so the enabled section reads as a clean menu. Order in `SIDEBAR_ITEMS` is the user's mental model (General → Models → … → Advanced last), not alphabetical — the sidebar partitions by `enabled` while preserving that order. Active item is marked with a 2px left border in `--accent`, never a filled background, so the accent only signals "you are here" (the same single-accent rule as the conversation window: blue ≡ user/marker, never decoration).
@@ -51,7 +23,7 @@ Disabled sidebar items group under a "Coming soon" heading at the bottom of the 
 
 No Save/Cancel buttons. Every input persists on change:
 
-- **Text inputs** (display name, model id, base URL, API key, group, custom param values) — debounced via `scheduleSave(false)`. Debounce is `store.settings.autosave_debounce_ms` (default 1000ms). This is the single source of truth for every autosave debounce in the app — `ModelEditor`, `PromptEditor`, and any future autosave site read it from here. 1000ms is tuned to fire only when the user has actually paused (typical inter-word gap is 250–400ms; 200ms fires mid-sentence).
+- **Text inputs** (display name, model id, base URL, API key, group, custom param values) — debounced via `scheduleSave(false)`. Debounce is `store.settings.autosave_debounce_ms` (`?? 1000` in `ModelEditor` and `PromptEditor`); every autosave site reads it from here. 1000ms is tuned to fire only when the user has actually paused (typical inter-word gap is 250–400ms; 200ms fires mid-sentence).
 - **Discrete controls** (segmented buttons, selects, checkboxes, slider toggles) — `scheduleSave(true)` = persist immediately, no debounce.
 - **Range sliders and number inputs** — fire on every `oninput` and must debounce. `ParametersKnown` passes `immediate: false` as the third argument of its `onChange` callback for these; the checkbox and the reasoning-effort select pass nothing and stay immediate. Saving a slider drag immediately would write the skill/model file once per animation frame, each write emitting a change event and a full store refresh. The known-parameter override checkbox is the gate: unchecking it sends `null` to drop the override entirely.
 
@@ -78,7 +50,7 @@ function scheduleSave(immediate: boolean) {
 
 Saves are **queued, never dropped**. A save arriving while another is in flight waits for it and then runs — the earlier `if (saving) return` guard silently discarded the newer edit while still reporting success, so the last change before a rapid second edit was lost. `dirty` only clears when nothing is queued behind the save that just finished.
 
-Discrete actions that aren't auto-saves (delete, duplicate) go through `tracker.runAction(fn)`, not `flush(fn)`: it persists pending edits first, then runs the action, and its `true`/`false` reflects the action itself. `flush(fn)` only queues `fn` as the next autosave — a concurrent edit can replace it, so an action passed to `flush` may never run while still returning `true`. Callers branch on the boolean to decide whether to advance UI (e.g., switching selection after a successful delete).
+Discrete actions that aren't auto-saves (delete, duplicate) should go through `tracker.runAction(fn)`, not `flush(fn)` (`SkillEditor` does; `ModelEditor` still passes its delete and duplicate to `flush`): it persists pending edits first, then runs the action, and its `true`/`false` reflects the action itself. `flush(fn)` only queues `fn` as the next autosave — a concurrent edit can replace it, so an action passed to `flush` may never run while still returning `true`. Callers branch on the boolean to decide whether to advance UI (e.g., switching selection after a successful delete).
 
 The indicator is mounted at the section/editor header — one indicator per save target. Tabbed prompt sections (`SectionPromptBase`, `SectionSurfacePrompts`) keep per-editor dots so the tab the user is on tracks its own document; promoting them to section-level would lie about which document is dirty.
 
@@ -102,7 +74,7 @@ Inside a section, group related fields in `<section class="card">` with an upper
 
 ### Danger zone
 
-Last card, red border (`border-color: rgba(217, 115, 115, 0.3)`), separated visually. Destructive actions use a two-step inline confirm — never an OS dialog or a modal-on-modal.
+Last card, red border (`var(--danger-border)`), separated visually. Destructive actions use a two-step inline confirm — never an OS dialog or a modal-on-modal.
 
 ```
 [Delete model]  →  "Delete X? [Cancel] [Yes, delete]"
@@ -139,7 +111,7 @@ The inherit option and an explicit pin to the same model read almost identically
 
 ### Env var references
 
-API key fields accept literal secrets *or* `${VAR_NAME}` references. `EnvRefChip` parses the value, calls `check_env_var` on the backend, and shows a green check or red alert chip below the input. Use `parseEnvRef()` from the same module — don't reimplement the regex.
+API key fields accept literal secrets *or* `${VAR_NAME}` references. `ModelEditor` parses the value with `parseEnvRef()` (exported by `EnvRefChip.svelte` — don't reimplement the regex), calls `checkEnvVar` (`$lib/services/settingsDialog`, backend `check_env_var`) and passes the result to `EnvRefChip`, which shows a green check or red alert chip below the input.
 
 ### Surface references
 
@@ -170,7 +142,7 @@ The list caption replaced a 7 px accent dot before the row name. The dot collide
 
 ### Prompt editor
 
-`PromptEditor.svelte` is the single component for any prompt slot. It loads via `getPrompt(kind)`, autosaves on change with an 800 ms debounce, and supports `Cmd/Ctrl+S` to flush immediately. There is no Save button — the only persistence affordance is `<SaveStatusIndicator>` in the title row (driven by `useSaveTracker` — see "Persistence" above). The file path is hidden behind a small `…` overflow next to the title (custom paths require manual JSON edit).
+`PromptEditor.svelte` is the single component for any prompt slot. It loads via `getPrompt(kind)`, autosaves on change with the `autosave_debounce_ms` debounce, and supports `Cmd/Ctrl+S` to flush immediately. There is no Save button — the only persistence affordance is `<SaveStatusIndicator>` in the title row (driven by `useSaveTracker` — see "Persistence" above). The file path is hidden behind a small `…` overflow next to the title (custom paths require manual JSON edit).
 
 Only `kind: "environment"` shows the placeholders affordance: a `{ }` icon button in the title row opens an `EnvPlaceholdersPopover` anchored to the button. Clicking a chip inserts the token at the cursor in the textarea and closes the popover. Other prompts get a description that says they are sent verbatim — no placeholder substitution happens for them.
 
@@ -182,10 +154,10 @@ Only `kind: "environment"` shows the placeholders affordance: a `{ }` icon butto
 
 `SectionPromptBase` additionally renders a "Preferred name" identity card above the tabs — a single-field `TextInput` capped at 60 chars (live counter on the right edge, turns `--danger` if `maxlength` is somehow exceeded). It autosaves through `useSaveTracker` + `updateSetting("preferred_name", …)`. The counter and the section's own `SaveStatusIndicator` both belong to this card; the per-editor save dots in the tabs below remain independent.
 
-Editor body width is capped: `--prompt-editor-max-width` (760px for prose-style prompts, 960px for environment with its placeholders popover) keeps long prompts readable. Always prefer wrapping the editor in this max-width rather than letting the textarea fill arbitrary window sizes.
+Editor body width is capped (760px for prose-style prompts, 960px for environment with its placeholders popover; hardcoded in the section styles) to keep long prompts readable; don't let the textarea fill arbitrary window sizes.
 
 Save flow goes through `$lib/services/prompts.ts` → backend `save_prompt` Tauri command → `ConfigService::write_prompt` → `PromptStore` (atomic tempfile + rename). Backend emits `prompt-changed` Tauri event after each save.
 
 ### Window registration reminders
 
-The settings dialog is a separate Tauri window. When adding new windows nearby (e.g., a sub-dialog), remember the project-wide rule: register the HTML entry in `vite.config.ts` `rollupOptions.input` AND in `src-tauri/capabilities/default.json` `"windows"`. See [project root CLAUDE.md](../../../../CLAUDE.md). Prefer not to spawn child dialogs from settings — inline confirms cover all current cases.
+The settings dialog is a separate Tauri window. When adding new windows nearby (e.g., a sub-dialog), register the HTML entry in `vite.config.ts` `rollupOptions.input` AND the label in `src-tauri/capabilities/default.json`: `"windows"` for windows, `"webviews"` for child webviews (`conversation-dialog`, `shell-toolbar`). See [project root CLAUDE.md](../../../../../CLAUDE.md). Prefer not to spawn child dialogs from settings — inline confirms cover all current cases.

@@ -16,48 +16,31 @@ The context menu runs in a **separate Tauri window** (`context-menu` label) with
 
 ### Files
 
-| File | Role |
-|------|------|
-| `ContextMenu.svelte` | Orchestrator — wires drivers/adapters, renders sections via dumb children |
-| `MenuShell.svelte` | Outer chrome (border, padding, shell layout) |
-| `ContextSection.svelte` | Renders `context` items (chips, edit mode, action buttons) |
-| `LastInteractionSection.svelte` | Renders `last_interaction` items (input/output/transcription chips + history) |
-| `itemExtractors.ts` | `groupBySection`, `extractContextItems`, `extractLastInteractionData`, last-interaction types |
-| `components/MenuEmptyState.svelte` | "No items available" fallback |
-| `components/MenuSeparator.svelte` | 1px section divider |
-| `components/MenuItemRow.svelte` | Generic row (icon + prompt-number + label + executing/recording state) |
-| `components/ChatRow.svelte` | Chat row (icon + label) |
-| `components/SettingsToggleRow.svelte` | Chevron + "Settings" toggle row |
-| `components/FooterHint.svelte` | Bottom hint (`⇧ run in dialog · right-click for actions`) |
-| `components/SkillActionMenu.svelte` | Floating panel content for skill RMB action menu (open in dialog / run in dialog / run with transcription / metadata) |
-| `components/SettingsPanel.svelte` | Floating panel content for Settings (quick action model + STT model selectors) |
-| `drivers/useFloatingPanelMutex.svelte.ts` | Mutually exclusive 3-panel state (settings / action menu / chat providers) + anchors |
-| `drivers/useMenuKeyboard.svelte.ts` | `keydown`/`keyup` handler, shifted digits, `shiftHeld` flag |
-| `drivers/useMenuBlurClose.svelte.ts` | Window blur listener, suppressed-blur recheck timer, blur-grace passthrough |
-| `drivers/useMenuPositioning.svelte.ts` | Resize/position window at cursor anchored to skills section (clamp via `clamp_menu_origin`), hover-enable gate |
-| `$lib/services/skillMetadata.svelte.ts` | Singleton cache for `get_skill` metadata + `buildSkillMetaEntries` |
-| `$lib/stores/webviewProviders.svelte.ts` | Webview providers list + `onSettingsChanged` listener + Promptheus prepend |
-| `$lib/stores/modelsMenuData.svelte.ts` | Derived `modelsData`/`modelNames`/`quickActionModel` + capability prefetch + setters |
-| `$lib/stores/contextMenu.svelte.ts` | Reactive state — items, selection, open/close lifecycle, IPC listeners |
-| `$lib/stores/useContextMenu.svelte.ts` | Getter wrapper around `contextMenu.svelte.ts` |
-| `context-menu.html` (project root) | HTML entry point for the context-menu window |
-| `src/windows/context-menu/App.svelte` | Minimal root that mounts `ContextMenu` |
-| `src/windows/context-menu/entry.ts` | JS entry point for the context-menu window |
+Files whose role does not follow from the name:
+
+- `ContextMenu.svelte` — orchestrator: wires drivers/adapters, renders sections via dumb children.
+- `itemExtractors.ts` — `groupBySection` and the extractors that pull context and last-interaction data out of `item.data`.
+- `drivers/useFloatingPanelMutex.svelte.ts` — mutually exclusive settings / action menu / chat providers panels plus anchors.
+- `drivers/useMenuPositioning.svelte.ts` — resizes and positions the window at the cursor (clamp via `clamp_menu_origin`), hover-enable gate.
+- `drivers/useMenuBlurClose.svelte.ts` — window blur listener, suppressed-blur recheck timer, blur-grace passthrough.
+- `$lib/stores/contextMenu.svelte.ts` — items, selection, open/close lifecycle, IPC listeners; `useContextMenu.svelte.ts` is a getter wrapper around it.
+- `$lib/stores/modelsMenuData.svelte.ts`, `webviewProviders.svelte.ts`, `$lib/services/skillMetadata.svelte.ts` — data adapters for the panels.
 
 ### Layer contracts
 
 - `components/*` and other UI primitives **must not** import `services/`, `stores/`, or `invoke()`. They take props and emit callbacks.
+- `ContextMenu.svelte` itself calls `invoke("open_image_preview")` directly (the one direct call here).
 - `drivers/*.svelte.ts` are pure runes — no JSX, no CSS. They may call `invoke()` (positioning calls `show_context_menu_panel` / `focus_context_menu`) or attach window listeners (blur).
 - Mutex `open*` methods atomically close the other two panels, removing the previous bug-prone `closePanels(); settingsOpen = true;` pattern.
 - `skillMetadata` cache is a module-level singleton (`$state`) so it survives menu close/reopen — fewer redundant `get_skill` IPC calls.
 
 ### Window configuration
 
-Defined in `src-tauri/tauri.conf.json` under `app.windows` with label `context-menu`. Key properties: `decorations: false`, `transparent: true`, `alwaysOnTop: true`, `visible: false`.
+Built in `src-tauri/src/setup/windows.rs` with label `context-menu`. Key properties: `decorations: false`, `transparent: true`, `alwaysOnTop: true`, `visible: false`.
 
 ## Interaction flow
 
-1. Trigger (tray "Show Menu" or future global hotkey) calls `show_context_menu_window` backend command.
+1. Trigger (tray "Show Menu" or the global hotkey, `execute_hotkey_action` in `services/hotkeys.rs`) calls `show_context_menu_window` backend command.
 2. Backend positions the window at cursor, emits `show-context-menu` event to the window, then shows and focuses it.
    - **Extension variant (GNOME Wayland)**: the show payload has `shell_placement: true` (`shellPlacement`) and carries the `GetPointer` result (cursor and work area). `useMenuPositioning` clamps the position to the work area (Rust command `clamp_menu_origin`, `services/monitor.rs::clamp_origin`, shared with the recording widget; no clamp arithmetic in the frontend) and calls `place_context_menu { x, y, first }` instead of `setPosition` + `show_context_menu_panel` + `focus_context_menu`. `first: true` sends `PlaceWindow` before `win.show()` and awaits the reply; the frontend clears the first-placement flag right after starting that invoke. After the height correction it calls `place_context_menu` with `first: false`. See [linux-wayland-gnome-extension.md](../../../../../docs/gotchas/linux-wayland-gnome-extension.md).
 3. Store's `init()` listener catches the event → calls `openMenu()`.
@@ -72,7 +55,7 @@ Defined in `src-tauri/tauri.conf.json` under `app.windows` with label `context-m
 | Arrow Up/Down | Move selection highlight |
 | Enter | Execute selected item (Shift+Enter runs a skill in the dialog on the clipboard text) |
 | Escape | Close menu (closes any open floating panel first) |
-| 1-9 | Quick-select item by position (multi-digit debounced at 300ms) |
+| 1-9 | Quick-select item by position (multi-digit debounced at `NUMBER_DEBOUNCE_MS` = 200) |
 | Shift+1-9 | Same as above; runs the numbered skill in the dialog on the clipboard text |
 
 All keyboard handling lives in `drivers/useMenuKeyboard.svelte.ts`.
@@ -101,20 +84,16 @@ Renders when `item.item_type === "context"`. Extracts `ContextItem[]` from `item
 
 | Element | Description |
 |---------|-------------|
-| Section header | Collapsible, shows "Context" label + item count badge |
+| Section header | "Context" label + item count badge (when not empty) |
 | Text chip | `Text #{number}` then the truncated text preview (first 50 chars) |
 | Image chip | One `ImageChipBar` per image, labelled `Image #{number}` from the item's `number` |
 | Replace button | Replaces context with clipboard content via `setContextFromClipboard()` |
 | Append button | Appends clipboard content to context via `appendContextFromClipboard()` |
-| Edit button | Toggles inline edit mode with `ContextEditor` component |
+| Edit button | Opens the context editor window via `openContextEditor` (`$lib/services/contextEditor`) |
 | Copy button | Copies concatenated text context to clipboard (disabled when no text items) |
 | Clear button | Calls `clearContext()` to remove all context items (disabled when empty) |
 
 Action buttons are always visible (not gated by empty state) since Replace/Append/Edit are useful even with no context.
-
-**Collapse behavior**: collapsed by default when empty, auto-expands when items exist. The `$effect` on `items.length` drives this.
-
-**Edit mode**: when active, replaces chips with `ContextEditor` (textarea + image chips). Save persists via `clearContext()` + `setContext()` + `setContextImage()`. The `onEditingChange` callback notifies `ContextMenu.svelte` to suppress blur-close and keyboard handling.
 
 The context store (`$lib/stores/context.svelte.ts`) is initialized in `src/windows/context-menu/App.svelte` so the section updates reactively via the `"context-changed"` Tauri event.
 
@@ -126,7 +105,7 @@ The menu lists only skills whose `offered_in` is absent or contains `context_men
 
 When a `skill` item is clicked, the context menu store intercepts it (instead of calling the generic `execute_menu_item` backend command) and delegates to the execution store's `startExecution(skillId, "context_menu")`. The menu closes immediately, and the execution runs asynchronously.
 
-During execution, skill items are disabled. The store applies this by overlaying `enabled: false` on skill items when `isExecuting()` is true (see `applyExecutionState` in `contextMenu.svelte.ts`). On `execution-completed`, the store refreshes items so they re-enable on next open.
+During execution, skill items are disabled. The store applies this by overlaying `enabled: false` on skill items when `isExecuting()` is true (in `contextMenu.svelte.ts`). On `execution-completed`, the store refreshes items so they re-enable on next open.
 
 The execution store is initialized in `src/windows/context-menu/App.svelte` alongside the context store.
 
@@ -159,4 +138,4 @@ A failed transcription is a real history entry (`success = false`), which is wha
 
 ### Other types
 
-Speech, settings, and other item types are rendered as `MenuItemRow` (label + icon + optional prompt number) and use the generic `execute_menu_item` backend command. Future tasks will add specialized renderers as needed.
+Speech, settings, and other item types are rendered as `MenuItemRow` (label + icon + optional prompt number) and use the generic `execute_menu_item` backend command.

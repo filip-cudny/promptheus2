@@ -1,24 +1,12 @@
 # UI Components
 
-Reusable UI primitives shared across features. See [src/DOCS.md](../../../DOCS.md) for general frontend conventions.
-
-## Directory Structure
-
-```
-ui/
-├── ActionIconButton.svelte     # Icon-only button with optional confirm feedback
-├── CollapsibleSection.svelte   # Expandable/collapsible content container
-├── CommandPalette.svelte       # Shared palette shell (scrim + modal + input + body + footer)
-├── ContextEditor.svelte        # Textarea + image chips for editing context
-├── ImageChipBar.svelte         # Horizontal row of image thumbnails with delete
-└── MarkdownRenderer.svelte     # Renders markdown to HTML with syntax highlighting
-```
+Reusable UI primitives shared across features. See [src/DOCS.md](../../../../DOCS.md) for general frontend conventions.
 
 ## Conventions
 
 ### Component patterns
 
-- Components import state from `$lib/stores/` and types from `$lib/types` — no direct `invoke()` calls.
+- Files here are presentational: they import no stores, services or `invoke()`, only types from `$lib/types` and constants. Components that need state or IPC go in `shared/widgets/`.
 - Scoped `<style>` blocks for all CSS — no global style leakage.
 - Custom Svelte transitions defined inline when built-in transitions (`fade`, `fly`) don't match the required animation curve (e.g., capped opacity).
 
@@ -37,45 +25,41 @@ For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconPro
 
 ### ActionIconButton
 
-- Props: `icon` (Lucide component), optional `confirmIcon` (swaps to this icon for 1.2s after click), `onclick`, `title`, `disabled`, `size` (defaults to `ICON_SIZE.md`).
+- `confirmIcon` swaps the icon for 1.2s after click; `confirmed` (bindable) exposes that state. `size` defaults to `ICON_SIZE.md`.
 - Borderless transparent button — no border, hover adds subtle background.
 - Use `confirmIcon={Check}` for actions where the user needs visual feedback (copy, save). Omit for actions with immediate visible effect (navigate, regenerate).
 - Icon sizes are defined in `$lib/constants/ui.ts` — never hardcode pixel values.
 
 ### CollapsibleSection
 
-- Props: `title: string`, `collapsed: boolean` (bindable), optional `headerClass: string`, optional `headerLeft` snippet, optional `actions` snippet, required `children` snippet.
 - Uses `bind:collapsed` for two-way binding — parent controls open/closed state.
-- Header uses Lucide `ChevronRight`/`ChevronDown` icons for collapse indicator. The `headerLeft` snippet renders between the chevron and title (e.g., role badges). The `actions` snippet renders on the right side and stops click propagation. `headerClass` allows conditional styling of the header (e.g., highlight when content is present).
+- Header uses Lucide `ChevronRight`/`ChevronDown` icons for collapse indicator. The `headerLeft` snippet renders between the chevron and title (e.g., role badges). The `actions` snippet renders on the right side and stops click propagation (`hoverActions` / `actionsVisible` control when it shows). `headerClass` allows conditional styling of the header (e.g., highlight when content is present).
 - Content area uses `svelte/transition` `slide` for smooth expand/collapse.
 
 ### ImageChipBar
 
-- Props: `images: ConversationImage[]` (bindable), `readonly: boolean`.
+- `images` is bindable; `onremove` overrides the default removal from the array; `onopen` is called when a thumbnail is opened.
 - Renders nothing when `images` is empty.
 - Chip label is `Image #{image.number ?? position + 1}`: the optional `number` of `ConversationImage` wins, the 1-based position is the fallback.
-- Each chip shows a 40×40 thumbnail from the base64 data URI. Delete button removes the image from the bound array.
+- Each chip is an `AttachmentChip` with a thumbnail from the base64 data URI (120 px, or 64 px with `variant="small"`). Delete removes the image from the bound array unless `onremove` is given.
 - Import `ConversationImage` from `$lib/types/conversation`.
 
 ### ContextEditor
 
-- Props: `text: string` (bindable), `images: ConversationImage[]` (bindable), optional `readonly`, `disabled`, `placeholder`.
-- Pure presentational component — no IPC calls or save logic. Parents control persistence.
-- Renders `ImageChipBar` above a textarea. Used in both the conversation dialog's context section and the context menu's inline edit mode.
-- Import `ConversationImage` from `$lib/types/conversation`.
+Lives in `shared/widgets/ContextEditor.svelte` (it calls `invoke("open_image_preview")` for `ImageChipBar`'s `onopen`), not here. Parents control persistence.
 
 ### CommandPalette
 
-- Props: `open: boolean`, `onClose: () => void`, `query: string` (bindable), `placeholder: string`, `variant: "overlay" | "window"`, optional `bodyMaxHeight` (default `"360px"`), optional `inputRef: HTMLInputElement | undefined` (bindable, lets the consumer call `.focus()`), optional `headerExtras` snippet, required `body` snippet, optional `footer` snippet.
-- Pure visual shell: shared frame (`#252525`, 1px white-08 border, 8px radius), input row, scrollable body, footer. Consumers render the list and footer keys via snippets.
-- `variant="overlay"` is for in-window overlays (e.g. Cmd+K inside ConversationDialog) — adds a dark `rgba(0,0,0,0.5)` scrim with fade-in.
-- `variant="window"` is for separate Tauri windows with transparent body (e.g. Cmd+P provider switcher) — keeps the scrim transparent so the host window itself acts as the backdrop. On Linux this variant uses a lighter shadow (`0 6px 18px / 0.22`) because GTK/X11 transparent windows render heavy shadows poorly; the overlay variant keeps the heavy `0 20px 60px / 0.5` shadow on every platform.
+- `inputRef` is bindable so the consumer can call `.focus()`.
+- Pure visual shell: shared frame (`var(--surface-floating-modal)` with `--surface-floating-modal-border`), input row, scrollable body, footer. Consumers render the list and footer keys via snippets.
+- `variant="overlay"` is for in-window overlays (e.g. Cmd+K inside ConversationDialog) — adds the `--surface-scrim` backdrop with fade-in.
+- `variant="window"` is for separate Tauri windows with transparent body (e.g. Cmd+P provider switcher) — keeps the scrim transparent so the host window itself acts as the backdrop. On Linux this variant uses a lighter shadow (`--shadow-lg-linux`) because GTK/X11 transparent windows render heavy shadows poorly; the overlay variant keeps `--shadow-lg` on every platform.
 - Provides utility classes for consumers: `.palette-item`, `.palette-item.highlight`, `.palette-item-icon`, `.palette-item-name`, `.palette-empty`, `.palette-divider`, plus `.palette-footer kbd` styling.
 
 ### MarkdownRenderer
 
-- Props: `content: string`, `isStreaming: boolean`.
+- `onopen` and `onsavesvg` are optional callbacks (open a link/image, save a Mermaid SVG).
 - Uses `marked` + `highlight.js` via `$lib/utils/markdown.ts` to render markdown with syntax-highlighted code blocks.
-- When `isStreaming` is true, syntax highlighting is skipped for performance — plain escaped code is rendered instead, and highlighting applies when streaming ends.
+- `renderMarkdown` always highlights code blocks (`highlight.js`, auto-detecting the language when none is given); the renderer's `isStreaming` only paces how much of `content` is shown, not highlighting.
 - Code copy: each code block gets a "Copy" button with a `data-copy-index` attribute. Click handler uses event delegation on the container div to copy the raw code block content to clipboard.
 
