@@ -108,7 +108,7 @@ Debugging:
 - `gdbus introspect --session --dest org.gnome.Shell --object-path /com/promptheus/Shell` — 11 methods, 6 signals when the extension is enabled.
 - `gdbus monitor --session --dest org.gnome.Shell` — watch `Ready` and `ShortcutActivated`.
 - `journalctl --user /usr/bin/gnome-shell` — extension errors.
-- `journalctl --user -f -o cat /usr/bin/gnome-shell | grep Promptheus` — host-relative placement: `Promptheus: place on parent "<title>" parent=X,Y frame=X,Y WxH`; anchored placement lines: anchored placement lines: `Promptheus: make_above "<title>"` on every anchor, then `Promptheus: anchor "<title>" right=R bottom=B moved=… frame=X,Y WxH`, then `re-anchor after placement` and `re-anchor on size-changed` with the same fields, and `anchor released "<title>"` on hide. A correct anchor has `X + W = R` and `Y + H = B`.
+- `journalctl --user -f -o cat /usr/bin/gnome-shell | grep Promptheus` — host-relative placement: `Promptheus: place on parent "<title>" parent=X,Y frame=X,Y WxH`; anchored placement lines: `Promptheus: make_above "<title>"` on every anchor, then `Promptheus: anchor "<title>" right=R bottom=B moved=… frame=X,Y WxH`, then `re-anchor after placement` and `re-anchor on size-changed` with the same fields, and `anchor released "<title>"` on hide. A correct anchor has `X + W = R` and `Y + H = B`.
 
 ## When to load this file
 
