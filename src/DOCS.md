@@ -26,6 +26,7 @@ This is a multi-window Tauri app. Every window has its own HTML at the project r
 
 - `entry.ts` — mounts the root component (`mount(App, { target: ... })`).
 - `App.svelte` — root component for that window. Keep thin; pull feature UI from `lib/components/`.
+- An inline `<style>` in a window's HTML loses to the bundled `global.css` in production (the bundled stylesheet is linked after it). A transparent window overrides the `html, body` background in its App root (`:global(html), :global(body) { background: transparent; }`). Exception: `image-preview.html` uses inline `!important`.
 
 Adding a new window:
 

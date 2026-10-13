@@ -18,3 +18,10 @@
 </script>
 
 <ContextMenu />
+
+<style>
+  :global(html),
+  :global(body) {
+    background: transparent;
+  }
+</style>
