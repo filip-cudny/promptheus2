@@ -8,6 +8,8 @@ use crate::Error;
 
 const MENU_LABEL: &str = "provider-menu";
 
+pub const PROVIDER_MENU_TITLE: &str = "Promptheus Provider Menu";
+
 static MENU_HOST: Mutex<Option<String>> = Mutex::new(None);
 
 fn store_menu_host(host_label: String) {
@@ -55,6 +57,8 @@ pub async fn show_provider_menu(
     host_label: String,
     anchor_x: f64,
     anchor_y: f64,
+    offset_x: f64,
+    offset_y: f64,
     width: f64,
     height: f64,
     providers: Vec<ProviderEntry>,
@@ -62,7 +66,7 @@ pub async fn show_provider_menu(
 ) -> crate::Result<()> {
     log::debug!(
         target: "app_lib::commands::provider_menu",
-        "show_provider_menu: host={host_label} anchor=({anchor_x}, {anchor_y}) size=({width}x{height}) active={active_id} count={}",
+        "show_provider_menu: host={host_label} anchor=({anchor_x}, {anchor_y}) offset=({offset_x}, {offset_y}) size=({width}x{height}) active={active_id} count={}",
         providers.len(),
     );
 
@@ -71,7 +75,6 @@ pub async fn show_provider_menu(
         .ok_or_else(|| Error::Other("provider-menu window not found".into()))?;
 
     win.set_size(LogicalSize::new(width.max(80.0), height.max(20.0)))?;
-    win.set_position(LogicalPosition::new(anchor_x, anchor_y))?;
 
     let payload = ShowPayload {
         providers: providers
@@ -84,6 +87,39 @@ pub async fn show_provider_menu(
             .collect(),
         active_id,
     };
+
+    #[cfg(target_os = "linux")]
+    if crate::services::gnome_shell::is_gnome_wayland() {
+        let host = app
+            .get_window(&host_label)
+            .ok_or_else(|| Error::Other(format!("host window {host_label} not found")))?;
+        app.emit_to(MENU_LABEL, "provider-menu:show", payload)?;
+        store_menu_host(host_label);
+        if let Err(e) = crate::services::gnome_shell::set_transient_parent(&win, &host).await {
+            log::warn!(
+                target: "app_lib::commands::provider_menu",
+                "set_transient_parent failed: {e}"
+            );
+        }
+        if let Err(e) = crate::services::gnome_shell::place_window_on_parent(
+            PROVIDER_MENU_TITLE,
+            offset_x.round() as i32,
+            offset_y.round() as i32,
+            true,
+            Some(&win),
+        )
+        .await
+        {
+            log::warn!(
+                target: "app_lib::commands::provider_menu",
+                "place_window_on_parent failed: {e}"
+            );
+            win.show()?;
+        }
+        return Ok(());
+    }
+
+    win.set_position(LogicalPosition::new(anchor_x, anchor_y))?;
 
     app.emit_to(MENU_LABEL, "provider-menu:show", payload)?;
 

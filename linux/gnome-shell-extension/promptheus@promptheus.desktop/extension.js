@@ -143,6 +143,13 @@ const INTERFACE_XML = `
       <arg type="b" direction="in" name="activate"/>
       <arg type="b" direction="out" name="placed"/>
     </method>
+    <method name="PlaceWindowOnParent">
+      <arg type="s" direction="in" name="title"/>
+      <arg type="i" direction="in" name="dx"/>
+      <arg type="i" direction="in" name="dy"/>
+      <arg type="b" direction="in" name="activate"/>
+      <arg type="b" direction="out" name="placed"/>
+    </method>
     <method name="GetFocusedWmClass">
       <arg type="s" direction="out" name="wm_class"/>
     </method>
@@ -287,6 +294,12 @@ export default class PromptheusExtension extends Extension {
         const [title, right, bottom, activate] = params;
         this._placeOrWait('PlaceWindowAnchored', title, invocation,
             win => this._anchorWindow(win, title, right, bottom, activate));
+    }
+
+    PlaceWindowOnParentAsync(params, invocation) {
+        const [title, dx, dy, activate] = params;
+        this._placeOrWait('PlaceWindowOnParent', title, invocation,
+            win => this._placeOnParent(win, title, dx, dy, activate));
     }
 
     GetFocusedWmClass() {
@@ -1020,8 +1033,8 @@ export default class PromptheusExtension extends Extension {
             this._pending.get(title)?.finish(false);
             const win = this._findWindow(title);
             if (win) {
-                place(win);
-                invocation.return_value(new GLib.Variant('(b)', [true]));
+                const placed = place(win) !== false;
+                invocation.return_value(new GLib.Variant('(b)', [placed]));
                 return;
             }
             this._waitForWindow(title, place, invocation);
@@ -1035,6 +1048,21 @@ export default class PromptheusExtension extends Extension {
         win.move_frame(true, x, y);
         if (activate)
             Main.activateWindow(win);
+    }
+
+    _placeOnParent(win, title, dx, dy, activate) {
+        const parent = win.get_transient_for();
+        if (!parent) {
+            console.warn(`Promptheus: PlaceWindowOnParent "${title}" has no transient parent`);
+            return false;
+        }
+        const p = parent.get_frame_rect();
+        win.move_frame(true, p.x + dx, p.y + dy);
+        if (activate)
+            Main.activateWindow(win);
+        const f = win.get_frame_rect();
+        console.log(`Promptheus: place on parent "${title}" parent=${p.x},${p.y} frame=${f.x},${f.y} ${f.width}x${f.height}`);
+        return true;
     }
 
     _anchorWindow(win, title, right, bottom, activate) {
@@ -1129,16 +1157,14 @@ export default class PromptheusExtension extends Extension {
             stopWatchingCreation();
             actor = win.get_compositor_private();
             if (!actor) {
-                place(win);
-                finish(true);
+                finish(place(win) !== false);
                 return;
             }
             actor.opacity = 0;
             frameId = actor.connect('first-frame', () => {
                 actor.disconnect(frameId);
                 frameId = 0;
-                place(win);
-                finish(true);
+                finish(place(win) !== false);
             });
         };
 

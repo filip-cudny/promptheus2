@@ -81,12 +81,24 @@ export function useShellToolbar(opts: {
     try {
       const pos = await hostWin.outerPosition();
       const scale = await hostWin.scaleFactor();
-      const anchorX = pos.x / scale + rect.left;
-      const anchorY = pos.y / scale + rect.bottom + 4;
+      const offsetX = rect.left;
+      const offsetY = rect.bottom + 4;
+      const anchorX = pos.x / scale + offsetX;
+      const anchorY = pos.y / scale + offsetY;
       const width = Math.max(rect.width, 160);
       const height = providers.length * 28 + 8;
       providerDropdownOpen = true;
-      await showProviderMenu(opts.hostLabel, anchorX, anchorY, width, height, providers, activeId);
+      await showProviderMenu(
+        opts.hostLabel,
+        anchorX,
+        anchorY,
+        offsetX,
+        offsetY,
+        width,
+        height,
+        providers,
+        activeId,
+      );
     } catch (err) {
       providerDropdownOpen = false;
       console.error("show_provider_menu failed", err);

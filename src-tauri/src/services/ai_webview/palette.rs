@@ -20,6 +20,9 @@ use super::AiWebviewState;
 
 const AI_WEBVIEW_PREFIX: &str = "ai-webview-";
 
+pub const PALETTE_TITLE: &str = "Promptheus Palette";
+pub const PALETTE_BACKDROP_TITLE: &str = "Promptheus Palette Backdrop";
+
 #[derive(Serialize, Clone)]
 pub(super) struct PaletteWindowEntry {
     pub host_label: String,
@@ -133,6 +136,49 @@ fn deliver_clipboard_text_to_webview(app: &tauri::AppHandle, webview_label: &str
     }
 }
 
+#[cfg(target_os = "linux")]
+fn is_host_relative_platform() -> bool {
+    crate::services::gnome_shell::is_gnome_wayland()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn is_host_relative_platform() -> bool {
+    false
+}
+
+#[cfg(target_os = "linux")]
+async fn show_over_host(
+    win: &tauri::WebviewWindow,
+    host: &tauri::Window,
+    title: &str,
+    activate: bool,
+) {
+    use crate::services::gnome_shell::{place_window_on_parent, set_transient_parent};
+
+    if let Err(e) = set_transient_parent(win, host).await {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "set_transient_parent({}) failed: {e}",
+            win.label(),
+        );
+    }
+    if let Err(e) =
+        place_window_on_parent(title, 0, TOOLBAR_HEIGHT as i32, activate, Some(win)).await
+    {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "place_window_on_parent({title}) failed: {e}",
+        );
+        if let Err(e) = win.show() {
+            log::warn!(
+                target: "app_lib::services::ai_webview",
+                "show({}) failed: {e}",
+                win.label(),
+            );
+        }
+    }
+}
+
 pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result<(), String> {
     log::debug!(
         target: "app_lib::services::ai_webview",
@@ -200,9 +246,12 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
     palette_win
         .set_size(LogicalSize::new(host_logical_w, palette_h))
         .map_err(|e| e.to_string())?;
-    palette_win
-        .set_position(LogicalPosition::new(host_logical_x, palette_y))
-        .map_err(|e| e.to_string())?;
+    let host_relative = is_host_relative_platform();
+    if !host_relative {
+        palette_win
+            .set_position(LogicalPosition::new(host_logical_x, palette_y))
+            .map_err(|e| e.to_string())?;
+    }
 
     if let Some(backdrop) = app.get_webview_window(PALETTE_BACKDROP_LABEL) {
         if let Err(e) = backdrop.set_size(LogicalSize::new(host_logical_w, palette_h)) {
@@ -211,23 +260,29 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
                 "backdrop set_size failed: {e}",
             );
         }
-        if let Err(e) = backdrop.set_position(LogicalPosition::new(host_logical_x, palette_y)) {
-            log::warn!(
-                target: "app_lib::services::ai_webview",
-                "backdrop set_position failed: {e}",
-            );
-        }
-        if let Err(e) = backdrop.show() {
-            log::warn!(
-                target: "app_lib::services::ai_webview",
-                "backdrop show failed: {e}",
-            );
-        }
-        #[cfg(target_os = "linux")]
-        {
-            use gtk::prelude::WidgetExt;
-            if let Ok(gtk_win) = backdrop.gtk_window() {
-                gtk_win.set_opacity(0.68);
+        if host_relative {
+            #[cfg(target_os = "linux")]
+            show_over_host(&backdrop, &host, PALETTE_BACKDROP_TITLE, false).await;
+        } else {
+            if let Err(e) = backdrop.set_position(LogicalPosition::new(host_logical_x, palette_y))
+            {
+                log::warn!(
+                    target: "app_lib::services::ai_webview",
+                    "backdrop set_position failed: {e}",
+                );
+            }
+            if let Err(e) = backdrop.show() {
+                log::warn!(
+                    target: "app_lib::services::ai_webview",
+                    "backdrop show failed: {e}",
+                );
+            }
+            #[cfg(target_os = "linux")]
+            {
+                use gtk::prelude::WidgetExt;
+                if let Ok(gtk_win) = backdrop.gtk_window() {
+                    gtk_win.set_opacity(0.68);
+                }
             }
         }
     }
@@ -250,12 +305,17 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
         );
     }
 
-    palette_win.show().map_err(|e| e.to_string())?;
-    if let Err(e) = focus_window(&palette_win) {
-        log::warn!(
-            target: "app_lib::services::ai_webview",
-            "focus_window(palette) failed: {e}",
-        );
+    if host_relative {
+        #[cfg(target_os = "linux")]
+        show_over_host(&palette_win, &host, PALETTE_TITLE, true).await;
+    } else {
+        palette_win.show().map_err(|e| e.to_string())?;
+        if let Err(e) = focus_window(&palette_win) {
+            log::warn!(
+                target: "app_lib::services::ai_webview",
+                "focus_window(palette) failed: {e}",
+            );
+        }
     }
 
     let opened_payload = serde_json::json!({ "active_label": active_label });

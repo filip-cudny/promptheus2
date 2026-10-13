@@ -20,6 +20,7 @@ Interface `com.promptheus.Shell`, object `/com/promptheus/Shell`, served by `org
 | `GetPointer` | `() → (iiiiii)` | pointer x, y, then work area x, y, width, height of the monitor under the pointer |
 | `PlaceWindow` | `(s title, i x, i y, b activate) → b` | move the window with that title, optionally activate it |
 | `PlaceWindowAnchored` | `(s title, i right, i bottom, b activate) → b` | keep the frame's bottom-right corner at `(right, bottom)` until the window is unmanaged, optionally activate it |
+| `PlaceWindowOnParent` | `(s title, i dx, i dy, b activate) → b` | move the window with that title to its transient parent's frame origin plus `(dx, dy)`, optionally activate it; `false` when it has no transient parent |
 | `GetFocusedWmClass` | `() → s` | `wm_class` of the focused window |
 | `ShowToast` | `(s level, s title, s message, b monochromatic) → ()` | draw a toast as a shell actor; `level` is `success`/`error`/`info`/`warning`, empty `message` = no description |
 | `ShowRecordingWidget` | `(i x, i y, b has_position, b monochromatic) → (i x, i y, i work_x, i work_y, i work_width, i work_height)` | show the recording widget at `(x, y)` logical stage pixels when `has_position`, else at the default position (the extension never clamps; Rust passes a clamped origin when the widget opens at the cursor); returns the placed origin and the work area of the monitor it is on; `monochromatic` picks the `done` check icon (`recording-check-mono.svg` in the widget foreground or green `recording-check.svg`) |
@@ -43,7 +44,7 @@ Lifecycle:
 - Accelerators come from `get_active_bindings` converted by `to_gtk_accelerator` in `services/hotkeys.rs`. An accelerator GNOME already uses is returned by `SetShortcuts` and logged at `warn`; the other shortcuts keep working.
 
 Window identification:
-- Windows are found by title. The context menu title is `CONTEXT_MENU_TITLE` (`commands/menu.rs`), the notification title is `NOTIFICATION_TITLE` (`commands/notification.rs`); both are set in `setup/windows.rs`. Change a title only in its constant.
+- Windows are found by title. The context menu title is `CONTEXT_MENU_TITLE` (`commands/menu.rs`), the notification title is `NOTIFICATION_TITLE` (`commands/notification.rs`); both are set in `setup/windows.rs`, as are `PROVIDER_MENU_TITLE` (`commands/provider_menu.rs`), `PALETTE_TITLE` and `PALETTE_BACKDROP_TITLE` (`services/ai_webview/palette.rs`). Change a title only in its constant.
 - Any process on the session bus can call `PlaceWindow` and `SetShortcuts`; there is no caller check.
 
 Context menu placement:
@@ -52,6 +53,12 @@ Context menu placement:
 - A second `PlaceWindow` for the same title while the first still waits cancels the first (it returns `false`, logged at `warn`) and is handled on its own.
 - GTK `set_opacity` cannot do this: it writes an X11 atom and is X11-only (see [linux-webkit-opacity.md](linux-webkit-opacity.md)).
 - `GetPointer` supplies the cursor and work area; the frontend positions inside the work area and calls `place_context_menu` (see `src/lib/components/features/context-menu/DOCS.md`).
+
+Host-relative popups:
+- A window placed relative to a host gets the host as transient parent (`gnome_shell::set_transient_parent`, on the GTK main thread, on every open because the windows are shared by all hosts) and is placed with `place_window_on_parent`.
+- Provider menu offset is `(rect.left, rect.bottom + 4)` window-relative; palette and backdrop offset is `(0, TOOLBAR_HEIGHT)`, size host width × (H − 40), so the toolbar stays undimmed and clickable.
+- Without the extension the transient parent alone makes Mutter place them over the host.
+- `set_opacity` and `focus_window` are skipped there (no effect on Wayland).
 
 Notification toasts:
 - On GNOME Wayland `commands/notification.rs::show_notification` calls `ShowToast` (async, proxy method `show_toast`) and does not touch the webview queue. The extension draws the toast as St actors in `Main.layoutManager.uiGroup`: not windows, never focused, non-reactive (no hover pause).
@@ -98,15 +105,15 @@ Install:
 - A changed `extension.js` needs a re-login: GNOME Shell caches loaded ES modules, so `gnome-extensions disable`/`enable` re-runs the old code.
 
 Debugging:
-- `gdbus introspect --session --dest org.gnome.Shell --object-path /com/promptheus/Shell` — 10 methods, 6 signals when the extension is enabled.
+- `gdbus introspect --session --dest org.gnome.Shell --object-path /com/promptheus/Shell` — 11 methods, 6 signals when the extension is enabled.
 - `gdbus monitor --session --dest org.gnome.Shell` — watch `Ready` and `ShortcutActivated`.
 - `journalctl --user /usr/bin/gnome-shell` — extension errors.
-- `journalctl --user -f -o cat /usr/bin/gnome-shell | grep Promptheus` — anchored placement lines: `Promptheus: make_above "<title>"` on every anchor, then `Promptheus: anchor "<title>" right=R bottom=B moved=… frame=X,Y WxH`, then `re-anchor after placement` and `re-anchor on size-changed` with the same fields, and `anchor released "<title>"` on hide. A correct anchor has `X + W = R` and `Y + H = B`.
+- `journalctl --user -f -o cat /usr/bin/gnome-shell | grep Promptheus` — host-relative placement: `Promptheus: place on parent "<title>" parent=X,Y frame=X,Y WxH`; anchored placement lines: anchored placement lines: `Promptheus: make_above "<title>"` on every anchor, then `Promptheus: anchor "<title>" right=R bottom=B moved=… frame=X,Y WxH`, then `re-anchor after placement` and `re-anchor on size-changed` with the same fields, and `anchor released "<title>"` on hide. A correct anchor has `X + W = R` and `Y + H = B`.
 
 ## When to load this file
 
 - Touching global shortcuts, window positioning or window focus on Linux.
-- Changing `linux/gnome-shell-extension/`, `services/gnome_shell/`, `setup/shortcuts.rs`, `place_context_menu`, `useMenuPositioning.svelte.ts`, `commands/notification.rs` or `services/monitor.rs`.
+- Changing `linux/gnome-shell-extension/`, `services/gnome_shell/`, `setup/shortcuts.rs`, `place_context_menu`, `useMenuPositioning.svelte.ts`, `commands/notification.rs`, `commands/provider_menu.rs`, `services/ai_webview/palette.rs` or `services/monitor.rs`.
 - Investigating "shortcuts do nothing on Ubuntu / GNOME", "menu opens at the wrong place or without focus on Wayland", "notifications never appear on Wayland", or "recent apps are empty on Wayland".
 
 ## Related

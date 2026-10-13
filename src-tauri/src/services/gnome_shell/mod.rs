@@ -25,6 +25,14 @@ pub trait Shell {
         activate: bool,
     ) -> zbus::Result<bool>;
 
+    fn place_window_on_parent(
+        &self,
+        title: &str,
+        dx: i32,
+        dy: i32,
+        activate: bool,
+    ) -> zbus::Result<bool>;
+
     fn get_focused_wm_class(&self) -> zbus::Result<String>;
 
     fn show_toast(
@@ -158,6 +166,46 @@ pub async fn place_window_anchored(
     show: Option<&tauri::WebviewWindow>,
 ) -> crate::Result<bool> {
     call_placement("PlaceWindowAnchored", title, right, bottom, activate, show).await
+}
+
+/// Moves the frame of the window titled `title` to its transient parent's
+/// frame origin plus `(dx, dy)` logical stage pixels.
+///
+/// Returns `false` when the window has no transient parent or was not found.
+/// `show` behaves as in [`place_window`].
+pub async fn place_window_on_parent(
+    title: &str,
+    dx: i32,
+    dy: i32,
+    activate: bool,
+    show: Option<&tauri::WebviewWindow>,
+) -> crate::Result<bool> {
+    call_placement("PlaceWindowOnParent", title, dx, dy, activate, show).await
+}
+
+pub async fn set_transient_parent(
+    child: &tauri::WebviewWindow,
+    parent: &tauri::Window,
+) -> crate::Result<()> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let child_clone = child.clone();
+    let parent_clone = parent.clone();
+    child.run_on_main_thread(move || {
+        let result = (|| -> crate::Result<()> {
+            let child_gtk = child_clone.gtk_window()?;
+            let parent_gtk = parent_clone.gtk_window()?;
+            gtk::prelude::GtkWindowExt::set_transient_for(&child_gtk, Some(&parent_gtk));
+            Ok(())
+        })();
+        let _ = tx.send(result);
+    })?;
+    rx.await.map_err(to_error)??;
+    log::debug!(
+        "set_transient_parent: child={} parent={}",
+        child.label(),
+        parent.label(),
+    );
+    Ok(())
 }
 
 async fn call_placement(

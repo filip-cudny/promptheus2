@@ -105,7 +105,7 @@ pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::E
         "provider-menu",
         tauri::WebviewUrl::App("provider-menu.html".into()),
     )
-    .title("")
+    .title(crate::commands::provider_menu::PROVIDER_MENU_TITLE)
     .inner_size(180.0, 120.0)
     .resizable(false)
     .decorations(false)
@@ -120,7 +120,7 @@ pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::E
         "palette-backdrop",
         tauri::WebviewUrl::App("palette-backdrop.html".into()),
     )
-    .title("")
+    .title(crate::services::ai_webview::PALETTE_BACKDROP_TITLE)
     .inner_size(800.0, 600.0)
     .resizable(false)
     .decorations(false)
@@ -133,7 +133,7 @@ pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::E
     .build()?;
 
     WebviewWindowBuilder::new(app, "palette", tauri::WebviewUrl::App("palette.html".into()))
-        .title("")
+        .title(crate::services::ai_webview::PALETTE_TITLE)
         .inner_size(520.0, 400.0)
         .resizable(false)
         .decorations(false)

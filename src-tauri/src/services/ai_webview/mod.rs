@@ -16,7 +16,9 @@ pub use lifecycle::{
     cleanup_host_state, close, focus_conversation_dialog, navigate, open_new_instance,
     open_or_focus,
 };
-pub use palette::{swap_from_palette, swap_to_palette};
+pub use palette::{
+    swap_from_palette, swap_to_palette, PALETTE_BACKDROP_TITLE, PALETTE_TITLE,
+};
 pub use provider_swap::{
     active_provider_for, emit_active_changed_for, mark_active_webview, new_chat_in_host,
     reload_active_in_host, swap_to_conversation_dialog, swap_to_provider,
