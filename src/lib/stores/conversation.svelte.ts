@@ -280,6 +280,7 @@ export function createConversationStore(
 
   let tabs = $state<TabState[]>([createTabState()]);
   let activeTabId = $state(tabs[0].tab_id);
+  let autoCopiedNodeId = $state<string | null>(null);
 
   const activeTab = $derived(
     tabs.find((t) => t.tab_id === activeTabId) ?? tabs[0],
@@ -731,16 +732,21 @@ export function createConversationStore(
     return true;
   }
 
-  async function sendMessage(): Promise<{ success: boolean; result: string }> {
+  async function sendMessage(): Promise<{
+    success: boolean;
+    result: string;
+    tabId: string | null;
+    nodeId: string | null;
+  }> {
     const tab = getTab(activeTabId);
     if (!tab || tab.is_executing)
-      return { success: false, result: "" };
+      return { success: false, result: "", tabId: null, nodeId: null };
 
     const text = tab.input_text.trim();
     const images = [...tab.input_images];
     const textAttachments = [...tab.input_text_attachments];
     if (!hasUserContent({ content: tab.input_text, images, text_attachments: textAttachments }))
-      return { success: false, result: "" };
+      return { success: false, result: "", tabId: null, nodeId: null };
 
     const { applied_skills } = await resolveSkillInput(text);
 
@@ -787,7 +793,15 @@ export function createConversationStore(
         .catch(() => {});
     }
 
-    return executeOnTree(tab, assistantNode);
+    const outcome = await executeOnTree(tab, assistantNode);
+    return { ...outcome, tabId: tab.tab_id, nodeId: assistantNode.node_id };
+  }
+
+  function markAutoCopied(nodeId: string): void {
+    autoCopiedNodeId = nodeId;
+    setTimeout(() => {
+      if (autoCopiedNodeId === nodeId) autoCopiedNodeId = null;
+    }, 1200);
   }
 
   function stopExecution(): void {
@@ -1427,6 +1441,10 @@ export function createConversationStore(
     get activeTabId() {
       return activeTabId;
     },
+    get autoCopiedNodeId() {
+      return autoCopiedNodeId;
+    },
+    markAutoCopied,
     get tree() {
       return tree;
     },

@@ -22,6 +22,7 @@
     displayContent,
     showDelete = false,
     isStreaming = false,
+    autoCopied = false,
     thinkingContent = "",
     isThinkingActive = false,
     branchInfo = { current: 1, total: 1 },
@@ -39,6 +40,7 @@
     displayContent: string;
     showDelete: boolean;
     isStreaming: boolean;
+    autoCopied?: boolean;
     thinkingContent: string;
     isThinkingActive: boolean;
     branchInfo: { current: number; total: number };
@@ -127,6 +129,11 @@
   });
 
   let editMode = $state(false);
+  let copyConfirmed = $state(false);
+
+  $effect(() => {
+    copyConfirmed = autoCopied;
+  });
   const edit = useEditSegments({ parseContent: parseContentSegments });
 
   function toggleEditMode() {
@@ -224,7 +231,7 @@
     </div>
   </div>
 
-  <BubbleActionsFooter visible={editMode}>
+  <BubbleActionsFooter visible={editMode || autoCopied}>
     {#if node.query_duration != null}
       <span class="query-time" title="Query time">{formatDuration(node.query_duration)}</span>
     {/if}
@@ -246,6 +253,7 @@
       <ActionIconButton
         icon={Copy}
         confirmIcon={Check}
+        bind:confirmed={copyConfirmed}
         onclick={copyContent}
         title="Copy"
       />

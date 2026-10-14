@@ -10,6 +10,7 @@ export function useConversationDialogIpc(opts: {
     skillModel: string | null,
     autoSend: boolean,
     invocationSource: InvocationSource | null,
+    copyToken: string | null,
   ) => void;
   onOpenForSkill: (skillId: string, skillName: string, skillModel: string | null) => void;
   onNewConversation: () => void;
@@ -32,6 +33,7 @@ export function useConversationDialogIpc(opts: {
       skill_model: string | null;
       auto_send: boolean;
       invocation_source: InvocationSource | null;
+      copy_token: string | null;
     }>(
       "voice-input",
       (event) =>
@@ -41,6 +43,7 @@ export function useConversationDialogIpc(opts: {
           event.payload.skill_model,
           event.payload.auto_send,
           event.payload.invocation_source,
+          event.payload.copy_token,
         ),
       { target: opts.selfTarget },
     );

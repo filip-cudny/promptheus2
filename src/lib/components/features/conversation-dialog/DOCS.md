@@ -67,6 +67,8 @@ This avoids feedback loops while preserving the cursor on user typing and resett
 
 `DialogInitParams` and the `voice-input` payload carry `skill_id`, `skill_model` and a nullable `invocation_source`. `handleVoiceInput` builds `/<skill_id> <text>` (plain text for an empty id), calls `store.setActiveTabInvocationSource(source ?? "alternative_execute")` and, for a non-empty `skill_model`, `store.setActiveTabModelId(skill_model)` (the active tab only, not `updateModelId`). Sources: the pill sends `pill`, the context menu's "Run in dialog" sends `alternative_execute`.
 
+Both also carry a nullable `copy_token`, set only by pill stop + chat. With a token, `handleVoiceInput` calls `copy_chat_answer_if_unchanged(token, text)` once after the auto-sent first answer, only when the send succeeded, its tab is still open and its assistant node is not `cancelled`; `text` is the send's `result`. The backend command decides on the clipboard fingerprint. On `true`, `store.markAutoCopied(nodeId)` sets `autoCopiedNodeId` for 1200 ms: `ConversationArea` passes `autoCopied` to that `AssistantBubble`, which shows its footer and the Copy button's check. No toast. A window that reconnects (accepted limit below) or is closed before the answer ends copies nothing. Follow-ups, regenerate and "Send and copy" never carry a token.
+
 `open_conversation_dialog` writes `PENDING` only when it creates the window; the reuse branch delivers by event, so a later new window never re-sends old input.
 
 Accepted limit: when the one global live-stream slot is set, a new dialog window reconnects (`tryReconnect`) and ignores the result of `get_dialog_init_params` (it still invokes it), so an auto-send request ("Run in dialog", the pill's "Stop and chat") opens the dialog without sending.

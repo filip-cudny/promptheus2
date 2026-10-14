@@ -32,6 +32,7 @@
     auto_send_input: boolean;
     new_chat: boolean;
     invocation_source: InvocationSource | null;
+    copy_token: string | null;
   }
 
   const skillsStore = getSkillsStore();
@@ -154,6 +155,7 @@
     skillModel: string | null,
     autoSend: boolean,
     invocationSource: InvocationSource | null,
+    copyToken: string | null,
   ) {
     const currentTab = store.tabs.find((t) => t.tab_id === store.activeTabId);
     if (currentTab && currentTab.tree.current_path.length > 0) {
@@ -173,7 +175,20 @@
     }
     const sending = store.sendMessage();
     await autoShowContextIfNeeded();
-    await sending;
+    const outcome = await sending;
+    if (!copyToken || !outcome.success || !outcome.tabId || !outcome.nodeId) return;
+    const tab = store.tabs.find((t) => t.tab_id === outcome.tabId);
+    const node = tab?.tree.nodes.get(outcome.nodeId);
+    if (!node || node.cancelled) return;
+    try {
+      const copied = await invoke<boolean>("copy_chat_answer_if_unchanged", {
+        token: copyToken,
+        text: outcome.result,
+      });
+      if (copied) store.markAutoCopied(outcome.nodeId);
+    } catch (err) {
+      console.error("conditional answer copy failed", err);
+    }
   }
 
   async function applyInitParams(p: DialogInitParams) {
@@ -182,7 +197,7 @@
     } else if (p.history_entry_id) {
       await store.restoreFromHistory(p.history_entry_id, p.last_interaction_only);
     } else if (p.initial_input) {
-      await handleVoiceInput(p.skill_id, p.initial_input, p.skill_model, p.auto_send_input, p.invocation_source);
+      await handleVoiceInput(p.skill_id, p.initial_input, p.skill_model, p.auto_send_input, p.invocation_source, p.copy_token);
     } else if (p.skill_id) {
       store.openForSkill(p.skill_id, p.skill_name, p.skill_model);
     }
@@ -201,8 +216,8 @@
     onRestoreHistory: (entryId, lastInteractionOnly) => {
       store.restoreFromHistory(entryId, lastInteractionOnly);
     },
-    onVoiceInput: (text, skillId, skillModel, autoSend, source) =>
-      handleVoiceInput(skillId, text, skillModel, autoSend, source),
+    onVoiceInput: (text, skillId, skillModel, autoSend, source, copyToken) =>
+      handleVoiceInput(skillId, text, skillModel, autoSend, source, copyToken),
     onOpenForSkill: (skillId, skillName, skillModel) =>
       store.openForSkill(skillId, skillName, skillModel),
     onNewConversation: () => store.addTab(),

@@ -87,6 +87,7 @@
             displayContent={streaming ? store.streamedContent : assistant.content}
             showDelete={false}
             isStreaming={streaming}
+            autoCopied={store.autoCopiedNodeId === assistant.node_id}
             thinkingContent={streaming ? store.streamedThinking : (assistant.thinking ?? "")}
             isThinkingActive={streaming && store.isThinking}
             branchInfo={store.getBranchInfo(assistant.node_id)}
