@@ -311,8 +311,10 @@ export default class PromptheusExtension extends Extension {
         if (duration === undefined)
             throw new Error(`Unknown toast level: ${level}`);
         const actor = this._buildToast(level, title, message, monochromatic);
-        if (this._toasts.length === 0)
+        if (this._toasts.length === 0) {
             this._toastMonitor = global.display.get_current_monitor();
+            global.compositor.disable_unredirect();
+        }
         const toast = {actor, timerId: 0};
         this._toasts.push(toast);
         toast.timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, duration, () => {
@@ -353,6 +355,8 @@ export default class PromptheusExtension extends Extension {
         if (!this._toasts.includes(toast))
             return;
         this._toasts = this._toasts.filter(t => t !== toast);
+        if (this._toasts.length === 0)
+            global.compositor.enable_unredirect();
         toast.actor.destroy();
         this._restackToasts();
     }
@@ -404,6 +408,8 @@ export default class PromptheusExtension extends Extension {
     _clearToasts() {
         const toasts = this._toasts;
         this._toasts = [];
+        if (toasts.length > 0)
+            global.compositor.enable_unredirect();
         for (const toast of toasts) {
             if (toast.timerId)
                 GLib.Source.remove(toast.timerId);
@@ -417,8 +423,10 @@ export default class PromptheusExtension extends Extension {
     }
 
     ShowRecordingWidget(x, y, hasPosition, monochromatic) {
-        if (!this._widget)
+        if (!this._widget) {
             this._widget = this._buildRecordingWidget();
+            global.compositor.disable_unredirect();
+        }
         const widget = this._widget;
         widget.monochromatic = monochromatic;
         widget.scales.fill(WIDGET_BAR_MIN_SCALE);
@@ -476,6 +484,7 @@ export default class PromptheusExtension extends Extension {
         if (!widget)
             return;
         this._widget = null;
+        global.compositor.enable_unredirect();
         this._endWidgetDrag(widget);
         this._closeDropdown(widget);
         this._closePreview(widget);
