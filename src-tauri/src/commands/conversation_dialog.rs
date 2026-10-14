@@ -26,6 +26,7 @@ struct VoiceInputEvent {
     skill_model: Option<String>,
     auto_send: bool,
     invocation_source: Option<InvocationSource>,
+    copy_token: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -45,6 +46,7 @@ struct PendingDialogParams {
     auto_send_input: bool,
     new_chat: bool,
     invocation_source: Option<InvocationSource>,
+    copy_token: Option<String>,
 }
 
 static PENDING: Mutex<Option<PendingDialogParams>> = Mutex::new(None);
@@ -60,6 +62,7 @@ pub struct DialogInitParams {
     auto_send_input: bool,
     new_chat: bool,
     invocation_source: Option<InvocationSource>,
+    copy_token: Option<String>,
 }
 
 #[tauri::command]
@@ -74,6 +77,7 @@ pub async fn open_conversation_dialog(
     auto_send_input: Option<bool>,
     new_chat: Option<bool>,
     invocation_source: Option<InvocationSource>,
+    copy_token: Option<String>,
 ) -> crate::Result<()> {
     let label = "conversation-dialog";
     let last_interaction_only = last_interaction_only.unwrap_or(false);
@@ -103,6 +107,7 @@ pub async fn open_conversation_dialog(
             skill_model.as_deref(),
             new_chat,
             invocation_source,
+            copy_token,
         )?;
         return Ok(());
     }
@@ -117,6 +122,7 @@ pub async fn open_conversation_dialog(
         auto_send_input,
         new_chat,
         invocation_source,
+        copy_token,
     });
 
     let (_, _created) = dialog::open_or_focus(&app, &config)
@@ -228,6 +234,7 @@ pub async fn open_conversation_dialog_new_window(
                 auto_send_input: false,
                 new_chat: false,
                 invocation_source: None,
+                copy_token: None,
             });
         }
     }
@@ -275,6 +282,7 @@ pub fn get_dialog_init_params() -> Option<DialogInitParams> {
             auto_send_input: p.auto_send_input,
             new_chat: p.new_chat,
             invocation_source: p.invocation_source,
+            copy_token: p.copy_token,
         })
 }
 
@@ -290,6 +298,7 @@ fn emit_reuse_event(
     skill_model: Option<&str>,
     new_chat: bool,
     invocation_source: Option<InvocationSource>,
+    copy_token: Option<String>,
 ) -> crate::Result<()> {
     if app.get_webview_window(label).is_none() {
         return Err(Error::Other(format!(
@@ -324,6 +333,7 @@ fn emit_reuse_event(
                 skill_model: skill_model.map(|s| s.to_string()),
                 auto_send: auto_send_input,
                 invocation_source,
+                copy_token,
             },
         )?;
     } else if !skill_id.is_empty() {

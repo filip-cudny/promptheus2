@@ -53,6 +53,7 @@ macro_rules! handlers {
             // === clipboard ===
             $crate::commands::clipboard::get_clipboard_text,
             $crate::commands::clipboard::get_clipboard_image,
+            $crate::commands::clipboard::copy_chat_answer_if_unchanged,
             // === context ===
             $crate::commands::context::get_context_items,
             $crate::commands::context::get_context_text,

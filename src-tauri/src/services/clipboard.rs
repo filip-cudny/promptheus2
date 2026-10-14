@@ -1,6 +1,9 @@
 use base64::Engine;
 use image::ImageBuffer;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::io::Cursor;
+use std::path::PathBuf;
 use tauri::AppHandle;
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
@@ -14,6 +17,45 @@ pub enum ClipboardError {
 
     #[error("image conversion error: {0}")]
     ImageConversion(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClipboardFingerprint {
+    Text(u64),
+    Image(u64),
+    Files(u64),
+    Empty,
+    Unreadable,
+}
+
+fn hash_of(value: impl Hash) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    hasher.finish()
+}
+
+fn fingerprint_from(
+    text: impl FnOnce() -> Result<String, arboard::Error>,
+    image: impl FnOnce() -> Result<arboard::ImageData<'static>, arboard::Error>,
+    files: impl FnOnce() -> Result<Vec<PathBuf>, arboard::Error>,
+) -> ClipboardFingerprint {
+    match text() {
+        Ok(text) if !text.is_empty() => return ClipboardFingerprint::Text(hash_of(text)),
+        Ok(_) | Err(arboard::Error::ContentNotAvailable) => {}
+        Err(_) => return ClipboardFingerprint::Unreadable,
+    }
+    match image() {
+        Ok(image) => {
+            return ClipboardFingerprint::Image(hash_of((image.width, image.height, &*image.bytes)))
+        }
+        Err(arboard::Error::ContentNotAvailable) => {}
+        Err(_) => return ClipboardFingerprint::Unreadable,
+    }
+    match files() {
+        Ok(files) if !files.is_empty() => ClipboardFingerprint::Files(hash_of(files)),
+        Ok(_) | Err(arboard::Error::ContentNotAvailable) => ClipboardFingerprint::Empty,
+        Err(_) => ClipboardFingerprint::Unreadable,
+    }
 }
 
 #[derive(Clone)]
@@ -54,6 +96,19 @@ impl ClipboardService {
         clipboard
             .set_text(content)
             .map_err(|e| ClipboardError::Access(e.to_string()))
+    }
+
+    /// Blocks on clipboard reads: call from `spawn_blocking`.
+    pub fn fingerprint(&self) -> ClipboardFingerprint {
+        let Ok(clipboard) = arboard::Clipboard::new() else {
+            return ClipboardFingerprint::Unreadable;
+        };
+        let clipboard = std::cell::RefCell::new(clipboard);
+        fingerprint_from(
+            || clipboard.borrow_mut().get_text(),
+            || clipboard.borrow_mut().get_image(),
+            || clipboard.borrow_mut().get().file_list(),
+        )
     }
 
     pub fn has_image(&self) -> bool {
@@ -186,6 +241,57 @@ impl ClipboardService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use arboard::{Error as E, ImageData};
+    use std::borrow::Cow;
+
+    fn img(bytes: &[u8]) -> Result<ImageData<'static>, E> {
+        Ok(ImageData { width: 1, height: 1, bytes: Cow::Owned(bytes.to_vec()) })
+    }
+
+    fn absent<T>() -> Result<T, E> {
+        Err(E::ContentNotAvailable)
+    }
+
+    #[test]
+    fn fingerprint_text_image_and_files_give_distinct_variants() {
+        let text = fingerprint_from(|| Ok("a".into()), absent, absent);
+        let image = fingerprint_from(absent, || img(&[1]), absent);
+        let files = fingerprint_from(absent, absent, || Ok(vec![PathBuf::from("/a")]));
+        assert!(matches!(text, ClipboardFingerprint::Text(_)));
+        assert!(matches!(image, ClipboardFingerprint::Image(_)));
+        assert!(matches!(files, ClipboardFingerprint::Files(_)));
+    }
+
+    #[test]
+    fn fingerprint_equal_text_is_equal_and_different_text_differs() {
+        let a = || fingerprint_from(|| Ok("same".into()), absent, absent);
+        assert_eq!(a(), a());
+        assert_ne!(a(), fingerprint_from(|| Ok("other".into()), absent, absent));
+    }
+
+    #[test]
+    fn fingerprint_text_present_does_not_read_image() {
+        let result = fingerprint_from(
+            || Ok("a".into()),
+            || panic!("image read"),
+            || panic!("files read"),
+        );
+        assert!(matches!(result, ClipboardFingerprint::Text(_)));
+    }
+
+    #[test]
+    fn fingerprint_everything_unavailable_is_empty() {
+        assert_eq!(
+            fingerprint_from(absent, absent, absent),
+            ClipboardFingerprint::Empty
+        );
+    }
+
+    #[test]
+    fn fingerprint_read_error_is_unreadable() {
+        let result = fingerprint_from(absent, || Err(E::ClipboardOccupied), absent);
+        assert_eq!(result, ClipboardFingerprint::Unreadable);
+    }
 
     #[test]
     fn a_file_list_blocks_paste_even_with_an_image_or_text() {

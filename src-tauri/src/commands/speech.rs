@@ -14,7 +14,8 @@ use crate::models::speech::{
 };
 use crate::commands::settings::apply_settings_reload;
 use crate::services::ai::AiService;
-use crate::services::clipboard::ClipboardService;
+use crate::commands::clipboard::store_pending_copy;
+use crate::services::clipboard::{ClipboardFingerprint, ClipboardService};
 use crate::services::config::{ConfigService, KeytermsDoc};
 use crate::services::context::ContextManagerService;
 use crate::services::execution::skill_executor::run_skill_stream;
@@ -24,7 +25,7 @@ use crate::services::notification::{NotificationLevel, NotificationService};
 use crate::services::skill::SkillService;
 use crate::services::speech::widget::{pill_targets, RecordingWidget};
 use crate::services::speech::{
-    self, AudioClipStore, PendingOrigin, SpeechError, SpeechService, SttOptions,
+    self, AudioClipStore, PendingOrigin, PendingPrompt, SpeechError, SpeechService, SttOptions,
 };
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
@@ -135,25 +136,63 @@ async fn notify_retry_started(
     );
 }
 
-async fn open_chat(
-    app: &AppHandle,
+#[derive(Debug, PartialEq)]
+struct ChatRequest {
     skill_id: String,
-    history_entry_id: Option<String>,
-    initial_input: Option<String>,
-) {
-    let auto_send_input = initial_input.as_ref().map(|_| true);
-    log::debug!("stop chat: opening the chat, entry={history_entry_id:?}");
+    initial_input: String,
+    skill_model: Option<String>,
+    auto_send: bool,
+    source: InvocationSource,
+}
+
+#[derive(Debug, PartialEq)]
+enum TranscriptPlan {
+    AlternativeExecute,
+    NoSpeech,
+    SkillRun { skill_id: String },
+    Dictation,
+    Chat(ChatRequest),
+}
+
+fn transcript_plan(
+    pending: Option<&PendingPrompt>,
+    stop_chat: bool,
+    text: &str,
+    skill_model: Option<String>,
+) -> TranscriptPlan {
+    let chat = |skill_id: String, skill_model| {
+        TranscriptPlan::Chat(ChatRequest {
+            skill_id,
+            initial_input: text.to_string(),
+            skill_model,
+            auto_send: true,
+            source: InvocationSource::Pill,
+        })
+    };
+    match pending {
+        Some(p) if p.origin == PendingOrigin::ShiftClick => TranscriptPlan::AlternativeExecute,
+        Some(_) if text.trim().is_empty() => TranscriptPlan::NoSpeech,
+        Some(p) if stop_chat => chat(p.id.clone(), skill_model),
+        Some(p) => TranscriptPlan::SkillRun { skill_id: p.id.clone() },
+        None if stop_chat => chat(String::new(), None),
+        None => TranscriptPlan::Dictation,
+    }
+}
+
+async fn open_chat(app: &AppHandle, request: ChatRequest, copy_token: String) {
+    log::debug!("stop chat: opening the chat, skill={}", request.skill_id);
     if let Err(e) = super::conversation_dialog::open_conversation_dialog(
         app.clone(),
-        skill_id,
+        request.skill_id,
         String::new(),
+        request.skill_model,
         None,
-        history_entry_id,
         None,
-        initial_input,
-        auto_send_input,
+        Some(request.initial_input),
+        Some(request.auto_send),
         None,
-        Some(InvocationSource::Pill),
+        Some(request.source),
+        Some(copy_token),
     )
     .await
     {
@@ -161,22 +200,39 @@ async fn open_chat(
     }
 }
 
-async fn run_pill_skill(
+async fn snapshot_clipboard(app: &AppHandle) -> String {
+    let service = (*app.state::<ClipboardService>()).clone();
+    let fingerprint = tokio::task::spawn_blocking(move || service.fingerprint())
+        .await
+        .unwrap_or(ClipboardFingerprint::Unreadable);
+    store_pending_copy(fingerprint)
+}
+
+async fn record_speech_entry(
     app: &AppHandle,
-    skill_id: String,
-    text: String,
-    stop_chat: bool,
-    generation: u64,
-) {
+    history: &Arc<Mutex<SqliteHistoryService>>,
+    text: &str,
+) -> Option<String> {
+    let added_id = history.lock().await.add_entry(
+        text.to_string(),
+        HistoryEntryType::Speech,
+        Some(text.to_string()),
+        None,
+        true,
+        None,
+        false,
+        None,
+        true,
+    );
+    let _ = crate::services::history_events::emit_history_changed(app, added_id.clone(), None);
+    added_id
+}
+
+async fn run_pill_skill(app: &AppHandle, skill_id: String, text: String, generation: u64) {
     let widget = app.state::<RecordingWidget>();
-    let route = if stop_chat {
-        OutputRoute::ClipboardChat
-    } else {
-        OutputRoute::Clipboard
-    };
     log::debug!(
         "pill skill run: start skill={skill_id} route={} generation={generation}",
-        route.as_str()
+        OutputRoute::Clipboard.as_str()
     );
     let started = std::time::Instant::now();
     let result = run_skill_stream(
@@ -193,7 +249,7 @@ async fn run_pill_skill(
         skill_id.clone(),
         Some(text),
         InvocationSource::Pill,
-        route,
+        OutputRoute::Clipboard,
         false,
         Channel::new(|_| Ok(())),
     )
@@ -205,12 +261,7 @@ async fn run_pill_skill(
     );
 
     match result {
-        Ok(Some(entry_id)) => {
-            widget.done_if_current(app, generation).await;
-            if stop_chat {
-                open_chat(app, skill_id, Some(entry_id), None).await;
-            }
-        }
+        Ok(Some(_)) => widget.done_if_current(app, generation).await,
         Ok(None) => widget.close_if_current(app, generation).await,
         Err(e) => {
             log::warn!("pill skill run failed: {e}");
@@ -454,8 +505,18 @@ pub async fn toggle_speech_recording(
                 widget_inner.refresh_model(&app_clone).await;
                 let mut created_entry_id = None;
 
-                match pending {
-                    Some(pending) if pending.origin == PendingOrigin::ShiftClick => {
+                let skill_model = match pending.as_ref() {
+                    Some(p) if p.origin == PendingOrigin::Pill => {
+                        let skills = app_clone.state::<Arc<Mutex<SkillService>>>();
+                        let model = skills.lock().await.get_skill(&p.id).and_then(|s| s.model.clone());
+                        model
+                    }
+                    _ => None,
+                };
+
+                match transcript_plan(pending.as_ref(), stop_chat, &text, skill_model) {
+                    TranscriptPlan::AlternativeExecute => {
+                        let pending = pending.expect("plan implies a pending prompt");
                         widget_inner.close(&app_clone).await;
                         let _ = app_clone.emit(
                             "speech-alternative-execute",
@@ -466,36 +527,19 @@ pub async fn toggle_speech_recording(
                             },
                         );
                     }
-                    Some(_) if text.trim().is_empty() => {
+                    TranscriptPlan::NoSpeech => {
                         widget_inner.close_if_current(&app_clone, generation).await;
                         notify_no_speech(&app_clone, &config_inner).await;
                     }
-                    Some(pending) => {
-                        run_pill_skill(&app_clone, pending.id, text.clone(), stop_chat, generation)
-                            .await;
+                    TranscriptPlan::SkillRun { skill_id } => {
+                        run_pill_skill(&app_clone, skill_id, text.clone(), generation).await;
                     }
-                    None => {
+                    TranscriptPlan::Dictation => {
                         if let Err(e) = crate::services::clipboard::write_text(&app_clone, &text) {
                             log::error!("Failed to copy transcription to clipboard: {e}");
                         }
 
-                        let added_id = history_inner.lock().await.add_entry(
-                            text.clone(),
-                            HistoryEntryType::Speech,
-                            Some(text.clone()),
-                            None,
-                            true,
-                            None,
-                            false,
-                            None,
-                            true,
-                        );
-                        created_entry_id = added_id.clone();
-                        let _ = crate::services::history_events::emit_history_changed(
-                            &app_clone,
-                            added_id,
-                            None,
-                        );
+                        created_entry_id = record_speech_entry(&app_clone, &history_inner, &text).await;
 
                         if widget_inner.is_shown().await {
                             widget_inner.done(&app_clone).await;
@@ -511,10 +555,12 @@ pub async fn toggle_speech_recording(
                                 &notification_settings,
                             );
                         }
-
-                        if stop_chat {
-                            open_chat(&app_clone, String::new(), None, Some(text.clone())).await;
-                        }
+                    }
+                    TranscriptPlan::Chat(request) => {
+                        created_entry_id = record_speech_entry(&app_clone, &history_inner, &text).await;
+                        widget_inner.close_if_current(&app_clone, generation).await;
+                        let copy_token = snapshot_clipboard(&app_clone).await;
+                        open_chat(&app_clone, request, copy_token).await;
                     }
                 }
 
@@ -1105,6 +1151,68 @@ pub async fn save_stt_keyterms(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn pill_target() -> PendingPrompt {
+        PendingPrompt {
+            id: "summarize".into(),
+            name: "Summarize".into(),
+            origin: PendingOrigin::Pill,
+        }
+    }
+
+    fn pill_chat(skill_id: &str, model: Option<&str>) -> TranscriptPlan {
+        TranscriptPlan::Chat(ChatRequest {
+            skill_id: skill_id.into(),
+            initial_input: "hello".into(),
+            skill_model: model.map(String::from),
+            auto_send: true,
+            source: InvocationSource::Pill,
+        })
+    }
+
+    #[test]
+    fn plan_skill_target_with_stop_chat_opens_chat_without_skill_run() {
+        let plan = transcript_plan(Some(&pill_target()), true, "hello", Some("m1".into()));
+        assert_eq!(plan, pill_chat("summarize", Some("m1")));
+    }
+
+    #[test]
+    fn plan_dictation_with_stop_chat_opens_chat_without_clipboard_write() {
+        assert_eq!(transcript_plan(None, true, "hello", None), pill_chat("", None));
+    }
+
+    #[test]
+    fn plan_skill_target_without_stop_chat_runs_skill() {
+        assert_eq!(
+            transcript_plan(Some(&pill_target()), false, "hello", None),
+            TranscriptPlan::SkillRun { skill_id: "summarize".into() }
+        );
+    }
+
+    #[test]
+    fn plan_dictation_without_stop_chat_writes_clipboard_and_done() {
+        assert_eq!(
+            transcript_plan(None, false, "hello", None),
+            TranscriptPlan::Dictation
+        );
+    }
+
+    #[test]
+    fn plan_empty_transcript_with_skill_and_stop_chat_opens_no_chat() {
+        assert_eq!(
+            transcript_plan(Some(&pill_target()), true, "  ", None),
+            TranscriptPlan::NoSpeech
+        );
+    }
+
+    #[test]
+    fn plan_shift_click_emits_alternative_execute() {
+        let pending = PendingPrompt { origin: PendingOrigin::ShiftClick, ..pill_target() };
+        assert_eq!(
+            transcript_plan(Some(&pending), true, "hello", None),
+            TranscriptPlan::AlternativeExecute
+        );
+    }
 
     #[test]
     fn clip_duration_is_formatted_as_minutes_and_seconds() {
