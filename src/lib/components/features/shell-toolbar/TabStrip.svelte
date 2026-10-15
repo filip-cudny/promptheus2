@@ -8,6 +8,7 @@
   const FULL_WIDTH = 196;
   const ICON_WIDTH = 32;
   const GAP = 2;
+  const ZONE_GAP = 4;
   const PLUS_WIDTH = 28;
   const MORE_WIDTH = 48;
   const MIN_DRAG = 24;
@@ -51,7 +52,7 @@
   }
 
   let layout = $derived.by(() => {
-    const room = zoneWidth - PLUS_WIDTH - MIN_DRAG;
+    const room = zoneWidth - PLUS_WIDTH - MIN_DRAG - 2 * ZONE_GAP;
     const lruFirst = tabs
       .filter((t) => t.id !== activeId)
       .sort((a, b) => b.recency - a.recency);
@@ -65,7 +66,7 @@
     const hidden = new Set<string>();
     const shown = () => tabs.filter((t) => !hidden.has(t.id));
     for (const t of lruFirst) {
-      if (widthOf(shown(), collapsed) <= room - MORE_WIDTH - GAP) break;
+      if (widthOf(shown(), collapsed) <= room - MORE_WIDTH - ZONE_GAP) break;
       hidden.add(t.id);
     }
     return {
@@ -133,19 +134,6 @@
     {/each}
   </div>
 
-  <button
-    bind:this={plusEl}
-    type="button"
-    class="strip-btn"
-    aria-label="New tab"
-    onmousedown={(e) => {
-      e.stopPropagation();
-      if (plusEl) onOpenPlus(plusEl);
-    }}
-  >
-    <Plus size={16} />
-  </button>
-
   {#if layout.hidden.length > 0}
     <button
       bind:this={moreEl}
@@ -160,6 +148,19 @@
       +{layout.hidden.length}
     </button>
   {/if}
+
+  <button
+    bind:this={plusEl}
+    type="button"
+    class="strip-btn"
+    aria-label="New tab"
+    onmousedown={(e) => {
+      e.stopPropagation();
+      if (plusEl) onOpenPlus(plusEl);
+    }}
+  >
+    <Plus size={16} />
+  </button>
 
   <div class="drag-fill" data-tauri-drag-region></div>
 </div>

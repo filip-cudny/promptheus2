@@ -27,6 +27,7 @@ export function useShellToolbar(opts: {
   let snapshot = $state<TabsSnapshot>({ tabs: [], active_id: null });
   let webviewProviders = $state<WebviewProvider[]>([]);
   let menuOpen = $state(false);
+  let menuAnchor: HTMLElement | null = null;
   let unlistens: UnlistenFn[] = [];
 
   async function refreshWebviewProviders() {
@@ -58,11 +59,12 @@ export function useShellToolbar(opts: {
   const openNewTab = (providerId: string) => run("new_tab", () => newTab(providerId));
 
   async function toggleMenu(anchor: HTMLElement, items: ProviderMenuItem[]) {
-    if (menuOpen) {
+    if (menuOpen && menuAnchor === anchor) {
       menuOpen = false;
       await run("hide_provider_menu", hideProviderMenu);
       return;
     }
+    menuAnchor = anchor;
     const rect = anchor.getBoundingClientRect();
     const hostWin = getCurrentWindow();
     try {
