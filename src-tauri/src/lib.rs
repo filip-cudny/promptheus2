@@ -22,6 +22,8 @@ pub use services::hotkeys::reload_shortcuts;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    let webkit_renderer_decision = services::webkit_renderer::configure();
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {
             log::info!(target: "app_lib", "second instance suppressed");
@@ -42,7 +44,11 @@ pub fn run() {
     #[cfg(target_os = "linux")]
     let builder = builder.plugin(services::scale_repaint::plugin());
     builder
-        .setup(|app| setup::init::run(app))
+        .setup(move |app| {
+            #[cfg(target_os = "linux")]
+            log::info!(target: "app_lib", "{webkit_renderer_decision}");
+            setup::init::run(app)
+        })
         .invoke_handler(crate::handlers!())
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Focused(false) = event {

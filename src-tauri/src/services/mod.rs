@@ -40,3 +40,5 @@ pub mod tool_confirmation;
 pub mod ui_state;
 #[cfg(target_os = "linux")]
 pub mod webkit_pressure;
+#[cfg(target_os = "linux")]
+pub mod webkit_renderer;
