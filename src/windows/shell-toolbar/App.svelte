@@ -4,6 +4,7 @@
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { openPalette } from "$lib/services/shellToolbar";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
+  import { tabShortcutAction } from "$lib/services/tabs";
   import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
   import Titlebar from "$lib/components/features/shell-toolbar/Titlebar.svelte";
   import { useShellToolbar } from "$lib/components/features/shell-toolbar/drivers/useShellToolbar.svelte";
@@ -42,6 +43,14 @@
   }
 
   async function handleGlobalKeydown(e: KeyboardEvent) {
+    const tabAction = tabShortcutAction(e);
+    if (tabAction) {
+      e.preventDefault();
+      e.stopPropagation();
+      tabAction().catch((err) => console.error("tab shortcut failed", err));
+      return;
+    }
+
     if (matches(e, SHORTCUTS.openPalette)) {
       e.preventDefault();
       e.stopPropagation();

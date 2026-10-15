@@ -427,6 +427,44 @@ pub async fn new_tab(app: &tauri::AppHandle, provider_id: &str) -> Result<(), St
     surface(app, "new_tab", SurfaceTarget::NewProviderTab(provider)).await
 }
 
+pub fn activate_adjacent_tab(app: &tauri::AppHandle, step: i32) -> Result<(), String> {
+    let target = state_of(app)?.with_tabs(|tabs| tabs.adjacent(step));
+    log::debug!(target: "app_lib::services::ai_webview", "adjacent tab step={step} target={target:?}");
+    target.map_or(Ok(()), |id| activate_tab(app, &id))
+}
+
+pub fn activate_tab_at(app: &tauri::AppHandle, position: u32) -> Result<(), String> {
+    let target = state_of(app)?.with_tabs(|tabs| tabs.at_position(position));
+    log::debug!(target: "app_lib::services::ai_webview", "tab at position={position} target={target:?}");
+    target.map_or(Ok(()), |id| activate_tab(app, &id))
+}
+
+pub fn close_active_tab(app: &tauri::AppHandle) -> Result<(), String> {
+    let active = state_of(app)?.with_tabs(|tabs| tabs.active_id().map(str::to_string));
+    log::debug!(target: "app_lib::services::ai_webview", "close active tab={active:?}");
+    active.map_or(Ok(()), |id| close_tab(app, &id))
+}
+
+pub async fn new_tab_like_active(app: &tauri::AppHandle) -> Result<(), String> {
+    let state = state_of(app)?;
+    let (has_tabs, provider_id) = state.with_tabs(|tabs| {
+        let provider_id = tabs
+            .active_id()
+            .and_then(|id| tabs.get(id))
+            .and_then(|tab| match &tab.kind {
+                TabKind::Provider { provider } => Some(provider.id.clone()),
+                TabKind::Native { .. } => None,
+            });
+        (!tabs.tabs().is_empty(), provider_id)
+    });
+    if !has_tabs {
+        return Ok(());
+    }
+    let provider_id = provider_id.unwrap_or_else(|| super::palette::PROMPTHEUS_PROVIDER_ID.to_string());
+    log::debug!(target: "app_lib::services::ai_webview", "new tab like active provider={provider_id}");
+    new_tab(app, &provider_id).await
+}
+
 pub fn report_native_tabs(
     app: &tauri::AppHandle,
     reports: &[NativeTabReport],

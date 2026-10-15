@@ -15,7 +15,7 @@
   import TabSidebar from "$lib/components/features/conversation-dialog/TabSidebar.svelte";
   import { useConversationDialogIpc } from "$lib/components/features/conversation-dialog/drivers/useConversationDialogIpc.svelte";
   import { openPalette, reloadActiveInHost } from "$lib/services/shellToolbar";
-  import { reportNativeTabs, type NativeTabReport } from "$lib/services/tabs";
+  import { reportNativeTabs, tabShortcutAction, type NativeTabReport } from "$lib/services/tabs";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
   import { focusConversationInput } from "$lib/utils/conversationFocus";
   import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
@@ -110,6 +110,14 @@
       } catch (err) {
         console.error("open_palette failed", err);
       }
+      return;
+    }
+
+    const tabAction = tabShortcutAction(e);
+    if (tabAction) {
+      e.preventDefault();
+      e.stopPropagation();
+      tabAction().catch((err) => console.error("tab shortcut failed", err));
       return;
     }
 

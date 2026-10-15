@@ -43,6 +43,10 @@ macro_rules! handlers {
             $crate::commands::ai_webview::activate_tab,
             $crate::commands::ai_webview::close_tab,
             $crate::commands::ai_webview::new_tab,
+            $crate::commands::ai_webview::activate_adjacent_tab,
+            $crate::commands::ai_webview::activate_tab_at,
+            $crate::commands::ai_webview::close_active_tab,
+            $crate::commands::ai_webview::new_tab_like_active,
             $crate::commands::ai_webview::report_native_tabs,
             // === clipboard ===
             $crate::commands::clipboard::get_clipboard_text,

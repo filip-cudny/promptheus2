@@ -80,6 +80,28 @@ pub fn close_tab(app: tauri::AppHandle, tab_id: String) -> crate::Result<()> {
     ai_webview::close_tab(&app, &tab_id).map_err(Error::Other)
 }
 
+#[tauri::command(async)]
+pub fn activate_adjacent_tab(app: tauri::AppHandle, step: i32) -> crate::Result<()> {
+    ai_webview::activate_adjacent_tab(&app, step).map_err(Error::Other)
+}
+
+#[tauri::command(async)]
+pub fn activate_tab_at(app: tauri::AppHandle, position: u32) -> crate::Result<()> {
+    ai_webview::activate_tab_at(&app, position).map_err(Error::Other)
+}
+
+#[tauri::command(async)]
+pub fn close_active_tab(app: tauri::AppHandle) -> crate::Result<()> {
+    ai_webview::close_active_tab(&app).map_err(Error::Other)
+}
+
+#[tauri::command]
+pub async fn new_tab_like_active(app: tauri::AppHandle) -> crate::Result<()> {
+    ai_webview::new_tab_like_active(&app)
+        .await
+        .map_err(Error::Other)
+}
+
 #[tauri::command]
 pub async fn new_tab(app: tauri::AppHandle, provider_id: String) -> crate::Result<()> {
     log::info!(target: "app_lib::commands::ai_webview", "new_tab provider={provider_id}");

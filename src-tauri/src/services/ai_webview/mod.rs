@@ -21,8 +21,8 @@ pub use lifecycle::cleanup_host_state;
 pub use palette::{swap_from_palette, swap_to_palette, PALETTE_BACKDROP_TITLE, PALETTE_TITLE};
 pub use provider_send::send_to_provider_chat;
 pub use provider_swap::{
-    activate_tab, close_tab, get_tabs, new_tab, reload_active_in_host, report_native_tabs,
-    show_native_view,
+    activate_adjacent_tab, activate_tab, activate_tab_at, close_active_tab, close_tab, get_tabs,
+    new_tab, new_tab_like_active, reload_active_in_host, report_native_tabs, show_native_view,
 };
 pub use surface::{hide_host, surface, SurfaceTarget};
 pub use tabs::{NativeTabReport, TabsSnapshot};

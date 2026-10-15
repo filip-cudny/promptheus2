@@ -18,6 +18,7 @@ pub(super) fn initialization_script(provider: &WebviewProvider) -> String {
             g.providerId = {provider_id_json};
             g.routerSentinel = {sentinel_json};
             {palette}
+            {tab_keybind}
             {external_links}
             {clipboard_paste_fallback}
             {deliver_message}
@@ -26,6 +27,7 @@ pub(super) fn initialization_script(provider: &WebviewProvider) -> String {
         provider_id_json = provider_id_json,
         sentinel_json = sentinel_json,
         palette = PALETTE_KEYBIND_JS,
+        tab_keybind = TAB_KEYBIND_JS,
         external_links = EXTERNAL_LINKS_JS,
         clipboard_paste_fallback = CLIPBOARD_PASTE_FALLBACK_JS,
         deliver_message = DELIVER_MESSAGE_JS,
@@ -60,6 +62,9 @@ pub(super) fn reinject_script() -> String {
         if (!window.__promptheus) return;
         if (window.__promptheus.ensurePaletteKeybind) {
             window.__promptheus.ensurePaletteKeybind();
+        }
+        if (window.__promptheus.ensureTabKeybind) {
+            window.__promptheus.ensureTabKeybind();
         }
         if (window.__promptheus.ensureExternalLinks) {
             window.__promptheus.ensureExternalLinks();
@@ -129,6 +134,39 @@ function ensurePaletteKeybind() {
 
 g.ensurePaletteKeybind = ensurePaletteKeybind;
 ensurePaletteKeybind();
+"##;
+
+const TAB_KEYBIND_JS: &str = r##"
+function tabRouterParams(e) {
+    const key = typeof e.key === "string" ? e.key : "";
+    if (e.ctrlKey && !e.metaKey && !e.altKey && key === "Tab") {
+        return { kind: e.shiftKey ? "tab_prev" : "tab_next" };
+    }
+    if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return null;
+    if (key >= "1" && key <= "9") return { kind: "tab_select", position: key };
+    const lower = key.toLowerCase();
+    if (lower === "t") return { kind: "tab_new" };
+    if (lower === "w") return { kind: "tab_close" };
+    return null;
+}
+
+function tabKeydown(e) {
+    const params = tabRouterParams(e);
+    if (!params) return;
+    e.preventDefault();
+    e.stopPropagation();
+    sendRouter(params);
+}
+
+function ensureTabKeybind() {
+    if (g.__tabKeybindInstalled) return;
+    g.__tabKeybindInstalled = true;
+    document.addEventListener("keydown", tabKeydown, true);
+    window.addEventListener("keydown", tabKeydown, true);
+}
+
+g.ensureTabKeybind = ensureTabKeybind;
+ensureTabKeybind();
 "##;
 
 const EXTERNAL_LINKS_JS: &str = r##"
@@ -418,6 +456,19 @@ mod tests {
     fn initialization_script_includes_palette_keybind() {
         let js = initialization_script(&provider());
         assert!(js.contains("ensurePaletteKeybind"));
+    }
+
+    #[test]
+    fn initialization_script_includes_tab_keybind() {
+        let js = initialization_script(&provider());
+        for kind in ["tab_next", "tab_prev", "tab_select", "tab_new", "tab_close"] {
+            assert!(js.contains(kind), "{kind}");
+        }
+    }
+
+    #[test]
+    fn reinject_script_reinstalls_tab_keybind() {
+        assert!(reinject_script().contains("ensureTabKeybind"));
     }
 
     #[test]

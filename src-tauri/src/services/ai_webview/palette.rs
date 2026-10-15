@@ -12,7 +12,9 @@ use crate::services::dialog::{focus_window, SHELL_TOOLBAR_LABEL, TOOLBAR_HEIGHT}
 use super::external_links::open_external_url;
 use super::lifecycle::{host_window_for_webview, CONVERSATION_DIALOG_LABEL};
 use super::provider_send::handle_send_outcome;
-use super::provider_swap::new_tab;
+use super::provider_swap::{
+    activate_adjacent_tab, activate_tab_at, close_active_tab, new_tab, new_tab_like_active,
+};
 use super::tabs::TabKind;
 use super::AiWebviewState;
 
@@ -28,6 +30,11 @@ pub(super) enum RouterMessage {
     OpenPalette,
     OpenExternal { url: String },
     RequestPasteText,
+    TabNext,
+    TabPrev,
+    TabSelect { position: u32 },
+    TabNew,
+    TabClose,
     SendOutcome { status: SendStatus, run: u64, uploads: Option<u32>, waited_ms: Option<u64> },
 }
 
@@ -54,6 +61,14 @@ pub(super) fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
             Some(RouterMessage::OpenExternal { url })
         }
         "request_paste_text" => Some(RouterMessage::RequestPasteText),
+        "tab_next" => Some(RouterMessage::TabNext),
+        "tab_prev" => Some(RouterMessage::TabPrev),
+        "tab_select" => {
+            let position: u32 = params.remove("position")?.parse().ok()?;
+            (1..=9).contains(&position).then_some(RouterMessage::TabSelect { position })
+        }
+        "tab_new" => Some(RouterMessage::TabNew),
+        "tab_close" => Some(RouterMessage::TabClose),
         "webview_send_outcome" => {
             let status = match params.remove("status")?.as_str() {
                 "sent" => SendStatus::Sent,
@@ -101,9 +116,20 @@ pub(super) async fn handle_router_message(
         RouterMessage::RequestPasteText => {
             deliver_clipboard_text_to_webview(app, webview_label);
         }
+        RouterMessage::TabNext => log_tab_failure(activate_adjacent_tab(app, 1)),
+        RouterMessage::TabPrev => log_tab_failure(activate_adjacent_tab(app, -1)),
+        RouterMessage::TabSelect { position } => log_tab_failure(activate_tab_at(app, position)),
+        RouterMessage::TabNew => log_tab_failure(new_tab_like_active(app).await),
+        RouterMessage::TabClose => log_tab_failure(close_active_tab(app)),
         RouterMessage::SendOutcome { status, run, uploads, waited_ms } => {
             handle_send_outcome(app, webview_label, status, run, uploads, waited_ms).await;
         }
+    }
+}
+
+fn log_tab_failure(result: Result<(), String>) {
+    if let Err(e) = result {
+        log::warn!(target: "app_lib::services::ai_webview", "tab shortcut failed: {e}");
     }
 }
 
@@ -501,6 +527,34 @@ mod tests {
         assert!(parse_outcome("&status=bogus&run=1").is_none());
         assert!(parse_outcome("&status=sent").is_none());
         assert!(parse_outcome("&status=sent&run=x").is_none());
+    }
+
+    fn parse_kind(query: &str) -> Option<RouterMessage> {
+        let url = tauri::Url::parse(&format!(
+            "https://promptheus-ai-webview-router.invalid/?kind={query}"
+        ))
+        .unwrap();
+        parse_router_message(&url)
+    }
+
+    #[test]
+    fn parse_router_message_tab_kinds() {
+        assert!(matches!(parse_kind("tab_next"), Some(RouterMessage::TabNext)));
+        assert!(matches!(parse_kind("tab_prev"), Some(RouterMessage::TabPrev)));
+        assert!(matches!(parse_kind("tab_new"), Some(RouterMessage::TabNew)));
+        assert!(matches!(parse_kind("tab_close"), Some(RouterMessage::TabClose)));
+        assert!(matches!(
+            parse_kind("tab_select&position=3"),
+            Some(RouterMessage::TabSelect { position: 3 })
+        ));
+    }
+
+    #[test]
+    fn parse_router_message_tab_select_invalid() {
+        assert!(parse_kind("tab_select").is_none());
+        assert!(parse_kind("tab_select&position=0").is_none());
+        assert!(parse_kind("tab_select&position=10").is_none());
+        assert!(parse_kind("tab_select&position=x").is_none());
     }
 
     #[test]
