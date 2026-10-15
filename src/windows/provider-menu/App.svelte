@@ -3,22 +3,22 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import ProviderMenuList from "$lib/components/shared/widgets/ProviderMenuList.svelte";
+  import MenuList from "$lib/components/shared/ui/MenuList.svelte";
+  import MenuItem from "$lib/components/shared/ui/MenuItem.svelte";
+  import { getWebviewProviders, type WebviewProvider } from "$lib/services/aiWebview";
+  import { providerIconSvg } from "$lib/icons/providerIcons";
+  import type { ProviderMenuItem } from "$lib/services/shellToolbar";
 
-  type Provider = { id: string; name: string; url?: string | null };
-  type ShowPayload = {
-    providers: Provider[];
-    active_id: string;
-  };
+  type ShowPayload = { items: ProviderMenuItem[] };
 
-  let providers = $state<Provider[]>([]);
-  let activeId = $state<string>("");
+  let items = $state<ProviderMenuItem[]>([]);
+  let webviewProviders = $state<WebviewProvider[]>([]);
   let unlistenShow: UnlistenFn | undefined;
   let unlistenBlur: UnlistenFn | undefined;
 
   async function pick(id: string) {
     try {
-      await invoke("provider_menu_select", { providerId: id });
+      await invoke("provider_menu_select", { itemId: id });
     } catch (e) {
       console.error("provider_menu_select failed", e);
     }
@@ -58,8 +58,12 @@
     window.addEventListener("keydown", handleKeydown);
 
     unlistenShow = await listen<ShowPayload>("provider-menu:show", async (ev) => {
-      providers = ev.payload.providers;
-      activeId = ev.payload.active_id;
+      items = ev.payload.items;
+      try {
+        webviewProviders = await getWebviewProviders();
+      } catch (e) {
+        console.error("getWebviewProviders failed", e);
+      }
       await reportSize();
     });
 
@@ -76,7 +80,24 @@
 </script>
 
 <div id="menu-root" class="menu-shell">
-  <ProviderMenuList {providers} {activeId} onSelect={pick} />
+  <MenuList>
+    {#each items as item (item.id)}
+      {@const iconSvg = providerIconSvg({
+        id: item.icon,
+        url: webviewProviders.find((p) => p.id === item.icon)?.url,
+      })}
+      {#snippet itemIcon()}
+        <span class="item-icon" aria-hidden="true">{#if iconSvg}{@html iconSvg}{/if}</span>
+      {/snippet}
+      <MenuItem
+        label={item.title}
+        icon={itemIcon}
+        active={item.active}
+        activeStyle="rail"
+        onclick={() => pick(item.id)}
+      />
+    {/each}
+  </MenuList>
 </div>
 
 <style>
@@ -84,6 +105,23 @@
   :global(body) {
     background: transparent;
     margin: var(--space-0);
+  }
+
+  .item-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .item-icon :global(svg),
+  .item-icon :global(img) {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
   }
 
   .menu-shell {

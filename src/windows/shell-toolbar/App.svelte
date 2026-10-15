@@ -2,7 +2,6 @@
   import { onDestroy, onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
-  import { takePendingProvider } from "$lib/services/aiWebview";
   import { openPalette } from "$lib/services/shellToolbar";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
   import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
@@ -12,18 +11,10 @@
   const HOST_LABEL = getCurrentWindow().label;
   const SELF_TARGET = getCurrentWebview().label;
   const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
-  const shortcutHint = isMac ? "⌘P" : "Ctrl P";
 
   const toolbar = useShellToolbar({ hostLabel: HOST_LABEL, selfTarget: SELF_TARGET });
 
   let isMaximized = $state(false);
-  let triggerEl = $state<HTMLButtonElement | null>(null);
-
-  async function handleToggleProviderDropdown(e: MouseEvent) {
-    e.stopPropagation();
-    if (!triggerEl) return;
-    await toolbar.toggleProviderDropdown(triggerEl);
-  }
 
   async function handleMinimize() {
     try {
@@ -71,12 +62,6 @@
     try {
       isMaximized = await getCurrentWindow().isMaximized();
     } catch {}
-    try {
-      const pending = await takePendingProvider(HOST_LABEL);
-      if (pending) await toolbar.selectProvider(pending);
-    } catch (e) {
-      console.error("take_pending_provider failed", e);
-    }
   });
 
   onDestroy(() => {
@@ -91,15 +76,17 @@
 
 <Titlebar
   {isMac}
-  {shortcutHint}
-  activeProvider={toolbar.activeProvider}
-  providerDropdownOpen={toolbar.providerDropdownOpen}
-  bind:triggerEl
+  tabs={toolbar.tabs}
+  activeId={toolbar.activeId}
+  providers={toolbar.webviewProviders}
   {isMaximized}
-  onToggleProviderDropdown={handleToggleProviderDropdown}
+  onActivate={toolbar.activate}
+  onClose={toolbar.close}
+  onOpenPlus={toolbar.openPlusMenu}
+  onOpenOverflow={toolbar.openOverflowMenu}
   onMinimize={handleMinimize}
   onToggleMaximize={handleToggleMaximize}
-  onClose={handleClose}
+  onWindowClose={handleClose}
 />
 
 <style>

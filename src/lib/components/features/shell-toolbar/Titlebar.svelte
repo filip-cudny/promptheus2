@@ -1,51 +1,43 @@
 <script lang="ts">
-  import Button from "$lib/components/shared/ui/Button.svelte";
   import WindowControls from "$lib/components/shared/widgets/WindowControls.svelte";
-  import ProviderSwitcherTrigger from "./ProviderSwitcherTrigger.svelte";
-
-  type Provider = { id: string; name: string; url?: string };
+  import type { TabDto } from "$lib/services/tabs";
+  import type { WebviewProvider } from "$lib/services/aiWebview";
+  import TabStrip from "./TabStrip.svelte";
 
   let {
     isMac,
-    shortcutHint,
-    activeProvider,
-    providerDropdownOpen = false,
-    triggerEl = $bindable(null),
+    tabs,
+    activeId,
+    providers,
     isMaximized = false,
-    onToggleProviderDropdown,
+    onActivate,
+    onClose,
+    onOpenPlus,
+    onOpenOverflow,
     onMinimize,
     onToggleMaximize,
-    onClose,
+    onWindowClose,
   }: {
     isMac: boolean;
-    shortcutHint: string;
-    activeProvider: Provider | undefined;
-    providerDropdownOpen?: boolean;
-    triggerEl?: HTMLButtonElement | null;
+    tabs: TabDto[];
+    activeId: string | null;
+    providers: WebviewProvider[];
     isMaximized?: boolean;
-    onToggleProviderDropdown: (e: MouseEvent) => void;
+    onActivate: (id: string) => void;
+    onClose: (id: string) => void;
+    onOpenPlus: (anchor: HTMLElement) => void;
+    onOpenOverflow: (anchor: HTMLElement, hidden: TabDto[]) => void;
     onMinimize: () => void;
     onToggleMaximize: () => void;
-    onClose: () => void;
+    onWindowClose: () => void;
   } = $props();
 </script>
 
 <div class="titlebar" class:mac={isMac} data-tauri-drag-region>
-  <span class="hint" title="Open command palette">{shortcutHint}</span>
-
-  <div class="switcher">
-    <ProviderSwitcherTrigger
-      {activeProvider}
-      expanded={providerDropdownOpen}
-      bind:triggerEl
-      onToggle={onToggleProviderDropdown}
-    />
-  </div>
-
-  <div class="drag-fill" data-tauri-drag-region></div>
+  <TabStrip {tabs} {activeId} {providers} {onActivate} {onClose} {onOpenPlus} {onOpenOverflow} />
 
   {#if !isMac}
-    <WindowControls {isMaximized} {onMinimize} {onToggleMaximize} {onClose} />
+    <WindowControls {isMaximized} {onMinimize} {onToggleMaximize} onClose={onWindowClose} />
   {/if}
 </div>
 
@@ -69,23 +61,5 @@
 
   .titlebar.mac {
     padding-left: 80px;
-  }
-
-  .switcher {
-    position: relative;
-    display: inline-flex;
-  }
-
-  .drag-fill {
-    flex: 1;
-    align-self: stretch;
-  }
-
-  .hint {
-    color: var(--text-disabled);
-    font-size: var(--font-size-sm);
-    padding: var(--space-1) var(--space-3);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-default);
   }
 </style>

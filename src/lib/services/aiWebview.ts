@@ -17,39 +17,3 @@ export async function getWebviewProvider(
     providerId,
   });
 }
-
-export async function openAiWebview(providerId: string, url?: string): Promise<void> {
-  await invoke("open_ai_webview", { providerId, url: url ?? null });
-}
-
-export async function openAiWebviewNewWindow(
-  providerId: string,
-  url?: string,
-  sourceLabel?: string,
-): Promise<void> {
-  await invoke("open_ai_webview_new_window", {
-    providerId,
-    url: url ?? null,
-    sourceLabel: sourceLabel ?? null,
-  });
-}
-
-export async function swapAiWebview(providerId: string, fromLabel: string): Promise<void> {
-  await invoke("swap_ai_webview", { providerId, fromLabel });
-}
-
-export async function takePendingProvider(hostLabel: string): Promise<string | null> {
-  return await invoke<string | null>("take_pending_provider", { hostLabel });
-}
-
-export async function swapToConversationDialog(fromLabel: string): Promise<void> {
-  await invoke("swap_to_conversation_dialog", { fromLabel });
-}
-
-export async function navigateAiWebview(providerId: string, url: string): Promise<void> {
-  await invoke("navigate_ai_webview", { providerId, url });
-}
-
-export async function closeAiWebview(providerId: string): Promise<void> {
-  await invoke("close_ai_webview", { providerId });
-}

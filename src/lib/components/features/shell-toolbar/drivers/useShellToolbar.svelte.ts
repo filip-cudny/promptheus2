@@ -1,38 +1,32 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import {
-  getWebviewProviders,
-  swapAiWebview,
-  swapToConversationDialog,
-  type WebviewProvider,
-} from "$lib/services/aiWebview";
+import { getWebviewProviders, type WebviewProvider } from "$lib/services/aiWebview";
 import { onSettingsChanged } from "$lib/services/events";
 import {
   PROMPTHEUS_PROVIDER_ID,
-  getActiveProvider,
   hideProviderMenu,
   showProviderMenu,
+  type ProviderMenuItem,
 } from "$lib/services/shellToolbar";
+import {
+  activateTab,
+  closeTab,
+  getTabs,
+  newTab,
+  type TabDto,
+  type TabsSnapshot,
+} from "$lib/services/tabs";
 
-type Provider = { id: string; name: string; url?: string };
+const MENU_ITEM_HEIGHT = 28;
+const MENU_MIN_WIDTH = 220;
 
 export function useShellToolbar(opts: {
   hostLabel: string;
   selfTarget: string;
 }) {
+  let snapshot = $state<TabsSnapshot>({ tabs: [], active_id: null });
   let webviewProviders = $state<WebviewProvider[]>([]);
-  let activeId = $state<string>(PROMPTHEUS_PROVIDER_ID);
-  let providerDropdownOpen = $state(false);
-
-  let providers = $derived<Provider[]>([
-    { id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
-    ...webviewProviders.map((p) => ({ id: p.id, name: p.name, url: p.url })),
-  ]);
-
-  let activeProvider = $derived(
-    providers.find((p) => p.id === activeId) ?? providers[0],
-  );
-
+  let menuOpen = $state(false);
   let unlistens: UnlistenFn[] = [];
 
   async function refreshWebviewProviders() {
@@ -43,97 +37,114 @@ export function useShellToolbar(opts: {
     }
   }
 
-  async function refreshActive() {
+  async function refreshTabs() {
     try {
-      const pid = await getActiveProvider(opts.hostLabel);
-      activeId = pid ?? PROMPTHEUS_PROVIDER_ID;
+      snapshot = await getTabs();
     } catch (e) {
-      console.error("get_active_provider failed", e);
+      console.error("get_tabs failed", e);
     }
   }
 
-  async function selectProvider(id: string) {
-    providerDropdownOpen = false;
-    if (id === activeId) return;
+  async function run(label: string, action: () => Promise<void>) {
     try {
-      if (id === PROMPTHEUS_PROVIDER_ID) {
-        await swapToConversationDialog(opts.hostLabel);
-      } else {
-        await swapAiWebview(id, opts.hostLabel);
-      }
+      await action();
     } catch (e) {
-      console.error("shell toolbar swap failed", e);
+      console.error(`${label} failed`, e);
     }
   }
 
-  async function toggleProviderDropdown(triggerEl: HTMLButtonElement) {
-    if (providerDropdownOpen) {
-      providerDropdownOpen = false;
-      try {
-        await hideProviderMenu();
-      } catch (err) {
-        console.error("hide_provider_menu failed", err);
-      }
+  const activate = (id: string) => run("activate_tab", () => activateTab(id));
+  const close = (id: string) => run("close_tab", () => closeTab(id));
+  const openNewTab = (providerId: string) => run("new_tab", () => newTab(providerId));
+
+  async function toggleMenu(anchor: HTMLElement, items: ProviderMenuItem[]) {
+    if (menuOpen) {
+      menuOpen = false;
+      await run("hide_provider_menu", hideProviderMenu);
       return;
     }
-    const rect = triggerEl.getBoundingClientRect();
+    const rect = anchor.getBoundingClientRect();
     const hostWin = getCurrentWindow();
     try {
       const pos = await hostWin.outerPosition();
       const scale = await hostWin.scaleFactor();
       const offsetX = rect.left;
       const offsetY = rect.bottom + 4;
-      const anchorX = pos.x / scale + offsetX;
-      const anchorY = pos.y / scale + offsetY;
-      const width = Math.max(rect.width, 160);
-      const height = providers.length * 28 + 8;
-      providerDropdownOpen = true;
+      menuOpen = true;
       await showProviderMenu(
         opts.hostLabel,
-        anchorX,
-        anchorY,
+        pos.x / scale + offsetX,
+        pos.y / scale + offsetY,
         offsetX,
         offsetY,
-        width,
-        height,
-        providers,
-        activeId,
+        Math.max(rect.width, MENU_MIN_WIDTH),
+        items.length * MENU_ITEM_HEIGHT + 8,
+        items,
       );
     } catch (err) {
-      providerDropdownOpen = false;
+      menuOpen = false;
       console.error("show_provider_menu failed", err);
     }
   }
 
-  async function init() {
-    const u1 = await listen<{ provider_id: string | null }>(
-      "shell:active-changed",
-      (ev) => {
-        activeId = ev.payload.provider_id ?? PROMPTHEUS_PROVIDER_ID;
-      },
-      { target: opts.selfTarget },
+  function openPlusMenu(anchor: HTMLElement) {
+    return toggleMenu(anchor, [
+      { id: PROMPTHEUS_PROVIDER_ID, kind: "provider", icon: PROMPTHEUS_PROVIDER_ID, title: "Promptheus", active: false },
+      ...webviewProviders.map((p) => ({
+        id: p.id,
+        kind: "provider" as const,
+        icon: p.id,
+        title: p.name,
+        active: false,
+      })),
+    ]);
+  }
+
+  function openOverflowMenu(anchor: HTMLElement, hidden: TabDto[]) {
+    return toggleMenu(
+      anchor,
+      hidden.map((t) => ({
+        id: t.id,
+        kind: "tab" as const,
+        icon: t.provider_id ?? PROMPTHEUS_PROVIDER_ID,
+        title: t.title,
+        active: t.id === snapshot.active_id,
+      })),
     );
-    const u2 = await listen<{ provider_id: string }>(
+  }
+
+  async function init() {
+    const target = { target: opts.selfTarget };
+    const onTabs = await listen<TabsSnapshot>(
+      "shell:tabs-changed",
+      (ev) => {
+        snapshot = ev.payload;
+      },
+      target,
+    );
+    const onSelect = await listen<{ item_id: string }>(
       "provider-menu:select",
       (ev) => {
-        providerDropdownOpen = false;
-        void selectProvider(ev.payload.provider_id);
+        menuOpen = false;
+        const id = ev.payload.item_id;
+        if (snapshot.tabs.some((t) => t.id === id)) void activate(id);
+        else void openNewTab(id);
       },
-      { target: opts.selfTarget },
+      target,
     );
-    const u3 = await listen(
+    const onClosed = await listen(
       "provider-menu:closed",
       () => {
-        providerDropdownOpen = false;
+        menuOpen = false;
       },
-      { target: opts.selfTarget },
+      target,
     );
-    const u4 = await onSettingsChanged(() => {
+    const onSettings = await onSettingsChanged(() => {
       void refreshWebviewProviders();
     });
-    unlistens = [u1, u2, u3, u4];
+    unlistens = [onTabs, onSelect, onClosed, onSettings];
     await refreshWebviewProviders();
-    await refreshActive();
+    await refreshTabs();
   }
 
   function destroy() {
@@ -142,22 +153,22 @@ export function useShellToolbar(opts: {
   }
 
   return {
+    get tabs() {
+      return snapshot.tabs;
+    },
     get activeId() {
-      return activeId;
+      return snapshot.active_id;
     },
-    get providers() {
-      return providers;
-    },
-    get activeProvider() {
-      return activeProvider;
-    },
-    get providerDropdownOpen() {
-      return providerDropdownOpen;
+    get webviewProviders() {
+      return webviewProviders;
     },
     init,
     destroy,
-    selectProvider,
-    toggleProviderDropdown,
+    activate,
+    close,
+    newTab: openNewTab,
+    openPlusMenu,
+    openOverflowMenu,
   };
 }
 

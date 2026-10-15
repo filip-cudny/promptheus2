@@ -5,19 +5,19 @@ export interface ShellProvider {
   name: string;
 }
 
+export interface ProviderMenuItem {
+  id: string;
+  kind: "provider" | "tab";
+  icon: string;
+  title: string;
+  active: boolean;
+}
+
 export const PROMPTHEUS_PROVIDER_ID = "promptheus";
 export const CONVERSATION_DIALOG_LABEL = "conversation-dialog";
 
-export async function getActiveProvider(hostLabel: string): Promise<string | null> {
-  return await invoke<string | null>("get_active_provider", { hostLabel });
-}
-
 export async function openPalette(hostLabel: string): Promise<void> {
   await invoke("open_palette", { hostLabel });
-}
-
-export async function newChatInHost(hostLabel: string): Promise<void> {
-  await invoke("new_chat_in_host", { hostLabel });
 }
 
 export async function reloadActiveInHost(hostLabel: string): Promise<void> {
@@ -43,8 +43,7 @@ export async function showProviderMenu(
   offsetY: number,
   width: number,
   height: number,
-  providers: { id: string; name: string; url?: string }[],
-  activeId: string,
+  items: ProviderMenuItem[],
 ): Promise<void> {
   await invoke("show_provider_menu", {
     hostLabel,
@@ -54,8 +53,7 @@ export async function showProviderMenu(
     offsetY,
     width,
     height,
-    providers,
-    activeId,
+    items,
   });
 }
 
