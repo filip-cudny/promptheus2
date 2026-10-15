@@ -2,6 +2,7 @@ mod cold_suspend;
 mod external_links;
 mod lifecycle;
 mod palette;
+mod provider_send;
 mod provider_swap;
 mod scripts;
 
@@ -19,10 +20,19 @@ pub use lifecycle::{
 pub use palette::{
     swap_from_palette, swap_to_palette, PALETTE_BACKDROP_TITLE, PALETTE_TITLE,
 };
+pub use provider_send::send_to_provider_chat;
 pub use provider_swap::{
     active_provider_for, emit_active_changed_for, mark_active_webview, new_chat_in_host,
     reload_active_in_host, swap_to_conversation_dialog, swap_to_provider,
 };
+
+pub(super) struct PendingMessage {
+    pub run: u64,
+    pub transcript: String,
+    pub script: String,
+    pub host: String,
+    pub delivered: bool,
+}
 
 #[derive(Default)]
 pub struct AiWebviewState {
@@ -37,6 +47,7 @@ pub struct AiWebviewState {
     host_focus: StdMutex<HashMap<String, Instant>>,
     page_titles: StdMutex<HashMap<String, String>>,
     host_titles: StdMutex<HashMap<String, String>>,
+    pending_messages: StdMutex<HashMap<String, PendingMessage>>,
 }
 
 impl AiWebviewState {
@@ -107,6 +118,35 @@ impl AiWebviewState {
             .lock()
             .unwrap()
             .retain(|k, _| !k.starts_with(&prefix) && k != host_label);
+        self.pending_messages
+            .lock()
+            .unwrap()
+            .retain(|k, _| !k.starts_with(&prefix) && k != host_label);
+    }
+
+    pub(super) fn arm_message(&self, label: &str, msg: PendingMessage) -> Option<PendingMessage> {
+        self.pending_messages
+            .lock()
+            .unwrap()
+            .insert(label.to_string(), msg)
+    }
+
+    pub(super) fn take_delivery(&self, label: &str, page_host: &str) -> Option<String> {
+        let mut map = self.pending_messages.lock().unwrap();
+        let msg = map.get_mut(label)?;
+        if msg.delivered || msg.host != page_host {
+            return None;
+        }
+        msg.delivered = true;
+        Some(msg.script.clone())
+    }
+
+    pub(super) fn finish_message(&self, label: &str, run: u64) -> Option<PendingMessage> {
+        let mut map = self.pending_messages.lock().unwrap();
+        if map.get(label)?.run != run {
+            return None;
+        }
+        map.remove(label)
     }
 
     pub fn set_pending_provider(&self, host_label: &str, provider_id: &str) {
@@ -374,5 +414,47 @@ mod tests {
         let zero = Duration::from_secs(0);
         let candidates = state.cold_suspend_candidates(zero);
         assert!(!candidates.contains(&"ai-webview-claude".to_string()));
+    }
+
+    fn pending(run: u64, host: &str) -> PendingMessage {
+        PendingMessage {
+            run,
+            transcript: "t".into(),
+            script: format!("script{run}"),
+            host: host.into(),
+            delivered: false,
+        }
+    }
+
+    #[test]
+    fn pending_message_is_delivered_once() {
+        let state = AiWebviewState::default();
+        state.arm_message("w", pending(1, "claude.ai"));
+        assert_eq!(state.take_delivery("w", "claude.ai").as_deref(), Some("script1"));
+        assert!(state.take_delivery("w", "claude.ai").is_none());
+    }
+
+    #[test]
+    fn pending_message_waits_for_provider_host() {
+        let state = AiWebviewState::default();
+        state.arm_message("w", pending(1, "claude.ai"));
+        assert!(state.take_delivery("w", "login.example").is_none());
+        assert_eq!(state.take_delivery("w", "claude.ai").as_deref(), Some("script1"));
+    }
+
+    #[test]
+    fn finish_message_requires_matching_run() {
+        let state = AiWebviewState::default();
+        state.arm_message("w", pending(1, "claude.ai"));
+        assert!(state.finish_message("w", 2).is_none());
+        assert_eq!(state.finish_message("w", 1).map(|m| m.run), Some(1));
+        assert!(state.finish_message("w", 1).is_none());
+    }
+
+    #[test]
+    fn arm_message_returns_replaced() {
+        let state = AiWebviewState::default();
+        assert!(state.arm_message("w", pending(1, "claude.ai")).is_none());
+        assert_eq!(state.arm_message("w", pending(2, "claude.ai")).map(|m| m.run), Some(1));
     }
 }

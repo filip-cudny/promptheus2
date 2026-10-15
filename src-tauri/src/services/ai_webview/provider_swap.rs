@@ -28,7 +28,7 @@ pub fn window_label(provider: &WebviewProvider) -> String {
     format!("ai-webview-{}", provider.id)
 }
 
-fn hosted_child_label(host_label: &str, provider: &WebviewProvider) -> String {
+pub(super) fn hosted_child_label(host_label: &str, provider: &WebviewProvider) -> String {
     format!("{host_label}::ai-webview-{}", provider.id)
 }
 
@@ -116,6 +116,30 @@ pub async fn swap_to_conversation_dialog(
     }
 
     swap_to_conversation_dialog_standalone(app, from_label).await
+}
+
+fn deliver_pending_message(webview: &tauri::Webview) {
+    let Some(host) = webview.url().ok().and_then(|u| u.host_str().map(str::to_string)) else {
+        return;
+    };
+    let Some(state) = webview.app_handle().try_state::<AiWebviewState>() else {
+        return;
+    };
+    let Some(script) = state.take_delivery(webview.label(), &host) else {
+        return;
+    };
+    log::debug!(
+        target: "app_lib::services::ai_webview",
+        "delivering pending message: webview={}",
+        webview.label(),
+    );
+    if let Err(e) = webview.eval(&script) {
+        log::warn!(
+            target: "app_lib::services::ai_webview",
+            "pending message eval failed on {}: {e}",
+            webview.label(),
+        );
+    }
 }
 
 pub(super) async fn hosted_swap_to_provider(
@@ -233,6 +257,7 @@ pub(super) async fn hosted_swap_to_provider(
                             "failed to re-inject keybind script: {e}",
                         );
                     }
+                    deliver_pending_message(&webview);
                 }
             });
 

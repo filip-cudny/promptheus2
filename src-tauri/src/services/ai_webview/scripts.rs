@@ -20,6 +20,7 @@ pub(super) fn initialization_script(provider: &WebviewProvider) -> String {
             {palette}
             {external_links}
             {clipboard_paste_fallback}
+            {deliver_message}
         }})();
         "#,
         provider_id_json = provider_id_json,
@@ -27,7 +28,29 @@ pub(super) fn initialization_script(provider: &WebviewProvider) -> String {
         palette = PALETTE_KEYBIND_JS,
         external_links = EXTERNAL_LINKS_JS,
         clipboard_paste_fallback = CLIPBOARD_PASTE_FALLBACK_JS,
+        deliver_message = DELIVER_MESSAGE_JS,
         dark_mode = DARK_MODE_JS,
+    )
+}
+
+pub(super) fn delivery_script(
+    run: u64,
+    transcript: &str,
+    context_text: Option<&str>,
+    images: &[(String, String)],
+) -> String {
+    let text = match context_text {
+        Some(context) => format!("{context}\n\n{transcript}"),
+        None => transcript.to_string(),
+    };
+    let images: Vec<_> = images
+        .iter()
+        .map(|(media_type, data)| serde_json::json!({ "mediaType": media_type, "data": data }))
+        .collect();
+    let payload = serde_json::json!({ "run": run, "text": text, "images": images });
+    let payload = serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string());
+    format!(
+        "window.__promptheus && window.__promptheus.__deliverMessage && window.__promptheus.__deliverMessage({payload});"
     )
 }
 
@@ -247,6 +270,56 @@ g.ensureClipboardPasteFallback = ensureClipboardPasteFallback;
 ensureClipboardPasteFallback();
 "##;
 
+const DELIVER_MESSAGE_JS: &str = r##"
+function decodeImage(image) {
+    const bin = atob(image.data);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: image.mediaType });
+}
+
+function pressEnter(composer) {
+    composer.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true,
+    }));
+}
+
+function sendUntilNavigated(composer, run) {
+    const startedAt = Date.now();
+    pressEnter(composer);
+    const timer = setInterval(function() {
+        if (/^\/(chat|c)\//.test(location.pathname)) {
+            clearInterval(timer);
+            sendRouter({ kind: "webview_send_outcome", status: "sent", run: run });
+        } else if (Date.now() - startedAt >= 30000) {
+            clearInterval(timer);
+            sendRouter({ kind: "webview_send_outcome", status: "typed", run: run });
+        } else {
+            pressEnter(composer);
+        }
+    }, 500);
+}
+
+g.__deliverMessage = function(payload) {
+    const startedAt = Date.now();
+    const poll = setInterval(function() {
+        const composer = document.querySelector('.ProseMirror[contenteditable="true"]');
+        if (!composer) {
+            if (Date.now() - startedAt >= 15000) {
+                clearInterval(poll);
+                sendRouter({ kind: "webview_send_outcome", status: "no_composer", run: payload.run });
+            }
+            return;
+        }
+        clearInterval(poll);
+        composer.focus();
+        payload.images.forEach(function(image) { injectImage(composer, decodeImage(image)); });
+        injectText(composer, payload.text);
+        sendUntilNavigated(composer, payload.run);
+    }, 250);
+};
+"##;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -309,5 +382,32 @@ mod tests {
     fn reinject_script_reinstalls_clipboard_paste_fallback() {
         let js = reinject_script();
         assert!(js.contains("ensureClipboardPasteFallback"));
+    }
+
+    #[test]
+    fn delivery_script_puts_context_before_transcript() {
+        let js = delivery_script(3, "say", Some("ctx"), &[]);
+        assert!(js.contains(&serde_json::to_string("ctx\n\nsay").unwrap()));
+        let js = delivery_script(3, "say", None, &[]);
+        assert!(js.contains(&serde_json::to_string("say").unwrap()));
+    }
+
+    #[test]
+    fn delivery_script_escapes_transcript_like_serde_json() {
+        let transcript = "a \"q\"\n</script>";
+        let js = delivery_script(1, transcript, None, &[]);
+        assert!(js.contains(&serde_json::to_string(transcript).unwrap()));
+    }
+
+    #[test]
+    fn delivery_script_carries_images() {
+        let js = delivery_script(1, "t", None, &[("image/png".into(), "QUJD".into())]);
+        assert!(js.contains(r#""mediaType":"image/png""#));
+        assert!(js.contains(r#""data":"QUJD""#));
+    }
+
+    #[test]
+    fn initialization_script_includes_deliver_message() {
+        assert!(initialization_script(&provider()).contains("__deliverMessage"));
     }
 }

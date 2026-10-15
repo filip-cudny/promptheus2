@@ -15,6 +15,7 @@ use crate::services::dialog::{
 
 use super::external_links::open_external_url;
 use super::lifecycle::{host_window_for_webview, CONVERSATION_DIALOG_LABEL};
+use super::provider_send::handle_send_outcome;
 use super::provider_swap::{hosted_swap_to_conversation_dialog, hosted_swap_to_provider};
 use super::AiWebviewState;
 
@@ -43,6 +44,14 @@ pub(super) enum RouterMessage {
     OpenPalette,
     OpenExternal { url: String },
     RequestPasteText,
+    SendOutcome { status: SendStatus, run: u64 },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) enum SendStatus {
+    Sent,
+    Typed,
+    NoComposer,
 }
 
 pub(super) fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
@@ -61,6 +70,16 @@ pub(super) fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
             Some(RouterMessage::OpenExternal { url })
         }
         "request_paste_text" => Some(RouterMessage::RequestPasteText),
+        "webview_send_outcome" => {
+            let status = match params.remove("status")?.as_str() {
+                "sent" => SendStatus::Sent,
+                "typed" => SendStatus::Typed,
+                "no_composer" => SendStatus::NoComposer,
+                _ => return None,
+            };
+            let run = params.remove("run")?.parse().ok()?;
+            Some(RouterMessage::SendOutcome { status, run })
+        }
         _ => None,
     }
 }
@@ -95,6 +114,9 @@ pub(super) async fn handle_router_message(
         }
         RouterMessage::RequestPasteText => {
             deliver_clipboard_text_to_webview(app, webview_label);
+        }
+        RouterMessage::SendOutcome { status, run } => {
+            handle_send_outcome(app, webview_label, status, run).await;
         }
     }
 }
@@ -599,6 +621,38 @@ mod tests {
         .unwrap();
         let msg = parse_router_message(&url).unwrap();
         assert!(matches!(msg, RouterMessage::OpenPalette));
+    }
+
+    fn parse_outcome(query: &str) -> Option<RouterMessage> {
+        let url = tauri::Url::parse(&format!(
+            "https://promptheus-ai-webview-router.invalid/?kind=webview_send_outcome{query}"
+        ))
+        .unwrap();
+        parse_router_message(&url)
+    }
+
+    #[test]
+    fn parse_router_message_send_outcome_statuses() {
+        assert!(matches!(
+            parse_outcome("&status=sent&run=7"),
+            Some(RouterMessage::SendOutcome { status: SendStatus::Sent, run: 7 })
+        ));
+        assert!(matches!(
+            parse_outcome("&status=typed&run=8"),
+            Some(RouterMessage::SendOutcome { status: SendStatus::Typed, run: 8 })
+        ));
+        assert!(matches!(
+            parse_outcome("&status=no_composer&run=9"),
+            Some(RouterMessage::SendOutcome { status: SendStatus::NoComposer, run: 9 })
+        ));
+    }
+
+    #[test]
+    fn parse_router_message_send_outcome_invalid() {
+        assert!(parse_outcome("&run=1").is_none());
+        assert!(parse_outcome("&status=bogus&run=1").is_none());
+        assert!(parse_outcome("&status=sent").is_none());
+        assert!(parse_outcome("&status=sent&run=x").is_none());
     }
 
     #[test]

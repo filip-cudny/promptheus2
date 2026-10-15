@@ -65,6 +65,17 @@ pub struct DialogInitParams {
     copy_token: Option<String>,
 }
 
+pub fn conversation_dialog_config() -> DialogConfig {
+    DialogConfig {
+        label: "conversation-dialog".into(),
+        url: "conversation-dialog.html".into(),
+        title: "Promptheus — chat".into(),
+        default_width: 700.0,
+        default_height: 600.0,
+        geometry_key: "conversation-dialog".into(),
+    }
+}
+
 #[tauri::command]
 pub async fn open_conversation_dialog(
     app: tauri::AppHandle,
@@ -84,14 +95,7 @@ pub async fn open_conversation_dialog(
     let auto_send_input = auto_send_input.unwrap_or(false);
     let new_chat = new_chat.unwrap_or(false);
 
-    let config = DialogConfig {
-        label: label.into(),
-        url: "conversation-dialog.html".into(),
-        title: "Promptheus — chat".into(),
-        default_width: 700.0,
-        default_height: 600.0,
-        geometry_key: "conversation-dialog".into(),
-    };
+    let config = conversation_dialog_config();
 
     if app.get_window(label).is_some() {
         surface_conversation_dialog(&app, label);
