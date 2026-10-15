@@ -369,6 +369,7 @@
       class:mac={isMac}
       style:height="{dropdownHeight}px"
       style:padding="{DROPDOWN_PADDING}px 0"
+      style:--row-radius="{RADIUS - DROPDOWN_PADDING}px"
     >
       {#each model.targets as target (target.id)}
         <button
@@ -554,6 +555,16 @@
     justify-content: flex-start;
     border-radius: 0;
     font: inherit;
+  }
+
+  .option:first-child {
+    border-top-left-radius: var(--row-radius);
+    border-top-right-radius: var(--row-radius);
+  }
+
+  .option:last-child {
+    border-bottom-left-radius: var(--row-radius);
+    border-bottom-right-radius: var(--row-radius);
   }
 
   .option.selected {

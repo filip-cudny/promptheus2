@@ -978,15 +978,19 @@ export default class PromptheusExtension extends Extension {
                 'font-family: "Noto Sans", sans-serif; font-size: 13px;',
         });
         dropdown.set_size(WIDGET_WIDTH, height);
-        for (const [id, label] of targets) {
+        const rowRadius = WIDGET_RADIUS - WIDGET_DROPDOWN_PADDING;
+        targets.forEach(([id, label], index) => {
             const weight = id === selectedId ? 'font-weight: 700;' : '';
+            const top = index === 0 ? rowRadius : 0;
+            const bottom = index === targets.length - 1 ? rowRadius : 0;
             dropdown.add_child(this._widgetButton(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}),
                 () => {
                     this._emitRecordingWidgetTargetSelected(id);
                     this._closeDropdown(widget);
                 },
-                `height: ${WIDGET_DROPDOWN_ROW_HEIGHT}px; padding: 0 ${WIDGET_PADDING_X}px; ${weight}`));
-        }
+                `height: ${WIDGET_DROPDOWN_ROW_HEIGHT}px; padding: 0 ${WIDGET_PADDING_X}px; ` +
+                `border-radius: ${top}px ${top}px ${bottom}px ${bottom}px; ${weight}`));
+        });
         const {actor} = widget;
         dropdown.set_position(actor.x, this._dropdownAbove(widget) ? actor.y - height : actor.y + actor.height);
         Main.layoutManager.addTopChrome(dropdown);
