@@ -170,6 +170,13 @@ This is a **tray-only app** — no main window opens on startup. On macOS, activ
 - Context menu window (borderless Tauri window, hotkey-triggered)
 - Prompt dialog windows (created dynamically)
 
+The chat window is the single `conversation-dialog` host: native chat webview, strip webview `shell-toolbar` and provider tabs as child webviews (`conversation-dialog::ai-webview-{provider id}-{n}`). Tabs live in `TabList` (`services/ai_webview/tabs.rs`).
+
+- Every entry path (context menu, tray, pill, shortcuts, "Run in dialog") brings the window up through `ai_webview::surface` (`services/ai_webview/surface.rs`): create or show the host, pick the view (keep active, native, or a new provider tab), focus.
+- At most 3 provider tabs are live; making a 4th live unloads the least recently used one that is neither active nor armed with a pill message.
+- A hidden provider tab is unloaded 30 min after it was last used (`services/ai_webview/unload.rs`, polled every 60 s). Unloading closes the child webview and keeps the tab with its URL and title; activating it loads it again.
+- Closing the window (OS close, strip close, send-and-copy) hides it instead of destroying it: geometry is saved, every provider tab is unloaded, `DockManager` counts the host once (`host_hidden` / `host_surfaced`). Settings, history and context-editor windows are destroyed on close.
+
 When showing a window from a background context (e.g., global hotkey), call `app.show()` on macOS before `win.show()` to activate the app and ensure the window appears in front.
 
 Because the app is tray-only with multiple short-lived windows, cross-window coordination via events is legitimate (`app.emit_to(label, …)` in `provider_menu.rs`, `conversation_dialog.rs`; the app-wide `app.emit("prompt-changed", …)` in `prompts.rs`). That is **not** the events-as-substitute-for-commands anti-pattern — there is no single window from which to drive a command. Within a single window, prefer `invoke`.

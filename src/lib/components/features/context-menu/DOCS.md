@@ -60,7 +60,7 @@ Built in `src-tauri/src/setup/windows.rs` with label `context-menu`. Key propert
 
 All keyboard handling lives in `drivers/useMenuKeyboard.svelte.ts`.
 
-Shift on a skill (click, Enter, digit, or the action-menu item) is "Run in dialog": the text comes from `get_clipboard_text`, `openConversationDialog` opens or reuses the dialog with auto-send, source `alternative_execute`. An empty or unreadable clipboard falls back to "Open in dialog". Shift on the skill being recorded stops the recording. "Run with transcription" in the action menu is the voice run. Shift+click on Chat is a normal click.
+Shift on a skill (click, Enter, digit, or the action-menu item) is "Run in dialog": the text comes from `get_clipboard_text`, `openConversationDialog` opens or reuses the dialog with auto-send, source `alternative_execute`. An empty or unreadable clipboard falls back to "Open in dialog", which opens the chat through `open_conversation_dialog` (the one chat window). Shift on the skill being recorded stops the recording. "Run with transcription" in the action menu is the voice run. Shift+click on Chat is a normal click.
 
 ## Floating panels
 
@@ -70,7 +70,7 @@ Three mutually exclusive panels (`drivers/useFloatingPanelMutex.svelte.ts`):
 |-------|---------|----------|
 | Settings | LMB on Settings toggle row | `SettingsPanel` — quick action model + STT model |
 | Skill action menu | RMB on a skill row | `SkillActionMenu` — open in dialog / run in dialog / run with transcription / metadata |
-| Chat providers | RMB on Chat row | `ProviderMenuList` — Promptheus + webview providers |
+| Chat providers | RMB on Chat row | `ProviderMenuList` — Promptheus + webview providers; picking one opens a new tab of it in the one chat window (`newTab`) |
 
 Closing the Settings or Skill action menu triggers `menu.resumeClose()` to release the suppression any inner control (e.g. ModelSelector) may have set.
 

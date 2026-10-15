@@ -56,6 +56,7 @@ Context menu placement:
 
 Host-relative popups:
 - A window placed relative to a host gets the host as transient parent (`gnome_shell::set_transient_parent`, on the GTK main thread, on every open because the windows are shared by all hosts) and is placed with `place_window_on_parent`.
+- The provider menu window (title `PROVIDER_MENU_TITLE`, unchanged) is one generic popup: it shows whatever `items` the `provider-menu:show` payload carries, serving the provider switcher and the strip's `+` and `+N` lists.
 - Provider menu offset is `(rect.left, rect.bottom + 4)` window-relative; palette and backdrop offset is `(0, TOOLBAR_HEIGHT)`, size host width × (H − 40), so the toolbar stays undimmed and clickable.
 - Without the extension the transient parent alone makes Mutter place them over the host.
 - `set_opacity` and `focus_window` are skipped there (no effect on Wayland).

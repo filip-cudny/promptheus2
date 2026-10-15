@@ -37,7 +37,7 @@ kill 0.95, poll 30 s. WebKit frees memory in long-lived pages instead of growing
 
 `services/ai_webview/lifecycle.rs → install_media_permissions` connects
 `is-web-process-responsive` notify. On `responsive=false` it waits
-`UNRESPONSIVE_GRACE_SECONDS` (20 s, `cold_suspend.rs`) via `glib::timeout_add_seconds_local_once`;
+`UNRESPONSIVE_GRACE_SECONDS` (20 s, `unload.rs`) via `glib::timeout_add_seconds_local_once`;
 if still unresponsive it calls `terminate_web_process()` + `reload()` and shows a Warning toast
 ("<provider> was unresponsive"). The same function logs `web-process-terminated` (observation
 only, no reload).
@@ -48,24 +48,19 @@ only, no reload).
   or terminate → reload loops.
 - No macOS equivalent: WKWebView has no public responsiveness API.
 
-## Layer 3 — cold suspend after long idle (all platforms)
+## Layer 3 — unloading idle provider tabs (all platforms)
 
-`setup/background.rs → spawn_ai_webview_cold_suspend` runs
-`services/ai_webview/cold_suspend.rs → run_cold_suspend_pass` on the main thread every
-`COLD_SUSPEND_POLL_INTERVAL` (60 s). Candidates (`AiWebviewState::cold_suspend_candidates`)
-are provider webviews (`ai-webview-*` or `*::ai-webview-*`) not active in any host, not already
-suspended, idle longer than `COLD_SUSPEND_IDLE_THRESHOLD` (90 min). Each is parked: its current
-URL is saved with `mark_suspended`, then it navigates to `about:blank`. No toast.
+Provider tabs are child webviews of the one `conversation-dialog` host (`services/ai_webview/tabs.rs → TabList`). Unloading (`unload.rs → unload_tab`) closes the child webview and keeps the tab with its URL and title, so a hung or bloated content process is gone while the tab stays in the strip. Three triggers:
 
-`resume_if_suspended` navigates back to the saved URL (the exact conversation, not the provider
-home). It is called from `provider_swap.rs → hosted_swap_to_provider` and
-`lifecycle.rs → open_or_focus`. Cookies and storage survive, so the user sees a short reload.
+- Idle pass: `setup/background.rs → spawn_ai_webview_unload` runs `unload.rs → run_unload_pass` on the main thread every `UNLOAD_POLL_INTERVAL` (60 s). Candidates (`TabList::idle_unload_candidates`) are live provider tabs that are not active, have no armed pill message and were last used `UNLOAD_IDLE` (30 min) ago. "Last used" is the later of activation and deactivation.
+- Live limit: at most `MAX_LIVE_PROVIDER_TABS` (3) live provider tabs; making another live unloads the least recently used one that is not active and not armed.
+- Window hide: `surface.rs → hide_host` unloads every live provider tab.
 
-- Every new path that shows a hidden provider webview must call `resume_if_suspended`,
-  otherwise the user lands on a blank page.
-- Uses public `navigate` rather than `terminate_web_process`, so it works on macOS too.
-- Suspending immediately on hide was rejected: it kills instant switching between providers.
-  Lowering the threshold trades that switching speed for earlier protection.
+Activating an unloaded tab (`provider_swap.rs → activate_tab`) creates a new child at the saved URL (the exact conversation, not the provider home) with a new label; cookies and storage survive, so the user sees a 3–6 s reload and loses scroll position and unsent composer text. An armed pill message on an unloaded tab goes to the pill fallback at once.
+
+- Every path that shows a provider tab must go through `activate_tab`, otherwise the user lands on a tab without a webview.
+- Unloading by closing the child works on macOS too.
+- Unloading immediately on hide was rejected: it kills instant switching between tabs. Lowering `UNLOAD_IDLE` trades that switching speed for earlier protection.
 
 ## Diagnostics
 
@@ -76,11 +71,11 @@ home). It is called from `provider_swap.rs → hosted_swap_to_provider` and
   `services/dialog.rs → present_on_main` log per-step elapsed times; the last step without a
   successor is the call that stalled.
 - Layer logs: `responsiveness changed`, `web process unresponsive >20s, restarting`,
-  `web process terminated`, `cold-suspend: webview=… parked`.
+  `web process terminated`, `unload pass: candidates=…`, `unloaded tab=… label=…`.
 
 ## When to load this file
 
-- Changing `services/ai_webview/` lifecycle, provider swap or cold suspend, or
+- Changing `services/ai_webview/` lifecycle, tab unloading, or
   `services/webkit_pressure.rs`.
 - Investigating an AI webview window freezing after idle on Linux.
 
