@@ -1,32 +1,30 @@
-mod cold_suspend;
 mod external_links;
 mod lifecycle;
 mod palette;
 mod provider_send;
 mod provider_swap;
 mod scripts;
-#[allow(dead_code)]
 mod tabs;
+mod unload;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex as StdMutex;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::models::settings::WebviewProvider;
 
-pub use cold_suspend::{run_cold_suspend_pass, COLD_SUSPEND_POLL_INTERVAL};
-pub use lifecycle::{
-    cleanup_host_state, close, focus_conversation_dialog, navigate, open_new_instance,
-    open_or_focus,
-};
-pub use palette::{
-    swap_from_palette, swap_to_palette, PALETTE_BACKDROP_TITLE, PALETTE_TITLE,
-};
+use lifecycle::CONVERSATION_DIALOG_LABEL;
+use tabs::{TabKind, TabList};
+
+pub use lifecycle::cleanup_host_state;
+pub use palette::{swap_from_palette, swap_to_palette, PALETTE_BACKDROP_TITLE, PALETTE_TITLE};
 pub use provider_send::send_to_provider_chat;
 pub use provider_swap::{
-    active_provider_for, emit_active_changed_for, mark_active_webview, new_chat_in_host,
-    reload_active_in_host, swap_to_conversation_dialog, swap_to_provider,
+    activate_tab, close_tab, get_tabs, new_tab, reload_active_in_host, report_native_tabs,
+    show_native_view,
 };
+pub use tabs::{NativeTabReport, TabsSnapshot};
+pub use unload::{run_unload_pass, UNLOAD_POLL_INTERVAL};
 
 pub(super) struct PendingMessage {
     pub run: u64,
@@ -38,92 +36,106 @@ pub(super) struct PendingMessage {
 
 #[derive(Default)]
 pub struct AiWebviewState {
-    hosted: StdMutex<HashMap<String, HashSet<String>>>,
-    current_provider: StdMutex<HashMap<String, String>>,
-    provider_snapshots: StdMutex<HashMap<String, WebviewProvider>>,
-    active_webview: StdMutex<HashMap<String, String>>,
+    tabs: StdMutex<TabList>,
+    reserved_labels: StdMutex<HashMap<String, String>>,
+    last_page_urls: StdMutex<HashMap<String, String>>,
     palette_open: StdMutex<HashMap<String, bool>>,
-    pending_provider: StdMutex<HashMap<String, String>>,
-    last_active: StdMutex<HashMap<String, Instant>>,
-    suspended: StdMutex<HashMap<String, String>>,
-    host_focus: StdMutex<HashMap<String, Instant>>,
-    page_titles: StdMutex<HashMap<String, String>>,
-    host_titles: StdMutex<HashMap<String, String>>,
     pending_messages: StdMutex<HashMap<String, PendingMessage>>,
 }
 
 impl AiWebviewState {
-    pub(super) fn set_provider(&self, label: &str, provider: &WebviewProvider) {
-        self.current_provider
+    pub(super) fn with_tabs<R>(&self, f: impl FnOnce(&mut TabList) -> R) -> R {
+        f(&mut self.tabs.lock().unwrap())
+    }
+
+    pub(super) fn provider_for_label(&self, label: &str) -> Option<WebviewProvider> {
+        self.with_tabs(|tabs| match &tabs.by_child_label(label)?.kind {
+            TabKind::Provider { provider } => Some(provider.clone()),
+            TabKind::Native { .. } => None,
+        })
+    }
+
+    pub(super) fn active_view_label(&self) -> String {
+        self.with_tabs(|tabs| {
+            tabs.active_id()
+                .and_then(|id| tabs.get(id))
+                .and_then(|tab| tab.child_label.clone())
+        })
+        .unwrap_or_else(|| CONVERSATION_DIALOG_LABEL.to_string())
+    }
+
+    pub(super) fn armed_tab_ids(&self) -> HashSet<String> {
+        let tabs = self.tabs.lock().unwrap();
+        let pending = self.pending_messages.lock().unwrap();
+        tabs.tabs()
+            .iter()
+            .filter(|tab| {
+                tab.child_label
+                    .as_ref()
+                    .and_then(|label| pending.get(label))
+                    .is_some_and(|message| !message.delivered)
+            })
+            .map(|tab| tab.id.clone())
+            .collect()
+    }
+
+    pub(super) fn arm_in_new_tab(
+        &self,
+        provider: &WebviewProvider,
+        message: PendingMessage,
+    ) -> (String, String) {
+        let (tab_id, label) = self.with_tabs(|tabs| {
+            let tab_id = tabs.push_provider(provider, Instant::now());
+            let label = tabs.next_child_label(&provider.id);
+            (tab_id, label)
+        });
+        self.reserved_labels
             .lock()
             .unwrap()
-            .insert(label.to_string(), provider.id.clone());
-        self.provider_snapshots
+            .insert(tab_id.clone(), label.clone());
+        self.arm_message(&label, message);
+        (tab_id, label)
+    }
+
+    pub(super) fn child_label_for_new_child(&self, tab_id: &str, provider_id: &str) -> String {
+        let reserved = self.reserved_labels.lock().unwrap().remove(tab_id);
+        reserved.unwrap_or_else(|| self.with_tabs(|tabs| tabs.next_child_label(provider_id)))
+    }
+
+    pub(super) fn set_last_page_url(&self, label: &str, url: String) {
+        self.last_page_urls
             .lock()
             .unwrap()
-            .insert(label.to_string(), provider.clone());
+            .insert(label.to_string(), url);
     }
 
-    pub(super) fn remove_provider(&self, label: &str) {
-        self.current_provider.lock().unwrap().remove(label);
-        self.provider_snapshots.lock().unwrap().remove(label);
-    }
-
-    pub(super) fn snapshot(&self, label: &str) -> Option<WebviewProvider> {
-        self.provider_snapshots.lock().unwrap().get(label).cloned()
-    }
-
-    pub(super) fn current_provider_for(&self, label: &str) -> Option<String> {
-        self.current_provider.lock().unwrap().get(label).cloned()
-    }
-
-    pub(super) fn has_hosted_child(&self, host_label: &str, provider_id: &str) -> bool {
-        self.hosted
-            .lock()
-            .unwrap()
-            .get(host_label)
-            .map(|set| set.contains(provider_id))
-            .unwrap_or(false)
-    }
-
-    pub(super) fn mark_hosted_child(&self, host_label: &str, provider_id: &str) {
-        self.hosted
-            .lock()
-            .unwrap()
-            .entry(host_label.to_string())
-            .or_default()
-            .insert(provider_id.to_string());
-    }
-
-    pub(super) fn unmark_hosted_child(&self, host_label: &str, provider_id: &str) {
-        if let Some(set) = self.hosted.lock().unwrap().get_mut(host_label) {
-            set.remove(provider_id);
+    pub(super) fn mark_unloaded(&self, tab_id: &str, url: Option<String>) -> Option<PendingMessage> {
+        let mut tabs = self.tabs.lock().unwrap();
+        let label = tabs.get(tab_id)?.child_label.clone()?;
+        let page_url = self.last_page_urls.lock().unwrap().remove(&label);
+        if let Some(url) = url.or(page_url) {
+            tabs.set_last_url(tab_id, Some(url));
         }
+        tabs.set_live(tab_id, None);
+        self.pending_messages.lock().unwrap().remove(&label)
     }
 
     pub(super) fn drop_host(&self, host_label: &str) {
-        self.hosted.lock().unwrap().remove(host_label);
-        self.active_webview.lock().unwrap().remove(host_label);
         self.palette_open.lock().unwrap().remove(host_label);
-        self.host_focus.lock().unwrap().remove(host_label);
-        self.host_titles.lock().unwrap().remove(host_label);
+        if host_label != CONVERSATION_DIALOG_LABEL {
+            return;
+        }
+        *self.tabs.lock().unwrap() = TabList::default();
+        self.reserved_labels.lock().unwrap().clear();
         let prefix = format!("{host_label}::");
-        self.last_active
+        self.last_page_urls
             .lock()
             .unwrap()
-            .retain(|k, _| !k.starts_with(&prefix) && k != host_label);
-        self.suspended
-            .lock()
-            .unwrap()
-            .retain(|k, _| !k.starts_with(&prefix) && k != host_label);
-        self.page_titles
-            .lock()
-            .unwrap()
-            .retain(|k, _| !k.starts_with(&prefix) && k != host_label);
+            .retain(|k, _| !k.starts_with(&prefix));
         self.pending_messages
             .lock()
             .unwrap()
-            .retain(|k, _| !k.starts_with(&prefix) && k != host_label);
+            .retain(|k, _| !k.starts_with(&prefix));
     }
 
     pub(super) fn arm_message(&self, label: &str, msg: PendingMessage) -> Option<PendingMessage> {
@@ -151,94 +163,6 @@ impl AiWebviewState {
         map.remove(label)
     }
 
-    pub fn set_pending_provider(&self, host_label: &str, provider_id: &str) {
-        self.pending_provider
-            .lock()
-            .unwrap()
-            .insert(host_label.to_string(), provider_id.to_string());
-    }
-
-    pub fn take_pending_provider(&self, host_label: &str) -> Option<String> {
-        self.pending_provider.lock().unwrap().remove(host_label)
-    }
-
-    pub(super) fn set_active(&self, host_label: &str, webview_label: &str) {
-        self.active_webview
-            .lock()
-            .unwrap()
-            .insert(host_label.to_string(), webview_label.to_string());
-        self.last_active
-            .lock()
-            .unwrap()
-            .insert(webview_label.to_string(), Instant::now());
-    }
-
-    pub(super) fn touch_last_active(&self, webview_label: &str) {
-        self.last_active
-            .lock()
-            .unwrap()
-            .insert(webview_label.to_string(), Instant::now());
-    }
-
-    pub fn is_suspended(&self, webview_label: &str) -> bool {
-        self.suspended.lock().unwrap().contains_key(webview_label)
-    }
-
-    pub(super) fn mark_suspended(&self, webview_label: &str, restore_url: String) {
-        self.suspended
-            .lock()
-            .unwrap()
-            .insert(webview_label.to_string(), restore_url);
-    }
-
-    pub(super) fn take_suspended_url(&self, webview_label: &str) -> Option<String> {
-        self.suspended.lock().unwrap().remove(webview_label)
-    }
-
-    pub(super) fn unmark_suspended(&self, webview_label: &str) {
-        self.suspended.lock().unwrap().remove(webview_label);
-    }
-
-    pub(super) fn cold_suspend_candidates(&self, idle_threshold: Duration) -> Vec<String> {
-        let now = Instant::now();
-        let active: HashSet<String> = self
-            .active_webview
-            .lock()
-            .unwrap()
-            .values()
-            .cloned()
-            .collect();
-        let suspended = self.suspended.lock().unwrap();
-        self.last_active
-            .lock()
-            .unwrap()
-            .iter()
-            .filter_map(|(label, last)| {
-                if !cold_suspend::is_suspendable_webview_label(label) {
-                    return None;
-                }
-                if active.contains(label) {
-                    return None;
-                }
-                if suspended.contains_key(label) {
-                    return None;
-                }
-                if now.duration_since(*last) < idle_threshold {
-                    return None;
-                }
-                Some(label.clone())
-            })
-            .collect()
-    }
-
-    pub(super) fn get_active(&self, host_label: &str) -> Option<String> {
-        self.active_webview
-            .lock()
-            .unwrap()
-            .get(host_label)
-            .cloned()
-    }
-
     pub(super) fn set_palette_open(&self, host_label: &str, open: bool) {
         self.palette_open
             .lock()
@@ -263,43 +187,6 @@ impl AiWebviewState {
         }
         was_open
     }
-
-    pub fn touch_host_focus(&self, host_label: &str) {
-        self.host_focus
-            .lock()
-            .unwrap()
-            .insert(host_label.to_string(), Instant::now());
-    }
-
-    pub(super) fn host_focus_at(&self, host_label: &str) -> Option<Instant> {
-        self.host_focus.lock().unwrap().get(host_label).copied()
-    }
-
-    pub fn set_page_title(&self, webview_label: &str, title: &str) {
-        self.page_titles
-            .lock()
-            .unwrap()
-            .insert(webview_label.to_string(), title.to_string());
-    }
-
-    pub(super) fn page_title_for(&self, webview_label: &str) -> Option<String> {
-        self.page_titles
-            .lock()
-            .unwrap()
-            .get(webview_label)
-            .cloned()
-    }
-
-    pub fn set_host_title(&self, host_label: &str, title: &str) {
-        self.host_titles
-            .lock()
-            .unwrap()
-            .insert(host_label.to_string(), title.to_string());
-    }
-
-    pub(super) fn host_title_for(&self, host_label: &str) -> Option<String> {
-        self.host_titles.lock().unwrap().get(host_label).cloned()
-    }
 }
 
 #[cfg(test)]
@@ -315,50 +202,6 @@ mod tests {
     }
 
     #[test]
-    fn provider_set_remove_round_trip() {
-        let state = AiWebviewState::default();
-        let p = provider("claude");
-        state.set_provider("ai-webview-claude", &p);
-        assert_eq!(
-            state.snapshot("ai-webview-claude").map(|p| p.id).as_deref(),
-            Some("claude")
-        );
-        assert_eq!(
-            state.current_provider_for("ai-webview-claude").as_deref(),
-            Some("claude")
-        );
-        state.remove_provider("ai-webview-claude");
-        assert!(state.snapshot("ai-webview-claude").is_none());
-        assert!(state.current_provider_for("ai-webview-claude").is_none());
-    }
-
-    #[test]
-    fn hosted_child_tracking() {
-        let state = AiWebviewState::default();
-        assert!(!state.has_hosted_child("host", "claude"));
-        state.mark_hosted_child("host", "claude");
-        assert!(state.has_hosted_child("host", "claude"));
-        state.unmark_hosted_child("host", "claude");
-        assert!(!state.has_hosted_child("host", "claude"));
-    }
-
-    #[test]
-    fn drop_host_clears_state() {
-        let state = AiWebviewState::default();
-        state.mark_hosted_child("host", "claude");
-        state.set_palette_open("host", true);
-        state.set_active("host", "host::ai-webview-claude");
-        state.mark_suspended("host::ai-webview-claude", "https://x".into());
-
-        state.drop_host("host");
-
-        assert!(!state.has_hosted_child("host", "claude"));
-        assert!(!state.is_palette_open("host"));
-        assert!(state.get_active("host").is_none());
-        assert!(!state.is_suspended("host::ai-webview-claude"));
-    }
-
-    #[test]
     fn palette_open_consume_clears_only_when_open() {
         let state = AiWebviewState::default();
         assert!(!state.try_consume_palette_open("host"));
@@ -370,52 +213,97 @@ mod tests {
     }
 
     #[test]
-    fn pending_provider_take_is_destructive() {
+    fn drop_host_clears_tabs_and_pending_messages_of_its_children() {
         let state = AiWebviewState::default();
-        state.set_pending_provider("host", "claude");
-        assert_eq!(state.take_pending_provider("host").as_deref(), Some("claude"));
-        assert!(state.take_pending_provider("host").is_none());
-    }
+        state.set_palette_open(CONVERSATION_DIALOG_LABEL, true);
+        let (_, label) = state.arm_in_new_tab(&provider("claude"), pending(1, "claude.ai"));
+        state.arm_message("other::ai-webview-claude-1", pending(2, "claude.ai"));
 
-    #[test]
-    fn suspend_round_trip() {
-        let state = AiWebviewState::default();
-        state.mark_suspended("ai-webview-claude", "https://claude.ai/c/123".into());
-        assert!(state.is_suspended("ai-webview-claude"));
+        state.drop_host(CONVERSATION_DIALOG_LABEL);
+
+        assert!(state.with_tabs(|tabs| tabs.tabs().is_empty()));
+        assert!(!state.is_palette_open(CONVERSATION_DIALOG_LABEL));
+        assert!(state.finish_message(&label, 1).is_none());
         assert_eq!(
-            state.take_suspended_url("ai-webview-claude").as_deref(),
-            Some("https://claude.ai/c/123")
-        );
-        assert!(!state.is_suspended("ai-webview-claude"));
-    }
-
-    #[test]
-    fn cold_suspend_candidates_skip_active() {
-        let state = AiWebviewState::default();
-        let p = provider("claude");
-        state.set_provider("ai-webview-claude", &p);
-        state.set_active("host", "ai-webview-claude");
-
-        let zero = Duration::from_secs(0);
-        let candidates = state.cold_suspend_candidates(zero);
-        assert!(
-            !candidates.contains(&"ai-webview-claude".to_string()),
-            "active webview should not be a candidate"
+            state.finish_message("other::ai-webview-claude-1", 2).map(|m| m.run),
+            Some(2)
         );
     }
 
     #[test]
-    fn cold_suspend_candidates_skip_already_suspended() {
+    fn pill_run_arms_on_a_new_label_before_any_child_exists() {
         let state = AiWebviewState::default();
-        let p = provider("claude");
-        state.set_provider("ai-webview-claude", &p);
-        state.set_active("host", "ai-webview-other");
-        state.mark_suspended("ai-webview-claude", "https://x".into());
-        state.touch_last_active("ai-webview-claude");
+        let (tab_id, label) = state.arm_in_new_tab(&provider("claude"), pending(1, "claude.ai"));
 
-        let zero = Duration::from_secs(0);
-        let candidates = state.cold_suspend_candidates(zero);
-        assert!(!candidates.contains(&"ai-webview-claude".to_string()));
+        assert_eq!(label, "conversation-dialog::ai-webview-claude-1");
+        assert!(state.with_tabs(|tabs| tabs.by_child_label(&label).is_none()));
+        assert_eq!(state.child_label_for_new_child(&tab_id, "claude"), label);
+        assert_eq!(state.take_delivery(&label, "claude.ai"), Some((1, "script1".to_string())));
+    }
+
+    #[test]
+    fn second_pill_run_gets_another_tab_and_label() {
+        let state = AiWebviewState::default();
+        let (first_tab, first_label) =
+            state.arm_in_new_tab(&provider("claude"), pending(1, "claude.ai"));
+        let (second_tab, second_label) =
+            state.arm_in_new_tab(&provider("claude"), pending(2, "claude.ai"));
+
+        assert_ne!(first_tab, second_tab);
+        assert_ne!(first_label, second_label);
+        assert_eq!(state.finish_message(&first_label, 1).map(|m| m.run), Some(1));
+        assert_eq!(state.finish_message(&second_label, 2).map(|m| m.run), Some(2));
+    }
+
+    #[test]
+    fn unloading_a_tab_returns_its_armed_message_and_leaves_none() {
+        let state = AiWebviewState::default();
+        let (tab_id, label) = state.arm_in_new_tab(&provider("claude"), pending(1, "claude.ai"));
+        state.with_tabs(|tabs| tabs.set_live(&tab_id, Some(label.clone())));
+
+        let message = state.mark_unloaded(&tab_id, Some("https://claude.ai/c/1".into()));
+
+        assert_eq!(message.map(|m| m.run), Some(1));
+        assert!(state.take_delivery(&label, "claude.ai").is_none());
+        assert!(state.with_tabs(|tabs| tabs.get(&tab_id).unwrap().child_label.is_none()));
+        assert_eq!(
+            state.with_tabs(|tabs| tabs.get(&tab_id).unwrap().last_url.clone()).as_deref(),
+            Some("https://claude.ai/c/1")
+        );
+    }
+
+    #[test]
+    fn unload_falls_back_to_the_last_page_load_url() {
+        let state = AiWebviewState::default();
+        let (tab_id, label) = state.arm_in_new_tab(&provider("claude"), pending(1, "claude.ai"));
+        state.with_tabs(|tabs| tabs.set_live(&tab_id, Some(label.clone())));
+        state.set_last_page_url(&label, "https://claude.ai/c/2".into());
+
+        state.mark_unloaded(&tab_id, None);
+
+        assert_eq!(
+            state.with_tabs(|tabs| tabs.get(&tab_id).unwrap().last_url.clone()).as_deref(),
+            Some("https://claude.ai/c/2")
+        );
+    }
+
+    #[test]
+    fn armed_set_skips_tabs_whose_message_was_delivered() {
+        let state = AiWebviewState::default();
+        let (waiting_tab, waiting_label) =
+            state.arm_in_new_tab(&provider("claude"), pending(1, "claude.ai"));
+        let (sent_tab, sent_label) =
+            state.arm_in_new_tab(&provider("claude"), pending(2, "claude.ai"));
+        state.with_tabs(|tabs| {
+            tabs.set_live(&waiting_tab, Some(waiting_label.clone()));
+            tabs.set_live(&sent_tab, Some(sent_label.clone()));
+        });
+        assert!(state.take_delivery(&sent_label, "claude.ai").is_some());
+
+        let armed = state.armed_tab_ids();
+
+        assert!(armed.contains(&waiting_tab));
+        assert!(!armed.contains(&sent_tab));
     }
 
     fn pending(run: u64, host: &str) -> PendingMessage {
@@ -442,18 +330,6 @@ mod tests {
         state.arm_message("w", pending(1, "claude.ai"));
         assert!(state.take_delivery("w", "login.example").is_none());
         assert_eq!(state.take_delivery("w", "claude.ai"), Some((1, "script1".to_string())));
-    }
-
-    #[test]
-    fn drop_host_discards_pending_messages_of_its_children() {
-        let state = AiWebviewState::default();
-        state.arm_message("host::ai-webview-claude", pending(1, "claude.ai"));
-        state.arm_message("other::ai-webview-claude", pending(2, "claude.ai"));
-
-        state.drop_host("host");
-
-        assert!(state.finish_message("host::ai-webview-claude", 1).is_none());
-        assert_eq!(state.finish_message("other::ai-webview-claude", 2).map(|m| m.run), Some(2));
     }
 
     #[test]

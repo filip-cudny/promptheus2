@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager};
 
-use crate::services::dialog::shell_toolbar_label_for;
+use crate::services::dialog::SHELL_TOOLBAR_LABEL;
 use crate::Error;
 
 const MENU_LABEL: &str = "provider-menu";
@@ -136,10 +136,9 @@ pub async fn hide_provider_menu(app: AppHandle) -> crate::Result<()> {
     if let Some(win) = app.get_webview_window(MENU_LABEL) {
         win.hide()?;
     }
-    if let Some(host) = take_menu_host() {
-        let toolbar = shell_toolbar_label_for(&host);
+    if take_menu_host().is_some() {
         let _ = app.emit_to(
-            toolbar.as_str(),
+            SHELL_TOOLBAR_LABEL,
             "provider-menu:closed",
             ProviderMenuClosedEvent { via_select: false },
         );
@@ -173,22 +172,21 @@ pub async fn provider_menu_select(
         let _ = win.hide();
     }
 
-    let Some(host) = take_menu_host() else {
+    if take_menu_host().is_none() {
         log::warn!(
             target: "app_lib::commands::provider_menu",
             "provider_menu_select: no recorded host for selection {provider_id}",
         );
         return Ok(());
-    };
-    let toolbar = shell_toolbar_label_for(&host);
+    }
 
     app.emit_to(
-        toolbar.as_str(),
+        SHELL_TOOLBAR_LABEL,
         "provider-menu:select",
         SelectPayload { provider_id },
     )?;
     let _ = app.emit_to(
-        toolbar.as_str(),
+        SHELL_TOOLBAR_LABEL,
         "provider-menu:closed",
         ProviderMenuClosedEvent { via_select: true },
     );

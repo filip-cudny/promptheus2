@@ -196,6 +196,7 @@ impl TabList {
         }
     }
 
+    #[allow(dead_code)]
     pub fn adjacent(&self, step: i32) -> Option<String> {
         let len = self.tabs.len() as i32;
         if len == 0 {
@@ -213,6 +214,7 @@ impl TabList {
         Some(self.tabs[index as usize].id.clone())
     }
 
+    #[allow(dead_code)]
     pub fn at_position(&self, position: u32) -> Option<String> {
         match position {
             1..=8 => self.tabs.get(position as usize - 1),
@@ -307,6 +309,7 @@ impl TabList {
             .collect()
     }
 
+    #[allow(dead_code)]
     pub fn live_provider_tabs(&self) -> Vec<String> {
         self.tabs
             .iter()

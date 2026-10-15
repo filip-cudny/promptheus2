@@ -5,7 +5,7 @@ use tauri::{Emitter, Manager};
 
 use crate::models::history::InvocationSource;
 use crate::services::ai_webview;
-use crate::services::dialog::{self, focus_host_window, is_shell_toolbar_label, DialogConfig};
+use crate::services::dialog::{self, focus_host_window, DialogConfig};
 use crate::Error;
 
 #[derive(Serialize, Clone)]
@@ -136,26 +136,9 @@ pub async fn open_conversation_dialog(
 }
 
 fn surface_conversation_dialog(app: &tauri::AppHandle, label: &str) {
-    use crate::services::ai_webview;
-
-    if let Some(host) = app.get_window(label) {
-        for webview in host.webviews() {
-            let wv_label = webview.label();
-            if wv_label == label {
-                let _ = webview.show();
-                let _ = webview.set_focus();
-            } else if is_shell_toolbar_label(wv_label) {
-                let _ = webview.show();
-            } else {
-                let _ = webview.hide();
-            }
-        }
-        if let Err(e) = host.set_title("Promptheus — chat") {
-            log::warn!("set_title failed: {e}");
-        }
+    if let Err(e) = ai_webview::show_native_view(app) {
+        log::warn!("show_native_view failed: {e}");
     }
-    ai_webview::mark_active_webview(app, label, label);
-    ai_webview::emit_active_changed_for(app, label, None);
     let _ = focus_host_window(app, label);
 }
 
@@ -184,90 +167,6 @@ pub async fn focus_or_open_chat(app: tauri::AppHandle) -> crate::Result<()> {
         .await
         .map_err(Error::Other)?;
     Ok(())
-}
-
-#[tauri::command]
-pub async fn open_conversation_dialog_new_window(
-    app: tauri::AppHandle,
-    source_label: Option<String>,
-    provider_id: Option<String>,
-    skill_id: Option<String>,
-    skill_name: Option<String>,
-    skill_model: Option<String>,
-) -> crate::Result<()> {
-    let label = next_conversation_dialog_label(&app);
-    log::info!(
-        target: "app_lib::commands::conversation_dialog",
-        "open_conversation_dialog_new_window label={label} source={source_label:?} provider={provider_id:?} skill={skill_id:?}",
-    );
-
-    if let Some(src) = source_label.as_deref() {
-        dialog::seed_geometry_from(&app, src, &label).await;
-    }
-
-    let config = DialogConfig {
-        label: label.clone(),
-        url: "conversation-dialog.html".into(),
-        title: "Promptheus — chat".into(),
-        default_width: 700.0,
-        default_height: 600.0,
-        geometry_key: label.clone(),
-    };
-
-    if let Some(pid) = provider_id.as_deref() {
-        if !pid.is_empty() && pid != "promptheus" {
-            if let Some(state) = app.try_state::<ai_webview::AiWebviewState>() {
-                state.set_pending_provider(&label, pid);
-                log::info!(
-                    target: "app_lib::commands::conversation_dialog",
-                    "open_conversation_dialog_new_window: stored pending provider {pid} for {label}",
-                );
-            }
-        }
-    }
-
-    if let Some(sid) = skill_id.as_deref() {
-        if !sid.is_empty() {
-            *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(PendingDialogParams {
-                skill_id: sid.to_string(),
-                skill_name: skill_name.unwrap_or_default(),
-                skill_model,
-                history_entry_id: None,
-                last_interaction_only: false,
-                initial_input: None,
-                auto_send_input: false,
-                new_chat: false,
-                invocation_source: None,
-                copy_token: None,
-            });
-        }
-    }
-
-    let (_, _) = dialog::open_or_focus(&app, &config)
-        .await
-        .map_err(Error::Other)?;
-    log::info!(
-        target: "app_lib::commands::conversation_dialog",
-        "open_conversation_dialog_new_window: window created label={label}",
-    );
-
-    Ok(())
-}
-
-fn next_conversation_dialog_label(app: &tauri::AppHandle) -> String {
-    use tauri::Manager;
-    let base = "conversation-dialog";
-    if app.get_window(base).is_none() {
-        return base.to_string();
-    }
-    let mut i = 2u32;
-    loop {
-        let candidate = format!("{base}-{i}");
-        if app.get_window(&candidate).is_none() {
-            return candidate;
-        }
-        i += 1;
-    }
 }
 
 #[tauri::command]

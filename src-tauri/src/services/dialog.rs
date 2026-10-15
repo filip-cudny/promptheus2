@@ -24,28 +24,14 @@ pub struct DialogConfig {
 
 pub fn is_conversation_dialog_host(label: &str) -> bool {
     label == CONVERSATION_DIALOG_LABEL
-        || label.starts_with(&format!("{CONVERSATION_DIALOG_LABEL}-"))
 }
 
 pub fn uses_custom_titlebar(label: &str) -> bool {
     is_conversation_dialog_host(label)
 }
 
-pub fn shell_toolbar_label_for(host_label: &str) -> String {
-    if host_label == CONVERSATION_DIALOG_LABEL {
-        SHELL_TOOLBAR_LABEL.to_string()
-    } else if let Some(suffix) =
-        host_label.strip_prefix(&format!("{CONVERSATION_DIALOG_LABEL}-"))
-    {
-        format!("{SHELL_TOOLBAR_LABEL}-{suffix}")
-    } else {
-        format!("{host_label}-toolbar")
-    }
-}
-
 pub fn is_shell_toolbar_label(label: &str) -> bool {
     label == SHELL_TOOLBAR_LABEL
-        || label.starts_with(&format!("{SHELL_TOOLBAR_LABEL}-"))
 }
 
 fn logical_window_size(win: &tauri::Window) -> Result<(f64, f64), String> {
@@ -268,7 +254,6 @@ pub async fn open_or_focus(
         .unwrap_or((config.default_width, config.default_height));
 
     let custom_titlebar = uses_custom_titlebar(&config.label);
-    let toolbar_label = shell_toolbar_label_for(&config.label);
 
     let mut window_builder = Window::builder(app, &config.label)
         .title(&config.title)
@@ -333,7 +318,7 @@ pub async fn open_or_focus(
     if custom_titlebar {
         let (toolbar_pos, toolbar_size) = toolbar_layout(logical_w);
         let toolbar_builder = tauri::webview::WebviewBuilder::new(
-            &toolbar_label,
+            SHELL_TOOLBAR_LABEL,
             tauri::WebviewUrl::App("shell-toolbar.html".into()),
         )
         .auto_resize()
@@ -361,7 +346,13 @@ pub async fn open_or_focus(
             attach_undecorated_resize_handler(&content_webview);
         }
 
-        ai_webview::mark_active_webview(app, &config.label, &config.label);
+        if let Err(e) = ai_webview::show_native_view(app) {
+            log::warn!(
+                target: "app_lib::services::dialog",
+                "show_native_view failed for {}: {e}",
+                config.label,
+            );
+        }
     } else {
         let content_builder = tauri::webview::WebviewBuilder::new(
             &config.label,
@@ -389,7 +380,6 @@ pub async fn open_or_focus(
     let resize_app = app.clone();
     let resize_custom_titlebar = custom_titlebar;
 
-    let focus_label = config.label.clone();
     window.on_window_event(move |event| match event {
         WindowEvent::CloseRequested { .. } => {
             save_geometry(&app_handle, &label, &geometry_key);
@@ -408,17 +398,8 @@ pub async fn open_or_focus(
             let logical_h = size.height as f64 / scale;
             apply_layout(&host, resize_custom_titlebar, logical_w, logical_h);
         }
-        WindowEvent::Focused(true) => {
-            if let Some(state) = resize_app.try_state::<ai_webview::AiWebviewState>() {
-                state.touch_host_focus(&focus_label);
-            }
-        }
         _ => {}
     });
-
-    if let Some(state) = app.try_state::<ai_webview::AiWebviewState>() {
-        state.touch_host_focus(&config.label);
-    }
 
     Ok((window, true))
 }
@@ -485,41 +466,6 @@ pub fn save_geometry(app: &tauri::AppHandle, window_label: &str, geometry_key: &
             log::warn!("failed to save window geometry: {e}");
         }
     });
-}
-
-pub async fn seed_geometry_from(
-    app: &tauri::AppHandle,
-    source_label: &str,
-    target_key: &str,
-) {
-    let Some(win) = app.get_window(source_label) else {
-        log::debug!(
-            target: "app_lib::services::dialog",
-            "seed_geometry_from: no source window {source_label}",
-        );
-        return;
-    };
-
-    let (Ok(pos), Ok(size)) = (win.outer_position(), win.inner_size()) else {
-        return;
-    };
-
-    let scale = win.scale_factor().unwrap_or(1.0);
-    let geom = WindowGeometry {
-        x: pos.x as f64 / scale,
-        y: pos.y as f64 / scale,
-        width: size.width as f64 / scale,
-        height: size.height as f64 / scale,
-    };
-
-    let ui_state = app.state::<Arc<Mutex<UiStateService>>>();
-    let mut guard = ui_state.lock().await;
-    if let Err(e) = guard.set_geometry(target_key, geom) {
-        log::warn!(
-            target: "app_lib::services::dialog",
-            "seed_geometry_from {source_label} -> {target_key} failed: {e}",
-        );
-    }
 }
 
 pub fn focus_window(win: &tauri::WebviewWindow) -> Result<(), String> {

@@ -4,27 +4,19 @@ import { tick } from "svelte";
 import {
   PROMPTHEUS_PROVIDER_ID,
   closePalette,
-  focusWindowByLabel,
   reloadActiveInHost,
 } from "$lib/services/shellToolbar";
+import { activateTab, type TabDto, type TabsSnapshot } from "$lib/services/tabs";
 
 type ProviderPayload = { id: string; name: string; url?: string | null };
 
-export type WindowEntry = {
-  host_label: string;
-  kind: "promptheus" | "ai_provider";
-  provider_id: string | null;
-  provider_name: string | null;
-  provider_url: string | null;
-  title: string;
-  is_current: boolean;
-};
+export type TabEntry = TabDto & { is_current: boolean };
 
 type ShowPayload = {
   host_label: string;
   active_id: string;
   providers: ProviderPayload[];
-  windows: WindowEntry[];
+  tabs: TabsSnapshot;
   current_title: string;
 };
 
@@ -34,7 +26,7 @@ export function usePaletteIpc(opts: {
   let hostLabel = $state("");
   let activeId = $state(PROMPTHEUS_PROVIDER_ID);
   let webviewProviders = $state<ProviderPayload[]>([]);
-  let openWindows = $state<WindowEntry[]>([]);
+  let openTabs = $state<TabEntry[]>([]);
   let currentTitle = $state("");
   let visible = $state(false);
 
@@ -60,7 +52,7 @@ export function usePaletteIpc(opts: {
     await dismiss(null);
   }
 
-  async function focusWindow(label: string) {
+  async function focusWindow(tabId: string) {
     if (!hostLabel) return;
     visible = false;
     try {
@@ -69,9 +61,9 @@ export function usePaletteIpc(opts: {
       console.error("close_palette failed", e);
     }
     try {
-      await focusWindowByLabel(label);
+      await activateTab(tabId);
     } catch (e) {
-      console.error("focus_window_by_label failed", e);
+      console.error("activate_tab failed", e);
     }
   }
 
@@ -80,7 +72,10 @@ export function usePaletteIpc(opts: {
       hostLabel = ev.payload.host_label;
       activeId = ev.payload.active_id;
       webviewProviders = ev.payload.providers;
-      openWindows = ev.payload.windows ?? [];
+      openTabs = (ev.payload.tabs?.tabs ?? []).map((tab) => ({
+        ...tab,
+        is_current: tab.id === ev.payload.tabs.active_id,
+      }));
       currentTitle = ev.payload.current_title ?? "";
       visible = false;
       await tick();
@@ -116,7 +111,7 @@ export function usePaletteIpc(opts: {
       return webviewProviders;
     },
     get openWindows() {
-      return openWindows;
+      return openTabs;
     },
     get currentTitle() {
       return currentTitle;

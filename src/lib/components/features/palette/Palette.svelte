@@ -1,25 +1,24 @@
 <script lang="ts">
-  import { AppWindow, RefreshCw } from "lucide-svelte";
+  import { RefreshCw } from "lucide-svelte";
   import CommandPalette from "$lib/components/shared/ui/CommandPalette.svelte";
   import KbdHint from "$lib/components/shared/ui/KbdHint.svelte";
   import { providerIconSvg } from "$lib/icons/providerIcons";
   import { PROMPTHEUS_PROVIDER_ID } from "$lib/services/shellToolbar";
   import { handleListNavKey } from "$lib/utils/listNavigation";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
-  import type { WindowEntry } from "./drivers/usePaletteIpc.svelte";
+  import type { TabEntry } from "./drivers/usePaletteIpc.svelte";
 
   type ProviderEntry = { kind: "provider"; id: string; name: string; url?: string };
-  type WindowSwitchEntry = {
-    kind: "window";
+  type TabSwitchEntry = {
+    kind: "tab";
     id: string;
     name: string;
-    hostLabel: string;
+    tabId: string;
     providerId: string | null;
-    providerUrl: string | null;
     isCurrent: boolean;
   };
   type ActionEntry = { kind: "action"; id: string; name: string };
-  type PaletteEntry = ProviderEntry | WindowSwitchEntry | ActionEntry;
+  type PaletteEntry = ProviderEntry | TabSwitchEntry | ActionEntry;
 
   const ACTION_RELOAD_ID = "action:reload-active";
 
@@ -37,12 +36,12 @@
     visible: boolean;
     activeId: string;
     webviewProviders: { id: string; name: string; url?: string | null }[];
-    openWindows: WindowEntry[];
+    openWindows: TabEntry[];
     currentTitle: string;
     inputRef?: HTMLInputElement | undefined;
     onDismiss: (selectedId: string | null) => void;
     onReloadActive: () => void;
-    onFocusWindow: (label: string) => void;
+    onFocusWindow: (tabId: string) => void;
   } = $props();
 
   let query = $state("");
@@ -61,15 +60,14 @@
 
   let activeName = $derived(providers.find((p) => p.id === activeId)?.name ?? "active provider");
 
-  let windowEntries = $derived<WindowSwitchEntry[]>(
-    openWindows.map((w) => ({
-      kind: "window",
-      id: `window:${w.host_label}`,
-      name: w.title,
-      hostLabel: w.host_label,
-      providerId: w.kind === "ai_provider" ? w.provider_id : PROMPTHEUS_PROVIDER_ID,
-      providerUrl: w.provider_url,
-      isCurrent: w.is_current,
+  let tabEntries = $derived<TabSwitchEntry[]>(
+    openWindows.map((tab) => ({
+      kind: "tab",
+      id: `tab:${tab.id}`,
+      name: tab.title,
+      tabId: tab.id,
+      providerId: tab.kind === "provider" ? tab.provider_id : PROMPTHEUS_PROVIDER_ID,
+      isCurrent: tab.is_current,
     })),
   );
 
@@ -77,7 +75,7 @@
     { kind: "action", id: ACTION_RELOAD_ID, name: `Reload ${activeName}` },
   ]);
 
-  let entries = $derived<PaletteEntry[]>([...providers, ...windowEntries, ...actions]);
+  let entries = $derived<PaletteEntry[]>([...providers, ...tabEntries, ...actions]);
 
   let filtered = $derived.by<PaletteEntry[]>(() => {
     const q = query.trim().toLowerCase();
@@ -112,12 +110,12 @@
       if (entry.id === ACTION_RELOAD_ID) onReloadActive();
       return;
     }
-    if (entry.kind === "window") {
+    if (entry.kind === "tab") {
       if (entry.isCurrent) {
         onDismiss(null);
         return;
       }
-      onFocusWindow(entry.hostLabel);
+      onFocusWindow(entry.tabId);
       return;
     }
     onDismiss(entry.id);
@@ -158,8 +156,9 @@
     return filtered[i - 1].kind !== entry.kind;
   }
 
-  function windowIconProvider(entry: WindowSwitchEntry) {
-    return { id: entry.providerId ?? "", url: entry.providerUrl ?? undefined };
+  function tabIconProvider(entry: TabSwitchEntry) {
+    const provider = webviewProviders.find((p) => p.id === entry.providerId);
+    return { id: entry.providerId ?? "", url: provider?.url ?? undefined };
   }
 </script>
 
@@ -170,7 +169,7 @@
   onClose={() => onDismiss(null)}
   bind:query
   bind:inputRef
-  placeholder="Search providers, windows, and actions..."
+  placeholder="Search providers, tabs, and actions..."
   variant="window"
   bodyMaxHeight="360px"
 >
@@ -203,21 +202,14 @@
           {#if entry.id === activeId}
             <span class="badge">active</span>
           {/if}
-        {:else if entry.kind === "window"}
-          {@const iconSvg = providerIconSvg(windowIconProvider(entry))}
-          <span
-            class="palette-item-icon window-icon"
-            class:muted={entry.isCurrent}
-            aria-hidden="true"
-          >
+        {:else if entry.kind === "tab"}
+          {@const iconSvg = providerIconSvg(tabIconProvider(entry))}
+          <span class="palette-item-icon" class:muted={entry.isCurrent} aria-hidden="true">
             {#if iconSvg}
-              <span class="window-icon-base">{@html iconSvg}</span>
+              <span class="tab-icon-base">{@html iconSvg}</span>
             {:else}
-              <span class="window-icon-base placeholder"></span>
+              <span class="tab-icon-base placeholder"></span>
             {/if}
-            <span class="window-icon-overlay">
-              <AppWindow size={9} strokeWidth={2.4} />
-            </span>
           </span>
           <span class="palette-item-name" class:muted-text={entry.isCurrent}>{entry.name}</span>
           {#if entry.isCurrent}
@@ -297,11 +289,7 @@
     opacity: 0.8;
   }
 
-  .window-icon {
-    position: relative;
-  }
-
-  .window-icon-base {
+  .tab-icon-base {
     width: 100%;
     height: 100%;
     display: inline-flex;
@@ -309,34 +297,15 @@
     justify-content: center;
   }
 
-  :global(.window-icon-base svg),
-  :global(.window-icon-base img) {
+  :global(.tab-icon-base svg),
+  :global(.tab-icon-base img) {
     width: 100%;
     height: 100%;
     display: block;
   }
 
-  .window-icon-base.placeholder {
+  .tab-icon-base.placeholder {
     background: var(--surface-overlay-faint);
     border-radius: var(--radius-xs);
-  }
-
-  .window-icon-overlay {
-    position: absolute;
-    right: -3px;
-    bottom: -3px;
-    width: 11px;
-    height: 11px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--surface-floating-modal);
-    border: 1px solid var(--border-default);
-    border-radius: 999px;
-    color: var(--text-primary);
-  }
-
-  :global(.palette-item.highlight .window-icon-overlay) {
-    background: var(--surface-overlay);
   }
 </style>

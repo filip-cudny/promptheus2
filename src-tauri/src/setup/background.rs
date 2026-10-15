@@ -41,21 +41,21 @@ pub fn spawn_heartbeat(app_handle: tauri::AppHandle) {
     });
 }
 
-pub fn spawn_ai_webview_cold_suspend(app_handle: tauri::AppHandle) {
+pub fn spawn_ai_webview_unload(app_handle: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut interval =
-            tokio::time::interval(services::ai_webview::COLD_SUSPEND_POLL_INTERVAL);
+            tokio::time::interval(services::ai_webview::UNLOAD_POLL_INTERVAL);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         interval.tick().await;
         loop {
             interval.tick().await;
             let app = app_handle.clone();
             if let Err(e) = app_handle.run_on_main_thread(move || {
-                services::ai_webview::run_cold_suspend_pass(app);
+                services::ai_webview::run_unload_pass(app);
             }) {
                 log::warn!(
                     target: "app_lib::ai_webview",
-                    "cold-suspend dispatch failed: {e}",
+                    "unload dispatch failed: {e}",
                 );
             }
         }
