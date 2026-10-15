@@ -73,6 +73,7 @@ pub struct TabList {
     active: Option<String>,
     provider_counter: u32,
     label_counters: HashMap<String, u32>,
+    closed_native: HashSet<String>,
 }
 
 fn native_id(tab_id: &str) -> String {
@@ -177,7 +178,10 @@ impl TabList {
                 list_empty: self.tabs.is_empty(),
             };
         };
-        self.tabs.remove(index);
+        let removed = self.tabs.remove(index);
+        if let TabKind::Native { tab_id } = removed.kind {
+            self.closed_native.insert(tab_id);
+        }
         let mut successor = None;
         if self.active.as_deref() == Some(tab_id) {
             successor = self
@@ -228,6 +232,12 @@ impl TabList {
         active_native_id: Option<&str>,
         now: Instant,
     ) {
+        let present: HashSet<&str> = reports.iter().map(|r| r.tab_id.as_str()).collect();
+        self.closed_native.retain(|id| present.contains(id.as_str()));
+        let reports: Vec<&NativeTabReport> = reports
+            .iter()
+            .filter(|r| !self.closed_native.contains(&r.tab_id))
+            .collect();
         let listed: HashSet<&str> = reports
             .iter()
             .filter(|r| r.listed)
@@ -550,6 +560,34 @@ mod tests {
         list.activate(&p, base);
         list.apply_native_snapshot(&reports, Some("a"), base);
         assert_eq!(list.active_id(), Some(p.as_str()));
+    }
+
+    #[test]
+    fn closed_native_tab_is_ignored_until_a_report_omits_it() {
+        let base = Instant::now();
+        let mut list = TabList::default();
+        let p = list.push_provider(&provider("claude"), base);
+        list.apply_native_snapshot(&[report("a", "A", true)], Some("a"), secs(base, 1));
+        list.close("native:a", secs(base, 2));
+        assert_eq!(list.active_id(), Some(p.as_str()));
+        let recency = list.get(&p).unwrap().last_used;
+
+        list.apply_native_snapshot(&[report("a", "A", true)], Some("a"), secs(base, 3));
+        assert_eq!(order(&list), vec![p.as_str()]);
+        assert_eq!(list.active_id(), Some(p.as_str()));
+        assert_eq!(list.get(&p).unwrap().last_used, recency);
+
+        list.apply_native_snapshot(&[], None, secs(base, 4));
+        list.apply_native_snapshot(&[report("a", "A", true)], None, secs(base, 5));
+        assert_eq!(order(&list), vec![p.as_str(), "native:a"]);
+
+        list.close("native:a", secs(base, 6));
+        list.apply_native_snapshot(
+            &[report("a", "A", true), report("b", "B", true)],
+            None,
+            secs(base, 7),
+        );
+        assert_eq!(order(&list), vec![p.as_str(), "native:b"]);
     }
 
     #[test]
