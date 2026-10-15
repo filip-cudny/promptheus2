@@ -284,16 +284,69 @@ function pressEnter(composer) {
     }));
 }
 
-function sendUntilNavigated(composer, run) {
+let uploadCounter = null;
+
+function countBodyImages(body) {
+    if (body instanceof Blob) return 1;
+    if (body instanceof FormData) {
+        let n = 0;
+        body.forEach(function(value) { if (value instanceof Blob) n++; });
+        return n;
+    }
+    return 0;
+}
+
+function trackUpload(body) {
+    const counter = uploadCounter;
+    const count = counter ? countBodyImages(body) : 0;
+    if (!count) return null;
+    counter.images += count;
+    counter.inFlight += 1;
+    counter.lastAt = Date.now();
+    return function() {
+        counter.inFlight -= 1;
+        counter.lastAt = Date.now();
+    };
+}
+
+if (window.fetch) {
+    const origFetch = window.fetch;
+    window.fetch = function(input, init) {
+        const settle = init && init.keepalive !== true ? trackUpload(init.body) : null;
+        let promise;
+        try {
+            promise = origFetch.apply(this, arguments);
+        } catch (e) {
+            if (settle) settle();
+            throw e;
+        }
+        if (settle) promise.then(settle, settle);
+        return promise;
+    };
+}
+
+const origXhrSend = XMLHttpRequest.prototype.send;
+XMLHttpRequest.prototype.send = function(body) {
+    const settle = trackUpload(body);
+    if (settle) this.addEventListener("loadend", settle);
+    try {
+        return origXhrSend.apply(this, arguments);
+    } catch (e) {
+        if (settle) settle();
+        throw e;
+    }
+};
+
+function sendUntilNavigated(composer, run, uploads, waitedMs) {
     const startedAt = Date.now();
     pressEnter(composer);
     const timer = setInterval(function() {
         if (/^\/(chat|c)\//.test(location.pathname)) {
             clearInterval(timer);
-            sendRouter({ kind: "webview_send_outcome", status: "sent", run: run });
+            sendRouter({ kind: "webview_send_outcome", status: "sent", run: run, uploads: uploads, waitedMs: waitedMs });
         } else if (Date.now() - startedAt >= 30000) {
             clearInterval(timer);
-            sendRouter({ kind: "webview_send_outcome", status: "typed", run: run });
+            sendRouter({ kind: "webview_send_outcome", status: "typed", run: run, uploads: uploads, waitedMs: waitedMs });
         } else {
             pressEnter(composer);
         }
@@ -313,9 +366,31 @@ g.__deliverMessage = function(payload) {
         }
         clearInterval(poll);
         composer.focus();
+        if (!payload.images.length) {
+            injectText(composer, payload.text);
+            sendUntilNavigated(composer, payload.run, 0, 0);
+            return;
+        }
+        const counter = { images: 0, inFlight: 0, lastAt: Date.now() };
+        const uploadStartedAt = Date.now();
+        uploadCounter = counter;
         payload.images.forEach(function(image) { injectImage(composer, decodeImage(image)); });
-        injectText(composer, payload.text);
-        sendUntilNavigated(composer, payload.run);
+        const wait = setInterval(function() {
+            const now = Date.now();
+            const done = counter.images >= payload.images.length
+                && counter.inFlight === 0 && now - counter.lastAt >= 1000;
+            const timedOut = now - uploadStartedAt >= 20000;
+            if (!done && !timedOut) return;
+            clearInterval(wait);
+            uploadCounter = null;
+            const waitedMs = now - uploadStartedAt;
+            injectText(composer, payload.text);
+            if (done) {
+                sendUntilNavigated(composer, payload.run, counter.images, waitedMs);
+            } else {
+                sendRouter({ kind: "webview_send_outcome", status: "typed", run: payload.run, uploads: counter.images, waitedMs: waitedMs });
+            }
+        }, 100);
     }, 250);
 };
 "##;

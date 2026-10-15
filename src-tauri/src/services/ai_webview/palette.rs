@@ -44,7 +44,7 @@ pub(super) enum RouterMessage {
     OpenPalette,
     OpenExternal { url: String },
     RequestPasteText,
-    SendOutcome { status: SendStatus, run: u64 },
+    SendOutcome { status: SendStatus, run: u64, uploads: Option<u32>, waited_ms: Option<u64> },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -78,7 +78,9 @@ pub(super) fn parse_router_message(url: &tauri::Url) -> Option<RouterMessage> {
                 _ => return None,
             };
             let run = params.remove("run")?.parse().ok()?;
-            Some(RouterMessage::SendOutcome { status, run })
+            let uploads = params.remove("uploads").and_then(|v| v.parse().ok());
+            let waited_ms = params.remove("waitedMs").and_then(|v| v.parse().ok());
+            Some(RouterMessage::SendOutcome { status, run, uploads, waited_ms })
         }
         _ => None,
     }
@@ -115,8 +117,8 @@ pub(super) async fn handle_router_message(
         RouterMessage::RequestPasteText => {
             deliver_clipboard_text_to_webview(app, webview_label);
         }
-        RouterMessage::SendOutcome { status, run } => {
-            handle_send_outcome(app, webview_label, status, run).await;
+        RouterMessage::SendOutcome { status, run, uploads, waited_ms } => {
+            handle_send_outcome(app, webview_label, status, run, uploads, waited_ms).await;
         }
     }
 }
@@ -632,18 +634,30 @@ mod tests {
     }
 
     #[test]
-    fn parse_router_message_send_outcome_statuses() {
+    fn parse_router_message_send_outcome_upload_fields() {
         assert!(matches!(
-            parse_outcome("&status=sent&run=7"),
-            Some(RouterMessage::SendOutcome { status: SendStatus::Sent, run: 7 })
+            parse_outcome("&status=sent&run=7&uploads=2&waitedMs=1350"),
+            Some(RouterMessage::SendOutcome { uploads: Some(2), waited_ms: Some(1350), .. })
         ));
         assert!(matches!(
             parse_outcome("&status=typed&run=8"),
-            Some(RouterMessage::SendOutcome { status: SendStatus::Typed, run: 8 })
+            Some(RouterMessage::SendOutcome { uploads: None, waited_ms: None, .. })
+        ));
+    }
+
+    #[test]
+    fn parse_router_message_send_outcome_statuses() {
+        assert!(matches!(
+            parse_outcome("&status=sent&run=7"),
+            Some(RouterMessage::SendOutcome { status: SendStatus::Sent, run: 7, .. })
+        ));
+        assert!(matches!(
+            parse_outcome("&status=typed&run=8"),
+            Some(RouterMessage::SendOutcome { status: SendStatus::Typed, run: 8, .. })
         ));
         assert!(matches!(
             parse_outcome("&status=no_composer&run=9"),
-            Some(RouterMessage::SendOutcome { status: SendStatus::NoComposer, run: 9 })
+            Some(RouterMessage::SendOutcome { status: SendStatus::NoComposer, run: 9, .. })
         ));
     }
 

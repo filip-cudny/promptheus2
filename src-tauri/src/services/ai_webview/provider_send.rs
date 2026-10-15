@@ -19,7 +19,7 @@ use super::provider_swap::{hosted_child_label, new_chat_in_host, swap_to_provide
 use super::scripts::delivery_script;
 use super::{AiWebviewState, PendingMessage};
 
-const DELIVERY_DEADLINE: Duration = Duration::from_secs(50);
+const DELIVERY_DEADLINE: Duration = Duration::from_secs(80);
 
 static NEXT_RUN: AtomicU64 = AtomicU64::new(1);
 
@@ -69,7 +69,13 @@ pub(super) async fn handle_send_outcome(
     webview_label: &str,
     status: SendStatus,
     run: u64,
+    uploads: Option<u32>,
+    waited_ms: Option<u64>,
 ) {
+    log::info!(
+        target: "app_lib::services::ai_webview",
+        "send outcome: webview={webview_label} run={run} status={status:?} uploads={uploads:?} waited_ms={waited_ms:?}",
+    );
     let Some(state) = app.try_state::<AiWebviewState>() else {
         return;
     };
@@ -81,13 +87,7 @@ pub(super) async fn handle_send_outcome(
         return;
     };
     let reason = match status {
-        SendStatus::Sent => {
-            log::info!(
-                target: "app_lib::services::ai_webview",
-                "message sent: webview={webview_label} run={run}",
-            );
-            return;
-        }
+        SendStatus::Sent => return,
         SendStatus::Typed => "typed but not sent",
         SendStatus::NoComposer => "no message box found (logged out?)",
     };
