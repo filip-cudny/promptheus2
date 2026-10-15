@@ -15,6 +15,8 @@
     Type,
     X,
   } from "lucide-svelte";
+  import claudeIcon from "$lib/icons/providers/claude.svg?raw";
+  import chatgptIcon from "$lib/icons/providers/chatgpt.svg?raw";
 
   type WidgetState = "recording" | "paused" | "processing" | "done";
 
@@ -64,6 +66,9 @@
   const CHIP_GAP = 4;
   const DROPDOWN_ROW_HEIGHT = 28;
   const DROPDOWN_PADDING = 4;
+  const TARGET_ICONS: Record<string, string> = { "webview:claude": claudeIcon, "webview:chatgpt": chatgptIcon };
+  const TARGET_ICON_SIZE = 14;
+  const TARGET_ICON_GAP = 8;
   const DEFAULT_TARGET_LABEL = "Dictation";
   const BAR_WIDTH = 2;
   const BAR_GAP = 3;
@@ -379,8 +384,12 @@
           tabindex="-1"
           style:height="{DROPDOWN_ROW_HEIGHT}px"
           style:padding="0 {PADDING_X}px"
+          style:gap="{TARGET_ICON_GAP}px"
           onclick={() => selectTarget(target.id)}
         >
+          {#if TARGET_ICONS[target.id]}
+            <span class="option-icon" style:--icon-size="{TARGET_ICON_SIZE}px" aria-hidden="true">{@html TARGET_ICONS[target.id]}</span>
+          {/if}
           {target.label}
         </button>
       {/each}
@@ -565,6 +574,18 @@
   .option:last-child {
     border-bottom-left-radius: var(--row-radius);
     border-bottom-right-radius: var(--row-radius);
+  }
+
+  .option-icon {
+    display: flex;
+    flex: none;
+    width: var(--icon-size);
+    height: var(--icon-size);
+  }
+
+  .option-icon :global(svg) {
+    width: 100%;
+    height: 100%;
   }
 
   .option.selected {

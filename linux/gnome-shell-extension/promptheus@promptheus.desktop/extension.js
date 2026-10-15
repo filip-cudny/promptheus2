@@ -72,6 +72,9 @@ const WIDGET_WAVE_STEP = 2 * Math.PI / WIDGET_WAVE_BAR_COUNT;
 const WIDGET_BUTTON_HOVER = '#3a3a3c';
 const WIDGET_TARGET_PADDING_X = 8;
 const WIDGET_DRAG_THRESHOLD_PX = 4;
+const WIDGET_TARGET_ICONS = {'webview:claude': 'provider-claude', 'webview:chatgpt': 'provider-chatgpt'};
+const WIDGET_TARGET_ICON_SIZE = 14;
+const WIDGET_TARGET_ICON_GAP = 8;
 
 function pointInRect(x, y, rect) {
     return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
@@ -989,7 +992,7 @@ export default class PromptheusExtension extends Extension {
             const weight = id === selectedId ? 'font-weight: 700;' : '';
             const top = index === 0 ? rowRadius : 0;
             const bottom = index === targets.length - 1 ? rowRadius : 0;
-            dropdown.add_child(this._widgetButton(new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER}),
+            dropdown.add_child(this._widgetButton(this._dropdownRowContent(id, label),
                 () => {
                     this._emitRecordingWidgetTargetSelected(id);
                     this._closeDropdown(widget);
@@ -1001,6 +1004,17 @@ export default class PromptheusExtension extends Extension {
         dropdown.set_position(actor.x, this._dropdownAbove(widget) ? actor.y - height : actor.y + actor.height);
         Main.layoutManager.addTopChrome(dropdown);
         widget.dropdown = dropdown;
+    }
+
+    _dropdownRowContent(id, label) {
+        const text = new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER});
+        const icon = WIDGET_TARGET_ICONS[id];
+        if (!icon)
+            return text;
+        const content = new St.BoxLayout({style: `spacing: ${WIDGET_TARGET_ICON_GAP}px;`});
+        content.add_child(this._widgetIcon(icon, WIDGET_TARGET_ICON_SIZE));
+        content.add_child(text);
+        return content;
     }
 
     _closeDropdown(widget) {

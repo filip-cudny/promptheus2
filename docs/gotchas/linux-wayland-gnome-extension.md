@@ -100,7 +100,7 @@ Notification placement (webview window path):
 - `services/monitor.rs::find_monitor_at` falls back to the monitor under the cursor, then `primary_monitor()`, then the first of `available_monitors()`. On Wayland `cursor_position()` is not global and GDK reports no primary monitor; without the last fallback the notification never showed (`no monitor found`).
 
 Install:
-- `.deb`: `bundle.linux.deb.files` in `src-tauri/tauri.conf.json` installs `metadata.json`, `extension.js` and `icons/` into `/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/`.
+- `.deb`: `bundle.linux.deb.files` in `src-tauri/tauri.conf.json` installs `metadata.json`, `extension.js` and the icons into `/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/`, one entry per file: a new file in `icons/` must get its own entry, or the installed extension draws no icon (the dev symlink from `install-dev.sh` hides the omission).
 - Development: `linux/gnome-shell-extension/install-dev.sh` symlinks the directory into `~/.local/share/gnome-shell/extensions/`.
 - Then re-login and `gnome-extensions enable promptheus@promptheus.desktop`. The app never installs or enables the extension itself.
 - `metadata.json` `shell-version` lists exact GNOME majors (`["50"]`); add the new major on each GNOME release.

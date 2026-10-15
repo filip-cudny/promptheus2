@@ -45,7 +45,9 @@
           "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-chat.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-chat.svg",
           "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-item-text.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-item-text.svg",
           "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-item-image.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-item-image.svg",
-          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-item-remove.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-item-remove.svg"
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-item-remove.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-item-remove.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-provider-claude.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-provider-claude.svg",
+          "/usr/share/gnome-shell/extensions/promptheus@promptheus.desktop/icons/recording-provider-chatgpt.svg": "../linux/gnome-shell-extension/promptheus@promptheus.desktop/icons/recording-provider-chatgpt.svg"
         }
       }
     },
