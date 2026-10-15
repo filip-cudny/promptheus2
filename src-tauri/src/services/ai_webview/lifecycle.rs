@@ -199,8 +199,8 @@ pub(super) async fn swap_to_conversation_dialog_standalone(
         default_height: 600.0,
         geometry_key: CONVERSATION_DIALOG_LABEL.into(),
     };
-    let (win, _) = dialog::open_or_focus(app, &config).await?;
-    focus_window(&win)
+    dialog::open_or_focus(app, &config).await?;
+    focus_host_window(app, CONVERSATION_DIALOG_LABEL)
 }
 
 async fn open_window(

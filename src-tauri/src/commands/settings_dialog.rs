@@ -1,5 +1,6 @@
 use crate::services::dialog::{self, DialogConfig};
 use crate::Error;
+use tauri::Manager;
 
 #[tauri::command]
 pub async fn check_env_var(name: String) -> crate::Result<bool> {
@@ -33,8 +34,8 @@ pub async fn open_settings_window(
         }
     }
 
-    if let Some(section) = section {
-        let _ = win.eval(format!(
+    if let (Some(section), Some(webview)) = (section, app.get_webview(&config.label)) {
+        let _ = webview.eval(format!(
             "window.__settingsInitialSection = {};",
             serde_json::to_string(&section).unwrap_or_else(|_| "null".into())
         ));

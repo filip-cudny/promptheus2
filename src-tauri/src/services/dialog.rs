@@ -242,10 +242,10 @@ pub fn configure_linux_child_packing(_webview: &tauri::Webview, _role: LinuxChil
 pub async fn open_or_focus(
     app: &tauri::AppHandle,
     config: &DialogConfig,
-) -> Result<(tauri::WebviewWindow, bool), String> {
+) -> Result<(Window, bool), String> {
     if let Some(existing) = app.get_webview_window(&config.label) {
         existing.set_focus().map_err(|e| e.to_string())?;
-        return Ok((existing, false));
+        return Ok((existing.as_ref().window(), false));
     }
     if app.get_window(&config.label).is_some() {
         return Err(format!(
@@ -381,10 +381,6 @@ pub async fn open_or_focus(
         }
     }
 
-    let win = app
-        .get_webview_window(&config.label)
-        .ok_or_else(|| format!("failed to attach webview for {}", config.label))?;
-
     let app_handle = app.clone();
     let label = config.label.clone();
     let geometry_key = config.geometry_key.clone();
@@ -424,7 +420,7 @@ pub async fn open_or_focus(
         state.touch_host_focus(&config.label);
     }
 
-    Ok((win, true))
+    Ok((window, true))
 }
 
 pub fn apply_layout(
