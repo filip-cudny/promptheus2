@@ -131,14 +131,14 @@ impl AiWebviewState {
             .insert(label.to_string(), msg)
     }
 
-    pub(super) fn take_delivery(&self, label: &str, page_host: &str) -> Option<String> {
+    pub(super) fn take_delivery(&self, label: &str, page_host: &str) -> Option<(u64, String)> {
         let mut map = self.pending_messages.lock().unwrap();
         let msg = map.get_mut(label)?;
         if msg.delivered || msg.host != page_host {
             return None;
         }
         msg.delivered = true;
-        Some(msg.script.clone())
+        Some((msg.run, msg.script.clone()))
     }
 
     pub(super) fn finish_message(&self, label: &str, run: u64) -> Option<PendingMessage> {
@@ -430,7 +430,7 @@ mod tests {
     fn pending_message_is_delivered_once() {
         let state = AiWebviewState::default();
         state.arm_message("w", pending(1, "claude.ai"));
-        assert_eq!(state.take_delivery("w", "claude.ai").as_deref(), Some("script1"));
+        assert_eq!(state.take_delivery("w", "claude.ai"), Some((1, "script1".to_string())));
         assert!(state.take_delivery("w", "claude.ai").is_none());
     }
 
@@ -439,7 +439,7 @@ mod tests {
         let state = AiWebviewState::default();
         state.arm_message("w", pending(1, "claude.ai"));
         assert!(state.take_delivery("w", "login.example").is_none());
-        assert_eq!(state.take_delivery("w", "claude.ai").as_deref(), Some("script1"));
+        assert_eq!(state.take_delivery("w", "claude.ai"), Some((1, "script1".to_string())));
     }
 
     #[test]

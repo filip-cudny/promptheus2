@@ -125,12 +125,12 @@ fn deliver_pending_message(webview: &tauri::Webview) {
     let Some(state) = webview.app_handle().try_state::<AiWebviewState>() else {
         return;
     };
-    let Some(script) = state.take_delivery(webview.label(), &host) else {
+    let Some((run, script)) = state.take_delivery(webview.label(), &host) else {
         return;
     };
     log::debug!(
         target: "app_lib::services::ai_webview",
-        "delivering pending message: webview={}",
+        "delivering pending message: webview={} run={run}",
         webview.label(),
     );
     if let Err(e) = webview.eval(&script) {
