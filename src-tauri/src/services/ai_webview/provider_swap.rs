@@ -360,10 +360,10 @@ pub fn activate_tab(app: &tauri::AppHandle, tab_id: &str) -> Result<(), String> 
     show_only(&host, &target)?;
     state.with_tabs(|tabs| tabs.activate(tab_id, Instant::now()));
     sync_host_title(app);
-    emit_active_changed(app, provider_id.as_deref());
     if let Some(native_tab_id) = native_tab_id {
         emit_to_chat(app, "chat:activate-tab", ChatActivateTabEvent { tab_id: native_tab_id });
     }
+    emit_active_changed(app, provider_id.as_deref());
     emit_tabs_changed(app);
     log::info!(
         target: "app_lib::services::ai_webview",
@@ -387,20 +387,29 @@ pub fn close_tab(app: &tauri::AppHandle, tab_id: &str) -> Result<(), String> {
         outcome.successor,
         outcome.list_empty,
     );
-    if let TabKind::Native { tab_id: native } = &tab.kind {
-        let next_tab_id = outcome
-            .successor
-            .as_deref()
-            .and_then(|id| state.with_tabs(|tabs| tabs.get(id).cloned()))
-            .and_then(|next| match next.kind {
-                TabKind::Native { tab_id } => Some(tab_id),
+    let close_event = match &tab.kind {
+        TabKind::Native { tab_id: native } => {
+            let successor_tab = outcome
+                .successor
+                .as_deref()
+                .and_then(|id| state.with_tabs(|tabs| tabs.get(id).cloned()));
+            let next_tab_id = successor_tab.as_ref().and_then(|next| match &next.kind {
+                TabKind::Native { tab_id } => Some(tab_id.clone()),
                 TabKind::Provider { .. } => None,
             });
-        emit_to_chat(
-            app,
-            "chat:close-tab",
-            ChatCloseTabEvent { tab_id: native.clone(), next_tab_id },
-        );
+            let provider_successor = successor_tab.is_some() && next_tab_id.is_none();
+            Some((ChatCloseTabEvent { tab_id: native.clone(), next_tab_id }, provider_successor))
+        }
+        TabKind::Provider { .. } => None,
+    };
+    match (close_event, &outcome.successor) {
+        (Some((event, true)), Some(successor)) => {
+            let activated = activate_tab(app, successor);
+            emit_to_chat(app, "chat:close-tab", event);
+            return activated;
+        }
+        (Some((event, _)), _) => emit_to_chat(app, "chat:close-tab", event),
+        (None, _) => {}
     }
     if outcome.list_empty {
         emit_tabs_changed(app);
