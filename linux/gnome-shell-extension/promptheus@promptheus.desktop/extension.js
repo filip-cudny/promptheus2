@@ -1007,11 +1007,18 @@ export default class PromptheusExtension extends Extension {
     }
 
     _dropdownRowContent(id, label) {
-        const text = new St.Label({text: label, y_align: Clutter.ActorAlign.CENTER});
+        const text = new St.Label({
+            text: label,
+            x_align: Clutter.ActorAlign.START,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
         const icon = WIDGET_TARGET_ICONS[id];
         if (!icon)
             return text;
-        const content = new St.BoxLayout({style: `spacing: ${WIDGET_TARGET_ICON_GAP}px;`});
+        const content = new St.BoxLayout({
+            x_align: Clutter.ActorAlign.START,
+            style: `spacing: ${WIDGET_TARGET_ICON_GAP}px;`,
+        });
         content.add_child(this._widgetIcon(icon, WIDGET_TARGET_ICON_SIZE));
         content.add_child(text);
         return content;
