@@ -23,9 +23,10 @@ use crate::services::execution::PromptExecutionService;
 use crate::services::recent_apps::RecentAppsState;
 use crate::services::notification::{NotificationLevel, NotificationService};
 use crate::services::skill::SkillService;
-use crate::services::speech::widget::{pill_targets, RecordingWidget};
+use crate::services::speech::widget::{configured_providers, pill_targets, RecordingWidget};
 use crate::services::speech::{
-    self, AudioClipStore, PendingOrigin, PendingPrompt, SpeechError, SpeechService, SttOptions,
+    self, webview_provider_of, AudioClipStore, PendingOrigin, PendingPrompt, SpeechError,
+    SpeechService, SttOptions,
 };
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
@@ -152,6 +153,7 @@ enum TranscriptPlan {
     SkillRun { skill_id: String },
     Dictation,
     Chat(ChatRequest),
+    Webview { provider_id: String },
 }
 
 fn transcript_plan(
@@ -172,6 +174,9 @@ fn transcript_plan(
     match pending {
         Some(p) if p.origin == PendingOrigin::ShiftClick => TranscriptPlan::AlternativeExecute,
         Some(_) if text.trim().is_empty() => TranscriptPlan::NoSpeech,
+        Some(p) if webview_provider_of(&p.id).is_some() => TranscriptPlan::Webview {
+            provider_id: webview_provider_of(&p.id).unwrap_or_default().to_string(),
+        },
         Some(p) if stop_chat => chat(p.id.clone(), skill_model),
         Some(p) => TranscriptPlan::SkillRun { skill_id: p.id.clone() },
         None if stop_chat => chat(String::new(), None),
@@ -561,6 +566,17 @@ pub async fn toggle_speech_recording(
                         widget_inner.close_if_current(&app_clone, generation).await;
                         let copy_token = snapshot_clipboard(&app_clone).await;
                         open_chat(&app_clone, request, copy_token).await;
+                    }
+                    TranscriptPlan::Webview { provider_id } => {
+                        created_entry_id = record_speech_entry(&app_clone, &history_inner, &text).await;
+                        widget_inner.close_if_current(&app_clone, generation).await;
+                        log::debug!("transcript: sending to the provider chat, provider={provider_id}");
+                        crate::services::ai_webview::send_to_provider_chat(
+                            &app_clone,
+                            &provider_id,
+                            text.clone(),
+                        )
+                        .await;
                     }
                 }
 
@@ -1011,8 +1027,9 @@ pub async fn select_recording_widget_target(app: AppHandle, id: String) -> crate
     if !recording_widget_shown(&app, "select target").await {
         return Ok(());
     }
+    let providers = configured_providers(&app).await;
     let label = match app.try_state::<Arc<Mutex<SkillService>>>() {
-        Some(skills) => pill_targets(skills.lock().await.list_skills())
+        Some(skills) => pill_targets(skills.lock().await.list_skills(), &providers)
             .into_iter()
             .find(|(target_id, _)| *target_id == id)
             .map(|(_, label)| label),
@@ -1203,6 +1220,30 @@ mod tests {
             transcript_plan(Some(&pill_target()), true, "  ", None),
             TranscriptPlan::NoSpeech
         );
+    }
+
+    fn webview_target() -> PendingPrompt {
+        PendingPrompt { id: "webview:claude".into(), name: "Claude".into(), ..pill_target() }
+    }
+
+    #[test]
+    fn plan_webview_target_routes_to_the_provider_with_and_without_stop_chat() {
+        for stop_chat in [true, false] {
+            assert_eq!(
+                transcript_plan(Some(&webview_target()), stop_chat, "hello", None),
+                TranscriptPlan::Webview { provider_id: "claude".into() }
+            );
+        }
+    }
+
+    #[test]
+    fn plan_webview_target_with_an_empty_transcript_is_no_speech() {
+        for text in ["", "  "] {
+            assert_eq!(
+                transcript_plan(Some(&webview_target()), true, text, None),
+                TranscriptPlan::NoSpeech
+            );
+        }
     }
 
     #[test]

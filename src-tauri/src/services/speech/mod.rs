@@ -26,6 +26,15 @@ const TOGGLE_DEBOUNCE_MS: u128 = 250;
 
 pub const DICTATION_ID: &str = "__dictation__";
 pub const DICTATION_LABEL: &str = "Dictation";
+pub const WEBVIEW_TARGET_PREFIX: &str = "webview:";
+
+pub fn webview_target_id(provider_id: &str) -> String {
+    format!("{WEBVIEW_TARGET_PREFIX}{provider_id}")
+}
+
+pub fn webview_provider_of(target_id: &str) -> Option<&str> {
+    target_id.strip_prefix(WEBVIEW_TARGET_PREFIX)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PendingOrigin {
@@ -580,6 +589,15 @@ mod tests {
                 origin: PendingOrigin::Pill
             })
         );
+    }
+
+    #[test]
+    fn a_webview_target_is_locked_by_the_take_and_keeps_its_shown_name() {
+        let mut service = SpeechService::new();
+        service.select_target("webview:claude", "Claude").unwrap();
+        service.take_pending_prompt();
+        assert_eq!(service.select_target("other", "Other"), Err(TargetLocked));
+        assert_eq!(service.shown_target().map(|p| p.name.as_str()), Some("Claude"));
     }
 
     #[test]

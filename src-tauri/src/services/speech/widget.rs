@@ -7,10 +7,10 @@ use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 use tokio::sync::Mutex;
 
 use super::reminder::rms;
-use super::{PendingPrompt, SpeechService, DICTATION_ID, DICTATION_LABEL};
+use super::{webview_target_id, PendingPrompt, SpeechService, DICTATION_ID, DICTATION_LABEL};
 use crate::commands::context::current_context_version;
 use crate::models::context::ContextItem;
-use crate::models::settings::PillAnchor;
+use crate::models::settings::{PillAnchor, WebviewProvider};
 use crate::models::skill::{is_offered_in, OfferedIn, Skill};
 use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
@@ -330,13 +330,24 @@ pub fn grown_frame(
     (clamp_origin((origin.0, top), grown, work_area), grown)
 }
 
-pub fn pill_targets(skills: &[Skill]) -> Vec<(String, String)> {
+pub fn pill_targets(skills: &[Skill], providers: &[WebviewProvider]) -> Vec<(String, String)> {
     let dictation = (DICTATION_ID.to_string(), DICTATION_LABEL.to_string());
     let offered = skills
         .iter()
         .filter(|skill| is_offered_in(&skill.offered_in, OfferedIn::Pill))
         .map(|skill| (skill.name.clone(), skill.display_name.clone()));
-    std::iter::once(dictation).chain(offered).collect()
+    let webviews = providers
+        .iter()
+        .filter(|provider| matches!(provider.id.as_str(), "claude" | "chatgpt"))
+        .map(|provider| (webview_target_id(&provider.id), provider.name.clone()));
+    std::iter::once(dictation).chain(offered).chain(webviews).collect()
+}
+
+pub async fn configured_providers(app: &AppHandle) -> Vec<WebviewProvider> {
+    match app.try_state::<Arc<Mutex<ConfigService>>>() {
+        Some(config) => config.lock().await.settings().webview_providers.clone(),
+        None => Vec::new(),
+    }
 }
 
 pub fn pill_items(items: &[ContextItem]) -> Vec<PillItem> {
@@ -413,9 +424,10 @@ fn window_payload(model: &PillModel) -> serde_json::Value {
 }
 
 async fn gather_model(app: &AppHandle, origin: (i32, i32)) -> (PillModel, Vec<ContextItem>) {
+    let providers = configured_providers(app).await;
     let targets = match app.try_state::<Arc<Mutex<SkillService>>>() {
-        Some(skills) => pill_targets(skills.lock().await.list_skills()),
-        None => pill_targets(&[]),
+        Some(skills) => pill_targets(skills.lock().await.list_skills(), &providers),
+        None => pill_targets(&[], &providers),
     };
     let items = match app.try_state::<Arc<Mutex<ContextManagerService>>>() {
         Some(context) => context.lock().await.get_items(),
@@ -1502,20 +1514,20 @@ mod tests {
 
     #[test]
     fn targets_start_with_plain_dictation() {
-        let targets = pill_targets(&[skill("fix", "Fix", None)]);
+        let targets = pill_targets(&[skill("fix", "Fix", None)], &[]);
         assert_eq!(targets[0], ("__dictation__".to_string(), "Dictation".to_string()));
         assert_eq!(targets[1], ("fix".to_string(), "Fix".to_string()));
     }
 
     #[test]
     fn a_context_menu_only_skill_is_not_a_target() {
-        let targets = pill_targets(&[skill("fix", "Fix", Some(vec![OfferedIn::ContextMenu]))]);
+        let targets = pill_targets(&[skill("fix", "Fix", Some(vec![OfferedIn::ContextMenu]))], &[]);
         assert_eq!(targets.len(), 1);
     }
 
     #[test]
     fn a_skill_without_offered_in_is_a_target() {
-        assert_eq!(pill_targets(&[skill("fix", "Fix", None)]).len(), 2);
+        assert_eq!(pill_targets(&[skill("fix", "Fix", None)], &[]).len(), 2);
     }
 
     #[test]
@@ -1523,9 +1535,33 @@ mod tests {
         let targets = pill_targets(&[
             skill("b", "B", Some(vec![OfferedIn::Pill])),
             skill("a", "A", None),
-        ]);
+        ], &[]);
         let ids: Vec<&str> = targets.iter().map(|(id, _)| id.as_str()).collect();
         assert_eq!(ids, ["__dictation__", "b", "a"]);
+    }
+
+    fn provider(id: &str, name: &str) -> WebviewProvider {
+        WebviewProvider { id: id.into(), name: name.into(), url: String::new() }
+    }
+
+    #[test]
+    fn webview_targets_follow_the_skills_and_only_claude_and_chatgpt_are_offered() {
+        let targets = pill_targets(
+            &[skill("fix", "Fix", None)],
+            &[provider("claude", "Claude"), provider("chatgpt", "ChatGPT"), provider("mistral", "Mistral")],
+        );
+        let ids: Vec<&str> = targets.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(ids, ["__dictation__", "fix", "webview:claude", "webview:chatgpt"]);
+        assert_eq!(targets[2].1, "Claude");
+        assert_eq!(targets[3].1, "ChatGPT");
+    }
+
+    #[test]
+    fn no_webview_target_without_a_supported_provider() {
+        for providers in [vec![], vec![provider("mistral", "Mistral")]] {
+            let targets = pill_targets(&[], &providers);
+            assert!(targets.iter().all(|(id, _)| !id.starts_with("webview:")));
+        }
     }
 
     #[test]
@@ -1554,14 +1590,14 @@ mod tests {
             name: "Summarize".into(),
             origin: crate::services::speech::PendingOrigin::ShiftClick,
         };
-        let model = build_model(pill_targets(&[]), Some(&pending), false, &[], 1, (0, 0));
+        let model = build_model(pill_targets(&[], &[]), Some(&pending), false, &[], 1, (0, 0));
         assert_eq!(model.selected_label, "Summarize");
         assert!(!model.targets.iter().any(|(id, _)| id == &model.selected_id));
     }
 
     #[test]
     fn no_pending_selects_plain_dictation() {
-        let model = build_model(pill_targets(&[]), None, false, &[text()], 7, (3, 4));
+        let model = build_model(pill_targets(&[], &[]), None, false, &[text()], 7, (3, 4));
         assert_eq!((model.selected_id.as_str(), model.selected_label.as_str()), ("__dictation__", "Dictation"));
         assert_eq!((model.context_version, model.x, model.y), (7, 3, 4));
         assert_eq!(model.items.len(), 1);
