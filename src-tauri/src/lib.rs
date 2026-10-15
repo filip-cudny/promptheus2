@@ -22,7 +22,7 @@ pub use services::hotkeys::reload_shortcuts;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {
             log::info!(target: "app_lib", "second instance suppressed");
         }))
@@ -38,7 +38,10 @@ pub fn run() {
                     std::env::consts::OS
                 ))
                 .build(),
-        )
+        );
+    #[cfg(target_os = "linux")]
+    let builder = builder.plugin(services::scale_repaint::plugin());
+    builder
         .setup(|app| setup::init::run(app))
         .invoke_handler(crate::handlers!())
         .on_window_event(|window, event| {

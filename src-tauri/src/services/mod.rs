@@ -29,6 +29,8 @@ pub mod execution;
 pub mod recent_apps;
 pub mod skill;
 pub mod skill_message;
+#[cfg(target_os = "linux")]
+pub mod scale_repaint;
 pub mod speech;
 pub mod history_events;
 pub mod history_search;
