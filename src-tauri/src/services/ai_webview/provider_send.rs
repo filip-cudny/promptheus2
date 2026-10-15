@@ -124,9 +124,9 @@ async fn open_chat(
         .ok_or_else(|| "ai webview state missing".to_string())?;
 
     if app.get_window(CONVERSATION_DIALOG_LABEL).is_none() {
-        arm(app, provider, child_label, message).await;
         state.set_pending_provider(CONVERSATION_DIALOG_LABEL, &provider.id);
         dialog::open_or_focus(app, &conversation_dialog_config()).await?;
+        arm(app, provider, child_label, message).await;
         return Ok(());
     }
 

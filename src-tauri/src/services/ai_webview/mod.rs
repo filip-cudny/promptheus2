@@ -443,6 +443,18 @@ mod tests {
     }
 
     #[test]
+    fn drop_host_discards_pending_messages_of_its_children() {
+        let state = AiWebviewState::default();
+        state.arm_message("host::ai-webview-claude", pending(1, "claude.ai"));
+        state.arm_message("other::ai-webview-claude", pending(2, "claude.ai"));
+
+        state.drop_host("host");
+
+        assert!(state.finish_message("host::ai-webview-claude", 1).is_none());
+        assert_eq!(state.finish_message("other::ai-webview-claude", 2).map(|m| m.run), Some(2));
+    }
+
+    #[test]
     fn finish_message_requires_matching_run() {
         let state = AiWebviewState::default();
         state.arm_message("w", pending(1, "claude.ai"));
