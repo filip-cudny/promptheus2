@@ -28,19 +28,3 @@ export async function openConversationDialog(
 export async function focusOrOpenChat(): Promise<void> {
   await invoke("focus_or_open_chat");
 }
-
-export async function openConversationDialogNewWindow(
-  sourceLabel?: string,
-  providerId?: string,
-  skillId?: string,
-  skillName?: string,
-  skillModel?: string | null,
-): Promise<void> {
-  await invoke("open_conversation_dialog_new_window", {
-    sourceLabel: sourceLabel ?? null,
-    providerId: providerId ?? null,
-    skillId: skillId ?? null,
-    skillName: skillName ?? null,
-    skillModel: skillModel ?? null,
-  });
-}

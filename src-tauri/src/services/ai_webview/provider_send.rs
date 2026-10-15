@@ -5,18 +5,16 @@ use std::time::Duration;
 use tauri::Manager;
 use tokio::sync::Mutex;
 
-use crate::commands::conversation_dialog::conversation_dialog_config;
 use crate::models::context::ContextItem;
 use crate::models::settings::WebviewProvider;
 use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
-use crate::services::dialog;
 use crate::services::notification::{NotificationLevel, NotificationService};
 
-use super::lifecycle::CONVERSATION_DIALOG_LABEL;
 use super::palette::{lookup_webview_provider, SendStatus};
 use super::provider_swap::activate_tab;
 use super::scripts::delivery_script;
+use super::surface::{surface, SurfaceTarget};
 use super::{AiWebviewState, PendingMessage};
 
 const DELIVERY_DEADLINE: Duration = Duration::from_secs(80);
@@ -40,16 +38,9 @@ pub async fn send_to_provider_chat(app: &tauri::AppHandle, provider_id: &str, tr
     let run = NEXT_RUN.fetch_add(1, Ordering::Relaxed);
     let script = delivery_script(run, &transcript, context_text.as_deref(), &images);
 
-    if app.get_window(CONVERSATION_DIALOG_LABEL).is_none() {
-        if let Err(reason) = dialog::open_or_focus(app, &conversation_dialog_config()).await {
-            log::warn!(
-                target: "app_lib::services::ai_webview",
-                "send_to_provider_chat: opening the chat window failed: provider={} run={run}: {reason}",
-                provider.id,
-            );
-            fallback(app, &provider.id, &provider.name, Some(run), transcript, &reason).await;
-            return;
-        }
+    if let Err(reason) = surface(app, "pill_webview_target", SurfaceTarget::KeepActive).await {
+        fallback(app, &provider.id, &provider.name, Some(run), transcript, &reason).await;
+        return;
     }
     let Some(state) = app.try_state::<AiWebviewState>() else {
         fallback(app, &provider.id, &provider.name, Some(run), transcript, "ai webview state missing").await;

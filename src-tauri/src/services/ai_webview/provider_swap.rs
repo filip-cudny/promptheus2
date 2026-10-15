@@ -17,6 +17,7 @@ use super::lifecycle::{
 };
 use super::palette::{handle_router_message, lookup_webview_provider, parse_router_message};
 use super::scripts::{initialization_script, reinject_script};
+use super::surface::{surface, SurfaceTarget};
 use super::tabs::{NativeTabReport, Tab, TabKind, TabsSnapshot};
 use super::unload::unload_tab;
 use super::AiWebviewState;
@@ -416,15 +417,14 @@ pub fn close_tab(app: &tauri::AppHandle, tab_id: &str) -> Result<(), String> {
 
 pub async fn new_tab(app: &tauri::AppHandle, provider_id: &str) -> Result<(), String> {
     if provider_id == super::palette::PROMPTHEUS_PROVIDER_ID {
-        show_native_view(app)?;
+        surface(app, "new_tab", SurfaceTarget::NativeView).await?;
         emit_to_chat(app, "new-conversation", NewConversationEvent { reason: "tab".into() });
         return Ok(());
     }
     let provider = lookup_webview_provider(app, provider_id)
         .await
         .ok_or_else(|| format!("unknown provider: {provider_id}"))?;
-    let tab_id = state_of(app)?.with_tabs(|tabs| tabs.push_provider(&provider, Instant::now()));
-    activate_tab(app, &tab_id)
+    surface(app, "new_tab", SurfaceTarget::NewProviderTab(provider)).await
 }
 
 pub fn report_native_tabs(

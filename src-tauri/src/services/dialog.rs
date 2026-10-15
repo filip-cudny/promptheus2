@@ -381,13 +381,21 @@ pub async fn open_or_focus(
     let resize_custom_titlebar = custom_titlebar;
 
     window.on_window_event(move |event| match event {
-        WindowEvent::CloseRequested { .. } => {
+        WindowEvent::CloseRequested { api, .. } => {
             save_geometry(&app_handle, &label, &geometry_key);
+            if is_conversation_dialog_host(&label) {
+                api.prevent_close();
+                ai_webview::hide_host(&app_handle);
+            }
         }
         WindowEvent::Destroyed => {
             ai_webview::cleanup_host_state(&app_handle, &destroy_label);
             let dock = app_handle.state::<DockManager>();
-            dock.dialog_closed(&app_handle);
+            if is_conversation_dialog_host(&destroy_label) {
+                dock.host_destroyed(&app_handle);
+            } else {
+                dock.dialog_closed(&app_handle);
+            }
         }
         WindowEvent::Resized(size) => {
             let Some(host) = resize_app.get_window(&resize_label) else {

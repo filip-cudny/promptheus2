@@ -4,6 +4,7 @@ mod palette;
 mod provider_send;
 mod provider_swap;
 mod scripts;
+mod surface;
 mod tabs;
 mod unload;
 
@@ -23,6 +24,7 @@ pub use provider_swap::{
     activate_tab, close_tab, get_tabs, new_tab, reload_active_in_host, report_native_tabs,
     show_native_view,
 };
+pub use surface::{hide_host, surface, SurfaceTarget};
 pub use tabs::{NativeTabReport, TabsSnapshot};
 pub use unload::{run_unload_pass, UNLOAD_POLL_INTERVAL};
 

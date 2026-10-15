@@ -4,8 +4,8 @@ use serde::Serialize;
 use tauri::{Emitter, Manager};
 
 use crate::models::history::InvocationSource;
-use crate::services::ai_webview;
-use crate::services::dialog::{self, focus_host_window, DialogConfig};
+use crate::services::ai_webview::{self, SurfaceTarget};
+use crate::services::dialog::DialogConfig;
 use crate::Error;
 
 #[derive(Serialize, Clone)]
@@ -95,10 +95,10 @@ pub async fn open_conversation_dialog(
     let auto_send_input = auto_send_input.unwrap_or(false);
     let new_chat = new_chat.unwrap_or(false);
 
-    let config = conversation_dialog_config();
-
     if app.get_window(label).is_some() {
-        surface_conversation_dialog(&app, label);
+        ai_webview::surface(&app, "open_conversation_dialog", SurfaceTarget::NativeView)
+            .await
+            .map_err(Error::Other)?;
         emit_reuse_event(
             &app,
             label,
@@ -129,44 +129,16 @@ pub async fn open_conversation_dialog(
         copy_token,
     });
 
-    let (_, _created) = dialog::open_or_focus(&app, &config)
+    ai_webview::surface(&app, "open_conversation_dialog", SurfaceTarget::NativeView)
         .await
-        .map_err(Error::Other)?;
-    Ok(())
-}
-
-fn surface_conversation_dialog(app: &tauri::AppHandle, label: &str) {
-    if let Err(e) = ai_webview::show_native_view(app) {
-        log::warn!("show_native_view failed: {e}");
-    }
-    let _ = focus_host_window(app, label);
+        .map_err(Error::Other)
 }
 
 #[tauri::command]
 pub async fn focus_or_open_chat(app: tauri::AppHandle) -> crate::Result<()> {
-    let label = "conversation-dialog";
-
-    if app.get_window(label).is_some() {
-        log::debug!(
-            target: "app_lib::commands::conversation_dialog",
-            "focus_or_open_chat: focusing existing host {label}",
-        );
-        return focus_host_window(&app, label).map_err(Error::Other);
-    }
-
-    let config = DialogConfig {
-        label: label.into(),
-        url: "conversation-dialog.html".into(),
-        title: "Promptheus — chat".into(),
-        default_width: 700.0,
-        default_height: 600.0,
-        geometry_key: "conversation-dialog".into(),
-    };
-
-    let (_, _) = dialog::open_or_focus(&app, &config)
+    ai_webview::surface(&app, "focus_or_open_chat", SurfaceTarget::KeepActive)
         .await
-        .map_err(Error::Other)?;
-    Ok(())
+        .map_err(Error::Other)
 }
 
 #[tauri::command]
@@ -203,7 +175,7 @@ fn emit_reuse_event(
     invocation_source: Option<InvocationSource>,
     copy_token: Option<String>,
 ) -> crate::Result<()> {
-    if app.get_webview_window(label).is_none() {
+    if app.get_webview(label).is_none() {
         return Err(Error::Other(format!(
             "conversation dialog window '{label}' missing"
         )));

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { SquareArrowOutUpRight } from "lucide-svelte";
   import Button from "$lib/components/shared/ui/Button.svelte";
   import WindowControls from "$lib/components/shared/widgets/WindowControls.svelte";
   import ProviderSwitcherTrigger from "./ProviderSwitcherTrigger.svelte";
@@ -14,7 +13,6 @@
     triggerEl = $bindable(null),
     isMaximized = false,
     onToggleProviderDropdown,
-    onOpenInNewWindow,
     onMinimize,
     onToggleMaximize,
     onClose,
@@ -26,7 +24,6 @@
     triggerEl?: HTMLButtonElement | null;
     isMaximized?: boolean;
     onToggleProviderDropdown: (e: MouseEvent) => void;
-    onOpenInNewWindow: () => void;
     onMinimize: () => void;
     onToggleMaximize: () => void;
     onClose: () => void;
@@ -44,10 +41,6 @@
       onToggle={onToggleProviderDropdown}
     />
   </div>
-
-  <Button variant="chrome" title="Open in new window" onclick={onOpenInNewWindow}>
-    <SquareArrowOutUpRight size={14} />
-  </Button>
 
   <div class="drag-fill" data-tauri-drag-region></div>
 

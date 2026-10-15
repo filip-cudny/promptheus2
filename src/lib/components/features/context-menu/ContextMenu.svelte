@@ -12,11 +12,8 @@
   import ContextSection from "./ContextSection.svelte";
   import LastInteractionSection from "./LastInteractionSection.svelte";
   import FloatingPanel from "$lib/components/shared/ui/FloatingPanel.svelte";
-  import {
-    focusOrOpenChat,
-    openConversationDialog,
-    openConversationDialogNewWindow,
-  } from "$lib/services/conversationDialog";
+  import { focusOrOpenChat, openConversationDialog } from "$lib/services/conversationDialog";
+  import { newTab } from "$lib/services/tabs";
   import {
     clearContext,
     getContextText,
@@ -29,7 +26,6 @@
   import { retryTranscription } from "$lib/services/speech";
   import { openHistoryDialog } from "$lib/services/historyDialog";
   import { openSettingsWindow } from "$lib/services/settingsDialog";
-  import { PROMPTHEUS_PROVIDER_ID } from "$lib/services/shellToolbar";
   import ProviderMenuList from "$lib/components/shared/widgets/ProviderMenuList.svelte";
   import { isExecuting, getExecutingSkillId } from "$lib/stores/execution.svelte";
   import { useContextMenu } from "$lib/stores/useContextMenu.svelte";
@@ -106,10 +102,9 @@
     panels.closeChatProviders();
     await menu.closeMenu();
     try {
-      const arg = providerId === PROMPTHEUS_PROVIDER_ID ? undefined : providerId;
-      await openConversationDialogNewWindow(undefined, arg);
+      await newTab(providerId);
     } catch (err) {
-      console.error("openConversationDialogNewWindow failed", err);
+      console.error("newTab failed", err);
     }
   }
 

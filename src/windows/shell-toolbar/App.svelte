@@ -3,8 +3,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { takePendingProvider } from "$lib/services/aiWebview";
-  import { openConversationDialogNewWindow } from "$lib/services/conversationDialog";
-  import { PROMPTHEUS_PROVIDER_ID, openPalette } from "$lib/services/shellToolbar";
+  import { openPalette } from "$lib/services/shellToolbar";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
   import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
   import Titlebar from "$lib/components/features/shell-toolbar/Titlebar.svelte";
@@ -24,15 +23,6 @@
     e.stopPropagation();
     if (!triggerEl) return;
     await toolbar.toggleProviderDropdown(triggerEl);
-  }
-
-  async function handleOpenInNewWindow() {
-    try {
-      const providerId = toolbar.activeId === PROMPTHEUS_PROVIDER_ID ? undefined : toolbar.activeId;
-      await openConversationDialogNewWindow(HOST_LABEL, providerId);
-    } catch (e) {
-      console.error("open in new window failed", e);
-    }
   }
 
   async function handleMinimize() {
@@ -107,7 +97,6 @@
   bind:triggerEl
   {isMaximized}
   onToggleProviderDropdown={handleToggleProviderDropdown}
-  onOpenInNewWindow={handleOpenInNewWindow}
   onMinimize={handleMinimize}
   onToggleMaximize={handleToggleMaximize}
   onClose={handleClose}
