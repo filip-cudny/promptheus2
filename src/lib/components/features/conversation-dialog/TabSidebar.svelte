@@ -38,23 +38,19 @@
   let menuContainerEls = $state<Record<string, HTMLDivElement>>({});
   let unlistenList: (() => void) | undefined;
 
-  const items = $derived(buildSidebarItems(store.tabs, list.conversations));
+  const items = $derived(buildSidebarItems(list.conversations));
 
   function isItemActive(item: SidebarItem): boolean {
-    if (item.kind === "history") {
-      const tab = store.tabs.find((t) => t.history_entry_id === item.entry.id);
-      return tab?.tab_id === store.activeTabId;
-    }
-    return item.tab.tab_id === store.activeTabId;
+    return openTabOf(item)?.tab_id === store.activeTabId;
+  }
+
+  function openTabOf(item: SidebarItem) {
+    return store.tabs.find((t) => t.history_entry_id === item.entry.id);
   }
 
   function handleItemClick(item: SidebarItem) {
     if (mutex.editingId) return;
-    if (item.kind === "history") {
-      store.restoreFromHistory(item.entry.id, false);
-    } else {
-      store.switchTab(item.tab.tab_id);
-    }
+    store.restoreFromHistory(item.entry.id, false);
     onClose();
     focusConversationInput();
   }
@@ -75,11 +71,9 @@
   function commitRename(item: SidebarItem, newValue: string) {
     const trimmed = newValue.trim();
     if (trimmed && trimmed !== itemTitle(item)) {
-      if (item.kind === "history") {
-        updateHistoryEntryTitle(item.entry.id, trimmed).catch(() => {});
-      } else {
-        store.renameTab(item.tab.tab_id, trimmed);
-      }
+      const tab = openTabOf(item);
+      if (tab) store.renameTab(tab.tab_id, trimmed);
+      else updateHistoryEntryTitle(item.entry.id, trimmed).catch(() => {});
     }
     mutex.clearEditing();
   }
@@ -88,19 +82,9 @@
     const item = mutex.confirmDelete;
     if (!item) return;
     mutex.clearConfirm();
-
-    if (item.kind === "open") {
-      store.closeTab(item.tab.tab_id);
-      await deleteHistoryEntry(item.entry.id).catch(() => {});
-    } else if (item.kind === "history") {
-      await deleteHistoryEntry(item.entry.id).catch(() => {});
-    } else if (item.kind === "draft" && item.tab.history_entry_id) {
-      const entryId = item.tab.history_entry_id;
-      store.closeTab(item.tab.tab_id);
-      await deleteHistoryEntry(entryId).catch(() => {});
-    } else {
-      store.closeTab(item.tab.tab_id);
-    }
+    const tab = openTabOf(item);
+    if (tab) store.closeTab(tab.tab_id);
+    await deleteHistoryEntry(item.entry.id).catch(() => {});
   }
 
   function handleScroll() {
@@ -133,7 +117,7 @@
       {@const id = itemId(item)}
       <SidebarItemRow
         active={isItemActive(item)}
-        icon={itemIcon(item, store.isTabClean)}
+        icon={itemIcon(item)}
         timestamp={itemTimestamp(item)}
         onClick={() => handleItemClick(item)}
       >

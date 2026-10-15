@@ -14,7 +14,8 @@
   import InputArea from "$lib/components/features/conversation-dialog/InputArea.svelte";
   import TabSidebar from "$lib/components/features/conversation-dialog/TabSidebar.svelte";
   import { useConversationDialogIpc } from "$lib/components/features/conversation-dialog/drivers/useConversationDialogIpc.svelte";
-  import { openPalette, reloadActiveInHost, setWindowTitle } from "$lib/services/shellToolbar";
+  import { openPalette, reloadActiveInHost } from "$lib/services/shellToolbar";
+  import { reportNativeTabs, type NativeTabReport } from "$lib/services/tabs";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
   import { focusConversationInput } from "$lib/utils/conversationFocus";
   import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
@@ -66,14 +67,27 @@
     return getContextWindowSize(activeModel.model, activeModel.context_window_size);
   });
 
-  let activeTabTitle = $derived(
-    store.tabs.find((t) => t.tab_id === store.activeTabId)?.tab_name ?? "",
-  );
+  let nativeViewVisible = $state(true);
+  let reportingReady = $state(false);
+  let activeChangedCount = $state(0);
+  let lastReportKey = "";
 
   $effect(() => {
-    const title = activeTabTitle;
-    setWindowTitle(HOST_LABEL, title).catch((err) => {
-      console.error("set_window_title failed", err);
+    if (!reportingReady) return;
+    void activeChangedCount;
+    const tabs: NativeTabReport[] = store.tabs.map((t) => ({
+      tab_id: t.tab_id,
+      title: t.tab_name ?? "New chat",
+      streaming: t.is_executing,
+      listed:
+        !store.isTabClean(t) || (t.tab_id === store.activeTabId && nativeViewVisible),
+    }));
+    const activeTabId = store.activeTabId;
+    const key = JSON.stringify([tabs, activeTabId]);
+    if (key === lastReportKey) return;
+    lastReportKey = key;
+    reportNativeTabs(tabs, activeTabId).catch((err) => {
+      console.error("report_native_tabs failed", err);
     });
   });
 
@@ -221,6 +235,13 @@
     onOpenForSkill: (skillId, skillName, skillModel) =>
       store.openForSkill(skillId, skillName, skillModel),
     onNewConversation: () => store.addTab(),
+    onActivateTab: (tabId) => store.switchTab(tabId),
+    onCloseTab: (tabId, nextTabId) => store.closeTabWithSuccessor(tabId, nextTabId),
+    onActiveProviderChanged: (providerId) => {
+      nativeViewVisible = providerId === null;
+      lastReportKey = "";
+      activeChangedCount++;
+    },
     onActiveProviderCleared: () => focusConversationInput(),
     onMenuReloadActive: () => {
       if (chatPaletteOpen) chatPaletteOpen = false;
@@ -249,6 +270,7 @@
 
     await ipc.init();
     await autoShowContextIfNeeded();
+    reportingReady = true;
   });
 
   function handleContextAutoShow() {

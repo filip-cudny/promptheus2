@@ -1019,6 +1019,28 @@ export function createConversationStore(
     }
   }
 
+  function closeTabWithSuccessor(tabId: string, nextTabId: string | null): void {
+    const idx = tabs.findIndex((t) => t.tab_id === tabId);
+    if (idx === -1) return;
+
+    stopTabExecution(tabs[idx]);
+
+    if (tabs.length <= 1) {
+      tabs[0] = createTabState("New chat", tabDefaults());
+      activeTabId = tabs[0].tab_id;
+      return;
+    }
+
+    const wasActive = activeTabId === tabId;
+    tabs.splice(idx, 1);
+
+    if (nextTabId && tabs.some((t) => t.tab_id === nextTabId)) {
+      activeTabId = nextTabId;
+    } else if (wasActive) {
+      activeTabId = tabs[0].tab_id;
+    }
+  }
+
   function switchTab(tabId: string): void {
     if (tabs.find((t) => t.tab_id === tabId)) {
       activeTabId = tabId;
@@ -1527,6 +1549,7 @@ export function createConversationStore(
     setPristineInput,
     addTab,
     closeTab,
+    closeTabWithSuccessor,
     switchTab,
     renameTab,
     updateNodeContent,

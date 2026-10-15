@@ -3,7 +3,7 @@
   import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
-    title = "Conversations",
+    title = "History",
     onClose,
   }: {
     title?: string;

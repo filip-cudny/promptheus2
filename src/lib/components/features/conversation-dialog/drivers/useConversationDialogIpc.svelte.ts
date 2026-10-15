@@ -14,6 +14,9 @@ export function useConversationDialogIpc(opts: {
   ) => void;
   onOpenForSkill: (skillId: string, skillName: string, skillModel: string | null) => void;
   onNewConversation: () => void;
+  onActivateTab: (tabId: string) => void;
+  onCloseTab: (tabId: string, nextTabId: string | null) => void;
+  onActiveProviderChanged: (providerId: string | null) => void;
   onActiveProviderCleared: () => void;
   onMenuReloadActive: () => void;
   onContextChanged: () => void;
@@ -64,6 +67,7 @@ export function useConversationDialogIpc(opts: {
     const u5 = await listen<{ provider_id: string | null }>(
       "shell:active-changed",
       (event) => {
+        opts.onActiveProviderChanged(event.payload.provider_id);
         if (event.payload.provider_id === null) opts.onActiveProviderCleared();
       },
       { target: opts.selfTarget },
@@ -77,7 +81,19 @@ export function useConversationDialogIpc(opts: {
 
     const u7 = await listen("context-changed", () => opts.onContextChanged());
 
-    unlistens = [u1, u2, u3, u4, u5, u6, u7];
+    const u8 = await listen<{ tab_id: string }>(
+      "chat:activate-tab",
+      (event) => opts.onActivateTab(event.payload.tab_id),
+      { target: opts.selfTarget },
+    );
+
+    const u9 = await listen<{ tab_id: string; next_tab_id: string | null }>(
+      "chat:close-tab",
+      (event) => opts.onCloseTab(event.payload.tab_id, event.payload.next_tab_id),
+      { target: opts.selfTarget },
+    );
+
+    unlistens = [u1, u2, u3, u4, u5, u6, u7, u8, u9];
   }
 
   function destroy() {
