@@ -5,6 +5,8 @@ mod palette;
 mod provider_send;
 mod provider_swap;
 mod scripts;
+#[allow(dead_code)]
+mod tabs;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex as StdMutex;
