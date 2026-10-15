@@ -104,10 +104,16 @@ function emptyWidgetModel() {
     };
 }
 
+function widgetItemsContentHeight(rows) {
+    if (rows <= 0)
+        return 0;
+    return rows * WIDGET_ITEM_ROW_HEIGHT + (rows - 1) * WIDGET_ITEM_ROW_GAP;
+}
+
 function widgetItemsHeight(rows) {
     if (rows <= 0)
         return 0;
-    return rows * WIDGET_ITEM_ROW_HEIGHT + (rows - 1) * WIDGET_ITEM_ROW_GAP + WIDGET_ITEMS_ROW_PADDING;
+    return widgetItemsContentHeight(rows) + WIDGET_ITEMS_ROW_PADDING;
 }
 
 function formatElapsed(elapsedMs) {
@@ -838,7 +844,7 @@ export default class PromptheusExtension extends Extension {
         this._closePreview(widget);
         widget.itemsRow.destroy_all_children();
         widget.itemsRow.visible = items.length > 0;
-        widget.itemsRow.style = `height: ${widgetItemsHeight(itemRows)}px; padding: ${WIDGET_ITEMS_ROW_PADDING / 2}px ${WIDGET_PADDING_X}px;`;
+        widget.itemsRow.style = `height: ${widgetItemsContentHeight(itemRows)}px; padding: ${WIDGET_ITEMS_ROW_PADDING / 2}px ${WIDGET_PADDING_X}px;`;
         const grid = new St.BoxLayout({vertical: true, style: `spacing: ${WIDGET_ITEM_ROW_GAP}px;`});
         let line = null;
         items.forEach(([index, kind, label, preview, imagePath], position) => {
