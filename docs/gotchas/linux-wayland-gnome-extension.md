@@ -59,6 +59,7 @@ Host-relative popups:
 - Provider menu offset is `(rect.left, rect.bottom + 4)` window-relative; palette and backdrop offset is `(0, TOOLBAR_HEIGHT)`, size host width × (H − 40), so the toolbar stays undimmed and clickable.
 - Without the extension the transient parent alone makes Mutter place them over the host.
 - `set_opacity` and `focus_window` are skipped there (no effect on Wayland).
+- On GNOME Wayland the shell animates the transient provider menu as `DIALOG` (`scale_y` 0↔1, 100 ms, pivot at the middle); the extension's `connect_after` handlers on `global.window_manager` `map` and `destroy` move the pivot to `(0.5, 0)` for the window titled `Promptheus Provider Menu`, so it unfolds from and folds into its trigger. This relies on the shell setting its pivot synchronously before the ease starts (GNOME Shell 50.1); other transient windows (palette, backdrop) keep the center pivot.
 
 Notification toasts:
 - On GNOME Wayland `commands/notification.rs::show_notification` calls `ShowToast` (async, proxy method `show_toast`) and does not touch the webview queue. The extension draws the toast as St actors in `Main.layoutManager.uiGroup`: not windows, never focused, non-reactive (no hover pause).

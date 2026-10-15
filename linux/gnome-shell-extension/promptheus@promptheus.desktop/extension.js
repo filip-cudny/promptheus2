@@ -10,6 +10,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
 const PLACE_WINDOW_TIMEOUT_MS = 1000;
 const OBJECT_PATH = '/com/promptheus/Shell';
+const PROVIDER_MENU_TITLE = 'Promptheus Provider Menu';
 const TOAST_DURATIONS_MS = {success: 2000, error: 4000, info: 2000, warning: 3000};
 const TOAST_MARGIN = 20;
 const TOAST_GAP = 14;
@@ -228,13 +229,28 @@ export default class PromptheusExtension extends Extension {
         this._acceleratorId = global.display.connect(
             'accelerator-activated',
             (display, action, device, timestamp) => this._onAcceleratorActivated(action));
+        this._mapId = global.window_manager.connect_after('map', (shellwm, actor) => this._pivotProviderMenuAtTop(actor));
+        this._destroyId = global.window_manager.connect_after('destroy', (shellwm, actor) => this._pivotProviderMenuAtTop(actor));
         this._dbus.emit_signal('Ready', null);
+    }
+
+    _pivotProviderMenuAtTop(actor) {
+        if (actor.meta_window?.get_title() === PROVIDER_MENU_TITLE)
+            actor.set_pivot_point(0.5, 0);
     }
 
     disable() {
         if (this._acceleratorId) {
             global.display.disconnect(this._acceleratorId);
             this._acceleratorId = 0;
+        }
+        if (this._mapId) {
+            global.window_manager.disconnect(this._mapId);
+            this._mapId = 0;
+        }
+        if (this._destroyId) {
+            global.window_manager.disconnect(this._destroyId);
+            this._destroyId = 0;
         }
         this._unwatchSender();
         this._ungrabAll();
