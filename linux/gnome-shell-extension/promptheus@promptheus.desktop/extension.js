@@ -1009,6 +1009,7 @@ export default class PromptheusExtension extends Extension {
     _dropdownRowContent(id, label) {
         const text = new St.Label({
             text: label,
+            x_expand: true,
             x_align: Clutter.ActorAlign.START,
             y_align: Clutter.ActorAlign.CENTER,
         });
@@ -1016,6 +1017,7 @@ export default class PromptheusExtension extends Extension {
         if (!icon)
             return text;
         const content = new St.BoxLayout({
+            x_expand: true,
             x_align: Clutter.ActorAlign.START,
             style: `spacing: ${WIDGET_TARGET_ICON_GAP}px;`,
         });
