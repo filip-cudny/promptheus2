@@ -141,7 +141,7 @@ Uses `tauri-plugin-log` (`setup/log.rs`) with the standard Rust `log` crate. Log
 
 - Rust: use `log::{info, warn, error, debug}` macros directly.
 - Frontend: `import { error, info, warn } from "@tauri-apps/plugin-log"`.
-- `attachConsole()` bridges Rust logs into browser devtools; it is called in `src/windows/{main,context-menu,conversation-dialog}/entry.ts` and in the `App.svelte` of `notification` and `recording-widget`.
+- `attachConsole()` bridges Rust logs into browser devtools; it is called in `src/windows/{context-menu,conversation-dialog}/entry.ts` and in the `App.svelte` of `notification` and `recording-widget`.
 - Default level is `Info` globally, `Debug` for the app crate. Override with `RUST_LOG` env var.
 - Log at decision points and errors, not at every function boundary.
 
@@ -184,7 +184,7 @@ Because the app is tray-only with multiple short-lived windows, cross-window coo
 
 - `capabilities/default.json` declares permissions for the app's webviews.
 - Our own `#[tauri::command]`s do **not** need a capability entry — those checks apply only to plugin APIs and the core API surface exposed to the webview.
-- When adding a Tauri plugin, add its permissions here (e.g., `"clipboard-manager:default"`).
+- When adding a Tauri plugin, add its permissions here (e.g., `"dialog:default"`).
 - **`fs:allow-read-text-file` and `fs:allow-write-text-file` are granted bare, with no scope entries.** The plugin allows a path only if it is in the scope built from the permission's scope entries (none here; `tauri.conf.json` has `"plugins": {}`, and the fs plugin config accepts no scope key, `tauri-plugin-fs-2.5.1/src/config.rs`) or in the runtime fs scope (`tauri-plugin-fs-2.5.1/src/commands.rs:1538-1572`, `src/lib.rs:489-490` starts it empty). The dialog plugin's `open` and `save` add each picked file, and each picked folder, to that runtime scope (`tauri-plugin-dialog-2.7.1/src/commands.rs:160-180` folders, `:192-212` files, `:250-254` save). So these two permissions reach only paths the user picked in a file dialog during the running session. Do not add other `fs:*` permissions, and do not add scope entries, without a reason: any window can then touch those paths without a picker.
 - Split `default.json` per feature once it grows past ~50 lines or two windows have non-overlapping needs (e.g. extract `settings.json` for the settings dialog so the context-menu window doesn't inherit settings-only permissions).
 

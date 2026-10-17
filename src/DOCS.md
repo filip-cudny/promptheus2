@@ -22,7 +22,7 @@ Store files use `.svelte.ts` extension to enable rune syntax outside components.
 
 ### Window entries
 
-This is a multi-window Tauri app. Every window has its own HTML at the project root (`index.html` for `main`) and, except the static `palette-backdrop.html`, a matching folder under `src/windows/<window-name>/`:
+This is a multi-window Tauri app. Every window has its own HTML at the project root and, except the static `palette-backdrop.html`, a matching folder under `src/windows/<window-name>/`:
 
 - `entry.ts` — mounts the root component (`mount(App, { target: ... })`).
 - `App.svelte` — root component for that window. Keep thin; pull feature UI from `lib/components/`.

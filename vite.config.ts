@@ -24,7 +24,6 @@ export default defineConfig({
     sourcemap: !!process.env.TAURI_DEBUG,
     rollupOptions: {
       input: {
-        main: path.resolve("./index.html"),
         "context-menu": path.resolve("./context-menu.html"),
         "conversation-dialog": path.resolve("./conversation-dialog.html"),
         "shell-toolbar": path.resolve("./shell-toolbar.html"),
