@@ -152,13 +152,39 @@ mod tests {
             .unwrap();
     }
 
+    fn override_file(data_dir: &Path, size_dir: &str) -> std::path::PathBuf {
+        data_dir
+            .join("icons/hicolor")
+            .join(size_dir)
+            .join("apps/promptheus.svg")
+    }
+
     fn assert_files_hold(data_dir: &Path, svg: &[u8]) {
         for size_dir in SIZE_DIRS {
-            let file = data_dir
-                .join("icons/hicolor")
-                .join(size_dir)
-                .join("apps/promptheus.svg");
-            assert_eq!(fs::read(file).unwrap(), svg, "{size_dir}");
+            assert_eq!(
+                fs::read(override_file(data_dir, size_dir)).unwrap(),
+                svg,
+                "{size_dir}"
+            );
+        }
+    }
+
+    fn reset_file_mtimes(data_dir: &Path) {
+        for size_dir in SIZE_DIRS {
+            File::open(override_file(data_dir, size_dir))
+                .unwrap()
+                .set_modified(old_mtime())
+                .unwrap();
+        }
+    }
+
+    fn assert_file_mtimes_unchanged(data_dir: &Path) {
+        for size_dir in SIZE_DIRS {
+            let modified = fs::metadata(override_file(data_dir, size_dir))
+                .unwrap()
+                .modified()
+                .unwrap();
+            assert_eq!(modified, old_mtime(), "{size_dir}");
         }
     }
 
@@ -173,8 +199,10 @@ mod tests {
         assert_ne!(hicolor_mtime(tmp.path()), old_mtime());
 
         reset_mtime(tmp.path());
+        reset_file_mtimes(tmp.path());
         assert!(!write_override(tmp.path(), logo_svg(Skin::Mono)).unwrap());
         assert_eq!(hicolor_mtime(tmp.path()), old_mtime());
+        assert_file_mtimes_unchanged(tmp.path());
 
         assert!(write_override(tmp.path(), logo_svg(Skin::Color)).unwrap());
         assert_files_hold(tmp.path(), LOGO_SVG);
