@@ -13,6 +13,7 @@ use crate::services::ui_state::UiStateService;
 
 const GEOMETRY_KEY: &str = "text-preview";
 const LABEL_PREFIX: &str = "text-preview-";
+const TITLE_LINE_CHARS: usize = 40;
 
 #[derive(Serialize)]
 pub struct TextPayload {
@@ -46,6 +47,22 @@ fn label_for(text: &str) -> String {
     format!("{}{:016x}", LABEL_PREFIX, hasher.finish())
 }
 
+fn preview_title(text: &str) -> String {
+    let first_line: String = text
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .chars()
+        .take(TITLE_LINE_CHARS)
+        .collect();
+    if first_line.is_empty() {
+        "Text Preview".to_string()
+    } else {
+        format!("Text Preview — {first_line}")
+    }
+}
+
 #[tauri::command]
 pub async fn open_text_preview(
     app: tauri::AppHandle,
@@ -59,10 +76,11 @@ pub async fn open_text_preview(
     if let Some(win) = app.get_webview_window(&label) {
         log::debug!("open_text_preview: reusing existing window {}", label);
         win.show()?;
-        win.set_focus()?;
+        dialog::activate_window(&win.as_ref().window(), win.title()?)?;
         return Ok(());
     }
 
+    let title = preview_title(&text);
     pending_insert(
         label.clone(),
         TextPayload { text, index, source_window },
@@ -84,7 +102,7 @@ pub async fn open_text_preview(
         &label,
         WebviewUrl::App("text-preview.html".into()),
     )
-    .title("Text Preview")
+    .title(title)
     .inner_size(width, height)
     .resizable(true)
     .decorations(true)
@@ -168,4 +186,40 @@ pub fn save_text_preview_geometry(window: tauri::Window) {
 #[tauri::command]
 pub fn get_pending_text(window: tauri::Window) -> Option<TextPayload> {
     pending_take(window.label())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn title_is_the_first_line() {
+        assert_eq!(preview_title("abc\ndef"), "Text Preview — abc");
+    }
+
+    #[test]
+    fn title_trims_surrounding_whitespace() {
+        assert_eq!(preview_title("  hello  \nx"), "Text Preview — hello");
+    }
+
+    #[test]
+    fn title_cuts_a_long_line_to_40_chars() {
+        assert_eq!(
+            preview_title(&"a".repeat(50)),
+            format!("Text Preview — {}", "a".repeat(40))
+        );
+    }
+
+    #[test]
+    fn title_cuts_by_chars_not_bytes() {
+        assert_eq!(
+            preview_title(&"ż".repeat(41)),
+            format!("Text Preview — {}", "ż".repeat(40))
+        );
+    }
+
+    #[test]
+    fn title_of_an_empty_first_line_is_plain() {
+        assert_eq!(preview_title("\nsecond"), "Text Preview");
+    }
 }

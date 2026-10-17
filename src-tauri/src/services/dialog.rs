@@ -247,8 +247,9 @@ pub async fn open_or_focus(
     config: &DialogConfig,
 ) -> Result<(Window, bool), String> {
     if let Some(existing) = app.get_webview_window(&config.label) {
-        existing.set_focus().map_err(|e| e.to_string())?;
-        return Ok((existing.as_ref().window(), false));
+        let window = existing.as_ref().window();
+        activate_window(&window, config.title.clone())?;
+        return Ok((window, false));
     }
     if app.get_window(&config.label).is_some() {
         return Err(format!(
@@ -488,5 +489,41 @@ pub fn focus_host_window(app: &tauri::AppHandle, label: &str) -> Result<(), Stri
         return Err(format!("no window: {label}"));
     };
 
+    let title = win.title().map_err(|e| e.to_string())?;
+    activate_window(&win, title)
+}
+
+/// Brings an already mapped window to the front. On GNOME Wayland Mutter denies
+/// `set_focus()` for it, so the shell extension activates the window by `title`;
+/// the title is never logged (text previews carry user text).
+pub fn activate_window(win: &Window, title: String) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        use super::gnome_shell;
+
+        if gnome_shell::is_gnome_wayland() {
+            if win.is_focused().map_err(|e| e.to_string())? {
+                return Ok(());
+            }
+            let win = win.clone();
+            tauri::async_runtime::spawn(async move {
+                let activated = match gnome_shell::proxy().await {
+                    Ok(proxy) => proxy.activate_window(&title).await,
+                    Err(e) => Err(e),
+                };
+                match activated {
+                    Ok(true) => {}
+                    Ok(false) => log::warn!("extension found no window to activate"),
+                    Err(e) => {
+                        log::warn!("ActivateWindow failed, falling back to set_focus: {e}");
+                        if let Err(e) = win.set_focus() {
+                            log::warn!("set_focus failed: {e}");
+                        }
+                    }
+                }
+            });
+            return Ok(());
+        }
+    }
     win.set_focus().map_err(|e| e.to_string())
 }

@@ -17,6 +17,8 @@ pub trait Shell {
 
     fn get_focused_wm_class(&self) -> zbus::Result<String>;
 
+    fn activate_window(&self, title: &str) -> zbus::Result<bool>;
+
     fn show_toast(
         &self,
         level: &str,
