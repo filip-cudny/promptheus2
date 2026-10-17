@@ -813,7 +813,12 @@ fn appearance_migration_either_true_gives_mono() {
 
 #[test]
 fn appearance_migration_absent_keys_keep_defaults() {
-    let (_dir, service) = load_with_old_icon_keys(None, None);
+    let dir = setup_test_dir();
+    let path = dir.path().join("settings.json");
+    let mut raw = read_json(&path);
+    raw.as_object_mut().unwrap().remove("appearance");
+    fs::write(&path, raw.to_string()).unwrap();
+    let service = ConfigService::load(dir.path()).expect("load");
     assert_eq!(service.settings().appearance.logo, Skin::Color);
     assert_eq!(service.settings().appearance.icons, Skin::Mono);
 }
