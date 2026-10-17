@@ -89,6 +89,9 @@ fn apply_dock_visible(app: &tauri::AppHandle, visible: bool) {
             "set_dock_visibility({visible}) failed: {e}",
         );
     }
+    if visible {
+        super::dock_icon::reapply_remembered(app);
+    }
 }
 
 #[cfg(test)]

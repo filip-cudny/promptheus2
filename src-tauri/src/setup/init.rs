@@ -26,6 +26,8 @@ pub fn run(app: &mut tauri::App) -> std::result::Result<(), Box<dyn std::error::
         log::info!("system tray initialized");
     }
 
+    services::dock_icon::apply(app.handle(), config_service.settings().appearance.logo);
+
     #[cfg(desktop)]
     {
         use tauri_plugin_autostart::MacosLauncher;

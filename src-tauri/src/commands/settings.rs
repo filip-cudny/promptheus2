@@ -35,6 +35,7 @@ pub(crate) fn rebuild_ai(config: &ConfigService, ai: &mut AiService) {
 pub(crate) fn apply_reloaded_settings(app: &AppHandle, settings: &Settings) {
     crate::reload_shortcuts(app, settings);
     crate::services::autostart::reconcile(app, settings, false);
+    crate::services::dock_icon::apply(app, settings.appearance.logo);
 }
 
 pub(crate) async fn apply_settings_reload(app: &AppHandle, reason: &str) -> crate::Result<()> {
@@ -55,6 +56,14 @@ pub(crate) async fn apply_settings_reload(app: &AppHandle, reason: &str) -> crat
 }
 
 async fn finish_mutation(app: &AppHandle, reloaded: bool) -> crate::Result<()> {
+    let logo = app
+        .state::<Arc<Mutex<ConfigService>>>()
+        .lock()
+        .await
+        .settings()
+        .appearance
+        .logo;
+    crate::services::dock_icon::apply(app, logo);
     if reloaded {
         apply_settings_reload(app, "reload").await
     } else {
