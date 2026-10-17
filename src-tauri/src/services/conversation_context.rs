@@ -40,6 +40,14 @@ impl ConversationContextCache {
         );
     }
 
+    #[cfg(test)]
+    pub(crate) fn insert_aged(&mut self, tab_id: String, resolved: String, age: chrono::Duration) {
+        self.insert(tab_id.clone(), resolved);
+        if let Some(entry) = self.entries.get_mut(&tab_id) {
+            entry.resolved_at = chrono::Local::now() - age;
+        }
+    }
+
     pub fn environment_update_if_stale(
         &self,
         tab_id: &str,
@@ -68,46 +76,65 @@ impl ConversationContextCache {
         })
     }
 
-    pub fn context_update_if_changed(
+    pub fn pending_updates(
+        &self,
+        tab_id: &str,
+        active_app: &str,
+        recent_apps: &str,
+        context_text: &str,
+        image_count: usize,
+        image_data_len: usize,
+    ) -> Vec<NodeUpdate> {
+        self.environment_update_if_stale(tab_id, active_app, recent_apps)
+            .into_iter()
+            .chain(self.context_update_if_changed(
+                tab_id,
+                context_text,
+                image_count,
+                image_data_len,
+            ))
+            .collect()
+    }
+
+    pub fn mark_context_sent(
         &mut self,
+        tab_id: &str,
+        context_text: &str,
+        image_count: usize,
+        image_data_len: usize,
+    ) {
+        if let Some(entry) = self.entries.get_mut(tab_id) {
+            entry.last_context_hash = Some(compute_context_hash(
+                context_text,
+                image_count,
+                image_data_len,
+            ));
+        }
+    }
+
+    pub fn context_update_if_changed(
+        &self,
         tab_id: &str,
         context_text: &str,
         image_count: usize,
         image_data_len: usize,
     ) -> Option<NodeUpdate> {
         let new_hash = compute_context_hash(context_text, image_count, image_data_len);
-        let entry = self.entries.get_mut(tab_id)?;
+        let previous = self.entries.get(tab_id).and_then(|e| e.last_context_hash);
+        let cleared = context_text.is_empty() && image_count == 0;
 
-        match entry.last_context_hash {
-            None => {
-                entry.last_context_hash = Some(new_hash);
-                if context_text.is_empty() && image_count == 0 {
-                    return None;
-                }
-                Some(NodeUpdate::Context {
-                    content: context_text.to_string(),
-                    reason: "initial".to_string(),
-                    image_refs: vec![],
-                })
-            }
-            Some(prev_hash) if prev_hash == new_hash => None,
-            Some(_) => {
-                entry.last_context_hash = Some(new_hash);
-                if context_text.is_empty() && image_count == 0 {
-                    Some(NodeUpdate::Context {
-                        content: String::new(),
-                        reason: "cleared".to_string(),
-                        image_refs: vec![],
-                    })
-                } else {
-                    Some(NodeUpdate::Context {
-                        content: context_text.to_string(),
-                        reason: "replaced".to_string(),
-                        image_refs: vec![],
-                    })
-                }
-            }
-        }
+        let (content, reason) = match previous {
+            None if cleared => return None,
+            None => (context_text, "initial"),
+            Some(prev_hash) if prev_hash == new_hash => return None,
+            Some(_) if cleared => ("", "cleared"),
+            Some(_) => (context_text, "replaced"),
+        };
+        Some(NodeUpdate::Context {
+            content: content.to_string(),
+            reason: reason.to_string(),
+            image_refs: vec![],
+        })
     }
 
     pub fn remove(&mut self, tab_id: &str) {
@@ -126,6 +153,18 @@ fn compute_context_hash(text: &str, image_count: usize, image_data_len: usize) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn context_update(
+        cache: &mut ConversationContextCache,
+        tab_id: &str,
+        text: &str,
+        image_count: usize,
+        image_data_len: usize,
+    ) -> Option<NodeUpdate> {
+        let update = cache.context_update_if_changed(tab_id, text, image_count, image_data_len);
+        cache.mark_context_sent(tab_id, text, image_count, image_data_len);
+        update
+    }
 
     #[test]
     fn insert_and_get() {
@@ -176,7 +215,7 @@ mod tests {
     fn context_update_initial_with_content() {
         let mut cache = ConversationContextCache::new();
         cache.insert("tab-1".to_string(), "env".to_string());
-        let update = cache.context_update_if_changed("tab-1", "some context", 0, 0);
+        let update = context_update(&mut cache, "tab-1", "some context", 0, 0);
         assert!(matches!(
             update,
             Some(NodeUpdate::Context { reason, .. }) if reason == "initial"
@@ -187,7 +226,7 @@ mod tests {
     fn context_update_none_for_empty_initial() {
         let mut cache = ConversationContextCache::new();
         cache.insert("tab-1".to_string(), "env".to_string());
-        let update = cache.context_update_if_changed("tab-1", "", 0, 0);
+        let update = context_update(&mut cache, "tab-1", "", 0, 0);
         assert!(update.is_none());
     }
 
@@ -195,8 +234,8 @@ mod tests {
     fn context_update_none_when_unchanged() {
         let mut cache = ConversationContextCache::new();
         cache.insert("tab-1".to_string(), "env".to_string());
-        cache.context_update_if_changed("tab-1", "ctx", 0, 0);
-        let update = cache.context_update_if_changed("tab-1", "ctx", 0, 0);
+        context_update(&mut cache, "tab-1", "ctx", 0, 0);
+        let update = context_update(&mut cache, "tab-1", "ctx", 0, 0);
         assert!(update.is_none());
     }
 
@@ -204,8 +243,8 @@ mod tests {
     fn context_update_replaced_when_changed() {
         let mut cache = ConversationContextCache::new();
         cache.insert("tab-1".to_string(), "env".to_string());
-        cache.context_update_if_changed("tab-1", "ctx-a", 0, 0);
-        let update = cache.context_update_if_changed("tab-1", "ctx-b", 0, 0);
+        context_update(&mut cache, "tab-1", "ctx-a", 0, 0);
+        let update = context_update(&mut cache, "tab-1", "ctx-b", 0, 0);
         assert!(matches!(
             update,
             Some(NodeUpdate::Context { reason, .. }) if reason == "replaced"
@@ -216,8 +255,8 @@ mod tests {
     fn context_update_cleared_when_emptied() {
         let mut cache = ConversationContextCache::new();
         cache.insert("tab-1".to_string(), "env".to_string());
-        cache.context_update_if_changed("tab-1", "ctx", 0, 0);
-        let update = cache.context_update_if_changed("tab-1", "", 0, 0);
+        context_update(&mut cache, "tab-1", "ctx", 0, 0);
+        let update = context_update(&mut cache, "tab-1", "", 0, 0);
         assert!(matches!(
             update,
             Some(NodeUpdate::Context { reason, .. }) if reason == "cleared"
@@ -228,11 +267,45 @@ mod tests {
     fn context_update_detects_image_change() {
         let mut cache = ConversationContextCache::new();
         cache.insert("tab-1".to_string(), "env".to_string());
-        cache.context_update_if_changed("tab-1", "ctx", 1, 100);
-        let update = cache.context_update_if_changed("tab-1", "ctx", 2, 200);
+        context_update(&mut cache, "tab-1", "ctx", 1, 100);
+        let update = context_update(&mut cache, "tab-1", "ctx", 2, 200);
         assert!(matches!(
             update,
             Some(NodeUpdate::Context { reason, .. }) if reason == "replaced"
         ));
+    }
+
+    #[test]
+    fn pending_updates_does_not_mark_context_sent() {
+        let mut cache = ConversationContextCache::new();
+        cache.insert_aged("tab-1".to_string(), "env".to_string(), chrono::Duration::hours(1));
+
+        let first = cache.pending_updates("tab-1", "Safari", "Safari", "ctx", 0, 0);
+        let second = cache.pending_updates("tab-1", "Safari", "Safari", "ctx", 0, 0);
+
+        assert_eq!(first.len(), 2);
+        assert!(matches!(first[0], NodeUpdate::Environment { .. }));
+        assert!(matches!(first[1], NodeUpdate::Context { .. }));
+        assert_eq!(first, second);
+    }
+
+    #[test]
+    fn pending_updates_treats_unknown_tab_as_new() {
+        let cache = ConversationContextCache::new();
+        let updates = cache.pending_updates("unknown", "Safari", "Safari", "ctx", 0, 0);
+        assert!(matches!(
+            updates.as_slice(),
+            [NodeUpdate::Context { reason, .. }] if reason == "initial"
+        ));
+    }
+
+    #[test]
+    fn mark_context_sent_silences_pending_context_update() {
+        let mut cache = ConversationContextCache::new();
+        cache.insert("tab-1".to_string(), "env".to_string());
+        cache.mark_context_sent("tab-1", "ctx", 0, 0);
+        assert!(cache
+            .pending_updates("tab-1", "Safari", "Safari", "ctx", 0, 0)
+            .is_empty());
     }
 }

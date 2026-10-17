@@ -11,7 +11,7 @@ use super::types::MAX_TOOL_LOOP_ITERATIONS;
 use crate::services::placeholder_registry::PlaceholderContext;
 use crate::models::ai::StreamEvent;
 use crate::models::message::{
-    ConversationNodeForExecution, ImageData, MessageContent, NodeUpdate, ProcessedMessage,
+    ConversationNodeForExecution, ImageData, NodeUpdate, ProcessedMessage,
 };
 use crate::models::settings::ModelParameters;
 use crate::services::ai::AiService;
@@ -31,6 +31,68 @@ pub struct ConversationPrepared {
     pub param_overrides: Option<ModelParameters>,
     pub updates_for_event: Option<(String, Vec<NodeUpdate>)>,
     pub user_message: String,
+}
+
+pub struct BuiltConversation {
+    pub messages: Vec<ProcessedMessage>,
+    pub updates_for_event: Option<(String, Vec<NodeUpdate>)>,
+}
+
+fn image_data_len(images: &[ImageData]) -> usize {
+    images.iter().map(|i| i.data.len()).sum()
+}
+
+/// Builds the messages a send produces for a tab, without touching the cache: the
+/// environment and context updates it would add are only read, and written into the
+/// last user node. Token counting and sending both call it.
+#[allow(clippy::too_many_arguments)]
+pub fn build_conversation_messages(
+    config: &ConfigService,
+    history: &SqliteHistoryService,
+    conversation_context: &ConversationContextCache,
+    active_app: &str,
+    recent_apps: &str,
+    resolved_environment_section: &str,
+    tab_id: &str,
+    nodes: &mut [ConversationNodeForExecution],
+    context_text: Option<&str>,
+    context_images: &[ImageData],
+) -> crate::Result<BuiltConversation> {
+    let placeholder_ctx = PlaceholderContext::with_apps(active_app, recent_apps);
+    let system_content =
+        build_system_prompt_base(config, Some(resolved_environment_section), &placeholder_ctx);
+
+    let node_updates = conversation_context.pending_updates(
+        tab_id,
+        active_app,
+        recent_apps,
+        context_text.unwrap_or(""),
+        context_images.len(),
+        image_data_len(context_images),
+    );
+    let updates_for_event = if node_updates.is_empty() {
+        None
+    } else {
+        nodes.iter_mut().rev().find(|n| n.role == "user").map(|last_user| {
+            last_user.updates = node_updates.clone();
+            (last_user.node_id.clone(), node_updates)
+        })
+    };
+
+    let version_ids = skill_message::collect_skill_version_ids(nodes);
+    let skill_bodies = skill_message::load_skill_version_bodies(history.conn(), &version_ids)?;
+
+    let mut messages = vec![ProcessedMessage::text("system", system_content)];
+    messages.extend(skill_message::build_messages_from_tree(
+        nodes,
+        context_images,
+        &skill_bodies,
+    ));
+
+    Ok(BuiltConversation {
+        messages,
+        updates_for_event,
+    })
 }
 
 pub struct ConversationExecutor;
@@ -68,67 +130,35 @@ impl ConversationExecutor {
         });
         let param_overrides = merge_optional_parameters(Some(chat_surface_params), tab_override);
 
-        let placeholder_ctx = PlaceholderContext::with_apps(active_app, recent_apps);
-
         if !conversation_context.has(tab_id) {
+            let placeholder_ctx = PlaceholderContext::with_apps(active_app, recent_apps);
             let resolved = resolve_environment_section_template(config, &placeholder_ctx);
             conversation_context.insert(tab_id.to_string(), resolved);
         }
         let resolved_environment_section =
             conversation_context.get(tab_id).unwrap().to_string();
 
-        let system_content = build_system_prompt_base(
+        let BuiltConversation {
+            messages: all_messages,
+            updates_for_event,
+        } = build_conversation_messages(
             config,
-            Some(&resolved_environment_section),
-            &placeholder_ctx,
-        );
-
-        let mut node_updates: Vec<NodeUpdate> = Vec::new();
-
-        if let Some(env_update) =
-            conversation_context.environment_update_if_stale(tab_id, active_app, recent_apps)
-        {
-            node_updates.push(env_update);
-        }
-
-        let context_str = context_text.unwrap_or("");
-        let image_data_len: usize = context_images.iter().map(|i| i.data.len()).sum();
-        if let Some(ctx_update) = conversation_context.context_update_if_changed(
+            history,
+            conversation_context,
+            active_app,
+            recent_apps,
+            &resolved_environment_section,
             tab_id,
-            context_str,
+            nodes,
+            context_text,
+            context_images,
+        )?;
+        conversation_context.mark_context_sent(
+            tab_id,
+            context_text.unwrap_or(""),
             context_images.len(),
-            image_data_len,
-        ) {
-            node_updates.push(ctx_update);
-        }
-
-        let updates_for_event = if !node_updates.is_empty() {
-            if let Some(last_user) = nodes.iter_mut().rev().find(|n| n.role == "user") {
-                let node_id = last_user.node_id.clone();
-                last_user.updates = node_updates.clone();
-                Some((node_id, node_updates))
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        let system_message = ProcessedMessage {
-            role: "system".to_string(),
-            content: MessageContent::Text(system_content),
-            tool_calls: None,
-            tool_call_id: None,
-        };
-
-        let version_ids = skill_message::collect_skill_version_ids(nodes);
-        let skill_bodies =
-            skill_message::load_skill_version_bodies(history.conn(), &version_ids)?;
-        let tree_messages =
-            skill_message::build_messages_from_tree(nodes, context_images, &skill_bodies);
-
-        let mut all_messages = vec![system_message];
-        all_messages.extend(tree_messages);
+            image_data_len(context_images),
+        );
 
         let user_message = nodes
             .iter()

@@ -7,7 +7,7 @@
   import ImageChipBar from "$lib/components/shared/ui/ImageChipBar.svelte";
   import EditorToolbar from "$lib/components/shared/ui/EditorToolbar.svelte";
   import MarkdownRenderer from "$lib/components/shared/ui/MarkdownRenderer.svelte";
-  import { countTokensDebounced, estimateImageTokens } from "$lib/services/tokenCounter";
+  import { countTokensDebounced } from "$lib/services/tokenCounter";
   import type { ConversationImage } from "$lib/types/conversation";
 
   let {
@@ -27,13 +27,16 @@
   } = $props();
 
   let lineCount = $derived(text ? text.split("\n").length : 0);
-  let textTokens = $state(0);
-  let tokenCount = $derived(textTokens + images.length * estimateImageTokens("openai"));
+  let tokenCount = $state(0);
 
   $effect(() => {
-    countTokensDebounced(text, (count) => {
-      textTokens = count;
-    });
+    countTokensDebounced(
+      text,
+      (count) => {
+        tokenCount = count;
+      },
+      images.length,
+    );
   });
 
   async function handleSaveSvg(svg: string) {

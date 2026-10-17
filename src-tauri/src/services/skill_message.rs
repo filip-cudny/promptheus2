@@ -17,11 +17,11 @@ pub fn compose_skill_user_message(
     input: &str,
     ctx: &PlaceholderContext,
 ) -> String {
-    let resolved_body = substitute(&skill.body, ctx);
-    format!(
-        "<skill name=\"{}\">\n{}\n</skill>\n\n<input>\n{}\n</input>",
-        skill.name, resolved_body, input
-    )
+    wrap_skill(&skill.name, &substitute(&skill.body, ctx), input)
+}
+
+pub fn wrap_skill(name: &str, body: &str, input: &str) -> String {
+    format!("<skill name=\"{name}\">\n{body}\n</skill>\n\n<input>\n{input}\n</input>")
 }
 
 pub fn compose_from_snapshot(
@@ -33,10 +33,7 @@ pub fn compose_from_snapshot(
     for (i, applied) in skills.iter().enumerate() {
         let empty = String::new();
         let body = bodies.get(&applied.skill_version_id).unwrap_or(&empty);
-        parts.push(format!(
-            "<skill name=\"{}\">\n{}\n</skill>\n\n<input>\n{}\n</input>",
-            applied.name, body, applied.input
-        ));
+        parts.push(wrap_skill(&applied.name, body, &applied.input));
 
         if i < skills.len() - 1 {
             parts.push(format!("\n\n<skill-end name=\"{}\" />\n", applied.name));
@@ -98,12 +95,7 @@ pub fn prepare_skill_messages(
         None => system_prompt.to_string(),
     };
 
-    messages.push(ProcessedMessage {
-        role: "system".to_string(),
-        content: MessageContent::Text(system_content),
-        tool_calls: None,
-        tool_call_id: None,
-    });
+    messages.push(ProcessedMessage::text("system", system_content));
 
     let user_text = compose_skill_user_message(skill, input, ctx);
 
@@ -122,19 +114,9 @@ pub fn prepare_skill_messages(
             }
         }
         parts.push(ContentPart::Text { text: user_text });
-        messages.push(ProcessedMessage {
-            role: "user".to_string(),
-            content: MessageContent::Parts(parts),
-            tool_calls: None,
-            tool_call_id: None,
-        });
+        messages.push(ProcessedMessage::parts("user", parts));
     } else {
-        messages.push(ProcessedMessage {
-            role: "user".to_string(),
-            content: MessageContent::Text(user_text),
-            tool_calls: None,
-            tool_call_id: None,
-        });
+        messages.push(ProcessedMessage::text("user", user_text));
     }
 
     messages
@@ -368,27 +350,12 @@ pub fn build_messages_from_tree(
                 parts.push(ContentPart::Text {
                     text: text_content,
                 });
-                messages.push(ProcessedMessage {
-                    role: "user".to_string(),
-                    content: MessageContent::Parts(parts),
-                    tool_calls: None,
-                    tool_call_id: None,
-                });
+                messages.push(ProcessedMessage::parts("user", parts));
             } else {
-                messages.push(ProcessedMessage {
-                    role: "user".to_string(),
-                    content: MessageContent::Text(text_content),
-                    tool_calls: None,
-                    tool_call_id: None,
-                });
+                messages.push(ProcessedMessage::text("user", text_content));
             }
         } else {
-            messages.push(ProcessedMessage {
-                role: "assistant".to_string(),
-                content: MessageContent::Text(node.content.clone()),
-                tool_calls: None,
-                tool_call_id: None,
-            });
+            messages.push(ProcessedMessage::text("assistant", node.content.clone()));
         }
     }
 

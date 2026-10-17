@@ -13,6 +13,7 @@ use crate::commands::settings::apply_settings_reload;
 use crate::services::config::ConfigService;
 use crate::services::placeholder_registry::{substitute, PlaceholderContext};
 use crate::services::skill::{validate_slug, SkillError, SkillService};
+use crate::services::skill_message;
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
 
@@ -406,9 +407,7 @@ pub async fn preview_skill_message(
     let preview_ctx = PlaceholderContext::with_apps("(preview)", "(preview)");
     let rendered_body = substitute(&body, &preview_ctx);
     info!("composing skill preview for '{name}'");
-    Ok(format!(
-        "<skill name=\"{name}\">\n{rendered_body}\n</skill>\n\n<input>\n{sample_input}\n</input>"
-    ))
+    Ok(skill_message::wrap_skill(&name, &rendered_body, &sample_input))
 }
 
 #[cfg(test)]

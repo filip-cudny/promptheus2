@@ -1,37 +1,26 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Provider } from "$lib/types";
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function countTokensDebounced(
   text: string,
   callback: (count: number) => void,
+  imageCount = 0,
   delay = 300,
 ): void {
   if (debounceTimer) clearTimeout(debounceTimer);
 
-  if (!text.trim()) {
+  if (!text.trim() && imageCount === 0) {
     callback(0);
     return;
   }
 
   debounceTimer = setTimeout(async () => {
     try {
-      const count = await invoke<number>("count_tokens", { text });
+      const count = await invoke<number>("count_tokens", { text, imageCount });
       callback(count);
     } catch {
       callback(0);
     }
   }, delay);
-}
-
-const IMAGE_TOKENS: Record<Provider, number> = {
-  openai: 765,
-  anthropic: 1334,
-  gemini: 258,
-  elevenlabs: 765,
-};
-
-export function estimateImageTokens(provider: Provider): number {
-  return IMAGE_TOKENS[provider] ?? 765;
 }

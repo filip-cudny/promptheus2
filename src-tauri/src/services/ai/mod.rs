@@ -20,7 +20,6 @@ use self::capabilities::{resolve, ModelCapabilities, ReasoningMode};
 use self::openai::OpenAiProvider;
 use self::openai_responses::OpenAiResponsesProvider;
 use self::provider::{AiProvider, CompletionRequest, StreamChunk};
-use self::tools::ToolRegistry;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AiError {
@@ -171,28 +170,12 @@ impl AiService {
         };
         let parameters = normalize_params(&parameters, &entry.capabilities, &entry.model_name);
 
-        let mut tool_payloads: Vec<serde_json::Value> = match tools_override {
-            Some(ref requested) => {
-                let built_in = ToolRegistry::resolve_tools(
-                    requested,
-                    &entry.provider_type,
-                    &entry.api_mode,
-                );
-                built_in
-                    .iter()
-                    .map(|t| ToolRegistry::to_request_payload(t, &entry.provider_type, &entry.api_mode))
-                    .collect()
-            }
-            None => vec![],
-        };
-
-        for mcp_tool in &mcp_tools {
-            tool_payloads.push(tools::mcp_tool_to_payload(
-                mcp_tool,
-                &entry.provider_type,
-                &entry.api_mode,
-            ));
-        }
+        let tool_payloads = tools::build_tool_payloads(
+            tools_override.as_deref(),
+            &mcp_tools,
+            &entry.provider_type,
+            &entry.api_mode,
+        );
 
         let request = CompletionRequest {
             model: entry.model_name.clone(),

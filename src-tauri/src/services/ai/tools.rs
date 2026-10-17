@@ -91,6 +91,26 @@ impl ToolRegistry {
     }
 }
 
+pub fn build_tool_payloads(
+    builtin_names: Option<&[String]>,
+    mcp_tools: &[rmcp::model::Tool],
+    provider: &Provider,
+    api_mode: &ApiMode,
+) -> Vec<serde_json::Value> {
+    let builtin = builtin_names
+        .map(|names| ToolRegistry::resolve_tools(names, provider, api_mode))
+        .unwrap_or_default();
+    builtin
+        .iter()
+        .map(|t| ToolRegistry::to_request_payload(t, provider, api_mode))
+        .chain(
+            mcp_tools
+                .iter()
+                .map(|t| mcp_tool_to_payload(t, provider, api_mode)),
+        )
+        .collect()
+}
+
 pub fn mcp_tool_to_payload(
     tool: &rmcp::model::Tool,
     provider: &Provider,
@@ -220,6 +240,30 @@ mod tests {
         tool.description = Some("Get weather for a location".into());
         tool.input_schema = std::sync::Arc::new(schema);
         tool
+    }
+
+    #[test]
+    fn build_tool_payloads_lists_builtin_before_mcp() {
+        let payloads = build_tool_payloads(
+            Some(&["web_search".to_string()]),
+            &[make_test_mcp_tool()],
+            &Provider::Openai,
+            &ApiMode::Responses,
+        );
+        assert_eq!(payloads.len(), 2);
+        assert_eq!(payloads[0], json!({"type": "web_search_preview"}));
+        assert_eq!(payloads[1]["name"], "get_weather");
+    }
+
+    #[test]
+    fn build_tool_payloads_without_builtin_names_keeps_mcp_only() {
+        let payloads = build_tool_payloads(
+            None,
+            &[make_test_mcp_tool()],
+            &Provider::Openai,
+            &ApiMode::Responses,
+        );
+        assert_eq!(payloads.len(), 1);
     }
 
     #[test]

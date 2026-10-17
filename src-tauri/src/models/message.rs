@@ -43,6 +43,25 @@ pub struct ProcessedMessage {
     pub tool_call_id: Option<String>,
 }
 
+impl ProcessedMessage {
+    pub fn text(role: &str, text: impl Into<String>) -> Self {
+        Self::new(role, MessageContent::Text(text.into()))
+    }
+
+    pub fn parts(role: &str, parts: Vec<ContentPart>) -> Self {
+        Self::new(role, MessageContent::Parts(parts))
+    }
+
+    fn new(role: &str, content: MessageContent) -> Self {
+        Self {
+            role: role.to_string(),
+            content,
+            tool_calls: None,
+            tool_call_id: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ImageData {
     pub data: String,
@@ -92,21 +111,16 @@ mod tests {
 
     #[test]
     fn text_only_message_serialization() {
-        let msg = ProcessedMessage {
-            role: "user".into(),
-            content: MessageContent::Text("hello".into()),
-            tool_calls: None,
-            tool_call_id: None,
-        };
+        let msg = ProcessedMessage::text("user", "hello");
         let value = serde_json::to_value(&msg).unwrap();
         assert_eq!(value, json!({"role": "user", "content": "hello"}));
     }
 
     #[test]
     fn multi_part_message_serialization() {
-        let msg = ProcessedMessage {
-            role: "user".into(),
-            content: MessageContent::Parts(vec![
+        let msg = ProcessedMessage::parts(
+            "user",
+            vec![
                 ContentPart::Text {
                     text: "hello".into(),
                 },
@@ -115,10 +129,8 @@ mod tests {
                         url: "data:image/png;base64,abc".into(),
                     },
                 },
-            ]),
-            tool_calls: None,
-            tool_call_id: None,
-        };
+            ],
+        );
         let value = serde_json::to_value(&msg).unwrap();
         assert_eq!(
             value,
@@ -188,12 +200,7 @@ mod tests {
 
     #[test]
     fn regular_message_omits_tool_fields() {
-        let msg = ProcessedMessage {
-            role: "user".into(),
-            content: MessageContent::Text("hello".into()),
-            tool_calls: None,
-            tool_call_id: None,
-        };
+        let msg = ProcessedMessage::text("user", "hello");
         let value = serde_json::to_value(&msg).unwrap();
         assert!(value.get("tool_calls").is_none());
         assert!(value.get("tool_call_id").is_none());

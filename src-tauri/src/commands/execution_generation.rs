@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
 
-use crate::models::message::{MessageContent, ProcessedMessage};
+use crate::models::message::ProcessedMessage;
 use crate::services::ai::AiService;
 use crate::services::config::ConfigService;
 use crate::services::execution::PromptExecutionService;
@@ -22,18 +22,8 @@ pub async fn generate_conversation_title(
     };
 
     let messages = vec![
-        ProcessedMessage {
-            role: "system".to_string(),
-            content: MessageContent::Text(prompt),
-            tool_calls: None,
-            tool_call_id: None,
-        },
-        ProcessedMessage {
-            role: "user".to_string(),
-            content: MessageContent::Text(user_message),
-            tool_calls: None,
-            tool_call_id: None,
-        },
+        ProcessedMessage::text("system", prompt),
+        ProcessedMessage::text("user", user_message),
     ];
 
     let title = ai.complete(&model_id, messages).await?;
