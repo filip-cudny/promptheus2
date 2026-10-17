@@ -42,7 +42,7 @@ For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconPro
 
 ### Modal
 
-- `title`, `width` (px, default 480), `onClose`, `children`. Backdrop, header with close button, panel; a mousedown on the backdrop or `Escape` calls `onClose`.
+- `title`, `width` (px, default 480), `closeHover` (default true; `false` drops the close button hover background), `onClose`, `children`. Backdrop, header with close button, panel; a mousedown on the backdrop or `Escape` calls `onClose`.
 - The panel is a flex column; children (fields, footer) are laid out inside it. Focus is the caller's job (`onMount`).
 
 ### MenuItem

@@ -6,11 +6,13 @@
   let {
     title,
     width = 480,
+    closeHover = true,
     onClose,
     children,
   }: {
     title: string;
     width?: number;
+    closeHover?: boolean;
     onClose: () => void;
     children: Snippet;
   } = $props();
@@ -30,7 +32,7 @@
   <div class="dialog" style="--modal-width: {width}px">
     <header>
       <h2>{title}</h2>
-      <button type="button" class="close" onclick={onClose} aria-label="Close">
+      <button type="button" class="close" class:hoverable={closeHover} onclick={onClose} aria-label="Close">
         <X size={ICON_SIZE.md} />
       </button>
     </header>
@@ -84,7 +86,7 @@
     border-radius: var(--radius-sm);
   }
 
-  .close:hover {
+  .close.hoverable:hover {
     background: var(--surface-overlay-faint);
     color: var(--text-primary);
   }

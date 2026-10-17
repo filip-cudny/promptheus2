@@ -60,7 +60,8 @@
     color: var(--text-secondary);
   }
 
-  .action-icon-btn.active {
+  .action-icon-btn.active,
+  .action-icon-btn.active:hover:not(:disabled) {
     background: rgba(74, 158, 187, 0.2);
     color: var(--info);
   }

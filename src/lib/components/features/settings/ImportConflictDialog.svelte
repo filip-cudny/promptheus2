@@ -13,7 +13,7 @@
   } = $props();
 </script>
 
-<Modal title="Skill already exists" width={520} {onClose}>
+<Modal title="Skill already exists" width={520} closeHover={false} {onClose}>
   <p>
     A skill named <code>/{existingSlug}</code> already exists. Choose how to import:
   </p>
