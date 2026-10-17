@@ -4,23 +4,17 @@
   let {
     title,
     hint,
-    actions,
     body,
-    footer,
-    flush = false,
   }: {
     title?: string;
     hint?: string;
-    actions?: Snippet;
     body: Snippet;
-    footer?: Snippet;
-    flush?: boolean;
   } = $props();
 
-  const hasHeader = $derived(Boolean(title || hint || actions));
+  const hasHeader = $derived(Boolean(title || hint));
 </script>
 
-<section class="settings-section" class:flush>
+<section class="settings-section">
   {#if hasHeader}
     <header class="head">
       <div class="head-text">
@@ -31,23 +25,12 @@
           <p class="hint">{hint}</p>
         {/if}
       </div>
-      {#if actions}
-        <div class="head-actions">
-          {@render actions()}
-        </div>
-      {/if}
     </header>
   {/if}
 
-  <div class="body" class:padded={!flush}>
+  <div class="body">
     {@render body()}
   </div>
-
-  {#if footer}
-    <footer class="foot">
-      {@render footer()}
-    </footer>
-  {/if}
 </section>
 
 <style>
@@ -88,32 +71,13 @@
     color: var(--text-muted);
   }
 
-  .head-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    flex-shrink: 0;
-  }
-
   .body {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-  }
-
-  .body.padded {
     padding: var(--space-8);
     gap: var(--space-8);
-  }
-
-  .foot {
-    border-top: 1px solid var(--border-faint);
-    padding: var(--space-4) var(--space-8);
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--space-3);
   }
 </style>

@@ -1,6 +1,4 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
-
   let {
     value = $bindable<string>(""),
     highlightPattern,
@@ -8,13 +6,7 @@
     placeholder,
     disabled = false,
     minHeight = 320,
-    spellcheck = false,
-    autoresize = false,
-    rows,
-    ariaLabel,
-    onInput,
     onTextareaRef,
-    footer,
   }: {
     value?: string;
     highlightPattern?: RegExp;
@@ -22,13 +14,7 @@
     placeholder?: string;
     disabled?: boolean;
     minHeight?: number;
-    spellcheck?: boolean;
-    autoresize?: boolean;
-    rows?: number;
-    ariaLabel?: string;
-    onInput?: (next: string) => void;
     onTextareaRef?: (el: HTMLTextAreaElement | undefined) => void;
-    footer?: Snippet;
   } = $props();
 
   let textarea = $state<HTMLTextAreaElement | undefined>(undefined);
@@ -80,9 +66,7 @@
   }
 
   function handleInput(e: Event) {
-    const next = (e.target as HTMLTextAreaElement).value;
-    value = next;
-    onInput?.(next);
+    value = (e.target as HTMLTextAreaElement).value;
   }
 </script>
 
@@ -96,16 +80,11 @@
     {value}
     {placeholder}
     {disabled}
-    {rows}
-    spellcheck={spellcheck ? "true" : "false"}
-    aria-label={ariaLabel}
+    spellcheck="false"
     oninput={handleInput}
     onscroll={syncScroll}
   ></textarea>
 </div>
-{#if footer}
-  <div class="footer">{@render footer()}</div>
-{/if}
 
 <style>
   .frame {
@@ -182,11 +161,5 @@
     color: var(--warning, #d39a37);
     background: rgba(211, 154, 55, 0.12);
     box-shadow: 0 0 0 1px rgba(211, 154, 55, 0.35);
-  }
-
-  .footer {
-    margin-top: var(--space-2);
-    font-size: var(--font-size-xs);
-    color: var(--text-faint);
   }
 </style>

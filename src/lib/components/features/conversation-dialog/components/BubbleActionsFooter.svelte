@@ -3,16 +3,14 @@
 
   let {
     visible = false,
-    align = "end",
     children,
   }: {
     visible?: boolean;
-    align?: "start" | "end";
     children: Snippet;
   } = $props();
 </script>
 
-<div class="bubble-footer" class:actions-visible={visible} class:align-start={align === "start"}>
+<div class="bubble-footer" class:actions-visible={visible}>
   {@render children()}
 </div>
 
@@ -25,10 +23,6 @@
     padding: var(--space-2) var(--space-0);
     opacity: 0;
     transition: opacity var(--motion-fast) var(--ease-default);
-  }
-
-  .bubble-footer.align-start {
-    justify-content: flex-start;
   }
 
   .bubble-footer.actions-visible,

@@ -33,7 +33,7 @@ For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconPro
 ### CollapsibleSection
 
 - Uses `bind:collapsed` for two-way binding — parent controls open/closed state.
-- Header uses Lucide `ChevronRight`/`ChevronDown` icons for collapse indicator. The `headerLeft` snippet renders between the chevron and title (e.g., role badges). The `actions` snippet renders on the right side and stops click propagation (`hoverActions` / `actionsVisible` control when it shows). `headerClass` allows conditional styling of the header (e.g., highlight when content is present).
+- Header uses Lucide `ChevronRight`/`ChevronDown` icons for collapse indicator. The `actions` snippet renders on the right side and stops click propagation. `headerClass` allows conditional styling of the header (e.g., highlight when content is present).
 - Content area uses `svelte/transition` `slide` for smooth expand/collapse.
 
 ### ImageChipBar

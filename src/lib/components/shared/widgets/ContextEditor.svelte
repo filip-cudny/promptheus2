@@ -8,7 +8,6 @@
   let {
     text = $bindable(),
     images = $bindable(),
-    readonly = false,
     disabled = false,
     placeholder = "Enter context text…",
     variant = "default",
@@ -16,7 +15,6 @@
   }: {
     text: string;
     images: ConversationImage[];
-    readonly?: boolean;
     disabled?: boolean;
     placeholder?: string;
     variant?: "default" | "flat";
@@ -31,7 +29,7 @@
   });
 
   async function handlePaste(e: ClipboardEvent) {
-    if (readonly || disabled) return;
+    if (disabled) return;
     const image = await getImageFromPasteEvent(e);
     if (image) {
       const number = Math.max(0, ...images.map((existing) => existing.number ?? 0)) + 1;
@@ -43,7 +41,7 @@
 <div class="context-editor" class:flat={variant === "flat"}>
   {#if !hideChipRow && images.length > 0}
     <div class="chip-row">
-      <ImageChipBar bind:images readonly={readonly || disabled} onopen={(image) => invoke("open_image_preview", { data: image.data, mediaType: image.media_type })} />
+      <ImageChipBar bind:images readonly={disabled} onopen={(image) => invoke("open_image_preview", { data: image.data, mediaType: image.media_type })} />
     </div>
   {/if}
   <textarea
@@ -53,7 +51,7 @@
     use:autoResize={"none"}
     rows="1"
     {placeholder}
-    disabled={disabled || readonly}
+    {disabled}
     onpaste={handlePaste}
   ></textarea>
 </div>

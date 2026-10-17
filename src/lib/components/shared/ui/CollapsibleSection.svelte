@@ -8,19 +8,13 @@
     title,
     collapsed = $bindable(false),
     headerClass,
-    headerLeft,
     actions,
-    hoverActions = false,
-    actionsVisible = false,
     children,
   }: {
     title: string;
     collapsed: boolean;
     headerClass?: string;
-    headerLeft?: Snippet;
     actions?: Snippet;
-    hoverActions?: boolean;
-    actionsVisible?: boolean;
     children: Snippet;
   } = $props();
 </script>
@@ -34,13 +28,10 @@
         <ChevronDown size={ICON_SIZE.md} />
       {/if}
     </span>
-    {#if headerLeft}
-      {@render headerLeft()}
-    {/if}
     <span class="collapsible-title">{title}</span>
     {#if actions}
       <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
-        <span class="collapsible-actions" class:hover-actions={hoverActions} class:actions-visible={actionsVisible} onclick={(e) => e.stopPropagation()}>
+        <span class="collapsible-actions" onclick={(e) => e.stopPropagation()}>
         {@render actions()}
       </span>
     {/if}
@@ -97,16 +88,6 @@
     display: flex;
     gap: var(--space-2);
     flex-shrink: 0;
-  }
-
-  .collapsible-actions.hover-actions {
-    opacity: 0;
-    transition: opacity var(--motion-fast) var(--ease-default);
-  }
-
-  .collapsible-header:hover .collapsible-actions.hover-actions,
-  .collapsible-actions.actions-visible {
-    opacity: 1;
   }
 
   .collapsible-content {

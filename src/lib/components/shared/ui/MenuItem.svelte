@@ -8,7 +8,6 @@
     active = false,
     activeStyle = "tint",
     disabled = false,
-    description,
     onclick,
   }: {
     label: string;
@@ -17,7 +16,6 @@
     active?: boolean;
     activeStyle?: "tint" | "rail";
     disabled?: boolean;
-    description?: string;
     onclick?: () => void;
   } = $props();
 </script>
@@ -35,9 +33,6 @@
     <span class="menu-item-icon">{@render icon()}</span>
   {/if}
   <span class="menu-item-label">{label}</span>
-  {#if description}
-    <span class="menu-item-description">{description}</span>
-  {/if}
   {#if shortcut}
     <span class="menu-item-shortcut">{@render shortcut()}</span>
   {/if}
@@ -97,12 +92,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .menu-item-description {
-    font-size: var(--font-size-sm);
-    color: var(--text-muted);
-    flex-shrink: 0;
   }
 
   .menu-item-shortcut {

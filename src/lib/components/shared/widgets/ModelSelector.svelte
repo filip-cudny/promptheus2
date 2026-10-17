@@ -16,7 +16,6 @@
     onModelSelect,
     onReasoningSelect,
     preventDismiss,
-    onDropdownToggle,
   }: {
     models: ModelConfig[];
     selectedModelId: string | null;
@@ -25,7 +24,6 @@
     onModelSelect: (modelId: string) => void;
     onReasoningSelect: (effort: string | null) => void;
     preventDismiss?: { suppress: () => void; resume: () => void };
-    onDropdownToggle?: () => void;
   } = $props();
 
   let modelDropdownOpen = $state(false);
@@ -131,7 +129,6 @@
       preventDismiss?.suppress();
       tick().then(() => {
         modelDropdownStyle = positionDropdown(modelChipEl, modelDropdownEl);
-        onDropdownToggle?.();
       });
     }
   }
@@ -146,7 +143,6 @@
       preventDismiss?.suppress();
       tick().then(() => {
         reasoningDropdownStyle = positionDropdown(reasoningChipEl, reasoningDropdownEl);
-        onDropdownToggle?.();
       });
     }
   }
@@ -155,10 +151,7 @@
     const wasOpen = modelDropdownOpen || reasoningDropdownOpen;
     modelDropdownOpen = false;
     reasoningDropdownOpen = false;
-    if (wasOpen) {
-      preventDismiss?.resume();
-      tick().then(() => onDropdownToggle?.());
-    }
+    if (wasOpen) preventDismiss?.resume();
   }
 
   function selectModel(modelId: string) {

@@ -9,7 +9,6 @@
     open,
     message,
     confirmLabel = "Delete",
-    confirmVariant = "danger",
     confirmIcon = Trash2,
     onConfirm,
     onCancel,
@@ -17,7 +16,6 @@
     open: boolean;
     message: string;
     confirmLabel?: string;
-    confirmVariant?: "danger" | "default";
     confirmIcon?: LucideIcon | null;
     onConfirm: () => void;
     onCancel: () => void;
@@ -48,8 +46,7 @@
         <button class="confirm-btn cancel" onclick={onCancel}>Cancel</button>
         <!-- svelte-ignore a11y_autofocus -->
         <button
-          class="confirm-btn"
-          class:danger={confirmVariant === "danger"}
+          class="confirm-btn danger"
           onclick={onConfirm}
           autofocus
         >

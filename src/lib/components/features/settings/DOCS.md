@@ -148,7 +148,7 @@ Only `kind: "environment"` shows the placeholders affordance: a `{ }` icon butto
 
 ### Section shells & tabbed prompts
 
-`SettingsSection.svelte` is a shared scaffold every section can use: optional title + hint + actions header (with a thin `--border-faint` divider), a scrollable padded body, and an optional sticky footer. Use it for sections that have a "page" feel (`SectionPromptBase`, `SectionSurfacePrompts`); the models section keeps its own list+editor split layout but should still match `SettingsSection`'s padding rhythm where possible.
+`SettingsSection.svelte` is a shared scaffold every section can use: optional title + hint header (with a thin `--border-faint` divider) and a scrollable padded body. Use it for sections that have a "page" feel (`SectionPromptBase`, `SectionSurfacePrompts`); the models section keeps its own list+editor split layout but should still match `SettingsSection`'s padding rhythm where possible.
 
 `SectionPromptBase` and `SectionSurfacePrompts` use a tab strip in the section header — only one `PromptEditor` is mounted at a time and fills the available height. This replaces the old "stacked card-soup" layout where every prompt rendered a full-bordered card stacked vertically. Tabs are uppercase-tracked labels, active tab uses a 2px bottom border in `--accent` (mirrors the sidebar's left-border marker, single-accent rule).
 

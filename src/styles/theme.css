@@ -47,21 +47,14 @@
   --success-border: rgba(98, 168, 120, 0.28);
 
   --tool-running-stripe: var(--accent);
-  --tool-done-stripe: transparent;
 
   --warning: #d4a843;
   --warning-bg-soft: rgba(212, 168, 67, 0.15);
-  --warning-border: rgba(212, 168, 67, 0.35);
 
   --info: #7dd3f0;
-  --info-bg-soft: rgba(125, 211, 240, 0.15);
-  --info-border: rgba(125, 211, 240, 0.35);
 
   /* 4.6 code syntax */
   --syntax-fg: #f0f0f0;
-  --syntax-keyword: #c084d8;
-  --syntax-string: #6dd49a;
-  --syntax-comment: rgba(255, 255, 255, 0.4);
   --syntax-link: #6ba3d6;
   --syntax-error: #e06c75;
 
@@ -130,13 +123,10 @@
 
   /* 4.13 opacity */
   --opacity-disabled: 0.4;
-  --opacity-hover: 0.6;
-  --opacity-pressed: 0.8;
 
   /* 4.14 floating surfaces */
   --surface-floating-modal: linear-gradient(180deg, #2c2d31 0%, #252629 100%);
   --surface-floating-modal-border: rgba(255, 255, 255, 0.13);
-  --surface-floating-modal-radius: 8px;
 
   --surface-floating-popover: #252629;
   --surface-floating-popover-border: rgba(255, 255, 255, 0.12);
@@ -148,15 +138,10 @@
   --surface-side-drawer-solid: rgba(22, 22, 24, 0.92);
 
   /* 4.15 component-specific */
-  --icon-size-sm: 12px;
-  --icon-size-md: 14px;
 
   --notification-bg: #ffffff;
   --notification-fg: #1a1a1a;
   --notification-fg-secondary: rgba(0, 0, 0, 0.65);
-  --notification-border: rgba(0, 0, 0, 0.08);
-  --notification-border-radius: 8px;
-  --notification-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 :root[data-theme="light"] {
@@ -201,7 +186,6 @@
   --user-bubble-bg: rgba(59,109,191,0.06);
 
   --tool-running-stripe: var(--accent);
-  --tool-done-stripe   : transparent;
 
   /* status */
   --danger         : #b84040;
@@ -214,11 +198,8 @@
 
   --warning        : #8a6500;
   --warning-bg-soft: rgba(138,101,0,0.10);
-  --warning-border : rgba(138,101,0,0.30);
 
   --info           : #1a7a9a;
-  --info-bg-soft   : rgba(26,122,154,0.10);
-  --info-border    : rgba(26,122,154,0.30);
 
   /* shadows */
   --shadow-sm      : 0 1px 3px rgba(0,0,0,0.12);
@@ -230,8 +211,6 @@
   --notification-bg          : #ffffff;
   --notification-fg          : #1a1a1a;
   --notification-fg-secondary: rgba(0,0,0,0.65);
-  --notification-border      : rgba(0,0,0,0.08);
-  --notification-shadow      : 0 4px 12px rgba(0,0,0,0.15);
 
   /* glassy floating surfaces */
   --surface-input-bar        : rgba(255, 255, 255, 0.75);

@@ -51,10 +51,6 @@
     textarea?.focus();
   }
 
-  export function getElement(): HTMLTextAreaElement | undefined {
-    return textarea;
-  }
-
   export function setTextAndHighlight(newText: string) {
     text = newText;
   }

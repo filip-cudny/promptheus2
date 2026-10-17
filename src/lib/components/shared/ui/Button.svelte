@@ -4,16 +4,12 @@
   let {
     variant = "ghost",
     disabled = false,
-    active = false,
-    type = "button",
     onclick,
     children,
     ...rest
   }: {
-    variant?: "primary" | "ghost" | "danger" | "segment" | "chrome";
+    variant?: "primary" | "ghost" | "danger";
     disabled?: boolean;
-    active?: boolean;
-    type?: "button" | "submit" | "reset";
     onclick?: (e: MouseEvent) => void;
     children: Snippet;
     [key: string]: unknown;
@@ -22,9 +18,8 @@
 
 <button
   class="btn btn-{variant}"
-  class:active
+  type="button"
   {disabled}
-  {type}
   {onclick}
   {...rest}
 >
@@ -63,10 +58,6 @@
     background: var(--surface-overlay);
     color: var(--text-primary);
   }
-  .btn-ghost.active {
-    background: var(--surface-overlay-strong);
-    color: var(--text-primary);
-  }
 
   /* --- primary --- */
   .btn-primary {
@@ -88,36 +79,5 @@
   .btn-danger:hover:not(:disabled) {
     background: var(--danger-border);
     color: var(--danger);
-  }
-
-  /* --- segment --- */
-  .btn-segment {
-    background: transparent;
-    color: var(--text-muted);
-    border-radius: var(--radius-sm);
-    padding: var(--space-1) var(--space-3);
-    font-size: var(--font-size-sm);
-  }
-  .btn-segment:hover:not(:disabled) {
-    background: var(--surface-overlay);
-    color: var(--text-secondary);
-  }
-  .btn-segment.active {
-    background: var(--surface-elevated);
-    color: var(--text-primary);
-  }
-
-  /* --- chrome (window chrome icon buttons) --- */
-  .btn-chrome {
-    background: transparent;
-    color: var(--text-muted);
-    border-radius: var(--radius-md);
-    padding: var(--space-1);
-    width: 26px;
-    height: 26px;
-  }
-  .btn-chrome:hover:not(:disabled) {
-    background: var(--surface-overlay);
-    color: var(--text-primary);
   }
 </style>
