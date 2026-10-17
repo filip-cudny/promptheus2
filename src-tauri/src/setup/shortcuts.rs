@@ -147,7 +147,7 @@ async fn run_shell_shortcuts(app: tauri::AppHandle, initial_settings: Settings) 
                         let id = args.id.to_string();
                         let app = app.clone();
                         tauri::async_runtime::spawn(async move {
-                            if let Err(e) = crate::commands::speech::select_recording_widget_target(app, id).await {
+                            if let Err(e) = crate::services::speech::session::select_recording_widget_target(app, id).await {
                                 log::warn!("recording widget target selection failed: {e}");
                             }
                         });
@@ -161,7 +161,7 @@ async fn run_shell_shortcuts(app: tauri::AppHandle, initial_settings: Settings) 
                         let (index, version) = (args.index, args.context_version);
                         let app = app.clone();
                         tauri::async_runtime::spawn(async move {
-                            if let Err(e) = crate::commands::speech::remove_recording_widget_item(app, index, version).await {
+                            if let Err(e) = crate::services::speech::session::remove_recording_widget_item(app, index, version).await {
                                 log::warn!("recording widget item removal failed: {e}");
                             }
                         });
@@ -234,7 +234,7 @@ async fn next_signal<S: futures::Stream + Unpin>(stream: &mut Option<S>) -> Opti
 
 #[cfg(target_os = "linux")]
 async fn run_widget_action(app: tauri::AppHandle, action: &str) {
-    use crate::commands::speech;
+    use crate::services::speech::session as speech;
 
     log::debug!("recording widget action: {action}");
     let result = match action {

@@ -7,8 +7,8 @@ When to use each level, with real log lines from the codebase.
 Something failed, operation cannot continue.
 
 ```rust
-log::error!("show_notification failed: {e}");            // commands/notification.rs
-log::error!("Failed to copy transcription to clipboard: {e}");   // commands/speech.rs
+log::error!("show_notification failed: {e}");            // services/notification_window.rs
+log::error!("Failed to copy transcription to clipboard: {e}");   // services/speech/session.rs
 ```
 
 ```typescript

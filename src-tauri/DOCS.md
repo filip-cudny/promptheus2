@@ -47,7 +47,7 @@ A command file deserializes input, looks up state, calls a service, returns the 
 - Implement business helpers (move to `services/`).
 - Build response payloads with inline `serde_json::json!` (define a `models/` struct or extend an existing one).
 
-Command-local `static`s are allowed for transient window state that is handed from one command to the next (e.g. the `PENDING` slot of `commands/notification.rs`, `commands/text_preview.rs`, `commands/conversation_dialog.rs`, `commands/image_preview.rs`) or for version counters (`SETTINGS_VERSION` in `commands/settings.rs`); state with its own lifecycle belongs in a service managed in `setup::state`.
+Command-local `static`s are allowed for transient window state that is handed from one command to the next (e.g. the `PENDING` slot of `commands/text_preview.rs`, `commands/conversation_dialog.rs`, `commands/image_preview.rs`) or for version counters (`SETTINGS_VERSION` in `commands/settings.rs`); state with its own lifecycle belongs in a service managed in `setup::state`.
 
 If a command file starts holding its own state machine, the logic belongs in a service.
 
@@ -79,7 +79,7 @@ When adding a command: add the `pub mod` line at the top of `commands/mod.rs`, t
 Pick the right primitive — getting this wrong deadlocks or freezes the app:
 
 - **Service state held across `.await` → `tokio::sync::Mutex`.** This is the default for anything reachable from an async command.
-- **`std::sync::Mutex` is allowed only for short, await-free guards** — typical examples are the command-local statics that swap an `Option`, e.g. in `commands/notification.rs`, `commands/text_preview.rs`, `commands/conversation_dialog.rs`.
+- **`std::sync::Mutex` is allowed only for short, await-free guards** — typical examples are the command-local statics that swap an `Option`, e.g. in `commands/text_preview.rs`, `commands/conversation_dialog.rs`.
 - **When a `std::sync::Mutex` lives on a service struct** (e.g. `services/ai_webview` snapshot maps), every guard **must drop before any `.await`**. Holding a sync mutex across `.await` deadlocks the runtime; holding it across a streamed response stalls every other command.
 
 Cross-reference: see `docs/gotchas/tauri-command-threading.md` for the related GTK-thread issue on Linux sync commands.
@@ -120,7 +120,7 @@ Default to commands. Reach for `app.emit*` only for true one-to-many notificatio
 - Tauri ships with `tokio` via `tauri::async_runtime`. Use it; don't pull a second runtime.
 - `#[tauri::command] async fn` runs on a tokio task. `State<'_, T>` requires the explicit lifetime — that's not optional in async commands.
 - Long-running background work (watchers, pollers): spawn with `tauri::async_runtime::spawn` from `setup::background`, not from inside a command.
-- **Session-scoped tasks are the exception** — work that only lives as long as one user-triggered session is spawned from the command that starts the session (e.g. `services/speech/reminder.rs` and the level task of `services/speech/widget.rs`, spawned by `commands/speech.rs`). Cancel them with a monotonic generation counter on the owning service (`SpeechService::session()`) rather than a cancellation channel: each tick re-checks `is_recording() && session() == captured`, so a stop, a restart, or a service reset all retire the task with no extra plumbing.
+- **Session-scoped tasks are the exception** — work that only lives as long as one user-triggered session is spawned from the command that starts the session (e.g. `services/speech/reminder.rs` and the level task of `services/speech/widget.rs`, spawned by `services/speech/session.rs`). Cancel them with a monotonic generation counter on the owning service (`SpeechService::session()`) rather than a cancellation channel: each tick re-checks `is_recording() && session() == captured`, so a stop, a restart, or a service reset all retire the task with no extra plumbing.
 - When a command both holds a `Mutex<Service>` lock and iterates a long-lived stream, clone the cheap inner handle (typically `Arc<Provider>`), drop the guard, then iterate. Keeps the service responsive. See `commands/ai.rs` for the pattern.
 
 ### Models

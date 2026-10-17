@@ -44,7 +44,7 @@ Lifecycle:
 - Accelerators come from `get_active_bindings` converted by `to_gtk_accelerator` in `services/hotkeys.rs`. An accelerator GNOME already uses is returned by `SetShortcuts` and logged at `warn`; the other shortcuts keep working.
 
 Window identification:
-- Windows are found by title. The context menu title is `CONTEXT_MENU_TITLE` (`commands/menu.rs`), the notification title is `NOTIFICATION_TITLE` (`commands/notification.rs`); both are set in `setup/windows.rs`, as are `PROVIDER_MENU_TITLE` (`commands/provider_menu.rs`), `PALETTE_TITLE` and `PALETTE_BACKDROP_TITLE` (`services/ai_webview/palette.rs`). Change a title only in its constant.
+- Windows are found by title. The context menu title is `CONTEXT_MENU_TITLE` (`commands/menu.rs`), the notification title is `NOTIFICATION_TITLE` (`services/notification_window.rs`); both are set in `setup/windows.rs`, as are `PROVIDER_MENU_TITLE` (`commands/provider_menu.rs`), `PALETTE_TITLE` and `PALETTE_BACKDROP_TITLE` (`services/ai_webview/palette.rs`). Change a title only in its constant.
 - Any process on the session bus can call `PlaceWindow` and `SetShortcuts`; there is no caller check.
 
 Context menu placement:
@@ -62,7 +62,7 @@ Host-relative popups:
 - On GNOME Wayland the shell animates the transient provider menu as `DIALOG` (`scale_y` 0↔1, 100 ms, pivot at the middle); the extension's `connect_after` handlers on `global.window_manager` `map` and `destroy` move the pivot to `(0.5, 0)` for the window titled `Promptheus Provider Menu`, so it unfolds from and folds into its trigger. This relies on the shell setting its pivot synchronously before the ease starts (GNOME Shell 50.1); other transient windows (palette, backdrop) keep the center pivot.
 
 Notification toasts:
-- On GNOME Wayland `commands/notification.rs::show_notification` calls `ShowToast` (async, proxy method `show_toast`) and does not touch the webview queue. The extension draws the toast as St actors in `Main.layoutManager.uiGroup`: not windows, never focused, non-reactive (no hover pause).
+- On GNOME Wayland `services/notification_window.rs::show_notification` calls `ShowToast` (async, proxy method `show_toast`) and does not touch the webview queue. The extension draws the toast as St actors in `Main.layoutManager.uiGroup`: not windows, never focused, non-reactive (no hover pause).
 - Durations are set in the extension (`TOAST_DURATIONS_MS`: success 2000, error 4000, info 2000, warning 3000 ms). The stack sits bottom-right in the work area of the monitor current when the stack went from empty to non-empty, newest at the bottom.
 - Each toast actor eases in and out with the values of GNOME Shell's window map/destroy animation for normal windows (`windowManager.js` `_mapWindow`/`_destroyWindow`): enter from pivot (0.5, 1.0), scale 0.01 × 0.05, opacity 0 to scale 1 and opacity 204 in 150 ms `EASE_OUT_EXPO`; exit at pivot (0.5, 0.5) to scale 0.8 and opacity 0 in 150 ms `EASE_OUT_QUAD`, after which the actor is destroyed and the remaining toasts move to their new place without animation.
 - A failed `ShowToast` call logs `warn` and shows that payload through the webview window path below. That path is also the only one on macOS.
@@ -84,7 +84,7 @@ Recording widget:
 - Rust side: `services/speech/widget.rs` (see `src-tauri/src/services/speech/DOCS.md`); position stored under `recording_widget.shell_position`. A failed `ShowRecordingWidget` makes the recording use toasts.
 
 Notification placement (webview window path):
-- `commands/notification.rs` reads `GetPointer` and sends `PlaceWindowAnchored(NOTIFICATION_TITLE, work_right, work_bottom, activate=false)` before the first `show()`, with the bottom-right corner of the work area under the pointer. The window is `focusable(false)`, which Mutter does not honor for Wayland clients (see above).
+- `services/notification_window.rs` reads `GetPointer` and sends `PlaceWindowAnchored(NOTIFICATION_TITLE, work_right, work_bottom, activate=false)` before the first `show()`, with the bottom-right corner of the work area under the pointer. The window is `focusable(false)`, which Mutter does not honor for Wayland clients (see above).
 - The extension sets the frame to x = `right` − frame width, y = `bottom` − frame height from `get_frame_rect()`. It applies this at placement (on `first-frame` when it had to wait for the window), once more on the next idle, and on every `size-changed` of the `MetaWindow`. It moves only when the computed x/y differ from the current frame position, so its own move does not re-trigger it.
 - The anchor is stored per title; a new `PlaceWindowAnchored` for the same title replaces it. It is released on the window's `unmanaged` signal: GTK3 on Wayland destroys the surface on `hide()`, so each show cycle is a new `MetaWindow` and a new `PlaceWindowAnchored`.
 - `.always_on_top(true)` in `setup/windows.rs` maps to GTK `keep_above`, which has no Wayland protocol under GTK3 (`xdg-shell` has no stacking request); on Wayland it does nothing.
@@ -115,7 +115,7 @@ Debugging:
 ## When to load this file
 
 - Touching global shortcuts, window positioning or window focus on Linux.
-- Changing `linux/gnome-shell-extension/`, `services/gnome_shell/`, `setup/shortcuts.rs`, `place_context_menu`, `useMenuPositioning.svelte.ts`, `commands/notification.rs`, `commands/provider_menu.rs`, `services/ai_webview/palette.rs` or `services/monitor.rs`.
+- Changing `linux/gnome-shell-extension/`, `services/gnome_shell/`, `setup/shortcuts.rs`, `place_context_menu`, `useMenuPositioning.svelte.ts`, `services/notification_window.rs`, `commands/provider_menu.rs`, `services/ai_webview/palette.rs` or `services/monitor.rs`.
 - Investigating "shortcuts do nothing on Ubuntu / GNOME", "menu opens at the wrong place or without focus on Wayland", "notifications never appear on Wayland", or "recent apps are empty on Wayland".
 
 ## Related

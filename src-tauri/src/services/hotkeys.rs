@@ -276,7 +276,7 @@ pub async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
             }
         }
         "speech_to_text_toggle" => {
-            if let Err(e) = commands::speech::toggle_speech_recording(app.clone(), None).await {
+            if let Err(e) = crate::services::speech::session::toggle_speech_recording(app.clone(), None).await {
                 log::error!("speech_to_text_toggle failed: {e}");
             }
         }

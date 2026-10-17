@@ -80,13 +80,13 @@ pub fn spawn_audio_clip_sweeper(app_handle: tauri::AppHandle) {
 pub fn spawn_settings_sync(app_handle: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         log::info!("settings sync loop started");
-        crate::commands::settings_sync::run_sync(&app_handle, Trigger::Startup).await;
+        crate::services::settings_sync::run_sync(&app_handle, Trigger::Startup).await;
         let mut interval = tokio::time::interval(SETTINGS_SYNC_INTERVAL);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         interval.tick().await;
         loop {
             interval.tick().await;
-            crate::commands::settings_sync::run_sync(&app_handle, Trigger::Periodic).await;
+            crate::services::settings_sync::run_sync(&app_handle, Trigger::Periodic).await;
         }
     });
 }

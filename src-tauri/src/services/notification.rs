@@ -68,7 +68,7 @@ impl NotificationService {
             payload.title
         );
 
-        crate::commands::notification::show_notification(&self.handle, payload);
+        crate::services::notification_window::show_notification(&self.handle, payload);
     }
 
     pub async fn notify_now(
