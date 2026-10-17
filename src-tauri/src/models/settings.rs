@@ -414,6 +414,23 @@ impl ModelParameters {
         params.extra = extra;
         params
     }
+
+    pub fn merged_with(&self, overrides: &ModelParameters) -> ModelParameters {
+        let mut extra = self.extra.clone();
+        extra.extend(overrides.extra.clone());
+        ModelParameters {
+            temperature: overrides.temperature.or(self.temperature),
+            max_tokens: overrides.max_tokens.or(self.max_tokens),
+            top_p: overrides.top_p.or(self.top_p),
+            frequency_penalty: overrides.frequency_penalty.or(self.frequency_penalty),
+            presence_penalty: overrides.presence_penalty.or(self.presence_penalty),
+            reasoning_effort: overrides
+                .reasoning_effort
+                .clone()
+                .or_else(|| self.reasoning_effort.clone()),
+            extra,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -601,6 +618,35 @@ impl Default for NotificationEvents {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn merged_with_override_wins_per_field_and_extra_merges() {
+        let base = ModelParameters {
+            temperature: Some(0.2),
+            max_tokens: Some(100),
+            reasoning_effort: Some("low".into()),
+            extra: BTreeMap::from([
+                ("seed".to_string(), serde_json::json!(1)),
+                ("user".to_string(), serde_json::json!("base")),
+            ]),
+            ..Default::default()
+        };
+        let overrides = ModelParameters {
+            temperature: Some(0.9),
+            top_p: Some(0.5),
+            extra: BTreeMap::from([("user".to_string(), serde_json::json!("override"))]),
+            ..Default::default()
+        };
+
+        let merged = base.merged_with(&overrides);
+
+        assert_eq!(merged.temperature, Some(0.9));
+        assert_eq!(merged.max_tokens, Some(100));
+        assert_eq!(merged.top_p, Some(0.5));
+        assert_eq!(merged.reasoning_effort.as_deref(), Some("low"));
+        assert_eq!(merged.extra["seed"], serde_json::json!(1));
+        assert_eq!(merged.extra["user"], serde_json::json!("override"));
+    }
 
     #[test]
     fn test_default_settings() {

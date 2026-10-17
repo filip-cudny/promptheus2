@@ -365,7 +365,6 @@ pub fn build_tool_loop_messages(
 mod tests {
     use super::*;
     use crate::models::capabilities::ModelCapabilities;
-    use crate::services::ai::encoder::OpenAiCompletionsEncoder;
     use crate::services::ai::provider::{AiProvider, CompletionRequest};
     use crate::services::execution::lifecycle::{ExecutionSnapshot, LiveExecution};
     use async_trait::async_trait;
@@ -441,7 +440,6 @@ mod tests {
             parameters: Default::default(),
             tool_payloads: vec![],
             capabilities: ModelCapabilities::minimal(),
-            encoder: Arc::new(OpenAiCompletionsEncoder),
         };
         let stream = provider.complete_stream(request).await.unwrap();
 

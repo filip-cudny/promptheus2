@@ -1,58 +1,28 @@
 use std::collections::VecDeque;
 use std::pin::Pin;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use futures::Stream;
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 use tokio_stream::StreamExt;
 
 use crate::models::settings::ModelConfig;
 
+use super::encoder::encode_completions_capabilities;
+use super::http::OpenAiHttp;
 use super::provider::{AiProvider, CompletionRequest, StreamChunk, ToolCallEvent, TokenUsage};
 use super::sse::parse_sse_stream;
 use super::AiError;
 
 pub struct OpenAiProvider {
-    http_client: reqwest::Client,
-    base_url: String,
+    http: OpenAiHttp,
 }
 
 impl OpenAiProvider {
     pub fn new(model: &ModelConfig) -> Result<Self, AiError> {
-        let api_key = model
-            .resolved_api_key()
-            .ok_or_else(|| {
-                AiError::Authentication(format!(
-                    "no API key configured for model '{}'",
-                    model.display_name
-                ))
-            })?;
-
-        let base_url = model
-            .base_url
-            .as_deref()
-            .unwrap_or("https://api.openai.com/v1")
-            .trim_end_matches('/')
-            .to_string();
-
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {api_key}"))
-                .map_err(|e| AiError::Request(e.to_string()))?,
-        );
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-        let http_client = reqwest::Client::builder()
-            .default_headers(headers)
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .build()
-            .map_err(|e| AiError::Request(e.to_string()))?;
-
         Ok(Self {
-            http_client,
-            base_url,
+            http: OpenAiHttp::new(model)?,
         })
     }
 }
@@ -88,9 +58,7 @@ fn build_request_body(
     if let Some(pp) = request.parameters.presence_penalty {
         obj.insert("presence_penalty".into(), serde_json::json!(pp));
     }
-    request
-        .encoder
-        .encode_reasoning(&request.capabilities, &request.parameters, obj);
+    encode_completions_capabilities(&request.capabilities, &request.parameters, obj);
 
     for (key, value) in &request.parameters.extra {
         obj.insert(key.clone(), value.clone());
@@ -101,21 +69,6 @@ fn build_request_body(
     }
 
     body
-}
-
-fn map_http_error(status: reqwest::StatusCode, body: &str) -> AiError {
-    match status.as_u16() {
-        401 => AiError::Authentication("API key is invalid or expired".into()),
-        429 => AiError::RateLimit,
-        status @ 500..=599 => AiError::ApiStatus {
-            status,
-            message: body.to_string(),
-        },
-        status => AiError::ApiStatus {
-            status,
-            message: body.to_string(),
-        },
-    }
 }
 
 #[derive(Deserialize)]
@@ -223,14 +176,13 @@ fn process_chunk(state: &mut StreamState, chunk: ChatCompletionChunk) {
                 state.accumulated.push_str(&marker);
                 state.pending_chunks.push_back(StreamChunk {
                     delta: marker,
-                    accumulated: state.accumulated.clone(),
-                    thinking_delta: None,
-                    accumulated_thinking: None,
-                    usage: None,
-                    tool_call_event: Some(ToolCallEvent::Started {
-                        tool_call_id: slot.id.clone(),
-                        tool_name: slot.name.clone(),
-                    }),
+                    ..StreamChunk::tool_call(
+                        &state.accumulated,
+                        ToolCallEvent::Started {
+                            tool_call_id: slot.id.clone(),
+                            tool_name: slot.name.clone(),
+                        },
+                    )
                 });
             }
         }
@@ -246,16 +198,12 @@ fn process_chunk(state: &mut StreamState, chunk: ChatCompletionChunk) {
         state.accumulated.push_str(content);
         state.accumulated_thinking.push_str(thinking);
         let thinking_delta = (!thinking.is_empty()).then(|| thinking.to_string());
-        let acc_thinking = (!state.accumulated_thinking.is_empty())
-            .then(|| state.accumulated_thinking.clone());
-        state.pending_chunks.push_back(StreamChunk {
-            delta: content.to_string(),
-            accumulated: state.accumulated.clone(),
+        state.pending_chunks.push_back(StreamChunk::content(
+            content.to_string(),
+            &state.accumulated,
             thinking_delta,
-            accumulated_thinking: acc_thinking,
-            usage: None,
-            tool_call_event: None,
-        });
+            &state.accumulated_thinking,
+        ));
     }
 
     if finish_reason.as_deref() == Some("tool_calls") {
@@ -263,33 +211,20 @@ fn process_chunk(state: &mut StreamState, chunk: ChatCompletionChunk) {
             if tc.id.is_empty() {
                 continue;
             }
-            state.pending_chunks.push_back(StreamChunk {
-                delta: String::new(),
-                accumulated: state.accumulated.clone(),
-                thinking_delta: None,
-                accumulated_thinking: None,
-                usage: None,
-                tool_call_event: Some(ToolCallEvent::ArgumentsComplete {
-                    tool_call_id: tc.id,
-                    tool_name: tc.name,
-                    arguments: serde_json::from_str(&tc.arguments).unwrap_or(serde_json::Value::Null),
-                }),
-            });
+            state.pending_chunks.push_back(StreamChunk::tool_call(
+                &state.accumulated,
+                ToolCallEvent::arguments_complete(tc.id, tc.name, &tc.arguments),
+            ));
         }
     }
 
-    if usage.is_some() {
+    if let Some(usage) = usage {
         if let Some(last) = state.pending_chunks.back_mut() {
-            last.usage = usage;
+            last.usage = Some(usage);
         } else {
-            state.pending_chunks.push_back(StreamChunk {
-                delta: String::new(),
-                accumulated: state.accumulated.clone(),
-                thinking_delta: None,
-                accumulated_thinking: None,
-                usage,
-                tool_call_event: None,
-            });
+            state
+                .pending_chunks
+                .push_back(StreamChunk::usage(&state.accumulated, usage));
         }
     }
 }
@@ -297,29 +232,11 @@ fn process_chunk(state: &mut StreamState, chunk: ChatCompletionChunk) {
 #[async_trait]
 impl AiProvider for OpenAiProvider {
     async fn complete(&self, request: CompletionRequest) -> Result<String, AiError> {
-        let url = format!("{}/chat/completions", self.base_url);
         let body = build_request_body(&request, false);
-
         let response = self
-            .http_client
-            .post(&url)
-            .json(&body)
-            .timeout(std::time::Duration::from_secs(120))
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_connect() {
-                    AiError::Connection("connection failed — check your internet".into())
-                } else {
-                    AiError::Request(e.to_string())
-                }
-            })?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let body_text = response.text().await.unwrap_or_default();
-            return Err(map_http_error(status, &body_text));
-        }
+            .http
+            .post("/chat/completions", &body, Some(Duration::from_secs(120)))
+            .await?;
 
         let parsed: ChatCompletionResponse = response
             .json()
@@ -338,28 +255,8 @@ impl AiProvider for OpenAiProvider {
         &self,
         request: CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk, AiError>> + Send>>, AiError> {
-        let url = format!("{}/chat/completions", self.base_url);
         let body = build_request_body(&request, true);
-
-        let response = self
-            .http_client
-            .post(&url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_connect() {
-                    AiError::Connection("connection failed — check your internet".into())
-                } else {
-                    AiError::Request(e.to_string())
-                }
-            })?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let body_text = response.text().await.unwrap_or_default();
-            return Err(map_http_error(status, &body_text));
-        }
+        let response = self.http.post("/chat/completions", &body, None).await?;
 
         let sse_stream = parse_sse_stream(response);
         let state = StreamState::default();
@@ -517,5 +414,20 @@ mod tests {
         let mut state = StreamState::default();
         process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{"role":"assistant"}}]}"#));
         assert!(state.pending_chunks.is_empty());
+    }
+
+    #[test]
+    fn unparseable_tool_call_arguments_become_empty_object() {
+        let mut state = StreamState::default();
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{"tool_calls":[{"id":"call_1","function":{"name":"t","arguments":"{not json"},"index":0}]}}]}"#));
+        process_chunk(&mut state, parse(r#"{"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}"#));
+
+        let events = drain(&mut state);
+        match &events[1].tool_call_event {
+            Some(ToolCallEvent::ArgumentsComplete { arguments, .. }) => {
+                assert_eq!(arguments, &serde_json::json!({}));
+            }
+            other => panic!("expected ArgumentsComplete, got {other:?}"),
+        }
     }
 }

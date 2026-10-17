@@ -1,5 +1,6 @@
 pub mod capabilities;
 pub mod encoder;
+mod http;
 pub mod openai;
 pub mod openai_responses;
 pub mod provider;
@@ -16,7 +17,6 @@ use crate::models::message::ProcessedMessage;
 use crate::models::settings::{ApiMode, ModelConfig, ModelParameters, Provider};
 
 use self::capabilities::{resolve, ModelCapabilities, ReasoningMode};
-use self::encoder::{CapabilityEncoder, OpenAiCompletionsEncoder, OpenAiResponsesEncoder};
 use self::openai::OpenAiProvider;
 use self::openai_responses::OpenAiResponsesProvider;
 use self::provider::{AiProvider, CompletionRequest, StreamChunk};
@@ -56,7 +56,6 @@ struct ProviderEntry {
     provider_type: Provider,
     api_mode: ApiMode,
     capabilities: ModelCapabilities,
-    encoder: Arc<dyn CapabilityEncoder>,
 }
 
 struct AiServiceInner {
@@ -90,10 +89,6 @@ impl AiService {
                         ApiMode::Responses => OpenAiResponsesProvider::new(model).map(|p| Box::new(p) as Box<dyn AiProvider>),
                         ApiMode::Completions => OpenAiProvider::new(model).map(|p| Box::new(p) as Box<dyn AiProvider>),
                     };
-                    let encoder: Arc<dyn CapabilityEncoder> = match api_mode {
-                        ApiMode::Responses => Arc::new(OpenAiResponsesEncoder),
-                        ApiMode::Completions => Arc::new(OpenAiCompletionsEncoder),
-                    };
                     match result {
                         Ok(provider) => {
                             let capabilities = resolve(model);
@@ -106,7 +101,6 @@ impl AiService {
                                     provider_type,
                                     api_mode: api_mode.clone(),
                                     capabilities,
-                                    encoder,
                                 },
                             );
                         }
@@ -158,7 +152,6 @@ impl AiService {
             parameters,
             tool_payloads: vec![],
             capabilities: entry.capabilities.clone(),
-            encoder: entry.encoder.clone(),
         };
         entry.provider.complete(request).await
     }
@@ -173,7 +166,7 @@ impl AiService {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk, AiError>> + Send>>, AiError> {
         let entry = self.get_provider(model_id)?;
         let parameters = match parameter_overrides {
-            Some(overrides) => merge_parameters(&entry.parameters, &overrides),
+            Some(overrides) => entry.parameters.merged_with(&overrides),
             None => entry.parameters.clone(),
         };
         let parameters = normalize_params(&parameters, &entry.capabilities, &entry.model_name);
@@ -207,7 +200,6 @@ impl AiService {
             parameters,
             tool_payloads,
             capabilities: entry.capabilities.clone(),
-            encoder: entry.encoder.clone(),
         };
         entry.provider.complete_stream(request).await
     }
@@ -220,20 +212,6 @@ impl AiService {
             .providers
             .get(model_id)
             .ok_or_else(|| AiError::ModelNotFound(model_id.to_string()))
-    }
-}
-
-fn merge_parameters(base: &ModelParameters, overrides: &ModelParameters) -> ModelParameters {
-    let mut extra = base.extra.clone();
-    extra.extend(overrides.extra.clone());
-    ModelParameters {
-        temperature: overrides.temperature.or(base.temperature),
-        max_tokens: overrides.max_tokens.or(base.max_tokens),
-        top_p: overrides.top_p.or(base.top_p),
-        frequency_penalty: overrides.frequency_penalty.or(base.frequency_penalty),
-        presence_penalty: overrides.presence_penalty.or(base.presence_penalty),
-        reasoning_effort: overrides.reasoning_effort.clone().or(base.reasoning_effort.clone()),
-        extra,
     }
 }
 

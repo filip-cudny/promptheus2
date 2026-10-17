@@ -1,5 +1,4 @@
 use std::pin::Pin;
-use std::sync::Arc;
 
 use async_trait::async_trait;
 use futures::Stream;
@@ -8,7 +7,6 @@ use crate::models::capabilities::ModelCapabilities;
 use crate::models::message::ProcessedMessage;
 use crate::models::settings::ModelParameters;
 
-use super::encoder::CapabilityEncoder;
 use super::AiError;
 
 pub struct CompletionRequest {
@@ -17,7 +15,6 @@ pub struct CompletionRequest {
     pub parameters: ModelParameters,
     pub tool_payloads: Vec<serde_json::Value>,
     pub capabilities: ModelCapabilities,
-    pub encoder: Arc<dyn CapabilityEncoder>,
 }
 
 pub struct StreamChunk {
@@ -27,6 +24,39 @@ pub struct StreamChunk {
     pub accumulated_thinking: Option<String>,
     pub usage: Option<TokenUsage>,
     pub tool_call_event: Option<ToolCallEvent>,
+}
+
+impl StreamChunk {
+    pub fn content(
+        delta: String,
+        accumulated: &str,
+        thinking_delta: Option<String>,
+        accumulated_thinking: &str,
+    ) -> Self {
+        Self {
+            delta,
+            accumulated: accumulated.to_string(),
+            thinking_delta,
+            accumulated_thinking: (!accumulated_thinking.is_empty())
+                .then(|| accumulated_thinking.to_string()),
+            usage: None,
+            tool_call_event: None,
+        }
+    }
+
+    pub fn tool_call(accumulated: &str, event: ToolCallEvent) -> Self {
+        Self {
+            tool_call_event: Some(event),
+            ..Self::content(String::new(), accumulated, None, "")
+        }
+    }
+
+    pub fn usage(accumulated: &str, usage: TokenUsage) -> Self {
+        Self {
+            usage: Some(usage),
+            ..Self::content(String::new(), accumulated, None, "")
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -45,6 +75,17 @@ pub enum ToolCallEvent {
         result: Option<String>,
         error: Option<String>,
     },
+}
+
+impl ToolCallEvent {
+    pub fn arguments_complete(tool_call_id: String, tool_name: String, raw_arguments: &str) -> Self {
+        Self::ArgumentsComplete {
+            tool_call_id,
+            tool_name,
+            arguments: serde_json::from_str(raw_arguments)
+                .unwrap_or_else(|_| serde_json::json!({})),
+        }
+    }
 }
 
 pub struct TokenUsage {

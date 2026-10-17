@@ -6,7 +6,7 @@ Business logic layer. Services own state and behavior; Tauri commands delegate t
 
 One file or directory per service; the file name is the service name. Directories where a file's place does not follow from its name:
 
-- `ai/` — `provider.rs` (`AiProvider`, `CompletionRequest`, `StreamChunk`), `openai.rs` (Completions) and `openai_responses.rs` (Responses), `encoder.rs` (per-API capability encoding), `sse.rs` (SSE line parser)
+- `ai/` — `provider.rs` (`AiProvider`, `CompletionRequest`, `StreamChunk`), `openai.rs` (Completions) and `openai_responses.rs` (Responses), `http.rs` (`OpenAiHttp`, the HTTP layer both OpenAI providers share), `encoder.rs` (per-API capability encoding functions), `sse.rs` (SSE line parser)
 - `execution/` — `lifecycle.rs` (`PromptExecutionService`, `ExecutionError`), `skill_executor.rs` and `conversation_executor.rs` (message preparation and result recording), `stream.rs` (stream and tool loop)
 - `settings_sync/` — `git.rs` (`GitRunner`), `detect.rs`, `reload.rs`
 - `speech/` — see [speech/DOCS.md](speech/DOCS.md); `mcp/` — see [mcp/DOCS.md](mcp/DOCS.md)
@@ -189,7 +189,7 @@ Multi-provider LLM service. Lives in `ai/` subdirectory with one file per provid
 
 **Provider registry**: `AiService::new(models)` iterates `ModelConfig` entries and matches on the `Provider` enum. Only `Provider::Openai` builds a client; `Anthropic`, `Gemini` and `ElevenLabs` models are recorded in `unavailable_models` with a reason ("provider not yet supported", "speech-to-text only"), as are OpenAI models whose provider fails to build (missing API key). The app still starts.
 
-**API mode**: the model's `ApiMode` picks the provider and the capability encoder: `Responses` → `OpenAiResponsesProvider` (`{base_url}/responses`) with `OpenAiResponsesEncoder`, `Completions` → `OpenAiProvider` (`{base_url}/chat/completions`) with `OpenAiCompletionsEncoder`.
+**API mode**: the model's `ApiMode` picks the provider, and each provider calls its own capability encoding function from `encoder.rs`: `Responses` → `OpenAiResponsesProvider` (`{base_url}/responses`, `encode_responses_capabilities`), `Completions` → `OpenAiProvider` (`{base_url}/chat/completions`, `encode_completions_capabilities`).
 
 **Adding a new provider**:
 1. Create `services/ai/<provider>.rs` implementing `AiProvider`.
@@ -201,7 +201,7 @@ Multi-provider LLM service. Lives in `ai/` subdirectory with one file per provid
 
 **Error variants**: `ModelNotFound`, `ModelUnavailable`, `Authentication`, `Connection`, `RateLimit`, `ApiStatus { status, message }`, `Stream`, `Request`.
 
-**OpenAiProvider** (`openai.rs`) and **OpenAiResponsesProvider** (`openai_responses.rs`): Default base URL: `https://api.openai.com/v1`. Supports any OpenAI-compatible endpoint via the `base_url` config field. Model parameters (temperature, max_tokens, etc.) are merged into the request body when present.
+**OpenAiProvider** (`openai.rs`) and **OpenAiResponsesProvider** (`openai_responses.rs`): Both build requests through `OpenAiHttp` (`http.rs`): API-key header, `base_url` (default `https://api.openai.com/v1`, any OpenAI-compatible endpoint via the `base_url` config field), connect error and HTTP status mapping to `AiError`. Streams follow one pattern: a `StreamState` with a pending-chunk queue and `process_chunk` / `process_event`, building `StreamChunk` through its constructors; unparseable tool-call arguments become `{}` in both. Model parameters (temperature, max_tokens, etc.) are merged into the request body when present; per-call overrides merge into a model's parameters through `ModelParameters::merged_with` (override wins per field, `extra` keys of the override win).
 
 ### PromptExecutionService specifics
 

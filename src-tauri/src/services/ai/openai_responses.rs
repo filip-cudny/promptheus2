@@ -1,61 +1,31 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::pin::Pin;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use futures::Stream;
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::Deserialize;
 use tokio_stream::StreamExt;
 
 use crate::models::message::{ContentPart, MessageContent, ProcessedMessage};
 use crate::models::settings::ModelConfig;
 
+use super::encoder::encode_responses_capabilities;
+use super::http::OpenAiHttp;
 use super::provider::{AiProvider, CompletionRequest, StreamChunk, TokenUsage, ToolCallEvent};
 use super::sse::parse_sse_stream;
 use super::tools::ToolRegistry;
 use super::AiError;
 
 pub struct OpenAiResponsesProvider {
-    http_client: reqwest::Client,
-    base_url: String,
+    http: OpenAiHttp,
     store: bool,
 }
 
 impl OpenAiResponsesProvider {
     pub fn new(model: &ModelConfig) -> Result<Self, AiError> {
-        let api_key = model
-            .resolved_api_key()
-            .ok_or_else(|| {
-                AiError::Authentication(format!(
-                    "no API key configured for model '{}'",
-                    model.display_name
-                ))
-            })?;
-
-        let base_url = model
-            .base_url
-            .as_deref()
-            .unwrap_or("https://api.openai.com/v1")
-            .trim_end_matches('/')
-            .to_string();
-
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            AUTHORIZATION,
-            HeaderValue::from_str(&format!("Bearer {api_key}"))
-                .map_err(|e| AiError::Request(e.to_string()))?,
-        );
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-        let http_client = reqwest::Client::builder()
-            .default_headers(headers)
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .build()
-            .map_err(|e| AiError::Request(e.to_string()))?;
-
         Ok(Self {
-            http_client,
-            base_url,
+            http: OpenAiHttp::new(model)?,
             store: model.store,
         })
     }
@@ -161,9 +131,7 @@ fn build_request_body(request: &CompletionRequest, stream: bool, store: bool) ->
         obj.insert("top_p".into(), serde_json::json!(top_p));
     }
 
-    request
-        .encoder
-        .encode_reasoning(&request.capabilities, &request.parameters, obj);
+    encode_responses_capabilities(&request.capabilities, &request.parameters, obj);
 
     if !request.tool_payloads.is_empty() {
         obj.insert("tools".into(), serde_json::json!(request.tool_payloads));
@@ -180,21 +148,6 @@ fn build_request_body(request: &CompletionRequest, stream: bool, store: bool) ->
     );
 
     body
-}
-
-fn map_http_error(status: reqwest::StatusCode, body: &str) -> AiError {
-    match status.as_u16() {
-        401 => AiError::Authentication("API key is invalid or expired".into()),
-        429 => AiError::RateLimit,
-        status @ 500..=599 => AiError::ApiStatus {
-            status,
-            message: body.to_string(),
-        },
-        other => AiError::ApiStatus {
-            status: other,
-            message: body.to_string(),
-        },
-    }
 }
 
 #[derive(Deserialize)]
@@ -265,29 +218,11 @@ struct ResponseUsage {
 #[async_trait]
 impl AiProvider for OpenAiResponsesProvider {
     async fn complete(&self, request: CompletionRequest) -> Result<String, AiError> {
-        let url = format!("{}/responses", self.base_url);
         let body = build_request_body(&request, false, self.store);
-
         let response = self
-            .http_client
-            .post(&url)
-            .json(&body)
-            .timeout(std::time::Duration::from_secs(120))
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_connect() {
-                    AiError::Connection("connection failed — check your internet".into())
-                } else {
-                    AiError::Request(e.to_string())
-                }
-            })?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let body_text = response.text().await.unwrap_or_default();
-            return Err(map_http_error(status, &body_text));
-        }
+            .http
+            .post("/responses", &body, Some(Duration::from_secs(120)))
+            .await?;
 
         let response_text = response
             .text()
@@ -313,30 +248,168 @@ impl AiProvider for OpenAiResponsesProvider {
         &self,
         request: CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk, AiError>> + Send>>, AiError> {
-        let url = format!("{}/responses", self.base_url);
         let body = build_request_body(&request, true, self.store);
-
-        let response = self
-            .http_client
-            .post(&url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| {
-                if e.is_connect() {
-                    AiError::Connection("connection failed — check your internet".into())
-                } else {
-                    AiError::Request(e.to_string())
-                }
-            })?;
-
-        let status = response.status();
-        if !status.is_success() {
-            let body_text = response.text().await.unwrap_or_default();
-            return Err(map_http_error(status, &body_text));
-        }
-
+        let response = self.http.post("/responses", &body, None).await?;
         Ok(Box::pin(parse_responses_events(parse_sse_stream(response))))
+    }
+}
+
+#[derive(Default)]
+struct StreamState {
+    accumulated: String,
+    accumulated_thinking: String,
+    active_tool_call_ids: Vec<String>,
+    fn_call_args: HashMap<String, (String, String)>,
+    item_id_to_call_id: HashMap<String, String>,
+    pending_chunks: VecDeque<StreamChunk>,
+}
+
+impl StreamState {
+    fn push_content(&mut self, delta: String, thinking_delta: Option<String>) {
+        self.pending_chunks.push_back(StreamChunk::content(
+            delta,
+            &self.accumulated,
+            thinking_delta,
+            &self.accumulated_thinking,
+        ));
+    }
+
+    fn push_tool_event(&mut self, event: ToolCallEvent) {
+        self.pending_chunks
+            .push_back(StreamChunk::tool_call(&self.accumulated, event));
+    }
+
+    fn resolve_call_id(&self, raw_id: String) -> String {
+        self.item_id_to_call_id.get(&raw_id).cloned().unwrap_or(raw_id)
+    }
+
+    fn start_tool_call(&mut self, tool_call_id: String, tool_name: String) {
+        self.active_tool_call_ids.push(tool_call_id.clone());
+        self.accumulated
+            .push_str(&format!("{{{{tool_call:{tool_call_id}}}}}"));
+        self.push_tool_event(ToolCallEvent::Started {
+            tool_call_id,
+            tool_name,
+        });
+    }
+
+    fn complete_function_call(
+        &mut self,
+        call_id: String,
+        tool_name: Option<String>,
+        arguments: Option<String>,
+    ) {
+        let (stored_name, stored_arguments) = self.fn_call_args.remove(&call_id).unwrap_or_default();
+        let tool_name = tool_name.unwrap_or(stored_name);
+        let arguments = arguments.unwrap_or(stored_arguments);
+        log::debug!("responses: function_call complete id={call_id} name={tool_name}");
+        self.active_tool_call_ids.retain(|id| id != &call_id);
+        self.push_tool_event(ToolCallEvent::arguments_complete(call_id, tool_name, &arguments));
+    }
+}
+
+fn process_event(state: &mut StreamState, event: ResponseEvent) {
+    log::trace!("responses: event_type={}", event.event_type);
+
+    match event.event_type.as_str() {
+        "response.reasoning_summary_text.delta" => {
+            let thinking = event.delta.unwrap_or_default();
+            log::trace!("responses: reasoning delta len={}", thinking.len());
+            if thinking.is_empty() {
+                return;
+            }
+            state.accumulated_thinking.push_str(&thinking);
+            state.push_content(String::new(), Some(thinking));
+        }
+        "response.output_text.delta" => {
+            let delta = event.delta.unwrap_or_default();
+            if delta.is_empty() {
+                return;
+            }
+            state.accumulated.push_str(&delta);
+            state.push_content(delta, None);
+        }
+        "response.output_item.added" => {
+            let Some(item) = event.item else { return };
+            match item.item_type.as_deref() {
+                Some("web_search_call") => {
+                    let tool_call_id = item.id.unwrap_or_default();
+                    log::debug!("responses: web_search_call started id={tool_call_id}");
+                    state.start_tool_call(tool_call_id, "web_search".to_string());
+                }
+                Some("function_call") => {
+                    let tool_call_id = item.call_id.unwrap_or_default();
+                    let tool_name = item.name.unwrap_or_default();
+                    log::debug!("responses: function_call started call_id={tool_call_id} item_id={:?} name={tool_name}", item.id);
+                    state
+                        .fn_call_args
+                        .insert(tool_call_id.clone(), (tool_name.clone(), String::new()));
+                    if let Some(item_id) = item.id {
+                        state.item_id_to_call_id.insert(item_id, tool_call_id.clone());
+                    }
+                    state.start_tool_call(tool_call_id, tool_name);
+                }
+                _ => {}
+            }
+        }
+        "response.function_call_arguments.delta" => {
+            let Some(raw_id) = event.call_id.or(event.item_id) else {
+                return;
+            };
+            let call_id = state.resolve_call_id(raw_id);
+            if let (Some(delta), Some((_, arguments))) =
+                (event.delta, state.fn_call_args.get_mut(&call_id))
+            {
+                arguments.push_str(&delta);
+            }
+        }
+        "response.function_call_arguments.done" => {
+            let raw_id = event.call_id.or(event.item_id);
+            log::debug!("responses: fn_call_args.done raw_id={raw_id:?} name={:?} has_arguments={}", event.name, event.arguments.is_some());
+            let Some(raw_id) = raw_id else { return };
+            let call_id = state.resolve_call_id(raw_id);
+            state.complete_function_call(call_id, event.name, event.arguments);
+        }
+        "response.output_item.done" => {
+            let Some(item) = event.item else { return };
+            match item.item_type.as_deref() {
+                Some("web_search_call") => {
+                    let tool_call_id = item.id.unwrap_or_default();
+                    log::debug!("responses: web_search_call done id={tool_call_id}");
+                    state.active_tool_call_ids.retain(|id| id != &tool_call_id);
+                    let result = item
+                        .action
+                        .as_ref()
+                        .and_then(ToolRegistry::format_web_search_result);
+                    state.push_tool_event(ToolCallEvent::Done {
+                        tool_call_id,
+                        result,
+                        error: None,
+                    });
+                }
+                Some("function_call") => {
+                    let tool_call_id = item.call_id.unwrap_or_default();
+                    if !state.active_tool_call_ids.contains(&tool_call_id) {
+                        log::debug!("responses: function_call output_item.done skipped (already handled) id={tool_call_id}");
+                        return;
+                    }
+                    state.complete_function_call(tool_call_id, item.name, item.arguments);
+                }
+                _ => {}
+            }
+        }
+        "response.completed" => {
+            if let Some(usage) = event.response.and_then(|r| r.usage) {
+                state.pending_chunks.push_back(StreamChunk::usage(
+                    &state.accumulated,
+                    TokenUsage {
+                        prompt_tokens: usage.input_tokens,
+                        completion_tokens: usage.output_tokens,
+                    },
+                ));
+            }
+        }
+        _ => {}
     }
 }
 
@@ -344,275 +417,28 @@ fn parse_responses_events<E: std::fmt::Display>(
     sse_stream: impl Stream<Item = Result<String, E>> + Unpin + Send + 'static,
 ) -> impl Stream<Item = Result<StreamChunk, AiError>> + Send {
     futures::stream::unfold(
-    (sse_stream, String::new(), String::new(), Vec::<String>::new(), HashMap::<String, (String, String)>::new(), HashMap::<String, String>::new()),
-    |(mut sse_stream, mut accumulated, mut accumulated_thinking, mut active_tool_call_ids, mut fn_call_args, mut item_id_to_call_id)| async move {
-        loop {
-            match sse_stream.next().await {
-                Some(Ok(data)) => {
-                    log::trace!("responses: SSE event len={}", data.len());
-                    let event: ResponseEvent = match serde_json::from_str(&data) {
-                        Ok(e) => e,
-                        Err(e) => {
-                            log::warn!("responses: failed to parse SSE event: {e}");
-                            continue;
+        (StreamState::default(), sse_stream),
+        |(mut state, mut sse_stream)| async move {
+            loop {
+                if let Some(chunk) = state.pending_chunks.pop_front() {
+                    return Some((Ok(chunk), (state, sse_stream)));
+                }
+                match sse_stream.next().await {
+                    Some(Ok(data)) => {
+                        log::trace!("responses: SSE event len={}", data.len());
+                        match serde_json::from_str::<ResponseEvent>(&data) {
+                            Ok(event) => process_event(&mut state, event),
+                            Err(e) => log::warn!("responses: failed to parse SSE event: {e}"),
                         }
-                    };
-
-                    log::trace!("responses: event_type={}", event.event_type);
-
-                    match event.event_type.as_str() {
-                        "response.reasoning_summary_text.delta" => {
-                            let thinking = event.delta.unwrap_or_default();
-                            log::trace!("responses: reasoning delta len={}", thinking.len());
-                            if thinking.is_empty() {
-                                continue;
-                            }
-                            accumulated_thinking.push_str(&thinking);
-                            return Some((
-                                Ok(StreamChunk {
-                                    delta: String::new(),
-                                    accumulated: accumulated.clone(),
-                                    thinking_delta: Some(thinking),
-                                    accumulated_thinking: Some(accumulated_thinking.clone()),
-                                    usage: None,
-                                    tool_call_event: None,
-                                }),
-                                (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
-                            ));
-                        }
-                        "response.output_text.delta" => {
-                            let delta = event.delta.unwrap_or_default();
-                            if delta.is_empty() {
-                                continue;
-                            }
-                            accumulated.push_str(&delta);
-                            let acc_thinking = if accumulated_thinking.is_empty() {
-                                None
-                            } else {
-                                Some(accumulated_thinking.clone())
-                            };
-                            return Some((
-                                Ok(StreamChunk {
-                                    delta,
-                                    accumulated: accumulated.clone(),
-                                    thinking_delta: None,
-                                    accumulated_thinking: acc_thinking,
-                                    usage: None,
-                                    tool_call_event: None,
-                                }),
-                                (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
-                            ));
-                        }
-                        "response.output_item.added" => {
-                            if let Some(ref item) = event.item {
-                                if item.item_type.as_deref() == Some("web_search_call") {
-                                    let tool_call_id = item.id.clone().unwrap_or_default();
-                                    log::debug!("responses: web_search_call started id={tool_call_id}");
-                                    active_tool_call_ids.push(tool_call_id.clone());
-                                    let marker = format!("{{{{tool_call:{tool_call_id}}}}}");
-                                    accumulated.push_str(&marker);
-                                    return Some((
-                                        Ok(StreamChunk {
-                                            delta: String::new(),
-                                            accumulated: accumulated.clone(),
-                                            thinking_delta: None,
-                                            accumulated_thinking: None,
-                                            usage: None,
-                                            tool_call_event: Some(ToolCallEvent::Started {
-                                                tool_call_id,
-                                                tool_name: "web_search".to_string(),
-                                            }),
-                                        }),
-                                        (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
-                                    ));
-                                }
-                                if item.item_type.as_deref() == Some("function_call") {
-                                    let tool_call_id = item.call_id.clone().unwrap_or_default();
-                                    let tool_name = item.name.clone().unwrap_or_default();
-                                    log::debug!("responses: function_call started call_id={tool_call_id} item_id={:?} name={tool_name}", item.id);
-                                    active_tool_call_ids.push(tool_call_id.clone());
-                                    fn_call_args.insert(tool_call_id.clone(), (tool_name.clone(), String::new()));
-                                    if let Some(ref item_id) = item.id {
-                                        item_id_to_call_id.insert(item_id.clone(), tool_call_id.clone());
-                                    }
-                                    let marker = format!("{{{{tool_call:{tool_call_id}}}}}");
-                                    accumulated.push_str(&marker);
-                                    return Some((
-                                        Ok(StreamChunk {
-                                            delta: String::new(),
-                                            accumulated: accumulated.clone(),
-                                            thinking_delta: None,
-                                            accumulated_thinking: None,
-                                            usage: None,
-                                            tool_call_event: Some(ToolCallEvent::Started {
-                                                tool_call_id,
-                                                tool_name,
-                                            }),
-                                        }),
-                                        (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
-                                    ));
-                                }
-                            }
-                            continue;
-                        }
-                        "response.function_call_arguments.delta" => {
-                            let raw_id = event.call_id.or(event.item_id.clone());
-                            if let Some(raw_id) = raw_id {
-                                let call_id = item_id_to_call_id.get(&raw_id).cloned().unwrap_or(raw_id);
-                                if let Some(delta) = event.delta {
-                                    if let Some((_, ref mut acc_args)) = fn_call_args.get_mut(&call_id) {
-                                        acc_args.push_str(&delta);
-                                    }
-                                }
-                            }
-                            continue;
-                        }
-                        "response.function_call_arguments.done" => {
-                            let raw_id = event.call_id.or(event.item_id.clone());
-                            log::debug!("responses: fn_call_args.done raw_id={:?} name={:?} has_arguments={}", raw_id, event.name, event.arguments.is_some());
-                            if let Some(raw_id) = raw_id {
-                                let call_id = item_id_to_call_id.get(&raw_id).cloned().unwrap_or(raw_id);
-                                let tool_name = event.name.unwrap_or_else(|| {
-                                    fn_call_args.get(&call_id)
-                                        .map(|(name, _)| name.clone())
-                                        .unwrap_or_default()
-                                });
-                                let arguments_str = event.arguments.unwrap_or_else(|| {
-                                    fn_call_args.get(&call_id)
-                                        .map(|(_, args)| args.clone())
-                                        .unwrap_or_default()
-                                });
-                                let arguments: serde_json::Value = serde_json::from_str(&arguments_str)
-                                    .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
-                                log::debug!("responses: function_call args complete id={call_id} name={tool_name}");
-                                fn_call_args.remove(&call_id);
-                                active_tool_call_ids.retain(|id| id != &call_id);
-                                return Some((
-                                    Ok(StreamChunk {
-                                        delta: String::new(),
-                                        accumulated: accumulated.clone(),
-                                        thinking_delta: None,
-                                        accumulated_thinking: None,
-                                        usage: None,
-                                        tool_call_event: Some(ToolCallEvent::ArgumentsComplete {
-                                            tool_call_id: call_id,
-                                            tool_name,
-                                            arguments,
-                                        }),
-                                    }),
-                                    (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
-                                ));
-                            }
-                            continue;
-                        }
-                        "response.output_item.done" => {
-                            if let Some(ref item) = event.item {
-                                if item.item_type.as_deref() == Some("web_search_call") {
-                                    let tool_call_id = item.id.clone().unwrap_or_default();
-                                    log::debug!("responses: web_search_call done id={tool_call_id}");
-                                    active_tool_call_ids.retain(|id| id != &tool_call_id);
-
-                                    let result = item.action.as_ref()
-                                        .and_then(ToolRegistry::format_web_search_result);
-
-                                    return Some((
-                                        Ok(StreamChunk {
-                                            delta: String::new(),
-                                            accumulated: accumulated.clone(),
-                                            thinking_delta: None,
-                                            accumulated_thinking: None,
-                                            usage: None,
-                                            tool_call_event: Some(ToolCallEvent::Done {
-                                                tool_call_id,
-                                                result,
-                                                error: None,
-                                            }),
-                                        }),
-                                        (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
-                                    ));
-                                }
-                                if item.item_type.as_deref() == Some("function_call") {
-                                    let tool_call_id = item.call_id.clone().unwrap_or_default();
-                                    if !active_tool_call_ids.contains(&tool_call_id) {
-                                        log::debug!("responses: function_call output_item.done skipped (already handled) id={tool_call_id}");
-                                        continue;
-                                    }
-                                    let tool_name = item.name.clone().unwrap_or_else(|| {
-                                        fn_call_args.get(&tool_call_id)
-                                            .map(|(n, _)| n.clone())
-                                            .unwrap_or_default()
-                                    });
-                                    let arguments_str = item.arguments.clone().unwrap_or_else(|| {
-                                        fn_call_args.get(&tool_call_id)
-                                            .map(|(_, a)| a.clone())
-                                            .unwrap_or_default()
-                                    });
-                                    let arguments: serde_json::Value = serde_json::from_str(&arguments_str)
-                                        .unwrap_or(serde_json::Value::Object(serde_json::Map::new()));
-                                    log::debug!("responses: function_call done via output_item id={tool_call_id} name={tool_name}");
-                                    fn_call_args.remove(&tool_call_id);
-                                    active_tool_call_ids.retain(|id| id != &tool_call_id);
-                                    return Some((
-                                        Ok(StreamChunk {
-                                            delta: String::new(),
-                                            accumulated: accumulated.clone(),
-                                            thinking_delta: None,
-                                            accumulated_thinking: None,
-                                            usage: None,
-                                            tool_call_event: Some(ToolCallEvent::ArgumentsComplete {
-                                                tool_call_id,
-                                                tool_name,
-                                                arguments,
-                                            }),
-                                        }),
-                                        (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
-                                    ));
-                                }
-                            }
-                            continue;
-                        }
-                        "response.web_search_call.completed"
-                        | "response.web_search_call.in_progress"
-                        | "response.web_search_call.searching" => {
-                            continue;
-                        }
-                        "response.completed" => {
-                            let usage = event
-                                .response
-                                .and_then(|r| r.usage)
-                                .map(|u| TokenUsage {
-                                    prompt_tokens: u.input_tokens,
-                                    completion_tokens: u.output_tokens,
-                                });
-                            if usage.is_some() {
-                                return Some((
-                                    Ok(StreamChunk {
-                                        delta: String::new(),
-                                        accumulated: accumulated.clone(),
-                                        thinking_delta: None,
-                                        accumulated_thinking: None,
-                                        usage,
-                                        tool_call_event: None,
-                                    }),
-                                    (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
-                                ));
-                            }
-                            continue;
-                        }
-                        _ => continue,
                     }
+                    Some(Err(e)) => {
+                        return Some((Err(AiError::Stream(e.to_string())), (state, sse_stream)));
+                    }
+                    None => return None,
                 }
-                Some(Err(e)) => {
-                    return Some((
-                        Err(AiError::Stream(e.to_string())),
-                        (sse_stream, accumulated, accumulated_thinking, active_tool_call_ids, fn_call_args, item_id_to_call_id),
-                    ));
-                }
-                None => return None,
             }
-        }
-    },
-)
+        },
+    )
 }
 
 #[cfg(test)]

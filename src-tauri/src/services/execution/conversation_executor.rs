@@ -4,7 +4,7 @@ use tauri::ipc::Channel;
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-use super::parameters::{merge_optional_parameters, surface_effort_override};
+use super::parameters::merge_optional_parameters;
 use super::stream::{build_tool_loop_messages, execute_tool_calls, run_stream_loop};
 use super::system_prompt::{build_system_prompt_base, resolve_environment_section_template};
 use super::types::MAX_TOOL_LOOP_ITERATIONS;
@@ -62,7 +62,10 @@ impl ConversationExecutor {
             .generation
             .parameters
             .clone();
-        let tab_override = surface_effort_override(None, reasoning_effort);
+        let tab_override = reasoning_effort.map(|effort| ModelParameters {
+            reasoning_effort: Some(effort),
+            ..Default::default()
+        });
         let param_overrides = merge_optional_parameters(Some(chat_surface_params), tab_override);
 
         let placeholder_ctx = PlaceholderContext::with_apps(active_app, recent_apps);

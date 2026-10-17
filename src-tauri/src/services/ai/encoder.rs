@@ -3,62 +3,35 @@ use serde_json::{Map, Value};
 use crate::models::capabilities::{ModelCapabilities, ReasoningMode};
 use crate::models::settings::ModelParameters;
 
-pub trait CapabilityEncoder: Send + Sync {
-    fn encode_reasoning(
-        &self,
-        caps: &ModelCapabilities,
-        params: &ModelParameters,
-        out: &mut Map<String, Value>,
-    );
-}
-
-pub struct OpenAiCompletionsEncoder;
-
-impl CapabilityEncoder for OpenAiCompletionsEncoder {
-    fn encode_reasoning(
-        &self,
-        caps: &ModelCapabilities,
-        params: &ModelParameters,
-        out: &mut Map<String, Value>,
-    ) {
-        let Some(value) = params.reasoning_effort.as_deref() else {
-            return;
-        };
-        match &caps.reasoning {
-            ReasoningMode::Effort { .. } if caps.accepts_effort(value) => {
-                out.insert("reasoning_effort".into(), Value::String(value.into()));
-            }
-            ReasoningMode::Toggle => {}
-            ReasoningMode::BudgetTokens { .. } => {}
-            _ => {}
-        }
+pub fn encode_completions_capabilities(
+    caps: &ModelCapabilities,
+    params: &ModelParameters,
+    out: &mut Map<String, Value>,
+) {
+    let Some(value) = params.reasoning_effort.as_deref() else {
+        return;
+    };
+    if matches!(caps.reasoning, ReasoningMode::Effort { .. }) && caps.accepts_effort(value) {
+        out.insert("reasoning_effort".into(), Value::String(value.into()));
     }
 }
 
-pub struct OpenAiResponsesEncoder;
-
-impl CapabilityEncoder for OpenAiResponsesEncoder {
-    fn encode_reasoning(
-        &self,
-        caps: &ModelCapabilities,
-        params: &ModelParameters,
-        out: &mut Map<String, Value>,
-    ) {
-        let Some(value) = params.reasoning_effort.as_deref() else {
-            return;
-        };
-        if !matches!(caps.reasoning, ReasoningMode::Effort { .. }) {
-            return;
-        }
-        if !caps.accepts_effort(value) {
-            return;
-        }
-        let mut reasoning = serde_json::json!({ "effort": value });
-        if value != "none" {
-            reasoning["summary"] = Value::String("auto".into());
-        }
-        out.insert("reasoning".into(), reasoning);
+pub fn encode_responses_capabilities(
+    caps: &ModelCapabilities,
+    params: &ModelParameters,
+    out: &mut Map<String, Value>,
+) {
+    let Some(value) = params.reasoning_effort.as_deref() else {
+        return;
+    };
+    if !matches!(caps.reasoning, ReasoningMode::Effort { .. }) || !caps.accepts_effort(value) {
+        return;
     }
+    let mut reasoning = serde_json::json!({ "effort": value });
+    if value != "none" {
+        reasoning["summary"] = Value::String("auto".into());
+    }
+    out.insert("reasoning".into(), reasoning);
 }
 
 #[cfg(test)]
@@ -80,9 +53,9 @@ mod tests {
     }
 
     #[test]
-    fn completions_encoder_passes_accepted_effort() {
+    fn completions_passes_accepted_effort() {
         let mut out = Map::new();
-        OpenAiCompletionsEncoder.encode_reasoning(
+        encode_completions_capabilities(
             &caps_effort(vec![Effort::Medium, Effort::High]),
             &params_with_effort("medium"),
             &mut out,
@@ -91,9 +64,9 @@ mod tests {
     }
 
     #[test]
-    fn completions_encoder_passes_implicit_none() {
+    fn completions_passes_implicit_none() {
         let mut out = Map::new();
-        OpenAiCompletionsEncoder.encode_reasoning(
+        encode_completions_capabilities(
             &caps_effort(vec![Effort::Medium]),
             &params_with_effort("none"),
             &mut out,
@@ -102,9 +75,9 @@ mod tests {
     }
 
     #[test]
-    fn completions_encoder_drops_disallowed_effort() {
+    fn completions_drops_disallowed_effort() {
         let mut out = Map::new();
-        OpenAiCompletionsEncoder.encode_reasoning(
+        encode_completions_capabilities(
             &caps_effort(vec![Effort::Medium]),
             &params_with_effort("xhigh"),
             &mut out,
@@ -113,9 +86,9 @@ mod tests {
     }
 
     #[test]
-    fn completions_encoder_does_nothing_when_unsupported() {
+    fn completions_does_nothing_when_unsupported() {
         let mut out = Map::new();
-        OpenAiCompletionsEncoder.encode_reasoning(
+        encode_completions_capabilities(
             &ModelCapabilities::minimal(),
             &params_with_effort("medium"),
             &mut out,
@@ -124,9 +97,9 @@ mod tests {
     }
 
     #[test]
-    fn responses_encoder_includes_summary_for_non_none() {
+    fn responses_includes_summary_for_non_none() {
         let mut out = Map::new();
-        OpenAiResponsesEncoder.encode_reasoning(
+        encode_responses_capabilities(
             &caps_effort(vec![Effort::Medium]),
             &params_with_effort("medium"),
             &mut out,
@@ -137,9 +110,9 @@ mod tests {
     }
 
     #[test]
-    fn responses_encoder_omits_summary_for_none() {
+    fn responses_omits_summary_for_none() {
         let mut out = Map::new();
-        OpenAiResponsesEncoder.encode_reasoning(
+        encode_responses_capabilities(
             &caps_effort(vec![Effort::Medium]),
             &params_with_effort("none"),
             &mut out,
@@ -150,9 +123,9 @@ mod tests {
     }
 
     #[test]
-    fn responses_encoder_drops_disallowed_effort() {
+    fn responses_drops_disallowed_effort() {
         let mut out = Map::new();
-        OpenAiResponsesEncoder.encode_reasoning(
+        encode_responses_capabilities(
             &caps_effort(vec![Effort::Medium]),
             &params_with_effort("xhigh"),
             &mut out,
@@ -161,9 +134,9 @@ mod tests {
     }
 
     #[test]
-    fn responses_encoder_does_nothing_when_unsupported() {
+    fn responses_does_nothing_when_unsupported() {
         let mut out = Map::new();
-        OpenAiResponsesEncoder.encode_reasoning(
+        encode_responses_capabilities(
             &ModelCapabilities::minimal(),
             &params_with_effort("medium"),
             &mut out,
