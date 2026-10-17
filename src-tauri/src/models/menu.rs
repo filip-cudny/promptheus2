@@ -25,6 +25,42 @@ pub struct MenuItem {
     pub section_id: Option<String>,
 }
 
+impl MenuItem {
+    pub fn new(id: impl Into<String>, label: impl Into<String>, item_type: MenuItemType) -> Self {
+        Self {
+            id: id.into(),
+            label: label.into(),
+            item_type,
+            data: None,
+            enabled: true,
+            separator_after: false,
+            tooltip: None,
+            icon: None,
+            section_id: None,
+        }
+    }
+
+    pub fn with_data(mut self, data: serde_json::Value) -> Self {
+        self.data = Some(data);
+        self
+    }
+
+    pub fn with_enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+
+    pub fn with_tooltip(mut self, tooltip: Option<String>) -> Self {
+        self.tooltip = tooltip;
+        self
+    }
+
+    pub fn with_icon(mut self, icon: &str) -> Self {
+        self.icon = Some(icon.to_string());
+        self
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -2,7 +2,7 @@
 
 ## Layout
 
-Directories follow their names (`commands/`, `services/`, `models/`, `providers/`, `setup/`). Files whose place does not follow from their name:
+Directories follow their names (`commands/`, `services/`, `models/`, `setup/`). Files whose place does not follow from their name:
 
 ```
 src-tauri/
@@ -128,13 +128,14 @@ Default to commands. Reach for `app.emit*` only for true one-to-many notificatio
 - All structs crossing the IPC boundary derive `serde::Serialize` and/or `serde::Deserialize`.
 - Model structs serialize in `snake_case` and their TypeScript mirrors keep `snake_case` field names; `rename_all` appears on enums (see `src/models/DOCS.md`) and on the `camelCase` payload in `services/speech/widget.rs`.
 
-### Provider Pattern
+### Menu State
 
-Menu content is assembled from pluggable providers (`providers/`):
+Context menu sections are built from one plain `MenuState` (`services/menu_coordinator.rs`) owned by `MenuCoordinator.state`:
 
-- Each provider implements `MenuItemProvider` and returns `Vec<MenuItem>`.
-- Providers are registered at startup and queried when the menu is shown.
-- Adding a new menu section = adding a new provider.
+- `MenuState` holds the inputs of the dynamic sections: `skills`, `context_items`, `is_recording`, `is_action_executing`.
+- `get_context_menu_items` (`commands/menu.rs`) assigns the fields, then calls `get_menu_items`, which maps each id of `menu_section_order` to a `build_*_items` method.
+- Adding a menu section = adding a `MenuState` field if it needs input, a `build_*_items` method and an arm in `get_menu_items`.
+
 ### Logging
 
 Uses `tauri-plugin-log` (`setup/log.rs`) with the standard Rust `log` crate. Logs go to stdout, a log file in Tauri's `LogDir`, and the webview console.

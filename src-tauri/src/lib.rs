@@ -5,10 +5,8 @@ use tauri::Manager;
 mod commands;
 mod error;
 mod models;
-mod providers;
 mod services;
 mod setup;
-mod traits;
 
 pub use error::{Error, Result};
 

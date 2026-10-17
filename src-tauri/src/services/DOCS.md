@@ -181,17 +181,13 @@ Holds an `AppHandle`.
 
 ### MenuCoordinator specifics
 
-Aggregates `MenuItemProvider` trait implementors (defined in `traits.rs`) into a flat, ordered list of `MenuItem`s. Section order comes from `ConfigService.settings().menu_section_order`.
+Builds a flat, ordered list of `MenuItem`s from `MenuState` (skills, context items, recording and executing flags), which the commands in `commands/menu.rs` update directly through `MenuCoordinator.state`. Section order comes from `ConfigService.settings().menu_section_order`.
 
-**Built-in virtual sections**: `"chat"`, `"skills"` (alias `"prompts"`), `"models"` and `"settings"` are handled directly (not via providers). Skills come from the registered providers with the dynamic ones (`ContextMenuProvider`, `LastInteractionMenuProvider`, `SpeechMenuProvider`) excluded; `models` and `settings` are built from `ConfigService`. The ids `speech`, `lastInteraction` and `context` map to the dynamic providers' names.
-
-**Provider sections**: Any other section ID is mapped to a provider name (`resolve_provider_name`); the items come from the first registered provider whose `provider_name()` matches and that has items. Providers are added at startup via `add_provider()`.
+**Sections**: `"chat"`, `"skills"` (aliases `"prompts"`, `"SkillProvider"`), `"models"`, `"settings"`, `"speech"` (`"SpeechMenuProvider"`), `"lastInteraction"` (`"LastInteractionMenuProvider"`) and `"context"` (`"ContextMenuProvider"`) each have a `build_*_items` method; the long names are the ids `default_settings.json` still uses. Unknown ids produce no items. `models` and `settings` are built from `ConfigService`; the `lastInteraction` item carries no data here, `get_context_menu_items` fills it.
 
 **Separator placement**: A `separator_after = true` flag is set on the last item of each non-final section. No trailing separator.
 
-`update_context_items` pushes context items to the `ContextMenuProvider`; `providers_mut` gives access to the registered providers.
-
-**Testing**: Unit tests cover section ordering, separator placement, empty-provider skipping, dynamic-provider exclusion, and settings section content. Tests use mock providers implementing `MenuItemProvider`.
+**Testing**: `full_menu_serializes_to_expected_json` asserts the whole serialized menu for a fixed `MenuState`; the other tests cover section order, separators, skipped empty sections, the skill `offered_in` filter and the speech and context items.
 
 ### AiService specifics
 

@@ -4,11 +4,10 @@ use std::sync::Arc;
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
-use crate::providers::{LastInteractionMenuProvider, SkillMenuProvider, SpeechMenuProvider};
 use crate::services::ai::AiService;
 use crate::services::clipboard::ClipboardService;
 use crate::services::config::ConfigService;
-use crate::services::context::{ContextManagerService, ContextMenuProvider};
+use crate::services::context::ContextManagerService;
 use crate::services::database::Database;
 use crate::services::dock::DockManager;
 use crate::services::execution::PromptExecutionService;
@@ -50,13 +49,6 @@ pub fn manage(
     let clipboard_service = ClipboardService::new(app.handle().clone())
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
     let notification_service = NotificationService::new(app.handle().clone());
-    let mut menu_coordinator = MenuCoordinator::new();
-    menu_coordinator.add_provider(Box::new(ContextMenuProvider::new()));
-    menu_coordinator.add_provider(Box::new(LastInteractionMenuProvider::new()));
-    menu_coordinator.add_provider(Box::new(SpeechMenuProvider::new()));
-
-    menu_coordinator.add_provider(Box::new(SkillMenuProvider::new(Vec::new())));
-
     let ui_state_service = ui_state::UiStateService::load(config_dir)
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
@@ -93,7 +85,7 @@ pub fn manage(
     app.manage(Arc::new(Mutex::new(config_service)));
     app.manage(clipboard_service);
     app.manage(notification_service);
-    app.manage(Arc::new(Mutex::new(menu_coordinator)));
+    app.manage(Arc::new(Mutex::new(MenuCoordinator::default())));
     app.manage(Arc::new(Mutex::new(context_service)));
     app.manage(Arc::new(Mutex::new(ai_service)));
     app.manage(Arc::new(Mutex::new(history_service)));

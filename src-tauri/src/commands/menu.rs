@@ -7,7 +7,6 @@ use tokio::sync::Mutex;
 use crate::models::history::HistoryEntryType;
 use crate::models::menu::{MenuItem, MenuItemType};
 use crate::models::skill::SkillSummary;
-use crate::providers::{SkillMenuProvider, SpeechMenuProvider};
 use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
 use crate::services::execution::PromptExecutionService;
@@ -100,19 +99,15 @@ pub async fn get_context_menu_items(
 ) -> crate::Result<Vec<MenuItem>> {
     let context_items = context.lock().await.get_items();
     let mut menu_coordinator = menu_coordinator.lock().await;
-    menu_coordinator.update_context_items(context_items);
+    menu_coordinator.state.context_items = context_items;
 
     let (is_recording, retrying_entries) = {
         let s = speech.lock().await;
         (s.is_recording(), s.retrying_entries())
     };
     let is_executing = prompt_execution.lock().await.is_busy();
-    for provider in menu_coordinator.providers_mut() {
-        if let Some(speech) = provider.as_any_mut().downcast_mut::<SpeechMenuProvider>() {
-            speech.set_recording(is_recording);
-            speech.set_action_executing(is_executing);
-        }
-    }
+    menu_coordinator.state.is_recording = is_recording;
+    menu_coordinator.state.is_action_executing = is_executing;
 
     let (last_text, last_speech, last_speech_clip) = {
         let history = history.lock().await;
@@ -154,11 +149,7 @@ pub async fn get_context_menu_items(
         .map(SkillSummary::from)
         .collect();
     log::debug!("context menu: refreshing {} skills", skill_summaries.len());
-    for provider in menu_coordinator.providers_mut() {
-        if let Some(skills) = provider.as_any_mut().downcast_mut::<SkillMenuProvider>() {
-            skills.update_skills(skill_summaries.clone());
-        }
-    }
+    menu_coordinator.state.skills = skill_summaries;
 
     let mut items = menu_coordinator.get_menu_items(&config);
 

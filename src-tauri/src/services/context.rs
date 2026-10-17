@@ -1,45 +1,5 @@
 use crate::models::context::ContextItem;
-use crate::models::menu::{MenuItem, MenuItemType};
 use crate::services::clipboard::PastedItem;
-use crate::traits::MenuItemProvider;
-
-pub struct ContextMenuProvider {
-    items: Vec<ContextItem>,
-}
-
-impl ContextMenuProvider {
-    pub fn new() -> Self {
-        Self { items: Vec::new() }
-    }
-
-    pub fn update_items(&mut self, items: Vec<ContextItem>) {
-        self.items = items;
-    }
-}
-
-impl MenuItemProvider for ContextMenuProvider {
-    fn provider_name(&self) -> &str {
-        "ContextMenuProvider"
-    }
-
-    fn get_menu_items(&self) -> Vec<MenuItem> {
-        vec![MenuItem {
-            id: "environment_section".to_string(),
-            label: "Context".to_string(),
-            item_type: MenuItemType::Context,
-            data: Some(serde_json::json!({ "items": self.items })),
-            enabled: true,
-            separator_after: false,
-            tooltip: None,
-            icon: None,
-            section_id: None,
-        }]
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-}
 
 pub fn pasted_text_block(number: impl std::fmt::Display, content: &str) -> String {
     format!("<pasted-text name=\"Text #{number}\">\n{content}\n</pasted-text>")
@@ -398,55 +358,5 @@ mod tests {
 
         svc.append_context_image("img".into(), "image/png".into());
         assert_eq!(svc.labelled_context(), None);
-    }
-
-    #[test]
-    fn provider_name_matches_dynamic_providers() {
-        let provider = ContextMenuProvider::new();
-        assert_eq!(provider.provider_name(), "ContextMenuProvider");
-    }
-
-    #[test]
-    fn provider_returns_environment_section_when_no_items() {
-        let provider = ContextMenuProvider::new();
-        let items = provider.get_menu_items();
-        assert_eq!(items.len(), 1);
-        assert_eq!(items[0].item_type, MenuItemType::Context);
-
-        let data = items[0].data.as_ref().unwrap();
-        let context_items = data["items"].as_array().unwrap();
-        assert!(context_items.is_empty());
-    }
-
-    #[test]
-    fn provider_returns_menu_item_with_serialized_context() {
-        use crate::models::menu::MenuItemType;
-        use crate::traits::MenuItemProvider;
-
-        let mut provider = ContextMenuProvider::new();
-        provider.update_items(vec![
-            ContextItem::Text {
-                number: 1,
-                content: "hello".into(),
-            },
-            ContextItem::Image {
-                number: 1,
-                data: "img_data".into(),
-                media_type: "image/png".into(),
-            },
-        ]);
-
-        let items = provider.get_menu_items();
-        assert_eq!(items.len(), 1);
-
-        let item = &items[0];
-        assert_eq!(item.id, "environment_section");
-        assert_eq!(item.label, "Context");
-        assert_eq!(item.item_type, MenuItemType::Context);
-        assert!(item.enabled);
-
-        let data = item.data.as_ref().unwrap();
-        let context_items = data["items"].as_array().unwrap();
-        assert_eq!(context_items.len(), 2);
     }
 }
