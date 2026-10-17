@@ -34,7 +34,7 @@ pub(crate) fn rebuild_ai(config: &ConfigService, ai: &mut AiService) {
 
 pub(crate) fn apply_reloaded_settings(app: &AppHandle, settings: &Settings) {
     crate::reload_shortcuts(app, settings);
-    crate::services::autostart::reconcile(app, settings);
+    crate::services::autostart::reconcile(app, settings, false);
 }
 
 pub(crate) async fn apply_settings_reload(app: &AppHandle, reason: &str) -> crate::Result<()> {

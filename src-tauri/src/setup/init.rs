@@ -33,7 +33,11 @@ pub fn run(app: &mut tauri::App) -> std::result::Result<(), Box<dyn std::error::
             MacosLauncher::LaunchAgent,
             None,
         ))?;
-        services::autostart::reconcile(app.handle(), config_service.settings());
+        services::autostart::reconcile(
+            app.handle(),
+            config_service.settings(),
+            !cfg!(debug_assertions),
+        );
     }
 
     setup::windows::create(app)?;
