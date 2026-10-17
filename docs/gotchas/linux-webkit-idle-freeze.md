@@ -18,7 +18,7 @@ Provider webviews are children of the host window (`add_child`, Tauri `unstable`
 share the process's GTK/GLib main loop with every other window. When a provider's WebKit
 content process stops answering, any main-thread call that waits synchronously stalls with it:
 `cursor_position()`, `available_monitors()`, IPC to another webview in the same window,
-`x11_get_server_time` before `present_with_time`, `set_focus()`. The suspected triggers are a
+`set_focus()`. The suspected triggers are a
 lost compositor context after monitor sleep, a stuck long-lived websocket/SSE stream, and heap
 growth in a page kept open for hours. Moving providers to separate windows or separate
 `WebKitWebContext`s does not help: they still share the main loop.
@@ -82,4 +82,3 @@ Activating an unloaded tab (`provider_swap.rs → activate_tab`) creates a new c
 ## Related
 
 - [tauri-command-threading.md](tauri-command-threading.md) — blocking work on the GTK main thread.
-- [linux-gtk-focus.md](linux-gtk-focus.md) — `present_with_time` / `x11_get_server_time`.

@@ -2,7 +2,7 @@
 
 ## Rule
 
-Any `#[tauri::command]` that performs blocking work (clipboard, filesystem, subprocess, network, X11 calls) **must** be marked `#[tauri::command(async)]` or written as `pub async fn`. A plain sync `pub fn` command is invoked **on the GTK main thread** on Linux — blocking it freezes the entire app: UI rendering, IPC, heartbeat, every other command.
+Any `#[tauri::command]` that performs blocking work (clipboard, filesystem, subprocess, network, GTK calls) **must** be marked `#[tauri::command(async)]` or written as `pub async fn`. A plain sync `pub fn` command is invoked **on the GTK main thread** on Linux — blocking it freezes the entire app: UI rendering, IPC, heartbeat, every other command.
 
 ## Why
 
@@ -16,7 +16,7 @@ The `#[tauri::command]` macro picks the execution context from the attribute and
 
 `(async)` on a sync `fn` does not use the blocking pool: the body runs on a regular tokio worker.
 
-Consequence: `(async)` moves a blocking call off the GTK main thread, so the GUI stays responsive. The call still blocks the tokio worker it runs on, and `async fn` commands that call blocking code do the same. Known blocking `async` commands: `set_context_from_clipboard` and `append_context_from_clipboard` (`commands/context.rs:210-245`, arboard reads through `ClipboardService`), `copy_last_interaction` and `copy_history_entry_content` (`commands/history.rs:290`, `:331`; `ClipboardService::set_text` waits for the `wl-copy`/`xclip` child in `services/clipboard.rs` `set_text_subprocess`). They block a tokio worker, not the GUI.
+Consequence: `(async)` moves a blocking call off the GTK main thread, so the GUI stays responsive. The call still blocks the tokio worker it runs on, and `async fn` commands that call blocking code do the same. Known blocking `async` commands: `set_context_from_clipboard` and `append_context_from_clipboard` (`commands/context.rs:210-245`, arboard reads through `ClipboardService`), `copy_last_interaction` and `copy_history_entry_content` (`commands/history.rs:290`, `:331`; `ClipboardService::set_text` waits for the `wl-copy` child in `services/clipboard.rs` `set_text_subprocess`). They block a tokio worker, not the GUI.
 
 Sync commands run on the main thread because Tauri needs that thread to touch the WebView (GTK is not thread-safe). Any blocking call in a sync command stalls the GUI.
 
@@ -59,7 +59,7 @@ Audit any new command that:
 - Reads/writes files synchronously
 - Spawns subprocesses and waits for them (`Command::output`, `wait`)
 - Makes network calls (use `pub async fn` + `reqwest` instead)
-- Calls into X11/GTK/Cocoa APIs that may block
+- Calls into GTK/Cocoa APIs that may block
 
 Cheap rule of thumb: if the function body contains any I/O that isn't a fast in-memory operation, mark it `(async)`.
 

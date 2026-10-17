@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 use crate::models::settings::WebviewProvider;
 use crate::services::clipboard::ClipboardService;
 use crate::services::config::ConfigService;
-use crate::services::dialog::{focus_window, SHELL_TOOLBAR_LABEL, TOOLBAR_HEIGHT};
+use crate::services::dialog::{SHELL_TOOLBAR_LABEL, TOOLBAR_HEIGHT};
 
 use super::external_links::open_external_url;
 use super::lifecycle::{host_window_for_webview, CONVERSATION_DIALOG_LABEL};
@@ -236,7 +236,7 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
             target: "app_lib::services::ai_webview",
             "swap_to_palette: already open host={host_label} (refocus)",
         );
-        let _ = focus_window(&palette_win);
+        let _ = palette_win.set_focus();
         return Ok(());
     }
 
@@ -310,13 +310,6 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
                     "backdrop show failed: {e}",
                 );
             }
-            #[cfg(target_os = "linux")]
-            {
-                use gtk::prelude::WidgetExt;
-                if let Ok(gtk_win) = backdrop.gtk_window() {
-                    gtk_win.set_opacity(0.68);
-                }
-            }
         }
     }
 
@@ -339,10 +332,10 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
         show_over_host(&palette_win, &host, PALETTE_TITLE, true).await;
     } else {
         palette_win.show().map_err(|e| e.to_string())?;
-        if let Err(e) = focus_window(&palette_win) {
+        if let Err(e) = palette_win.set_focus() {
             log::warn!(
                 target: "app_lib::services::ai_webview",
-                "focus_window(palette) failed: {e}",
+                "set_focus(palette) failed: {e}",
             );
         }
     }

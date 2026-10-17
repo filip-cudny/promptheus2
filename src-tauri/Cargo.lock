@@ -3932,7 +3932,6 @@ dependencies = [
  "cpal",
  "dotenvy",
  "futures",
- "gdkx11",
  "gemini-tokenizer",
  "gtk",
  "hex",

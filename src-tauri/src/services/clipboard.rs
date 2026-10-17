@@ -176,7 +176,7 @@ pub fn paste_kind(has_file_list: bool, has_image: bool) -> PasteKind {
 
 pub fn write_text(app: &AppHandle, content: &str) -> Result<(), ClipboardError> {
     #[cfg(target_os = "linux")]
-    {
+    if std::env::var("WAYLAND_DISPLAY").is_ok() {
         match set_text_subprocess(content) {
             Ok(()) => return Ok(()),
             Err(e) => {
@@ -195,16 +195,9 @@ fn set_text_subprocess(content: &str) -> Result<(), ClipboardError> {
     use std::io::Write;
     use std::process::{Command, Stdio};
 
-    let is_wayland = std::env::var("WAYLAND_DISPLAY").is_ok();
-
-    let (cmd, args): (&str, &[&str]) = if is_wayland {
-        ("wl-copy", &[])
-    } else {
-        ("xclip", &["-selection", "clipboard"])
-    };
+    let cmd = "wl-copy";
 
     let mut child = Command::new(cmd)
-        .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

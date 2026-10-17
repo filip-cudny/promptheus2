@@ -65,7 +65,7 @@ pub async fn open_text_preview(
     if let Some(win) = app.get_webview_window(&label) {
         log::debug!("open_text_preview: reusing existing window {}", label);
         win.show()?;
-        dialog::focus_window(&win).map_err(crate::Error::Other)?;
+        win.set_focus()?;
         return Ok(());
     }
 
@@ -131,7 +131,7 @@ pub async fn open_text_preview(
     app.show()?;
 
     win.show()?;
-    dialog::focus_window(&win).map_err(crate::Error::Other)?;
+    win.set_focus()?;
 
     Ok(())
 }

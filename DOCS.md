@@ -22,9 +22,7 @@ Top-level index of the documentation files in the project. Updated incrementally
 - [docs/gotchas/tauri-command-threading.md](docs/gotchas/tauri-command-threading.md) — Sync Tauri commands run on GTK main thread; use `(async)` for blocking work
 - [docs/gotchas/paste-handler.md](docs/gotchas/paste-handler.md) — Shift+Cmd/Ctrl+V raw paste: Mac vs non-Mac paths, empty-`DataTransfer` paste into AI webviews
 - [docs/gotchas/webview-drag-drop.md](docs/gotchas/webview-drag-drop.md) — AI webview builders must call `.disable_drag_drop_handler()` to receive file drops
-- [docs/gotchas/linux-gtk-focus.md](docs/gotchas/linux-gtk-focus.md) — `present_with_time` with real X11 timestamp from `x11_get_server_time`
 - [docs/gotchas/linux-wayland-gnome-extension.md](docs/gotchas/linux-wayland-gnome-extension.md) — GNOME Wayland: shortcuts, positioning and focus through the GNOME Shell extension (D-Bus `com.promptheus.Shell`)
-- [docs/gotchas/linux-webkit-opacity.md](docs/gotchas/linux-webkit-opacity.md) — CSS opacity ignored on transparent WebKitGTK; use GTK `set_opacity()` instead
 - [docs/gotchas/linux-webkit-idle-freeze.md](docs/gotchas/linux-webkit-idle-freeze.md) — AI webview content process hangs after idle and blocks the GTK main loop; memory pressure, responsiveness watchdog and unloading of idle provider tabs
 - [docs/gotchas/linux-scale-change-repaint.md](docs/gotchas/linux-scale-change-repaint.md) — stale or white window drawing after a scale change between monitors on GNOME Wayland; debounced 1 px resize nudge on GTK `scale-factor` notify
 - [docs/gotchas/linux-nvidia-webkit-compositing.md](docs/gotchas/linux-nvidia-webkit-compositing.md) — SIGSEGV of the app when a page enters accelerated compositing on NVIDIA Linux (empty WebKit buffer transport mode); shared-memory renderer env pair set at startup

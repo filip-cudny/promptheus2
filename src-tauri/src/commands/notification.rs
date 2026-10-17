@@ -248,14 +248,6 @@ async fn show_notification_window(handle: &tauri::AppHandle) -> crate::Result<()
 
     anchor_and_show(handle, &win, FIRST_SHOW_HEIGHT).await?;
 
-    #[cfg(target_os = "linux")]
-    {
-        use gtk::prelude::WidgetExt;
-        if let Ok(gtk_win) = win.gtk_window() {
-            gtk_win.set_opacity(0.8);
-        }
-    }
-
     win.eval("drainPending()")?;
 
     Ok(())

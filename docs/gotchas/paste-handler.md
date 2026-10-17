@@ -53,7 +53,7 @@ delivers nothing on this path; it is especially reproducible when our own proces
 X11 selection. The async API behaves differently per source:
 - **External clipboard** (image/text copied in another app): `navigator.clipboard.read()`
   returns it fine.
-- **Same-process clipboard** (text we wrote via `xclip`/`wl-copy`/arboard — e.g. the
+- **Same-process clipboard** (text we wrote via `wl-copy`/arboard — e.g. the
   Shift+F1 transcription result): the embedded WebKit returns **empty** from both
   `read()` and `readText()`. It cannot read a selection our own process owns. This is why
   the JS-only async read is insufficient and the host bridge below exists.

@@ -312,18 +312,6 @@ pub async fn show_context_menu_panel(app: tauri::AppHandle) -> crate::Result<()>
     #[cfg(not(target_os = "macos"))]
     {
         win.show()?;
-        #[cfg(target_os = "linux")]
-        {
-            use gtk::prelude::WidgetExt;
-            if let Ok(gtk_win) = win.gtk_window() {
-                gtk_win.set_opacity(0.99);
-            } else {
-                log::warn!(
-                    target: "app_lib::commands::menu",
-                    "show_context_menu_panel: gtk_window() failed; rounded corners may render as a gray square",
-                );
-            }
-        }
         Ok(())
     }
 }
@@ -409,43 +397,6 @@ pub async fn focus_context_menu(app: tauri::AppHandle) -> crate::Result<()> {
     let win = app
         .get_webview_window("context-menu")
         .ok_or_else(|| Error::Other("context-menu window not found".into()))?;
-
-    #[cfg(target_os = "linux")]
-    {
-        use gtk::glib::object::Cast;
-        use gtk::prelude::GtkWindowExt;
-        use gtk::prelude::WidgetExt;
-
-        log::debug!(target: "app_lib::commands::menu", "focus_context_menu: calling gtk_window()");
-        let t0 = std::time::Instant::now();
-        if let Ok(gtk_win) = win.gtk_window() {
-            log::debug!(
-                target: "app_lib::commands::menu",
-                "focus_context_menu: gtk_window OK in {:?}",
-                t0.elapsed(),
-            );
-            if let Some(gdk_win) = gtk_win.window() {
-                if let Ok(x11_win) = gdk_win.downcast::<gdkx11::X11Window>() {
-                    log::debug!(target: "app_lib::commands::menu", "focus_context_menu: calling x11_get_server_time");
-                    let t1 = std::time::Instant::now();
-                    let timestamp = gdkx11::functions::x11_get_server_time(&x11_win);
-                    log::debug!(
-                        target: "app_lib::commands::menu",
-                        "focus_context_menu: x11_get_server_time={timestamp} in {:?}",
-                        t1.elapsed(),
-                    );
-                    let t2 = std::time::Instant::now();
-                    gtk_win.present_with_time(timestamp);
-                    log::debug!(
-                        target: "app_lib::commands::menu",
-                        "focus_context_menu: present_with_time done in {:?}",
-                        t2.elapsed(),
-                    );
-                    return Ok(());
-                }
-            }
-        }
-    }
 
     #[cfg(target_os = "macos")]
     {

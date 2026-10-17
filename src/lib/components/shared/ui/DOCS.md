@@ -53,7 +53,7 @@ Lives in `shared/widgets/ContextEditor.svelte` (it calls `invoke("open_image_pre
 - `inputRef` is bindable so the consumer can call `.focus()`.
 - Pure visual shell: shared frame (`var(--surface-floating-modal)` with `--surface-floating-modal-border`), input row, scrollable body, footer. Consumers render the list and footer keys via snippets.
 - `variant="overlay"` is for in-window overlays (e.g. Cmd+K inside ConversationDialog) — adds the `--surface-scrim` backdrop with fade-in.
-- `variant="window"` is for separate Tauri windows with transparent body (e.g. Cmd+P provider switcher) — keeps the scrim transparent so the host window itself acts as the backdrop. On Linux this variant uses a lighter shadow (`--shadow-lg-linux`) because GTK/X11 transparent windows render heavy shadows poorly; the overlay variant keeps `--shadow-lg` on every platform.
+- `variant="window"` is for separate Tauri windows with transparent body (e.g. Cmd+P provider switcher) — keeps the scrim transparent so the host window itself acts as the backdrop. On Linux this variant uses a lighter shadow (`--shadow-lg-linux`) because GTK transparent windows render heavy shadows poorly; the overlay variant keeps `--shadow-lg` on every platform.
 - Provides utility classes for consumers: `.palette-item`, `.palette-item.highlight`, `.palette-item-icon`, `.palette-item-name`, `.palette-empty`, `.palette-divider`, plus `.palette-footer kbd` styling.
 
 ### MarkdownRenderer

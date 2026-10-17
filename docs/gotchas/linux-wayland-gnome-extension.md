@@ -2,13 +2,13 @@
 
 ## Rule
 
-On GNOME Wayland, Promptheus runs as a native Wayland client. Wayland has no protocol for global shortcuts, window positioning or window activation by a client, and `tauri-plugin-global-shortcut` only grabs keys through XWayland (they arrive while an X11 window has focus). Everything that needs the compositor goes through the GNOME Shell extension `promptheus@promptheus.desktop` (`linux/gnome-shell-extension/`), reached over the session D-Bus by `src-tauri/src/services/gnome_shell/`. Do not add `setPosition`, `set_focus()`, `present_with_time` or plugin shortcut code for this path.
+On GNOME Wayland, Promptheus runs as a native Wayland client. Wayland has no protocol for global shortcuts, window positioning or window activation by a client, and `tauri-plugin-global-shortcut` only grabs keys through XWayland (they arrive while an X11 window has focus). Everything that needs the compositor goes through the GNOME Shell extension `promptheus@promptheus.desktop` (`linux/gnome-shell-extension/`), reached over the session D-Bus by `src-tauri/src/services/gnome_shell/`. Do not add `setPosition`, `set_focus()` or plugin shortcut code for this path.
 
 ## Why
 
 - The extension runs inside the compositor: it can grab accelerators, read the pointer and the monitor work area, move and activate a window, and read the focused window's `wm_class`.
-- `org.gnome.Shell.Eval` is blocked since GNOME 41, and `xdotool` does not see Wayland windows.
-- Backend selection (`services/gnome_shell::is_gnome_wayland`): `XDG_SESSION_TYPE=wayland` and `XDG_CURRENT_DESKTOP` contains `GNOME` → extension backend, always. Anything else (macOS, X11, other desktops) → `tauri-plugin-global-shortcut` and the old placement path. Without the enabled extension on GNOME Wayland there are no shortcuts (`warn` log) and the context menu opens only from the tray, at the old, wrong position (`shell_placement: false`).
+- `org.gnome.Shell.Eval` is blocked since GNOME 41.
+- Backend selection (`services/gnome_shell::is_gnome_wayland`): `XDG_SESSION_TYPE=wayland` and `XDG_CURRENT_DESKTOP` contains `GNOME` → extension backend, always. Anything else (macOS, other desktops) → `tauri-plugin-global-shortcut` and the old placement path. Without the enabled extension on GNOME Wayland there are no shortcuts (`warn` log) and the context menu opens only from the tray, at the old, wrong position (`shell_placement: false`).
 
 ## D-Bus contract
 
@@ -51,7 +51,7 @@ Context menu placement:
 - GTK3 on Wayland creates the surface at `show()`, so the window does not exist for Mutter before it.
 - `gnome_shell::place_window(title, x, y, activate, Some(win))` puts the `PlaceWindow` call on the bus before `win.show()` and then awaits the reply. The extension waits up to 1000 ms for the window, keeps its compositor actor hidden (`opacity = 0`) until the first frame, then moves it, activates it when `activate` is set, and shows it. With `None` it only sends `PlaceWindow` to an already visible window. `place_context_menu_through_shell` calls it with `activate = first`.
 - A second `PlaceWindow` for the same title while the first still waits cancels the first (it returns `false`, logged at `warn`) and is handled on its own.
-- GTK `set_opacity` cannot do this: it writes an X11 atom and is X11-only (see [linux-webkit-opacity.md](linux-webkit-opacity.md)).
+- GTK `set_opacity` cannot do this: it has no effect on Wayland.
 - `GetPointer` supplies the cursor and work area; the frontend positions inside the work area and calls `place_context_menu` (see `src/lib/components/features/context-menu/DOCS.md`).
 
 Host-relative popups:
@@ -59,14 +59,13 @@ Host-relative popups:
 - The provider menu window (title `PROVIDER_MENU_TITLE`, unchanged) is one generic popup: it shows whatever `items` the `provider-menu:show` payload carries, serving the provider switcher and the strip's `+` and `+N` lists.
 - Provider menu offset is `(rect.left, rect.bottom + 4)` window-relative; palette and backdrop offset is `(0, TOOLBAR_HEIGHT)`, size host width × (H − 40), so the toolbar stays undimmed and clickable.
 - Without the extension the transient parent alone makes Mutter place them over the host.
-- `set_opacity` and `focus_window` are skipped there (no effect on Wayland).
 - On GNOME Wayland the shell animates the transient provider menu as `DIALOG` (`scale_y` 0↔1, 100 ms, pivot at the middle); the extension's `connect_after` handlers on `global.window_manager` `map` and `destroy` move the pivot to `(0.5, 0)` for the window titled `Promptheus Provider Menu`, so it unfolds from and folds into its trigger. This relies on the shell setting its pivot synchronously before the ease starts (GNOME Shell 50.1); other transient windows (palette, backdrop) keep the center pivot.
 
 Notification toasts:
 - On GNOME Wayland `commands/notification.rs::show_notification` calls `ShowToast` (async, proxy method `show_toast`) and does not touch the webview queue. The extension draws the toast as St actors in `Main.layoutManager.uiGroup`: not windows, never focused, non-reactive (no hover pause).
 - Durations are set in the extension (`TOAST_DURATIONS_MS`: success 2000, error 4000, info 2000, warning 3000 ms). The stack sits bottom-right in the work area of the monitor current when the stack went from empty to non-empty, newest at the bottom.
 - Each toast actor eases in and out with the values of GNOME Shell's window map/destroy animation for normal windows (`windowManager.js` `_mapWindow`/`_destroyWindow`): enter from pivot (0.5, 1.0), scale 0.01 × 0.05, opacity 0 to scale 1 and opacity 204 in 150 ms `EASE_OUT_EXPO`; exit at pivot (0.5, 0.5) to scale 0.8 and opacity 0 in 150 ms `EASE_OUT_QUAD`, after which the actor is destroyed and the remaining toasts move to their new place without animation.
-- A failed `ShowToast` call logs `warn` and shows that payload through the webview window path below. That path is also the only one on X11 and macOS.
+- A failed `ShowToast` call logs `warn` and shows that payload through the webview window path below. That path is also the only one on macOS.
 - Why actors: Mutter ignores the GTK3 `accept_focus` hint (`focusable(false)`) for Wayland clients and focuses the mapped notification window anyway, even with `activate=false`; focus returns only when `hide()` unmanages it.
 
 Recording widget:
@@ -81,7 +80,7 @@ Recording widget:
 - Pitfall: GNOME Shell's `actor.ease()` on an actor that is not mapped (for example a child of a box not yet added to the stage) creates no transition and calls `onStopped(true)` synchronously (`environment.js` copies Clutter's skip of implicit transitions for unmapped actors). The former processing spinner restarted its `ease` from `onStopped` while the icon's box was not yet added to the pill, so it recursed until `InternalError: too much recursion`; `UpdateRecordingWidget` threw before `add_child`, the pill stayed empty during processing, and the floating content was finalized, so the stored `widget.spinner` wrapper pointed at a disposed `St.Icon` and the transition to `done` logged `Object St.Icon (0x…), has been already disposed`. Do not loop an animation through `onStopped`; drive repeated animations with a timer (or a `Clutter.Timeline`) owned by the widget, and remove it before destroying its actors.
 - `ShowRecordingWidget` position is validated by the shell against the current monitors; outside every work area (or `has_position = false`) it uses the default, bottom center 24 px above the work area bottom of the pointer's monitor.
 - Hidden by `HideRecordingWidget`, when the bus name of the `SetShortcuts` caller vanishes, and in `disable()`.
-- Pitfall: Mutter's direct scanout (`find_candidate` in `meta-compositor-view-native.c`) puts the top window's buffer straight on the output when that window covers the whole monitor, without checking shell actors above windows; on a monitor without the top panel a maximized window covers it, so the pill and the toasts flickered or vanished there. GNOME Shell's own overlays (`osdWindow.js`, `messageTray.js`, `boxpointer.js`) call `global.compositor.disable_unredirect()` while shown; Mutter counts the calls and each needs exactly one `enable_unredirect()`. The extension disables once when `ShowRecordingWidget` builds the pill and enables once in `_removeRecordingWidget` (every hide path, `disable()` included); toasts disable when the stack goes from empty to non-empty and enable when `_removeToast` empties it or `_clearToasts` clears a non-empty stack. The dropdown and the chip preview live only while the pill exists and need no call of their own. Platform-forced difference: GNOME-only compositor workaround, nothing in `App.svelte` (X11 and macOS compositors draw the webview pill as a normal window).
+- Pitfall: Mutter's direct scanout (`find_candidate` in `meta-compositor-view-native.c`) puts the top window's buffer straight on the output when that window covers the whole monitor, without checking shell actors above windows; on a monitor without the top panel a maximized window covers it, so the pill and the toasts flickered or vanished there. GNOME Shell's own overlays (`osdWindow.js`, `messageTray.js`, `boxpointer.js`) call `global.compositor.disable_unredirect()` while shown; Mutter counts the calls and each needs exactly one `enable_unredirect()`. The extension disables once when `ShowRecordingWidget` builds the pill and enables once in `_removeRecordingWidget` (every hide path, `disable()` included); toasts disable when the stack goes from empty to non-empty and enable when `_removeToast` empties it or `_clearToasts` clears a non-empty stack. The dropdown and the chip preview live only while the pill exists and need no call of their own. Platform-forced difference: GNOME-only compositor workaround, nothing in `App.svelte` (the macOS compositor draws the webview pill as a normal window).
 - Rust side: `services/speech/widget.rs` (see `src-tauri/src/services/speech/DOCS.md`); position stored under `recording_widget.shell_position`. A failed `ShowRecordingWidget` makes the recording use toasts.
 
 Notification placement (webview window path):
@@ -90,13 +89,13 @@ Notification placement (webview window path):
 - The anchor is stored per title; a new `PlaceWindowAnchored` for the same title replaces it. It is released on the window's `unmanaged` signal: GTK3 on Wayland destroys the surface on `hide()`, so each show cycle is a new `MetaWindow` and a new `PlaceWindowAnchored`.
 - `.always_on_top(true)` in `setup/windows.rs` maps to GTK `keep_above`, which has no Wayland protocol under GTK3 (`xdg-shell` has no stacking request); on Wayland it does nothing.
 - The extension calls `make_above()` in `_anchorWindow` on every anchor, so the window stacks above app windows; every window placed with `PlaceWindowAnchored` is kept above. The window is `focusable(false)`; without `make_above` Mutter stacks it as a normal never-focused window under the focused app, and an occluded surface gets no frame callbacks (resize answered 20–30 s late).
-- `update_notification_window` on the extension path only calls `set_size`; the extension follows the resize. The X11/macOS path keeps `set_position` then `set_size`. `anchor_and_show` calls `set_size` (380 × `FIRST_SHOW_HEIGHT`) before showing, because after `hide()` the GTK window keeps its size from the previous cycle.
+- `update_notification_window` on the extension path only calls `set_size`; the extension follows the resize. The macOS path keeps `set_position` then `set_size`. `anchor_and_show` calls `set_size` (380 × `FIRST_SHOW_HEIGHT`) before showing, because after `hide()` the GTK window keeps its size from the previous cycle.
 - Why the anchor lives in the extension: the GTK client commits a new size asynchronously. A top-left computed in Rust from the requested height reached Mutter before or after the real resize, so the frame kept the old height at the new origin or the new height at the old origin, and the toast stack (anchored to the window bottom by Sonner `position="bottom-right"`) ended below the work area. Resizing before `PlaceWindow` did not fix it. Only the compositor knows the real frame size.
 - The notification drain closes every toast still live `DURATIONS[level] + 1500` ms after it showed (own timer per toast plus a sweep at the start of every `drainPending`) and logs a `warn` with the source (`timer`/`sweep`) and page state, because sonner timers have been seen to stall on GNOME Wayland (cause not yet known).
 - A toast paused under the pointer is closed the same way and also logs the `warn`.
 - The drain logs at `debug` the toast show/close lines (close with path `autoClose`/`dismiss`/`watchdog`), toaster mouse/pointer events, window focus/blur/keydown (`altKey` and whether the code is `KeyT` only, never the key) and `visibilitychange`; kept in the product for diagnosing a future stall.
 - `update_notification_window` logs at `debug` the toast count, requested logical height and either the extension anchor (bottom-right) or the computed origin.
-- `GetPointer` coordinates are logical stage pixels, so the shell anchor uses scale 1.0; the X11/macOS path keeps physical pixels and `set_position`.
+- `GetPointer` coordinates are logical stage pixels, so the shell anchor uses scale 1.0; the macOS path keeps physical pixels and `set_position`.
 - If the extension call fails (extension disabled), the show path logs at `warn` and falls back to `cursor_position` + `find_monitor_at` + `set_position`; Mutter ignores the position and places the toast itself.
 - `services/monitor.rs::find_monitor_at` falls back to the monitor under the cursor, then `primary_monitor()`, then the first of `available_monitors()`. On Wayland `cursor_position()` is not global and GDK reports no primary monitor; without the last fallback the notification never showed (`no monitor found`).
 
@@ -121,6 +120,4 @@ Debugging:
 
 ## Related
 
-- [linux-gtk-focus.md](linux-gtk-focus.md) — the X11 focus path.
-- [linux-webkit-opacity.md](linux-webkit-opacity.md) — X11-only window opacity.
 - `src-tauri/src/services/DOCS.md` — `gnome_shell` and hotkeys sections.
