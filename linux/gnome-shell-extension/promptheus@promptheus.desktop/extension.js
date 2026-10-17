@@ -1316,8 +1316,11 @@ export default class PromptheusExtension extends Extension {
         const titleWatches = [];
         let createdId = 0;
         let timeoutId = 0;
+        let found = null;
+        let unmanagedId = 0;
         let actor = null;
         let frameId = 0;
+        let laterId = 0;
         let done = false;
 
         const stopWatchingCreation = () => {
@@ -1339,6 +1342,10 @@ export default class PromptheusExtension extends Extension {
                 GLib.Source.remove(timeoutId);
                 timeoutId = 0;
             }
+            if (laterId)
+                global.compositor.get_laters().remove(laterId);
+            if (unmanagedId)
+                found.disconnect(unmanagedId);
             if (actor) {
                 if (frameId)
                     actor.disconnect(frameId);
@@ -1357,11 +1364,18 @@ export default class PromptheusExtension extends Extension {
                 finish(place(win) !== false);
                 return;
             }
+            found = win;
+            unmanagedId = win.connect('unmanaged', () => finish(false));
             actor.opacity = 0;
             frameId = actor.connect('first-frame', () => {
                 actor.disconnect(frameId);
                 frameId = 0;
-                finish(place(win) !== false);
+                // Restacking while Mutter paints a frame aborts the shell (assertion !priv->frame_in_progress).
+                laterId = global.compositor.get_laters().add(Meta.LaterType.BEFORE_REDRAW, () => {
+                    laterId = 0;
+                    finish(place(win) !== false);
+                    return GLib.SOURCE_REMOVE;
+                });
             });
         };
 
