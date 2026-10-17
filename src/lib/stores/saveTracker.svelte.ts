@@ -67,13 +67,6 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
     return "Autosaves on edit (⌘S to flush)";
   });
 
-  function markDirty() {
-    untrack(() => {
-      dirty = true;
-      ensureNowTimer();
-    });
-  }
-
   function scheduleSave(fn: PersistFn) {
     untrack(() => {
       pending = fn;
@@ -211,10 +204,6 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
     return detachBeforeUnload;
   }
 
-  function clearError() {
-    error = null;
-  }
-
   function setError(message: string) {
     error = message;
   }
@@ -255,26 +244,15 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
     get saving() {
       return saving;
     },
-    get recentlySaved() {
-      return recentlySaved;
-    },
-    get lastSavedAt() {
-      return lastSavedAt;
-    },
-    get debounceMs() {
-      return debounceMs;
-    },
     get hasPending() {
       return pendingFlag;
     },
-    markDirty,
     scheduleSave,
     cancel,
     flush,
     runAction,
     attachKeyboard,
     attachBeforeUnload,
-    clearError,
     setError,
     destroy,
   };

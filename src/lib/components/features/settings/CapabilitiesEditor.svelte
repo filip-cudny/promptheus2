@@ -36,7 +36,7 @@
 
   let allowedSet = $derived.by<Set<ReasoningLevel>>(() => {
     if (capabilities?.reasoning.kind !== "effort") return new Set();
-    return new Set(capabilities.reasoning.allowed as ReasoningLevel[]);
+    return new Set(capabilities.reasoning.allowed);
   });
 
   let budgetMin = $derived<number>(

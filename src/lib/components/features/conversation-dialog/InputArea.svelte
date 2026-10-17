@@ -16,7 +16,6 @@
   import { handleEditablePaste } from "$lib/utils/paste";
   import { formatTokenCount } from "$lib/utils/contextWindow";
   import { focusConversationInput, setConversationInputFocus } from "$lib/utils/conversationFocus";
-  import { ICON_SIZE } from "$lib/constants/ui";
   import type { createConversationStore } from "$lib/stores/conversation.svelte";
   import type { ConversationImage } from "$lib/types/conversation";
   import type { ModelConfig } from "$lib/types";

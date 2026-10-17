@@ -52,7 +52,7 @@
   let availableLevels = $derived.by<ReasoningLevel[]>(() => {
     const reasoning = currentCapabilities?.reasoning;
     if (!reasoning || reasoning.kind !== "effort") return [];
-    const allowed = reasoning.allowed as ReasoningLevel[];
+    const allowed = reasoning.allowed;
     return allowed.includes("none") ? allowed : ["none", ...allowed];
   });
 

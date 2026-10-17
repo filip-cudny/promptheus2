@@ -3,11 +3,11 @@ import type {
   AppliedSkill,
   StreamEvent,
   ConversationNodeForExecution,
-  ImageData,
   ToolCall,
 } from "$lib/types/ai";
 
 import type { NodeUpdate } from "$lib/types/ai";
+import type { ConversationImage } from "$lib/types/conversation";
 import type { InvocationSource } from "$lib/types/history";
 
 export interface TokenUsageData {
@@ -103,7 +103,7 @@ export async function executeConversationFromTree(
   callbacks: ExecutionCallbacks,
   options: {
     contextText?: string;
-    contextImages?: ImageData[];
+    contextImages?: ConversationImage[];
     tabId: string;
     modelId?: string;
     reasoningEffort?: string;

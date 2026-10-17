@@ -153,9 +153,6 @@ export function getHistorySearchStore(opts: HistorySearchStoreOptions) {
     set timeRange(v: TimeRangePreset) {
       timeRange = v;
     },
-    get dateFrom() {
-      return dateFrom;
-    },
     get results() {
       return response.results;
     },

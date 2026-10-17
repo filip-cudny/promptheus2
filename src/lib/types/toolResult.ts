@@ -22,11 +22,6 @@ export interface ToolHint {
   diagnostics?: Record<string, string>;
 }
 
-export interface ToolEnvelope<T = unknown> {
-  data: T;
-  hint: ToolHint;
-}
-
 export type ParsedToolResult =
   | { kind: "empty" }
   | { kind: "envelope"; hint: ToolHint; data: unknown }

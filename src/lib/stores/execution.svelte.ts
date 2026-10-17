@@ -5,9 +5,7 @@ import { executeSkill } from "$lib/services/promptExecution";
 import type { InvocationSource } from "$lib/types/history";
 
 let _isExecuting = $state(false);
-let _executionId = $state<string | null>(null);
 let _executingSkillId = $state<string | null>(null);
-let _streamedContent = $state("");
 
 let unlistenStarted: (() => void) | null = null;
 let unlistenCompleted: (() => void) | null = null;
@@ -17,16 +15,8 @@ function isExecuting(): boolean {
   return _isExecuting;
 }
 
-function getExecutionId(): string | null {
-  return _executionId;
-}
-
 function getExecutingSkillId(): string | null {
   return _executingSkillId;
-}
-
-function getStreamedContent(): string {
-  return _streamedContent;
 }
 
 async function startExecution(
@@ -35,21 +25,15 @@ async function startExecution(
   inputOverride?: string,
 ): Promise<void> {
   _executingSkillId = skillName;
-  _streamedContent = "";
 
   try {
     await executeSkill(
       skillName,
       {
-        onChunk: (_delta, accumulated) => {
-          _streamedContent = accumulated;
-        },
-        onDone: (_fullText) => {
-          _streamedContent = "";
-        },
+        onChunk: () => {},
+        onDone: () => {},
         onError: (message) => {
           logError("Prompt execution error: " + message);
-          _streamedContent = "";
         },
       },
       invocationSource,
@@ -69,19 +53,11 @@ async function cancelExecution(): Promise<boolean> {
   }
 }
 
-function resetExecution() {
-  _isExecuting = false;
-  _executionId = null;
-  _executingSkillId = null;
-  _streamedContent = "";
-}
-
 async function init() {
   unlistenStarted = await listen<{ execution_id: string; skill_id?: string }>(
     "execution-started",
     (event) => {
       _isExecuting = true;
-      _executionId = event.payload.execution_id;
       if (event.payload.skill_id) {
         _executingSkillId = event.payload.skill_id;
       }
@@ -95,9 +71,7 @@ async function init() {
     cancelled: boolean;
   }>("execution-completed", () => {
     _isExecuting = false;
-    _executionId = null;
     _executingSkillId = null;
-    _streamedContent = "";
   });
 
   unlistenAlternativeExecute = await listen<{
@@ -129,12 +103,9 @@ function destroy() {
 
 export {
   isExecuting,
-  getExecutionId,
   getExecutingSkillId,
-  getStreamedContent,
   startExecution,
   cancelExecution,
-  resetExecution,
   init,
   destroy,
 };

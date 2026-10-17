@@ -95,7 +95,7 @@ Renders when `item.item_type === "context"`. Extracts `ContextItem[]` from `item
 
 Action buttons are always visible (not gated by empty state) since Replace/Append/Edit are useful even with no context.
 
-The context store (`$lib/stores/context.svelte.ts`) is initialized in `src/windows/context-menu/App.svelte` so the section updates reactively via the `"context-changed"` Tauri event.
+The section updates reactively because `contextMenu.svelte.ts` refetches the menu items on the `"context-changed"` Tauri event.
 
 ### Skill list
 
@@ -107,7 +107,7 @@ When a `skill` item is clicked, the context menu store intercepts it (instead of
 
 During execution, skill items are disabled. The store applies this by overlaying `enabled: false` on skill items when `isExecuting()` is true (in `contextMenu.svelte.ts`). On `execution-completed`, the store refreshes items so they re-enable on next open.
 
-The execution store is initialized in `src/windows/context-menu/App.svelte` alongside the context store.
+The execution store is initialized in `src/windows/context-menu/App.svelte`.
 
 ### LastInteractionSection (`LastInteractionSection.svelte`)
 

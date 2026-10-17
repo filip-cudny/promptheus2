@@ -57,14 +57,7 @@
     if (searchStore.loading) return null;
     if (store.entries.length === 0) return "no-history";
     if (searchStore.query.trim() !== "") return "no-query-match";
-    if (
-      searchStore.typeFilter !== "all" ||
-      searchStore.statusFilter !== "all" ||
-      searchStore.skillFilter.size > 0 ||
-      searchStore.timeRange !== "all"
-    ) {
-      return "no-filter-match";
-    }
+    if (searchStore.hasActiveFilters) return "no-filter-match";
     return "no-history";
   });
 

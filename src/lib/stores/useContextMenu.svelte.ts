@@ -17,7 +17,6 @@ import {
   startAlternativeExecution,
   handleNumberInput,
   getAllSkillItems,
-  getSkillItems,
   openDialogForItem,
   refreshItems,
   init,
@@ -46,9 +45,6 @@ export function useContextMenu() {
     },
     get allSkillItems() {
       return getAllSkillItems();
-    },
-    get skillItems() {
-      return getSkillItems();
     },
     setSelectedIndex,
     closeMenu,

@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
-  import { debug as logDebug } from "@tauri-apps/plugin-log";
   import type { MenuItem } from "$lib/types/menu";
   import {
     extractContextItems,

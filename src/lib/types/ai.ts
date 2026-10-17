@@ -1,8 +1,9 @@
-export type Effort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+import type { ReasoningLevel } from "$lib/constants/models";
+import type { ConversationImage } from "$lib/types/conversation";
 
 export type ReasoningMode =
   | { kind: "unsupported" }
-  | { kind: "effort"; allowed: Effort[] }
+  | { kind: "effort"; allowed: ReasoningLevel[] }
   | { kind: "budget_tokens"; min: number; max: number }
   | { kind: "toggle" };
 
@@ -39,12 +40,6 @@ export type StreamEvent =
   | { event: "tool_call_start"; data: { tool_call: ToolCall } }
   | { event: "tool_call_done"; data: { tool_call_id: string; result: string | null; error: string | null } };
 
-export interface ImageData {
-  data: string;
-  media_type: string;
-  number?: number;
-}
-
 export interface AppliedSkill {
   name: string;
   skill_version_id: number;
@@ -55,7 +50,7 @@ export interface ConversationNodeForExecution {
   node_id: string;
   role: string;
   content: string;
-  images: ImageData[];
+  images: ConversationImage[];
   text_attachments: string[];
   updates: NodeUpdate[];
   applied_skills: AppliedSkill[];

@@ -50,10 +50,6 @@ const _allSkillItems = $derived(
   _items.filter((item) => item.item_type === "skill"),
 );
 
-const _skillItems = $derived(
-  _allSkillItems.filter((item) => item.enabled),
-);
-
 function getItems(): MenuItem[] {
   return _items;
 }
@@ -381,17 +377,8 @@ function handleNumberInput(digit: string, isAlternative: boolean) {
   }, NUMBER_DEBOUNCE_MS);
 }
 
-function clearNumberBuffer() {
-  if (numberTimer) clearTimeout(numberTimer);
-  numberBuffer = "";
-}
-
 function getAllSkillItems(): MenuItem[] {
   return _allSkillItems;
-}
-
-function getSkillItems(): MenuItem[] {
-  return _skillItems;
 }
 
 async function refreshItems() {
@@ -537,9 +524,7 @@ export {
   executeSelected,
   startAlternativeExecution,
   handleNumberInput,
-  clearNumberBuffer,
   getAllSkillItems,
-  getSkillItems,
   openDialogForItem,
   refreshItems,
   init,

@@ -9,8 +9,6 @@ export const REASONING_LEVELS: readonly ReasoningLevel[] = [
   "xhigh",
 ];
 
-export const KNOWN_REASONING_EFFORTS: readonly ReasoningLevel[] = REASONING_LEVELS;
-
 export const REASONING_LEVEL_LABELS: Record<ReasoningLevel, string> = {
   none: "None",
   minimal: "Minimal",

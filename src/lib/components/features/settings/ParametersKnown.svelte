@@ -48,7 +48,7 @@
     const reasoning = capabilities?.reasoning;
     const allowed =
       reasoning?.kind === "effort"
-        ? (reasoning.allowed as ReasoningLevel[])
+        ? reasoning.allowed
         : [...REASONING_LEVELS];
     return allowed.includes("none") ? allowed : ["none", ...allowed];
   });
