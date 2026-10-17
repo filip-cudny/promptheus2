@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use rmcp::model::{CallToolRequestParams, CallToolResult, Tool};
-use rmcp::service::RunningService;
+use rmcp::service::{Peer, RunningService};
 use rmcp::transport::child_process::TokioChildProcess;
 use rmcp::ServiceExt;
 use serde_json::Value;
@@ -20,7 +20,8 @@ pub enum McpError {
 }
 
 pub struct McpClient {
-    service: RunningService<rmcp::RoleClient, ()>,
+    peer: Peer<rmcp::RoleClient>,
+    service: tokio::sync::Mutex<RunningService<rmcp::RoleClient, ()>>,
     server_name: String,
     default_timeout: Duration,
     tool_timeouts: HashMap<String, Duration>,
@@ -60,7 +61,8 @@ impl McpClient {
         log::info!("MCP server '{}' started (timeout: {}s)", server_name, timeout_secs);
 
         Ok(Self {
-            service,
+            peer: service.peer().clone(),
+            service: tokio::sync::Mutex::new(service),
             server_name: server_name.to_string(),
             default_timeout: Duration::from_secs(timeout_secs),
             tool_timeouts: tool_timeouts
@@ -72,8 +74,7 @@ impl McpClient {
 
     pub async fn list_tools(&self) -> Result<Vec<Tool>, McpError> {
         let tools = self
-            .service
-            .peer()
+            .peer
             .list_all_tools()
             .await
             .map_err(|e| McpError::Service(e.to_string()))?;
@@ -100,7 +101,7 @@ impl McpClient {
         let timeout = self.tool_timeouts.get(name).copied().unwrap_or(self.default_timeout);
         let params = CallToolRequestParams::new(name.to_string()).with_arguments(args_map);
 
-        let result = tokio::time::timeout(timeout, self.service.peer().call_tool(params))
+        let result = tokio::time::timeout(timeout, self.peer.call_tool(params))
             .await
             .map_err(|_| McpError::Timeout {
                 server: self.server_name.clone(),
@@ -118,9 +119,16 @@ impl McpClient {
         Ok(result)
     }
 
-    pub async fn shutdown(self) {
-        log::info!("MCP server '{}' shutting down", self.server_name);
-        drop(self.service);
+    pub async fn close(&self, timeout: Duration) {
+        match self.service.lock().await.close_with_timeout(timeout).await {
+            Ok(Some(_)) => log::info!("MCP server '{}' closed", self.server_name),
+            Ok(None) => log::warn!(
+                "MCP server '{}' did not close within {:?}",
+                self.server_name,
+                timeout
+            ),
+            Err(e) => log::warn!("MCP server '{}' close failed: {}", self.server_name, e),
+        }
     }
 }
 
@@ -246,6 +254,6 @@ mod tests {
         };
         assert_eq!(text, "hello from promptheus");
 
-        client.shutdown().await;
+        client.close(Duration::from_secs(2)).await;
     }
 }

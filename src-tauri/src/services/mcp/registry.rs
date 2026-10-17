@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Duration;
 
 use rmcp::model::{CallToolResult, Tool};
 use serde_json::Value;
@@ -122,10 +123,18 @@ impl McpRegistry {
         client.call_tool(raw_name, arguments).await
     }
 
-    pub async fn shutdown_all(self) {
-        for (name, client) in self.servers {
-            log::info!("Shutting down MCP server '{}'", name);
-            client.shutdown().await;
-        }
+    pub async fn close_all(&self, timeout: Duration) {
+        futures::future::join_all(self.servers.values().map(|client| client.close(timeout))).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn close_all_on_empty_registry_returns() {
+        let registry = McpRegistry::start_all(&HashMap::new()).await;
+        registry.close_all(Duration::from_secs(2)).await;
     }
 }

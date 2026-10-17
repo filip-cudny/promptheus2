@@ -66,6 +66,20 @@ pub fn run() {
                 });
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                close_mcp_servers(app);
+            }
+        });
+}
+
+fn close_mcp_servers(app: &tauri::AppHandle) {
+    let Some(registry) = app.try_state::<Arc<services::mcp::McpRegistry>>() else {
+        return;
+    };
+    log::info!("Closing MCP servers");
+    tauri::async_runtime::block_on(registry.close_all(tokio::time::Duration::from_secs(2)));
+    log::info!("MCP servers closed");
 }
