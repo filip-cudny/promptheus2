@@ -54,33 +54,6 @@ pub async fn get_history_entry(
 }
 
 #[tauri::command]
-pub async fn add_history_entry(
-    app: AppHandle,
-    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
-    input_content: String,
-    entry_type: HistoryEntryType,
-    output_content: Option<String>,
-    skill_id: Option<String>,
-    success: bool,
-    error: Option<String>,
-    is_multi_turn: bool,
-    skill_name: Option<String>,
-) -> crate::Result<()> {
-    let added_id = history.lock().await.add_entry(
-        input_content,
-        entry_type,
-        output_content,
-        skill_id,
-        success,
-        error,
-        is_multi_turn,
-        skill_name,
-        false,
-    );
-    emit_history_changed(&app, added_id, None)
-}
-
-#[tauri::command]
 pub async fn add_conversation_entry(
     app: AppHandle,
     history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
@@ -184,21 +157,6 @@ pub async fn delete_history_entry(
 ) -> crate::Result<()> {
     history.lock().await.delete_entry(&entry_id)?;
     emit_history_changed(&app, None, Some(entry_id))
-}
-
-#[tauri::command]
-pub async fn clear_history(
-    app: AppHandle,
-    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
-) -> crate::Result<()> {
-    {
-        let history = history.lock().await;
-        tokio::task::block_in_place(|| {
-            history.clear();
-            history.compact_after_bulk_delete();
-        });
-    }
-    emit_history_changed(&app, None, None)
 }
 
 #[tauri::command]

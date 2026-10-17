@@ -11,7 +11,7 @@ pub use prompts::{PromptKind, PromptStore};
 use std::path::{Path, PathBuf};
 
 use crate::models::settings::{
-    KeymapGroup, ModelConfig, NotificationSettings, Settings, SpeechToTextConfig,
+    ModelConfig, NotificationSettings, Settings, SpeechToTextConfig,
 };
 
 use path::resolve_config_relative;
@@ -347,14 +347,6 @@ impl ConfigService {
             .models
             .iter()
             .find(|m| m.id == id && m.is_stt())
-    }
-
-    pub fn update_keymaps(&mut self, keymaps: Vec<KeymapGroup>) {
-        self.settings.keymaps = keymaps;
-    }
-
-    pub fn update_menu_section_order(&mut self, order: Vec<String>) {
-        self.settings.menu_section_order = order;
     }
 
     pub fn update_skills_order(&mut self, order: Vec<String>) {

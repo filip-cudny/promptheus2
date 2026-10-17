@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   HistoryEntry,
-  HistoryEntryType,
   InvocationSource,
   ImagePayload,
   SerializedConversationNode,
@@ -24,19 +23,6 @@ export async function getHistoryEntry(
   entryId: string,
 ): Promise<HistoryEntry | null> {
   return invoke("get_history_entry", { entryId });
-}
-
-export async function addHistoryEntry(params: {
-  inputContent: string;
-  entryType: HistoryEntryType;
-  outputContent: string | null;
-  skillId: string | null;
-  success: boolean;
-  error: string | null;
-  isMultiTurn: boolean;
-  skillName: string | null;
-}): Promise<void> {
-  return invoke("add_history_entry", params);
 }
 
 export async function addConversationEntry(params: {
@@ -93,10 +79,6 @@ export async function getHistoryStorageStats(): Promise<HistoryStorageStats> {
 
 export async function compactHistoryDatabase(): Promise<HistoryStorageStats> {
   return invoke("compact_history_database");
-}
-
-export async function clearHistory(): Promise<void> {
-  return invoke("clear_history");
 }
 
 export type LastInteractionChip = "input" | "output" | "transcription";

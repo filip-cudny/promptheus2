@@ -21,14 +21,6 @@ export async function getSkill(name: string): Promise<Skill> {
   return invoke("get_skill", { name });
 }
 
-export async function getSkillBody(name: string): Promise<string> {
-  return invoke("get_skill_body", { name });
-}
-
-export async function reloadSkills(): Promise<void> {
-  return invoke("reload_skills");
-}
-
 export async function validateSkillSlug(slug: string): Promise<SlugValidation> {
   return invoke("validate_skill_slug", { slug });
 }

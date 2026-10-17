@@ -30,7 +30,3 @@ export function invalidateCapabilities(modelId: string): void {
   delete next[modelId];
   cache = next;
 }
-
-export function clearCapabilitiesCache(): void {
-  cache = {};
-}

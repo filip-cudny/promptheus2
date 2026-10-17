@@ -85,12 +85,6 @@ impl MenuCoordinator {
         &mut self.providers
     }
 
-    pub fn refresh_all(&mut self) {
-        for provider in &mut self.providers {
-            provider.refresh();
-        }
-    }
-
     fn build_provider_items(&self, section_id: &str) -> Vec<MenuItem> {
         let provider_name = resolve_provider_name(section_id);
         for provider in &self.providers {
@@ -278,8 +272,6 @@ mod tests {
         fn get_menu_items(&self) -> Vec<MenuItem> {
             self.items.clone()
         }
-
-        fn refresh(&mut self) {}
 
         fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
             self

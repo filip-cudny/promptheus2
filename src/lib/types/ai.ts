@@ -39,21 +39,6 @@ export type StreamEvent =
   | { event: "tool_call_start"; data: { tool_call: ToolCall } }
   | { event: "tool_call_done"; data: { tool_call_id: string; result: string | null; error: string | null } };
 
-export interface ImageUrlData {
-  url: string;
-}
-
-export type ContentPart =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: ImageUrlData };
-
-export type MessageContent = string | ContentPart[];
-
-export interface ProcessedMessage {
-  role: string;
-  content: MessageContent;
-}
-
 export interface ImageData {
   data: string;
   media_type: string;

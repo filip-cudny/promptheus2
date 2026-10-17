@@ -9,11 +9,3 @@ export interface WebviewProvider {
 export async function getWebviewProviders(): Promise<WebviewProvider[]> {
   return await invoke<WebviewProvider[]>("get_webview_providers");
 }
-
-export async function getWebviewProvider(
-  providerId: string,
-): Promise<WebviewProvider | null> {
-  return await invoke<WebviewProvider | null>("get_webview_provider", {
-    providerId,
-  });
-}

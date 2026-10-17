@@ -1,10 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 
-export interface ShellProvider {
-  id: string;
-  name: string;
-}
-
 export interface ProviderMenuItem {
   id: string;
   kind: "provider" | "tab";
@@ -14,7 +9,6 @@ export interface ProviderMenuItem {
 }
 
 export const PROMPTHEUS_PROVIDER_ID = "promptheus";
-export const CONVERSATION_DIALOG_LABEL = "conversation-dialog";
 
 export async function openPalette(hostLabel: string): Promise<void> {
   await invoke("open_palette", { hostLabel });

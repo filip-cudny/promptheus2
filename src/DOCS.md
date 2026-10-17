@@ -46,7 +46,7 @@ Adding a new window:
 
 ### Services (IPC Layer)
 
-- `lib/services/` has one file per domain (`settings.ts`, `history.ts`, `ai.ts`, …) wrapping `invoke()` with typed signatures.
+- `lib/services/` has one file per domain (`settings.ts`, `history.ts`, `skills.ts`, …) wrapping `invoke()` with typed signatures.
 - Components call services, not `invoke()`; this keeps the IPC boundary explicit. Preference, not enforced: direct calls exist in `ContextMenu.svelte`, `shared/widgets/ContextEditor.svelte`, `ContextEditorView.svelte`, `windows/provider-menu/App.svelte`, `windows/recording-widget/App.svelte` and `windows/conversation-dialog/App.svelte` (`get_dialog_init_params`).
 
 ### Types
@@ -54,12 +54,6 @@ Adding a new window:
 - `lib/types/` mirrors Rust serializable structs; update it when adding a Rust command or struct.
 - Mirrors use the default serde field names (snake_case), so the TypeScript fields are snake_case too. Exception: `types/toolResult.ts` is camelCase.
 - The `$lib` alias resolves to `src/lib/` (configured in `vite.config.ts` and `tsconfig.json`).
-
-### Services (AI)
-
-- `lib/services/ai.ts` — `complete()` for one-shot completions, `completeStream()` for streaming.
-- Streaming uses Tauri 2 `Channel` from `@tauri-apps/api/core` — not global event listeners.
-- `completeStream()` accepts a callbacks object (`onChunk`, `onDone`, `onError`). The Channel dispatches `StreamEvent` messages by their `event` tag.
 
 ### Services (History)
 

@@ -17,14 +17,6 @@ export async function hasContext(): Promise<boolean> {
   return invoke("has_context");
 }
 
-export async function hasContextImages(): Promise<boolean> {
-  return invoke("has_context_images");
-}
-
-export async function setContext(value: string): Promise<void> {
-  return invoke("set_context", { value });
-}
-
 export async function appendContext(value: string): Promise<void> {
   return invoke("append_context", { value });
 }
@@ -35,13 +27,6 @@ export async function clearContext(): Promise<void> {
 
 export async function removeContextItem(index: number): Promise<boolean> {
   return invoke("remove_context_item", { index });
-}
-
-export async function setContextImage(
-  data: string,
-  mediaType: string,
-): Promise<void> {
-  return invoke("set_context_image", { data, mediaType });
 }
 
 export async function appendContextImage(

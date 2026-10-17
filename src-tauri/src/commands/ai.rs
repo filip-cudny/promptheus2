@@ -1,14 +1,9 @@
 use std::sync::Arc;
 
-use tauri::ipc::Channel;
 use tauri::State;
 use tokio::sync::Mutex;
-use tokio_stream::StreamExt;
 
-use crate::models::ai::StreamEvent;
 use crate::models::capabilities::ModelCapabilities;
-use crate::models::message::ProcessedMessage;
-use crate::services::ai::AiService;
 use crate::services::config::ConfigService;
 use crate::services::ai::capabilities::resolve;
 
@@ -25,76 +20,4 @@ pub async fn get_model_capabilities(
         .find(|m| m.id == model_id)
         .ok_or_else(|| crate::services::ai::AiError::ModelNotFound(model_id.clone()))?;
     Ok(resolve(model))
-}
-
-#[tauri::command]
-pub async fn complete(
-    ai: State<'_, Arc<Mutex<AiService>>>,
-    model_id: String,
-    messages: Vec<ProcessedMessage>,
-) -> crate::Result<String> {
-    let ai = ai.lock().await.clone();
-    Ok(ai.complete(&model_id, messages).await?)
-}
-
-#[tauri::command]
-pub async fn complete_stream(
-    ai: State<'_, Arc<Mutex<AiService>>>,
-    model_id: String,
-    messages: Vec<ProcessedMessage>,
-    on_event: Channel<StreamEvent>,
-) -> crate::Result<()> {
-    let ai = ai.lock().await.clone();
-    let mut stream = ai
-        .complete_stream(&model_id, messages, None, None, vec![])
-        .await?;
-
-    let mut full_text = String::new();
-    let mut full_thinking = String::new();
-    let mut prompt_tokens: Option<usize> = None;
-    let mut completion_tokens: Option<usize> = None;
-
-    while let Some(result) = stream.next().await {
-        match result {
-            Ok(chunk) => {
-                if let Some(usage) = chunk.usage {
-                    prompt_tokens = Some(usage.prompt_tokens);
-                    completion_tokens = Some(usage.completion_tokens);
-                }
-                let has_content = !chunk.delta.is_empty() || chunk.thinking_delta.is_some();
-                if has_content {
-                    full_text.clone_from(&chunk.accumulated);
-                    if let Some(ref acc) = chunk.accumulated_thinking {
-                        full_thinking.clone_from(acc);
-                    }
-                    if on_event
-                        .send(StreamEvent::Chunk {
-                            delta: chunk.delta,
-                            accumulated: chunk.accumulated,
-                            thinking_delta: chunk.thinking_delta,
-                            accumulated_thinking: chunk.accumulated_thinking,
-                        })
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
-            }
-            Err(e) => {
-                let _ = on_event.send(StreamEvent::Error {
-                    message: e.to_string(),
-                });
-                return Err(e.into());
-            }
-        }
-    }
-
-    let thinking = if full_thinking.is_empty() { None } else { Some(full_thinking) };
-    let _ = on_event.send(StreamEvent::Done {
-        full_text,
-        full_thinking: thinking,
-        prompt_tokens,
-        completion_tokens,
-    });
-    Ok(())
 }

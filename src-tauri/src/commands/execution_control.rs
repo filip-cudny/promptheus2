@@ -22,17 +22,6 @@ pub async fn cancel_live_execution(
 }
 
 #[tauri::command]
-pub async fn get_executing_skill_id(
-    prompt_execution: State<'_, Arc<Mutex<PromptExecutionService>>>,
-) -> crate::Result<Option<String>> {
-    Ok(prompt_execution
-        .lock()
-        .await
-        .executing_skill_id()
-        .map(|s| s.to_string()))
-}
-
-#[tauri::command]
 pub async fn reconnect_to_execution(
     prompt_execution: State<'_, Arc<Mutex<PromptExecutionService>>>,
     on_event: Channel<StreamEvent>,

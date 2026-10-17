@@ -3,7 +3,6 @@ import type {
   Settings,
   ModelConfig,
   NotificationSettings,
-  KeymapGroup,
   SurfaceKind,
   SpeechToTextConfig,
 } from "$lib/types";
@@ -86,18 +85,4 @@ export async function updateNotifications(
 
 export async function updateHistoryRetention(days: number): Promise<void> {
   return invoke("update_history_retention", { days });
-}
-
-export async function updateKeymaps(keymaps: KeymapGroup[]): Promise<void> {
-  return invoke("update_keymaps", { keymaps });
-}
-
-export async function updateMenuSectionOrder(
-  order: string[],
-): Promise<void> {
-  return invoke("update_menu_section_order", { order });
-}
-
-export async function reloadSettings(): Promise<void> {
-  return invoke("reload_settings");
 }

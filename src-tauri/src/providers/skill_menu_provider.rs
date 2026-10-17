@@ -44,8 +44,6 @@ impl MenuItemProvider for SkillMenuProvider {
             .collect()
     }
 
-    fn refresh(&mut self) {}
-
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }

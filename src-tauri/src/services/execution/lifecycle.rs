@@ -62,6 +62,7 @@ impl PromptExecutionService {
         self.skill_executing
     }
 
+    #[cfg(test)]
     pub fn executing_skill_id(&self) -> Option<&str> {
         self.executing_skill_id.as_deref()
     }

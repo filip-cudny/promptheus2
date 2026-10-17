@@ -30,12 +30,9 @@ macro_rules! handlers {
     () => {
         tauri::generate_handler![
             // === ai ===
-            $crate::commands::ai::complete,
-            $crate::commands::ai::complete_stream,
             $crate::commands::ai::get_model_capabilities,
             // === ai_webview ===
             $crate::commands::ai_webview::get_webview_providers,
-            $crate::commands::ai_webview::get_webview_provider,
             $crate::commands::ai_webview::reload_active_in_host,
             $crate::commands::ai_webview::open_palette,
             $crate::commands::ai_webview::close_palette,
@@ -57,12 +54,9 @@ macro_rules! handlers {
             $crate::commands::context::get_context_text,
             $crate::commands::context::get_labelled_context,
             $crate::commands::context::has_context,
-            $crate::commands::context::has_context_images,
-            $crate::commands::context::set_context,
             $crate::commands::context::append_context,
             $crate::commands::context::clear_context,
             $crate::commands::context::remove_context_item,
-            $crate::commands::context::set_context_image,
             $crate::commands::context::append_context_image,
             $crate::commands::context::set_context_from_clipboard,
             $crate::commands::context::append_context_from_clipboard,
@@ -77,7 +71,6 @@ macro_rules! handlers {
             // === execution_stream ===
             $crate::commands::execution_stream::execute_skill,
             $crate::commands::execution_stream::execute_conversation_from_tree,
-            $crate::commands::execution_stream::resolve_environment_section,
             $crate::commands::execution_stream::release_conversation_context,
             $crate::commands::execution_stream::seed_conversation_context,
             $crate::commands::execution_stream::resolve_skill_input,
@@ -85,19 +78,16 @@ macro_rules! handlers {
             $crate::commands::execution_control::reconnect_to_execution,
             $crate::commands::execution_control::cancel_skill_execution,
             $crate::commands::execution_control::cancel_live_execution,
-            $crate::commands::execution_control::get_executing_skill_id,
             // === execution_generation ===
             $crate::commands::execution_generation::generate_conversation_title,
             // === history ===
             $crate::commands::history::get_history,
             $crate::commands::history::get_conversations,
             $crate::commands::history::get_history_entry,
-            $crate::commands::history::add_history_entry,
             $crate::commands::history::add_conversation_entry,
             $crate::commands::history::update_conversation_entry,
             $crate::commands::history::get_last_interaction,
             $crate::commands::history::delete_history_entry,
-            $crate::commands::history::clear_history,
             $crate::commands::history::get_history_storage_stats,
             $crate::commands::history::compact_history_database,
             $crate::commands::history::copy_last_interaction,
@@ -116,8 +106,6 @@ macro_rules! handlers {
             // === menu ===
             $crate::commands::menu::get_context_menu_items,
             $crate::commands::menu::execute_menu_item,
-            $crate::commands::menu::refresh_menu_providers,
-            $crate::commands::menu::show_context_menu_window,
             $crate::commands::menu::show_context_menu_panel,
             $crate::commands::menu::place_context_menu,
             $crate::commands::menu::clamp_menu_origin,
@@ -127,7 +115,6 @@ macro_rules! handlers {
             $crate::commands::notification::update_notification_window,
             $crate::commands::notification::drain_pending_notifications,
             // === prompts ===
-            $crate::commands::prompts::list_prompts,
             $crate::commands::prompts::get_prompt,
             $crate::commands::prompts::save_prompt,
             $crate::commands::prompts::get_environment_placeholders,
@@ -148,9 +135,6 @@ macro_rules! handlers {
             $crate::commands::settings::delete_model,
             $crate::commands::settings::update_notifications,
             $crate::commands::settings::update_history_retention,
-            $crate::commands::settings::update_keymaps,
-            $crate::commands::settings::update_menu_section_order,
-            $crate::commands::settings::reload_settings,
             // === settings_sync ===
             $crate::commands::settings_sync::get_settings_sync_status,
             $crate::commands::settings_sync::sync_settings_now,
@@ -161,8 +145,6 @@ macro_rules! handlers {
             $crate::commands::skills::list_skills,
             $crate::commands::skills::list_skills_full,
             $crate::commands::skills::get_skill,
-            $crate::commands::skills::get_skill_body,
-            $crate::commands::skills::reload_skills,
             $crate::commands::skills::create_skill,
             $crate::commands::skills::update_skill,
             $crate::commands::skills::delete_skill,

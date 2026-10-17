@@ -18,17 +18,6 @@ pub struct PromptDoc {
 }
 
 #[tauri::command]
-pub async fn list_prompts(
-    config: State<'_, Arc<Mutex<ConfigService>>>,
-) -> crate::Result<Vec<PromptDoc>> {
-    let config = config.lock().await;
-    Ok(PromptKind::ALL
-        .iter()
-        .map(|kind| build_prompt_doc(&config, *kind))
-        .collect())
-}
-
-#[tauri::command]
 pub async fn get_prompt(
     config: State<'_, Arc<Mutex<ConfigService>>>,
     kind: PromptKind,

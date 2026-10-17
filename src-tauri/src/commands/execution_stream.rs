@@ -14,11 +14,9 @@ use crate::services::context::ContextManagerService;
 use crate::services::conversation_context::ConversationContextCache;
 use crate::services::execution::conversation_executor::ConversationExecutor;
 use crate::services::execution::skill_executor::run_skill_stream;
-use crate::services::execution::system_prompt::resolve_environment_section_template;
 use crate::services::execution::PromptExecutionService;
 use crate::services::mcp::McpRegistry;
 use crate::services::notification::NotificationService;
-use crate::services::placeholder_registry::PlaceholderContext;
 use crate::services::recent_apps::RecentAppsState;
 use crate::services::skill::SkillService;
 use crate::services::skill_message;
@@ -104,20 +102,6 @@ pub async fn execute_conversation_from_tree(
         on_event,
     )
     .await
-}
-
-#[tauri::command]
-pub async fn resolve_environment_section(
-    config: State<'_, Arc<Mutex<ConfigService>>>,
-    recent_apps: State<'_, Arc<RecentAppsState>>,
-) -> crate::Result<String> {
-    let active_app = recent_apps.active().await;
-    let recent_apps_display = recent_apps.display().await;
-    let ctx = PlaceholderContext::with_apps(active_app, recent_apps_display);
-    Ok(resolve_environment_section_template(
-        &*config.lock().await,
-        &ctx,
-    ))
 }
 
 #[tauri::command]

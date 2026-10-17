@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 use crate::models::settings::{
-    KeymapGroup, ModelConfig, NotificationSettings, Settings, SpeechToTextConfig,
+    ModelConfig, NotificationSettings, Settings, SpeechToTextConfig,
 };
 use crate::commands::skills::{emit_changed as emit_skills_changed, rescan_and_prune};
 use crate::services::ai::AiService;
@@ -223,45 +223,4 @@ pub async fn update_history_retention(
         emit_history_changed(&app, None, None)?;
     }
     Ok(())
-}
-
-#[tauri::command]
-pub async fn update_keymaps(
-    app: AppHandle,
-    config: State<'_, Arc<Mutex<ConfigService>>>,
-    keymaps: Vec<KeymapGroup>,
-) -> crate::Result<()> {
-    let (reloaded, settings) = {
-        let mut c = config.lock().await;
-        let reloaded = c.mutate(|c| c.update_keymaps(keymaps))?.reloaded;
-        (reloaded, c.settings().clone())
-    };
-    finish_mutation(&app, reloaded).await?;
-    crate::reload_shortcuts(&app, &settings);
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn update_menu_section_order(
-    app: AppHandle,
-    config: State<'_, Arc<Mutex<ConfigService>>>,
-    order: Vec<String>,
-) -> crate::Result<()> {
-    mutate_settings(&app, &config, |c| c.update_menu_section_order(order)).await
-}
-
-#[tauri::command]
-pub async fn reload_settings(
-    app: AppHandle,
-    config: State<'_, Arc<Mutex<ConfigService>>>,
-    ai: State<'_, Arc<Mutex<AiService>>>,
-) -> crate::Result<()> {
-    let settings = {
-        let mut c = config.lock().await;
-        c.reload()?;
-        rebuild_ai(&c, &mut *ai.lock().await);
-        c.settings().clone()
-    };
-    apply_reloaded_settings(&app, &settings);
-    emit_changed(&app)
 }

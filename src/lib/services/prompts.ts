@@ -24,10 +24,6 @@ export interface EnvPlaceholder {
   example: string;
 }
 
-export async function listPrompts(): Promise<PromptDoc[]> {
-  return invoke("list_prompts");
-}
-
 export async function getPrompt(kind: PromptKind): Promise<PromptDoc> {
   return invoke("get_prompt", { kind });
 }

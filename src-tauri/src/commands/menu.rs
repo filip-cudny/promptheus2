@@ -417,14 +417,6 @@ pub async fn focus_context_menu(app: tauri::AppHandle) -> crate::Result<()> {
     }
 }
 
-#[tauri::command]
-pub async fn refresh_menu_providers(
-    menu_coordinator: State<'_, Arc<Mutex<MenuCoordinator>>>,
-) -> crate::Result<()> {
-    menu_coordinator.lock().await.refresh_all();
-    Ok(())
-}
-
 #[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;

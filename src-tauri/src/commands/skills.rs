@@ -84,30 +84,6 @@ pub async fn get_skill(
 }
 
 #[tauri::command]
-pub async fn get_skill_body(
-    skill_service: State<'_, Arc<Mutex<SkillService>>>,
-    name: String,
-) -> crate::Result<String> {
-    skill_service
-        .lock()
-        .await
-        .get_skill(&name)
-        .map(|s| s.body.clone())
-        .ok_or_else(|| Error::Other(format!("Skill not found: {name}")))
-}
-
-#[tauri::command]
-pub async fn reload_skills(
-    app: AppHandle,
-    config: State<'_, Arc<Mutex<ConfigService>>>,
-    skill_service: State<'_, Arc<Mutex<SkillService>>>,
-    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
-) -> crate::Result<()> {
-    rescan_and_prune(&skill_service, &config, &history).await?;
-    emit_changed(&app, "reload")
-}
-
-#[tauri::command]
 pub async fn validate_skill_slug(
     skill_service: State<'_, Arc<Mutex<SkillService>>>,
     slug: String,

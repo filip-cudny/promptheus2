@@ -129,24 +129,6 @@ pub async fn has_context(
 }
 
 #[tauri::command]
-pub async fn has_context_images(
-    context: State<'_, Arc<Mutex<ContextManagerService>>>,
-) -> crate::Result<bool> {
-    Ok(context.lock().await.has_images())
-}
-
-#[tauri::command]
-pub async fn set_context(
-    app: AppHandle,
-    context: State<'_, Arc<Mutex<ContextManagerService>>>,
-    value: String,
-) -> crate::Result<()> {
-    context.lock().await.set_context(value);
-    emit_context_changed(&app)?;
-    Ok(())
-}
-
-#[tauri::command]
 pub async fn append_context(
     app: AppHandle,
     context: State<'_, Arc<Mutex<ContextManagerService>>>,
@@ -178,18 +160,6 @@ pub async fn remove_context_item(
         emit_context_changed(&app)?;
     }
     Ok(removed)
-}
-
-#[tauri::command]
-pub async fn set_context_image(
-    app: AppHandle,
-    context: State<'_, Arc<Mutex<ContextManagerService>>>,
-    data: String,
-    media_type: String,
-) -> crate::Result<()> {
-    context.lock().await.set_context_image(data, media_type);
-    emit_context_changed(&app)?;
-    Ok(())
 }
 
 #[tauri::command]

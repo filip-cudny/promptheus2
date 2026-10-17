@@ -15,19 +15,6 @@ pub async fn get_webview_providers(
     Ok(config.lock().await.settings().webview_providers.clone())
 }
 
-#[tauri::command]
-pub async fn get_webview_provider(
-    config: State<'_, Arc<Mutex<ConfigService>>>,
-    provider_id: String,
-) -> crate::Result<Option<WebviewProvider>> {
-    Ok(config
-        .lock()
-        .await
-        .settings()
-        .find_webview_provider(&provider_id)
-        .cloned())
-}
-
 #[tauri::command(async)]
 pub fn reload_active_in_host(app: tauri::AppHandle, host_label: String) -> crate::Result<()> {
     log::info!(
