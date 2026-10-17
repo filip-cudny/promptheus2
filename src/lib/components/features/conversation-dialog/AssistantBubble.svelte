@@ -123,11 +123,6 @@
   });
 
   let editMode = $state(false);
-  let copyConfirmed = $state(false);
-
-  $effect(() => {
-    copyConfirmed = autoCopied;
-  });
   const edit = useEditSegments({ parseContent: parseContentSegments });
 
   function toggleEditMode() {
@@ -234,7 +229,7 @@
       <ActionIconButton
         icon={Copy}
         confirmIcon={Check}
-        bind:confirmed={copyConfirmed}
+        confirmed={autoCopied}
         onclick={copyContent}
         title="Copy"
       />

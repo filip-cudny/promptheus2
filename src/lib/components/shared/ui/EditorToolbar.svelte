@@ -19,30 +19,13 @@
     oncopy?: () => void | Promise<void>;
   } = $props();
 
-  let copied = $state(false);
-  let copyTimer: ReturnType<typeof setTimeout> | undefined;
-
-  async function handleCopy() {
-    if (!oncopy) return;
-    await oncopy();
-    copied = true;
-    clearTimeout(copyTimer);
-    copyTimer = setTimeout(() => (copied = false), 1200);
-  }
 </script>
 
 <div class="editor-toolbar">
   <span class="line-count">{lineCount} {lineCount === 1 ? "line" : "lines"}{#if tokenCount !== undefined} · ~{tokenCount} tokens{/if}</span>
   <div class="spacer"></div>
   {#if oncopy}
-    <span class:active={copied}>
-      <ActionIconButton
-        icon={copied ? Check : Copy}
-        size={ICON_SIZE.sm}
-        onclick={handleCopy}
-        title={copied ? "Copied" : "Copy"}
-      />
-    </span>
+    <ActionIconButton icon={Copy} confirmIcon={Check} size={ICON_SIZE.sm} onclick={() => oncopy?.()} title="Copy" />
   {/if}
   <span class:active={editMode}>
     <ActionIconButton

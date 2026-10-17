@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Check, AlertCircle } from "lucide-svelte";
+  import { useCopyFeedback } from "$lib/utils/copyFeedback.svelte";
+  import { error as logError } from "@tauri-apps/plugin-log";
   import type { SaveTracker } from "$lib/stores/saveTracker.svelte";
 
   let {
@@ -10,12 +12,15 @@
     compact?: boolean;
   } = $props();
 
+  const copyFeedback = useCopyFeedback<true>();
+
   async function copyError() {
     if (!tracker.error) return;
     try {
       await navigator.clipboard.writeText(tracker.error);
-    } catch {
-      // ignore
+      copyFeedback.flash(true);
+    } catch (e) {
+      logError(`Copy save error failed: ${e}`);
     }
   }
 </script>
@@ -39,11 +44,16 @@
     <button
       type="button"
       class="err-stamp"
+      class:copied={copyFeedback.confirmed}
       title={tracker.error ?? ""}
       onclick={copyError}
       aria-label="Copy error message"
     >
-      <AlertCircle size={10} /> save failed
+      {#if copyFeedback.confirmed}
+        <Check size={10} /> copied
+      {:else}
+        <AlertCircle size={10} /> save failed
+      {/if}
     </button>
   {/if}
 </span>
@@ -115,6 +125,10 @@
     padding: 0;
     font: inherit;
     cursor: pointer;
+  }
+
+  .err-stamp.copied {
+    color: var(--text-muted);
   }
 
   .err-stamp:hover {

@@ -2,6 +2,7 @@ import { tick } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import { error as logError } from "@tauri-apps/plugin-log";
 import { generateId } from "$lib/utils/id";
+import { COPY_FEEDBACK_MS } from "$lib/utils/copyFeedback.svelte";
 import {
   cancelLiveExecution,
   executeConversationFromTree,
@@ -776,7 +777,7 @@ export function createConversationStore(
     autoCopiedNodeId = nodeId;
     setTimeout(() => {
       if (autoCopiedNodeId === nodeId) autoCopiedNodeId = null;
-    }, 1200);
+    }, COPY_FEEDBACK_MS);
   }
 
   function stopExecution(): void {

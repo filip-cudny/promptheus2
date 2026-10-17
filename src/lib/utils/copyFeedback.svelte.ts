@@ -1,4 +1,4 @@
-const FEEDBACK_MS = 1200;
+export const COPY_FEEDBACK_MS = 1200;
 
 export function useCopyFeedback<T>() {
   let confirmed = $state<T | null>(null);
@@ -11,7 +11,7 @@ export function useCopyFeedback<T>() {
     flash(key: T) {
       clearTimeout(timer);
       confirmed = key;
-      timer = setTimeout(() => (confirmed = null), FEEDBACK_MS);
+      timer = setTimeout(() => (confirmed = null), COPY_FEEDBACK_MS);
     },
   };
 }

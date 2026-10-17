@@ -2,6 +2,7 @@
   import type { ComponentType, SvelteComponent } from "svelte";
   import type { IconProps } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import { useCopyFeedback } from "$lib/utils/copyFeedback.svelte";
 
   type LucideIcon = ComponentType<SvelteComponent<IconProps>>;
 
@@ -12,7 +13,7 @@
     title = "",
     disabled = false,
     size = ICON_SIZE.md,
-    confirmed = $bindable(false),
+    confirmed = false,
     active = false,
     variant = "default",
   }: {
@@ -26,15 +27,13 @@
     active?: boolean;
     variant?: "default" | "danger";
   } = $props();
-  let ActiveIcon = $derived(confirmed && confirmIcon ? confirmIcon : icon);
+  const feedback = useCopyFeedback<true>();
+  let ActiveIcon = $derived(confirmIcon && (confirmed || feedback.confirmed) ? confirmIcon : icon);
 
   function handleClick(e: MouseEvent) {
     e.stopPropagation();
     onclick(e);
-    if (confirmIcon) {
-      confirmed = true;
-      setTimeout(() => (confirmed = false), 1200);
-    }
+    if (confirmIcon) feedback.flash(true);
   }
 </script>
 

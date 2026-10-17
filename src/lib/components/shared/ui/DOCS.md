@@ -25,7 +25,8 @@ For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconPro
 
 ### ActionIconButton
 
-- `confirmIcon` swaps the icon for 1.2s after click; `confirmed` (bindable) exposes that state. `size` defaults to `ICON_SIZE.md`.
+- `confirmIcon` swaps the icon for `COPY_FEEDBACK_MS` (1.2 s) after click through `useCopyFeedback`; a repeated click restarts the window. `confirmed` is a read-only prop that also shows `confirmIcon` (used by `AssistantBubble` auto-copy). `size` defaults to `ICON_SIZE.md`.
+- Copy feedback comes from `useCopyFeedback` (`$lib/utils/copyFeedback.svelte`) or `ActionIconButton confirmIcon`, never an own timer; the check keeps the button's normal text colour, no copied-state colour.
 - Borderless transparent button — no border, hover adds subtle background.
 - Use `confirmIcon={Check}` for actions where the user needs visual feedback (copy, save). Omit for actions with immediate visible effect (navigate, regenerate).
 - Icon sizes are defined in `$lib/constants/ui.ts` — never hardcode pixel values.

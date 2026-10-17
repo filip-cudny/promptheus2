@@ -14,6 +14,7 @@
     LoaderCircle,
   } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import { useCopyFeedback } from "$lib/utils/copyFeedback.svelte";
   import { highlightFor, truncateAroundMatch } from "$lib/utils/highlightMatches";
   import { formatDuration, formatTimestamp } from "$lib/utils/format";
   import type { AudioClipInfo, HistoryEntry } from "$lib/types";
@@ -43,15 +44,12 @@
     entry.entry_type === "speech" && !entry.skill_name && entry.quick_action,
   );
 
-  let copied = $state(false);
-  let copyTimeout: ReturnType<typeof setTimeout> | null = null;
+  const copyFeedback = useCopyFeedback<true>();
 
   function copyToClipboard(e: MouseEvent) {
     e.stopPropagation();
     oncopy(entry.id);
-    copied = true;
-    if (copyTimeout) clearTimeout(copyTimeout);
-    copyTimeout = setTimeout(() => { copied = false; }, 1500);
+    copyFeedback.flash(true);
   }
 
   let turnCount = $derived(
@@ -163,8 +161,8 @@
         {/if}
         <span class="timestamp">{formatTimestamp(entry.updated_at ?? entry.created_at ?? entry.timestamp, true)}</span>
         {#if isTranscription}
-          <button class="copy-btn" class:copied onclick={copyToClipboard} title="Copy transcription">
-            {#if copied}
+          <button class="copy-btn" onclick={copyToClipboard} title="Copy transcription">
+            {#if copyFeedback.confirmed}
               <Check size={ICON_SIZE.md} />
             {:else}
               <Copy size={ICON_SIZE.md} />
@@ -435,10 +433,6 @@
   .copy-btn:hover {
     color: var(--text-secondary);
     background: var(--surface-overlay);
-  }
-
-  .copy-btn.copied {
-    color: var(--success);
   }
 
   :global(.entry-row mark) {

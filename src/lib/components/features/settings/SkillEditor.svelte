@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from "svelte";
-  import { Copy, ChevronRight } from "lucide-svelte";
+  import { Copy, Check, ChevronRight } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import { useCopyFeedback } from "$lib/utils/copyFeedback.svelte";
+  import { error as logError } from "@tauri-apps/plugin-log";
   import { save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { writeTextFile } from "@tauri-apps/plugin-fs";
   import FormRow from "$lib/components/shared/ui/FormRow.svelte";
@@ -70,7 +72,7 @@
     untrack(() => entriesFromExtra(extraOf(skill.parameters))),
   );
   let customErrors = $state<Record<string, string>>({});
-  let copiedSlug = $state(false);
+  const slugFeedback = useCopyFeedback<true>();
   let bodyError = $state<string | null>(null);
   let inheritedExpanded = $state(false);
   let suppressCustomSave = true;
@@ -296,10 +298,9 @@
   async function copySlug() {
     try {
       await navigator.clipboard.writeText(skill.name);
-      copiedSlug = true;
-      setTimeout(() => (copiedSlug = false), 1200);
-    } catch {
-      copiedSlug = false;
+      slugFeedback.flash(true);
+    } catch (e) {
+      logError(`Copy skill slug failed: ${e}`);
     }
   }
 
@@ -384,8 +385,8 @@
       <div class="slug-row">
         <code class="slug-readonly">/{skill.name}</code>
         <button class="icon-btn" onclick={copySlug} title="Copy slug">
-          <Copy size={ICON_SIZE.sm} />
-          <span>{copiedSlug ? "Copied" : "Copy"}</span>
+          {#if slugFeedback.confirmed}<Check size={ICON_SIZE.sm} />{:else}<Copy size={ICON_SIZE.sm} />{/if}
+          <span>{slugFeedback.confirmed ? "Copied" : "Copy"}</span>
         </button>
       </div>
       <p class="helper">

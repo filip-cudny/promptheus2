@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from "svelte";
-  import { Eye, EyeOff, Copy } from "lucide-svelte";
+  import { Eye, EyeOff, Copy, Check } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import { useCopyFeedback } from "$lib/utils/copyFeedback.svelte";
+  import { error as logError } from "@tauri-apps/plugin-log";
   import { formatSurfaceList } from "$lib/constants/surfaces";
   import EnvRefChip, { parseEnvRef } from "./EnvRefChip.svelte";
   import ParametersKnown from "./ParametersKnown.svelte";
@@ -63,7 +65,7 @@
   let envResolved = $state<boolean>(false);
   let envVarName = $state<string | null>(null);
   let showApiKey = $state(false);
-  let copiedId = $state(false);
+  const idFeedback = useCopyFeedback<true>();
 
   const tracker = useSaveTracker({ debounceMs: untrack(() => debounceMs) });
 
@@ -238,10 +240,9 @@
   async function copyId() {
     try {
       await navigator.clipboard.writeText(model.id);
-      copiedId = true;
-      setTimeout(() => (copiedId = false), 1200);
-    } catch {
-      copiedId = false;
+      idFeedback.flash(true);
+    } catch (e) {
+      logError(`Copy model id failed: ${e}`);
     }
   }
 
@@ -514,8 +515,8 @@
   <footer class="meta">
     <span>ID: <code>{model.id}</code></span>
     <button class="icon-btn" onclick={copyId} title="Copy ID">
-      <Copy size={ICON_SIZE.sm} />
-      <span>{copiedId ? "Copied" : "Copy"}</span>
+      {#if idFeedback.confirmed}<Check size={ICON_SIZE.sm} />{:else}<Copy size={ICON_SIZE.sm} />{/if}
+      <span>{idFeedback.confirmed ? "Copied" : "Copy"}</span>
     </button>
   </footer>
 </div>
