@@ -3,6 +3,7 @@
   import morphdom from "morphdom";
   import { renderMarkdown, extractCodeBlocks } from "$lib/utils/markdown";
   import { icon, icons } from "$lib/utils/icons";
+  import { COPY_FEEDBACK_MS } from "$lib/utils/copyFeedback.svelte";
 
   let {
     content,
@@ -171,6 +172,19 @@
     return null;
   }
 
+  const feedbackTimers = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
+
+  function flashCheck(button: HTMLElement, restoreIcon: string) {
+    clearTimeout(feedbackTimers.get(button));
+    button.innerHTML = icon(icons.Check);
+    feedbackTimers.set(
+      button,
+      setTimeout(() => {
+        button.innerHTML = restoreIcon;
+      }, COPY_FEEDBACK_MS),
+    );
+  }
+
   function closeAllMermaidMenus() {
     if (!markdownContainer) return;
     for (const panel of markdownContainer.querySelectorAll<HTMLElement>(".mermaid-menu.open")) {
@@ -209,8 +223,13 @@
 
     const copySvgBtn = target.closest("[data-mermaid-copy-svg]") as HTMLElement | null;
     if (copySvgBtn) {
-      const svg = getMermaidSvg(copySvgBtn.dataset.mermaidCopySvg!);
-      if (svg) navigator.clipboard.writeText(svg);
+      const idx = copySvgBtn.dataset.mermaidCopySvg!;
+      const svg = getMermaidSvg(idx);
+      if (svg) {
+        navigator.clipboard.writeText(svg);
+        const dotsBtn = markdownContainer?.querySelector<HTMLElement>(`[data-mermaid-menu="${idx}"]`);
+        if (dotsBtn) flashCheck(dotsBtn, icon(icons.EllipsisVertical));
+      }
       closeAllMermaidMenus();
       return;
     }
@@ -234,13 +253,8 @@
     const index = parseInt(copyBtn.dataset.copyIndex ?? "", 10);
     if (Number.isNaN(index) || index >= codeBlocks.length) return;
 
-    const checkIcon = icon(icons.Check);
-    const originalHtml = copyBtn.innerHTML;
     navigator.clipboard.writeText(codeBlocks[index]);
-    copyBtn.innerHTML = checkIcon;
-    setTimeout(() => {
-      copyBtn.innerHTML = originalHtml;
-    }, 1200);
+    flashCheck(copyBtn, icon(icons.Copy));
   }
 </script>
 

@@ -89,4 +89,5 @@ Lives in `shared/widgets/ContextEditor.svelte` (it calls `openImagePreview` from
 - Uses `marked` + `highlight.js` via `$lib/utils/markdown.ts` to render markdown with syntax-highlighted code blocks.
 - `renderMarkdown` always highlights code blocks (`highlight.js`, auto-detecting the language when none is given); the renderer's `isStreaming` only paces how much of `content` is shown, not highlighting.
 - Code copy: each code block gets a "Copy" button with a `data-copy-index` attribute. Click handler uses event delegation on the container div to copy the raw code block content to clipboard.
+- Copy feedback: the code-block Copy button and, after "Copy as SVG", the mermaid dots button show `icons.Check` for `COPY_FEEDBACK_MS` through one timer per button (a repeated click restarts it), then the fixed icon is restored. This `innerHTML` swap is the one copy feedback outside `useCopyFeedback`, because the buttons are HTML strings from `markdown.ts`.
 
