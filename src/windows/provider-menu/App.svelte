@@ -3,6 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { initLogo } from "$lib/stores/logo.svelte";
   import ProviderMenuList from "$lib/components/shared/widgets/ProviderMenuList.svelte";
   import { getWebviewProviders, type WebviewProvider } from "$lib/services/aiWebview";
   import type { ProviderMenuItem } from "$lib/services/shellToolbar";
@@ -62,6 +63,7 @@
   }
 
   onMount(async () => {
+    initLogo();
     window.addEventListener("keydown", handleKeydown);
 
     unlistenShow = await listen<ShowPayload>("provider-menu:show", async (ev) => {

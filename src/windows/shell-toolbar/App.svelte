@@ -5,6 +5,7 @@
   import { createHostShortcutHandler } from "$lib/shortcuts";
   import { isMac } from "$lib/utils/platform";
   import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
+  import { initLogo } from "$lib/stores/logo.svelte";
   import Titlebar from "$lib/components/features/shell-toolbar/Titlebar.svelte";
   import { useShellToolbar } from "$lib/components/features/shell-toolbar/drivers/useShellToolbar.svelte";
 
@@ -45,6 +46,7 @@
   let detachEdgeResizeCursor: (() => void) | null = null;
 
   onMount(async () => {
+    initLogo();
     window.addEventListener("keydown", handleGlobalKeydown);
     detachEdgeResizeCursor = attachEdgeResizeCursor("toolbar");
     await toolbar.init();

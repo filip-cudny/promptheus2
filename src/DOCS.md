@@ -8,6 +8,7 @@
 - `features/<feature>/drivers/` — runes drivers (`use*.svelte.ts`) that keep window `App.svelte` files thin, e.g. `features/history/drivers/` (`useHistoryAudio`: audio-clip state and speech listeners; `useHistoryKeyboard`: search focus, paging and row navigation, bubble phase).
 - `lib/shortcuts.ts` — shortcut table and `createHostShortcutHandler` (tab shortcuts + open palette, registered in bubble phase by the shell toolbar and chat windows); `lib/utils/platform.ts` — `isMac`, `isLinux`: the only place that reads `navigator`.
 - `lib/stores/` — rune stores (`*.svelte.ts`); `lib/services/` — per-domain `invoke()` wrappers and event listeners; `lib/types/` — types mirroring Rust structs; `lib/utils/` (`format.ts`: `escapeHtml`, `formatDuration`, relative `formatTimestamp`), `lib/constants/`.
+- `lib/stores/logo.svelte.ts` — the in-app logo follows `appearance.logo`; windows showing it call `initLogo()`. Logo SVGs are imported with `?url` into an `<img>`, never `?raw` (gradient ids collide when inlined twice).
 - `styles/theme.css` — CSS variables; `styles/global.css` — global styles.
 
 ## Conventions

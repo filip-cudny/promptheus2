@@ -3,7 +3,7 @@ declare module "*.svg?raw" {
   export default content;
 }
 
-declare module "*.png?url" {
+declare module "*.svg?url" {
   const url: string;
   export default url;
 }

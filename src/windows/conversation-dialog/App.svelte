@@ -20,6 +20,7 @@
   import { focusConversationInput } from "$lib/utils/conversationFocus";
   import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
   import { initTheme } from "$lib/stores/theme.svelte";
+  import { initLogo } from "$lib/stores/logo.svelte";
   import type { ModelConfig } from "$lib/types";
   import type { InvocationSource } from "$lib/types/history";
 
@@ -247,6 +248,7 @@
 
   onMount(async () => {
     initTheme();
+    initLogo();
     window.addEventListener("keydown", handleGlobalKeydown);
     window.addEventListener("focus", handleWindowFocus);
     detachEdgeResizeCursor = attachEdgeResizeCursor("content");
