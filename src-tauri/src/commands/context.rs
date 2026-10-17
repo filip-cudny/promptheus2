@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 use crate::models::context::ContextItem;
-use crate::services::clipboard::{paste_kind, ClipboardError, ClipboardService, PasteKind};
+use crate::services::clipboard::{read_clipboard_item, ClipboardError, ClipboardService, PastedItem};
 use crate::services::context::ContextManagerService;
 use crate::services::speech::widget::RecordingWidget;
 
@@ -54,50 +54,43 @@ pub async fn remove_item_for_pill(app: &AppHandle, index: usize, version: u64) -
     Ok(())
 }
 
-enum PastedItem {
-    Text(String),
-    Image(String, String),
+/// Returns whether the context changed; the caller emits `context-changed`.
+pub(crate) async fn write_clipboard_to_context(
+    app: &AppHandle,
+    write: fn(&mut ContextManagerService, PastedItem),
+) -> crate::Result<bool> {
+    let clipboard = app.state::<ClipboardService>();
+    let Some(item) = read_clipboard_item(&clipboard).await? else {
+        log::debug!("clipboard holds files: context left unchanged");
+        return Ok(false);
+    };
+    let context = app.state::<Arc<Mutex<ContextManagerService>>>();
+    write(&mut *context.lock().await, item);
+    Ok(true)
 }
 
-fn read_pasted_item(clipboard: &ClipboardService) -> Result<Option<PastedItem>, ClipboardError> {
-    match paste_kind(clipboard.has_file_list(), clipboard.has_image()) {
-        PasteKind::Nothing => Ok(None),
-        PasteKind::Image => clipboard
-            .get_image_base64()
-            .map(|(data, media_type)| Some(PastedItem::Image(data, media_type))),
-        PasteKind::Text => clipboard.get_text().map(|text| Some(PastedItem::Text(text))),
+async fn write_clipboard_and_emit(
+    app: &AppHandle,
+    write: fn(&mut ContextManagerService, PastedItem),
+) -> crate::Result<()> {
+    if write_clipboard_to_context(app, write).await? {
+        emit_context_changed(app)?;
     }
+    Ok(())
 }
 
 pub async fn paste_item_for_pill(app: &AppHandle) -> crate::Result<()> {
-    let clipboard = app.state::<ClipboardService>().inner().clone();
-    let read = tokio::task::spawn_blocking(move || read_pasted_item(&clipboard))
-        .await
-        .map_err(|e| crate::Error::Other(e.to_string()))?;
-    let item = match read {
-        Ok(Some(item)) => item,
-        Ok(None) => {
-            log::debug!("pill paste ignored: the clipboard holds files");
-            return Ok(());
-        }
-        Err(ClipboardError::Unavailable(_)) => {
+    match write_clipboard_and_emit(app, ContextManagerService::append_item).await {
+        Err(crate::Error::Clipboard(ClipboardError::Unavailable(_))) => {
             log::debug!("pill paste ignored: nothing pasteable on the clipboard");
-            return Ok(());
+            Ok(())
         }
-        Err(e) => {
+        Err(crate::Error::Clipboard(e)) => {
             log::warn!("pill paste failed reading the clipboard: {e}");
-            return Ok(());
+            Ok(())
         }
-    };
-    {
-        let context = app.state::<Arc<Mutex<ContextManagerService>>>();
-        let mut context = context.lock().await;
-        match item {
-            PastedItem::Text(text) => context.append_context(text),
-            PastedItem::Image(data, media_type) => context.append_context_image(data, media_type),
-        }
+        result => result,
     }
-    emit_context_changed(app)
 }
 
 #[tauri::command]
@@ -178,40 +171,13 @@ pub async fn append_context_image(
 }
 
 #[tauri::command]
-pub async fn set_context_from_clipboard(
-    app: AppHandle,
-    clipboard: State<'_, ClipboardService>,
-    context: State<'_, Arc<Mutex<ContextManagerService>>>,
-) -> crate::Result<()> {
-    if clipboard.has_image() {
-        let (data, media_type) = clipboard.get_image_base64()?;
-        context.lock().await.set_context_image(data, media_type);
-    } else {
-        let text = clipboard.get_text()?;
-        context.lock().await.set_context(text);
-    }
-    emit_context_changed(&app)?;
-    Ok(())
+pub async fn set_context_from_clipboard(app: AppHandle) -> crate::Result<()> {
+    write_clipboard_and_emit(&app, ContextManagerService::set_item).await
 }
 
 #[tauri::command]
-pub async fn append_context_from_clipboard(
-    app: AppHandle,
-    clipboard: State<'_, ClipboardService>,
-    context: State<'_, Arc<Mutex<ContextManagerService>>>,
-) -> crate::Result<()> {
-    if clipboard.has_image() {
-        let (data, media_type) = clipboard.get_image_base64()?;
-        context
-            .lock()
-            .await
-            .append_context_image(data, media_type);
-    } else {
-        let text = clipboard.get_text()?;
-        context.lock().await.append_context(text);
-    }
-    emit_context_changed(&app)?;
-    Ok(())
+pub async fn append_context_from_clipboard(app: AppHandle) -> crate::Result<()> {
+    write_clipboard_and_emit(&app, ContextManagerService::append_item).await
 }
 
 #[cfg(test)]

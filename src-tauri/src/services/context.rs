@@ -1,5 +1,6 @@
 use crate::models::context::ContextItem;
 use crate::models::menu::{MenuItem, MenuItemType};
+use crate::services::clipboard::PastedItem;
 use crate::traits::MenuItemProvider;
 
 pub struct ContextMenuProvider {
@@ -55,11 +56,6 @@ impl ContextManagerService {
         Self { items: Vec::new(), next_text_number: 1, next_image_number: 1 }
     }
 
-    pub fn set_context(&mut self, value: String) {
-        self.clear();
-        self.append_context(value);
-    }
-
     pub fn append_context(&mut self, value: String) {
         let number = self.next_text_number;
         self.next_text_number += 1;
@@ -104,15 +100,22 @@ impl ContextManagerService {
         !self.items.is_empty()
     }
 
-    pub fn set_context_image(&mut self, data: String, media_type: String) {
-        self.clear();
-        self.append_context_image(data, media_type);
-    }
-
     pub fn append_context_image(&mut self, data: String, media_type: String) {
         let number = self.next_image_number;
         self.next_image_number += 1;
         self.items.push(ContextItem::Image { number, data, media_type });
+    }
+
+    pub fn set_item(&mut self, item: PastedItem) {
+        self.clear();
+        self.append_item(item);
+    }
+
+    pub fn append_item(&mut self, item: PastedItem) {
+        match item {
+            PastedItem::Text(text) => self.append_context(text),
+            PastedItem::Image(data, media_type) => self.append_context_image(data, media_type),
+        }
     }
 
     pub fn has_images(&self) -> bool {
@@ -157,12 +160,20 @@ mod tests {
         ContextManagerService::new()
     }
 
+    fn text(value: &str) -> PastedItem {
+        PastedItem::Text(value.into())
+    }
+
+    fn image(value: &str) -> PastedItem {
+        PastedItem::Image(value.into(), "image/png".into())
+    }
+
     #[test]
     fn set_context_replaces_all_items() {
         let mut svc = service();
         svc.append_context("first".into());
         svc.append_context_image("img".into(), "image/png".into());
-        svc.set_context("replaced".into());
+        svc.set_item(text("replaced"));
 
         assert_eq!(svc.item_count(), 1);
         assert_eq!(svc.get_context(), Some("replaced".into()));
@@ -248,7 +259,7 @@ mod tests {
         let mut svc = service();
         svc.append_context("text".into());
         svc.append_context_image("img1".into(), "image/png".into());
-        svc.set_context_image("new_img".into(), "image/jpeg".into());
+        svc.set_item(PastedItem::Image("new_img".into(), "image/jpeg".into()));
 
         assert_eq!(svc.item_count(), 1);
         assert!(svc.has_context());
@@ -337,7 +348,7 @@ mod tests {
         let mut svc = service();
         svc.append_context("a".into());
         svc.append_context("b".into());
-        svc.set_context("c".into());
+        svc.set_item(text("c"));
         assert_eq!(numbers(&svc), [("text", 1)]);
     }
 
@@ -345,11 +356,22 @@ mod tests {
     fn set_context_image_resets_text_numbers() {
         let mut svc = service();
         svc.append_context("a".into());
-        svc.set_context_image("i".into(), "image/png".into());
+        svc.set_item(image("i"));
         assert_eq!(numbers(&svc), [("image", 1)]);
 
         svc.append_context("b".into());
         assert_eq!(numbers(&svc), [("image", 1), ("text", 1)]);
+    }
+
+    #[test]
+    fn append_item_adds_text_and_image_with_per_kind_numbers() {
+        let mut svc = service();
+        svc.append_item(text("a"));
+        svc.append_item(image("i"));
+        svc.append_item(text("b"));
+        assert_eq!(numbers(&svc), [("text", 1), ("image", 1), ("text", 2)]);
+        assert_eq!(svc.get_context(), Some("a\nb".into()));
+        assert!(svc.has_images());
     }
 
     #[test]

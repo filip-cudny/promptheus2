@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 
 use crate::models::ai::StreamEvent;
 use crate::models::history::{InvocationSource, OutputRoute};
-use crate::models::message::{AppliedSkill, ConversationNodeForExecution, ImageData};
+use crate::models::message::{ConversationNodeForExecution, ImageData};
 use crate::services::ai::AiService;
 use crate::services::config::ConfigService;
 use crate::services::conversation_context::ConversationContextCache;
@@ -16,7 +16,7 @@ use crate::services::execution::PromptExecutionService;
 use crate::services::mcp::McpRegistry;
 use crate::services::recent_apps::RecentAppsState;
 use crate::services::skill::SkillService;
-use crate::services::skill_message;
+use crate::services::skill_message::{self, ResolveSkillResult};
 use crate::services::sqlite_history::SqliteHistoryService;
 
 #[tauri::command]
@@ -101,18 +101,12 @@ pub async fn seed_conversation_context(
     Ok(())
 }
 
-#[derive(Clone, serde::Serialize)]
-pub struct ResolveSkillInputResult {
-    pub had_skills: bool,
-    pub applied_skills: Vec<AppliedSkill>,
-}
-
 #[tauri::command]
 pub async fn resolve_skill_input(
     skill_service: State<'_, Arc<Mutex<SkillService>>>,
     history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     text: String,
-) -> crate::Result<ResolveSkillInputResult> {
+) -> crate::Result<ResolveSkillResult> {
     let mut skill_service = skill_service.lock().await;
     let history = history.lock().await;
     for name in skill_message::referenced_skill_names(&text) {
@@ -123,9 +117,5 @@ pub async fn resolve_skill_input(
             let _ = skill_service.ensure_version(&name, history.conn());
         }
     }
-    let result = skill_message::resolve_skill_input(&skill_service, &text);
-    Ok(ResolveSkillInputResult {
-        had_skills: result.had_skills,
-        applied_skills: result.applied_skills,
-    })
+    Ok(skill_message::resolve_skill_input(&skill_service, &text))
 }

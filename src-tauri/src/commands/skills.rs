@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use log::info;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
 
 use crate::models::skill::{
@@ -43,6 +43,63 @@ pub(crate) async fn rescan_and_prune(
     let history_guard = history.lock().await;
     skill_guard.prune_missing_skills(history_guard.conn())?;
     Ok(())
+}
+
+enum OrderPlacement<'a> {
+    Keep,
+    Append,
+    After(&'a str),
+}
+
+impl OrderPlacement<'_> {
+    fn apply(&self, order: &mut Vec<String>, slug: &str) {
+        match self {
+            Self::Keep => {}
+            Self::Append => {
+                if !order.iter().any(|n| n == slug) {
+                    order.push(slug.to_string());
+                }
+            }
+            Self::After(source) => match order.iter().position(|n| n == source) {
+                Some(pos) => order.insert(pos + 1, slug.to_string()),
+                None => order.push(slug.to_string()),
+            },
+        }
+    }
+}
+
+async fn persist_skill(
+    app: &AppHandle,
+    slug: &str,
+    placement: OrderPlacement<'_>,
+    reason: &str,
+) -> crate::Result<SkillFull> {
+    let config = app.state::<Arc<Mutex<ConfigService>>>();
+    let skill_service = app.state::<Arc<Mutex<SkillService>>>();
+    let history = app.state::<Arc<Mutex<SqliteHistoryService>>>();
+
+    rescan_and_prune(&skill_service, &config, &history).await?;
+    if !matches!(placement, OrderPlacement::Keep) {
+        let reloaded = config
+            .lock()
+            .await
+            .mutate(|c| {
+                let mut order = c.settings().skills_order.clone();
+                placement.apply(&mut order, slug);
+                c.update_skills_order(order);
+            })?
+            .reloaded;
+        if reloaded {
+            apply_settings_reload(app, reason).await?;
+        }
+    }
+    emit_changed(app, reason)?;
+
+    let skill_guard = skill_service.lock().await;
+    let skill = skill_guard
+        .get_skill(slug)
+        .ok_or_else(|| Error::Other(format!("Skill '{slug}' missing after {reason}")))?;
+    Ok(SkillFull::from(skill))
 }
 
 #[tauri::command]
@@ -116,9 +173,7 @@ pub async fn validate_skill_slug(
 #[tauri::command]
 pub async fn create_skill(
     app: AppHandle,
-    config: State<'_, Arc<Mutex<ConfigService>>>,
     skill_service: State<'_, Arc<Mutex<SkillService>>>,
-    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     slug: String,
     frontmatter: SkillFrontmatter,
     body: String,
@@ -137,36 +192,13 @@ pub async fn create_skill(
         skill_guard.write_skill(&slug, &frontmatter, &body)?;
     }
 
-    rescan_and_prune(&skill_service, &config, &history).await?;
-    let reloaded = config
-        .lock()
-        .await
-        .mutate(|c| {
-            let mut order = c.settings().skills_order.clone();
-            if !order.contains(&slug) {
-                order.push(slug.clone());
-                c.update_skills_order(order);
-            }
-        })?
-        .reloaded;
-    if reloaded {
-        apply_settings_reload(&app, "create").await?;
-    }
-    emit_changed(&app, "create")?;
-
-    let skill_guard = skill_service.lock().await;
-    let skill = skill_guard
-        .get_skill(&slug)
-        .ok_or_else(|| Error::Other(format!("Skill '{slug}' missing after create")))?;
-    Ok(SkillFull::from(skill))
+    persist_skill(&app, &slug, OrderPlacement::Append, "create").await
 }
 
 #[tauri::command]
 pub async fn update_skill(
     app: AppHandle,
-    config: State<'_, Arc<Mutex<ConfigService>>>,
     skill_service: State<'_, Arc<Mutex<SkillService>>>,
-    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     slug: String,
     frontmatter: SkillFrontmatter,
     body: String,
@@ -184,14 +216,7 @@ pub async fn update_skill(
         skill_guard.write_skill(&slug, &frontmatter, &body)?;
     }
 
-    rescan_and_prune(&skill_service, &config, &history).await?;
-    emit_changed(&app, "update")?;
-
-    let skill_guard = skill_service.lock().await;
-    let skill = skill_guard
-        .get_skill(&slug)
-        .ok_or_else(|| Error::Other(format!("Skill '{slug}' missing after update")))?;
-    Ok(SkillFull::from(skill))
+    persist_skill(&app, &slug, OrderPlacement::Keep, "update").await
 }
 
 #[tauri::command]
@@ -228,9 +253,7 @@ pub async fn delete_skill(
 #[tauri::command]
 pub async fn duplicate_skill(
     app: AppHandle,
-    config: State<'_, Arc<Mutex<ConfigService>>>,
     skill_service: State<'_, Arc<Mutex<SkillService>>>,
-    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     slug: String,
     new_slug: String,
 ) -> crate::Result<SkillFull> {
@@ -250,30 +273,8 @@ pub async fn duplicate_skill(
         let mut skill_guard = skill_service.lock().await;
         skill_guard.write_skill(&new_slug, &frontmatter, &body)?;
     }
-    rescan_and_prune(&skill_service, &config, &history).await?;
-    let reloaded = config
-        .lock()
-        .await
-        .mutate(|c| {
-            let mut order = c.settings().skills_order.clone();
-            if let Some(pos) = order.iter().position(|n| n == &slug) {
-                order.insert(pos + 1, new_slug.clone());
-            } else {
-                order.push(new_slug.clone());
-            }
-            c.update_skills_order(order);
-        })?
-        .reloaded;
-    if reloaded {
-        apply_settings_reload(&app, "duplicate").await?;
-    }
-    emit_changed(&app, "duplicate")?;
 
-    let skill_guard = skill_service.lock().await;
-    let skill = skill_guard
-        .get_skill(&new_slug)
-        .ok_or_else(|| Error::Other(format!("Skill '{new_slug}' missing after duplicate")))?;
-    Ok(SkillFull::from(skill))
+    persist_skill(&app, &new_slug, OrderPlacement::After(&slug), "duplicate").await
 }
 
 #[tauri::command]
@@ -300,9 +301,7 @@ pub async fn reorder_skills(
 #[tauri::command]
 pub async fn import_skill_file(
     app: AppHandle,
-    config: State<'_, Arc<Mutex<ConfigService>>>,
     skill_service: State<'_, Arc<Mutex<SkillService>>>,
-    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
     content: String,
     on_conflict: Option<ImportConflictMode>,
 ) -> crate::Result<SkillFull> {
@@ -346,28 +345,8 @@ pub async fn import_skill_file(
         let mut skill_guard = skill_service.lock().await;
         skill_guard.write_skill(&target_slug, &fm_to_write, &body)?;
     }
-    rescan_and_prune(&skill_service, &config, &history).await?;
-    let reloaded = config
-        .lock()
-        .await
-        .mutate(|c| {
-            let mut order = c.settings().skills_order.clone();
-            if !order.contains(&target_slug) {
-                order.push(target_slug.clone());
-                c.update_skills_order(order);
-            }
-        })?
-        .reloaded;
-    if reloaded {
-        apply_settings_reload(&app, "import").await?;
-    }
-    emit_changed(&app, "import")?;
 
-    let skill_guard = skill_service.lock().await;
-    let skill = skill_guard
-        .get_skill(&target_slug)
-        .ok_or_else(|| Error::Other(format!("Skill '{target_slug}' missing after import")))?;
-    Ok(SkillFull::from(skill))
+    persist_skill(&app, &target_slug, OrderPlacement::Append, "import").await
 }
 
 fn duplicate_frontmatter(source: &Skill, new_slug: &str) -> SkillFrontmatter {

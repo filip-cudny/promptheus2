@@ -87,14 +87,14 @@ export async function generateConversationTitle(
   return invoke("generate_conversation_title", { userMessage });
 }
 
-export interface ResolveSkillInputResult {
+export interface ResolveSkillResult {
   had_skills: boolean;
   applied_skills: AppliedSkill[];
 }
 
 export async function resolveSkillInput(
   text: string,
-): Promise<ResolveSkillInputResult> {
+): Promise<ResolveSkillResult> {
   return invoke("resolve_skill_input", { text });
 }
 

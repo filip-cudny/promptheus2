@@ -189,7 +189,10 @@ export interface SkillSummary {
 }
 
 export interface Skill extends SkillSummary {
+  model: string | null;
+  parameters: Record<string, unknown> | null;
   body: string;
+  skill_version_id?: number;
 }
 
 export interface SkillFull {

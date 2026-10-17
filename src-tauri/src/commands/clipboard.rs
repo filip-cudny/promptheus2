@@ -34,17 +34,8 @@ fn take_copy_if_unchanged(
 }
 
 #[tauri::command(async)]
-pub fn get_clipboard_text() -> crate::Result<String> {
-    let mut clipboard = arboard::Clipboard::new()
-        .map_err(|e| Error::Other(e.to_string()))?;
-    let text = clipboard
-        .get_text()
-        .map_err(|e| Error::Other(e.to_string()))?;
-    let trimmed = text.trim().to_string();
-    if trimmed.is_empty() {
-        return Err(Error::Other("clipboard is empty".into()));
-    }
-    Ok(trimmed)
+pub fn get_clipboard_text(clipboard: State<'_, ClipboardService>) -> crate::Result<String> {
+    Ok(clipboard.get_text()?)
 }
 
 #[tauri::command(async)]

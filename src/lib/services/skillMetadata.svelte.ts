@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
 import { debug as logDebug } from "@tauri-apps/plugin-log";
+import { getSkill } from "$lib/services/skills";
 
 export type SkillMeta = {
   model: string | null;
@@ -18,16 +18,10 @@ export async function fetchSkillMetadata(skillId: string): Promise<void> {
   if (skillId in cache) return;
   cache = { ...cache, [skillId]: { model: null, parameters: null } };
   try {
-    const skill = await invoke<{
-      model?: string | null;
-      parameters?: Record<string, unknown> | null;
-    }>("get_skill", { name: skillId });
+    const skill = await getSkill(skillId);
     cache = {
       ...cache,
-      [skillId]: {
-        model: skill?.model ?? null,
-        parameters: skill?.parameters ?? null,
-      },
+      [skillId]: { model: skill.model, parameters: skill.parameters },
     };
   } catch (e) {
     logDebug(`get_skill failed for ${skillId}: ${e}`);

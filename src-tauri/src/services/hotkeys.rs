@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::commands;
 use crate::models::settings::Settings;
-use crate::services::clipboard::ClipboardService;
+use crate::services::clipboard::PastedItem;
 use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
 use crate::services::frontmost_app;
@@ -289,93 +289,45 @@ pub async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
     }
 }
 
+type WriteItem = fn(&mut ContextManagerService, PastedItem);
+
+async fn announce_context_change(app: &tauri::AppHandle, id: &str, title: &str) {
+    let notification_settings = app
+        .state::<Arc<Mutex<ConfigService>>>()
+        .lock()
+        .await
+        .settings()
+        .notifications
+        .clone();
+    if let Err(e) = commands::context::emit_context_changed(app) {
+        log::warn!("emitting context-changed failed: {}", e);
+    }
+    app.state::<NotificationService>().notify(
+        id,
+        NotificationLevel::Success,
+        title,
+        None::<String>,
+        &notification_settings,
+    );
+}
+
 async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
-    let clipboard = app.state::<ClipboardService>();
-    let context = app.state::<Arc<Mutex<ContextManagerService>>>();
-    let config = app.state::<Arc<Mutex<ConfigService>>>();
-    let notifications = app.state::<NotificationService>();
     match action {
-        "set_context_value" => {
-            let result: std::result::Result<(), String> = if clipboard.has_image() {
-                match clipboard.get_image_base64() {
-                    Ok((data, mt)) => {
-                        context.lock().await.set_context_image(data, mt);
-                        Ok(())
-                    }
-                    Err(e) => Err(e.to_string()),
-                }
+        "set_context_value" | "append_context_value" => {
+            let (write, id, title) = if action == "set_context_value" {
+                (ContextManagerService::set_item as WriteItem, "context_set", "Context set")
             } else {
-                match clipboard.get_text() {
-                    Ok(text) => {
-                        context.lock().await.set_context(text);
-                        Ok(())
-                    }
-                    Err(e) => Err(e.to_string()),
-                }
+                (ContextManagerService::append_item as WriteItem, "context_append", "Context appended")
             };
-            if let Err(e) = result {
-                log::error!("set_context_value hotkey failed: {}", e);
-                return;
+            match commands::context::write_clipboard_to_context(app, write).await {
+                Ok(true) => announce_context_change(app, id, title).await,
+                Ok(false) => {}
+                Err(e) => log::error!("{action} hotkey failed: {e}"),
             }
-            let notification_settings = config.lock().await.settings().notifications.clone();
-            if let Err(e) = commands::context::emit_context_changed(app) {
-                log::warn!("emitting context-changed failed: {}", e);
-            }
-            notifications.notify(
-                "context_set",
-                NotificationLevel::Success,
-                "Context set",
-                None::<String>,
-                &notification_settings,
-            );
-        }
-        "append_context_value" => {
-            let result: std::result::Result<(), String> = if clipboard.has_image() {
-                match clipboard.get_image_base64() {
-                    Ok((data, mt)) => {
-                        context.lock().await.append_context_image(data, mt);
-                        Ok(())
-                    }
-                    Err(e) => Err(e.to_string()),
-                }
-            } else {
-                match clipboard.get_text() {
-                    Ok(text) => {
-                        context.lock().await.append_context(text);
-                        Ok(())
-                    }
-                    Err(e) => Err(e.to_string()),
-                }
-            };
-            if let Err(e) = result {
-                log::error!("append_context_value hotkey failed: {}", e);
-                return;
-            }
-            let notification_settings = config.lock().await.settings().notifications.clone();
-            if let Err(e) = commands::context::emit_context_changed(app) {
-                log::warn!("emitting context-changed failed: {}", e);
-            }
-            notifications.notify(
-                "context_append",
-                NotificationLevel::Success,
-                "Context appended",
-                None::<String>,
-                &notification_settings,
-            );
         }
         "clear_context" => {
-            context.lock().await.clear();
-            let notification_settings = config.lock().await.settings().notifications.clone();
-            if let Err(e) = commands::context::emit_context_changed(app) {
-                log::warn!("emitting context-changed failed: {}", e);
-            }
-            notifications.notify(
-                "context_cleared",
-                NotificationLevel::Success,
-                "Context cleared",
-                None::<String>,
-                &notification_settings,
-            );
+            app.state::<Arc<Mutex<ContextManagerService>>>().lock().await.clear();
+            announce_context_change(app, "context_cleared", "Context cleared").await;
         }
         _ => {}
     }

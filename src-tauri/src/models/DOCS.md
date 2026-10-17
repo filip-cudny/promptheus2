@@ -51,3 +51,7 @@ Optional frontmatter field of `SKILL.md`, carried by `SkillFrontmatter`, `Skill`
 - A list: offered only in the listed places.
 - Unknown value (e.g. `chat`): the file is invalid (`SkillError::YamlParse`) and the skill is skipped on load.
 - The chat `/skill` autocomplete ignores the field.
+
+### Skill types
+
+`Skill` is the loaded skill; it serializes without `file_path` (`#[serde(skip)]`) and with `skill_version_id` only when set (command `get_skill`, TS `Skill`). `SkillFull` is the settings-editor shape of the same skill: it carries `file_path` as a string and no `skill_version_id` (commands `list_skills_full`, `create_skill`, `update_skill`, `duplicate_skill`, `import_skill_file`; TS `SkillFull`). They stay two types because `SkillEditor` shows `file_path` and the JSON of both commands must keep its keys. `SkillSummary` is the list shape. `ResolveSkillResult` (`services/skill_message.rs`) is both the service result and the `resolve_skill_input` command return value.

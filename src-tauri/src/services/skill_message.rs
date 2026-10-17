@@ -204,6 +204,7 @@ pub fn referenced_skill_names(text: &str) -> Vec<String> {
     names
 }
 
+#[derive(Clone, serde::Serialize)]
 pub struct ResolveSkillResult {
     pub had_skills: bool,
     pub applied_skills: Vec<AppliedSkill>,
@@ -493,7 +494,7 @@ mod tests {
     fn prepare_messages_with_text_context() {
         let skill = test_skill("test", "Test body.");
         let mut context = ContextManagerService::new();
-        context.set_context("background info".into());
+        context.append_context("background info".into());
         let messages = prepare_skill_messages(
             "You are helpful.",
             &skill,

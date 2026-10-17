@@ -174,6 +174,31 @@ pub fn paste_kind(has_file_list: bool, has_image: bool) -> PasteKind {
     }
 }
 
+pub enum PastedItem {
+    Text(String),
+    Image(String, String),
+}
+
+fn read_item_blocking(clipboard: &ClipboardService) -> Result<Option<PastedItem>, ClipboardError> {
+    match paste_kind(clipboard.has_file_list(), clipboard.has_image()) {
+        PasteKind::Nothing => Ok(None),
+        PasteKind::Image => clipboard
+            .get_image_base64()
+            .map(|(data, media_type)| Some(PastedItem::Image(data, media_type))),
+        PasteKind::Text => clipboard.get_text().map(|text| Some(PastedItem::Text(text))),
+    }
+}
+
+/// `None` when the clipboard holds files. Reads off the async runtime.
+pub async fn read_clipboard_item(
+    clipboard: &ClipboardService,
+) -> Result<Option<PastedItem>, ClipboardError> {
+    let clipboard = clipboard.clone();
+    tokio::task::spawn_blocking(move || read_item_blocking(&clipboard))
+        .await
+        .map_err(|e| ClipboardError::Access(e.to_string()))?
+}
+
 pub fn write_text(app: &AppHandle, content: &str) -> Result<(), ClipboardError> {
     #[cfg(target_os = "linux")]
     if std::env::var("WAYLAND_DISPLAY").is_ok() {

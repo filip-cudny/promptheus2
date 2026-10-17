@@ -5,6 +5,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { MenuItem } from "$lib/types/menu";
 import { startExecution, isExecuting, getExecutingSkillId, cancelExecution } from "$lib/stores/execution.svelte";
 import { openConversationDialog } from "$lib/services/conversationDialog";
+import { fetchSkillMetadata, getSkillMeta } from "$lib/services/skillMetadata.svelte";
 
 interface WorkArea {
   cursorX: number;
@@ -481,13 +482,8 @@ function destroy() {
 }
 
 async function fetchSkillModel(skillId: string): Promise<string | null> {
-  try {
-    const skill = await invoke<{ model?: string | null }>("get_skill", { name: skillId });
-    return skill?.model ?? null;
-  } catch (e) {
-    error(`get_skill failed for ${skillId}: ${e}`);
-    return null;
-  }
+  await fetchSkillMetadata(skillId);
+  return getSkillMeta(skillId)?.model ?? null;
 }
 
 async function openDialogForItem(index: number) {

@@ -134,6 +134,21 @@ pub async fn update_speech_to_text_config(
     mutate_settings(&app, &config_svc, |c| c.update_speech_to_text(config)).await
 }
 
+async fn mutate_models(
+    app: &AppHandle,
+    config: &Mutex<ConfigService>,
+    ai: &Mutex<AiService>,
+    f: impl FnOnce(&mut ConfigService),
+) -> crate::Result<()> {
+    let reloaded = {
+        let mut svc = config.lock().await;
+        let reloaded = svc.mutate(f)?.reloaded;
+        rebuild_ai(&svc, &mut *ai.lock().await);
+        reloaded
+    };
+    finish_mutation(app, reloaded).await
+}
+
 #[tauri::command]
 pub async fn add_model(
     app: AppHandle,
@@ -141,13 +156,7 @@ pub async fn add_model(
     ai: State<'_, Arc<Mutex<AiService>>>,
     config: ModelConfig,
 ) -> crate::Result<()> {
-    let reloaded = {
-        let mut svc = config_svc.lock().await;
-        let reloaded = svc.mutate(|c| c.add_model(config))?.reloaded;
-        rebuild_ai(&svc, &mut *ai.lock().await);
-        reloaded
-    };
-    finish_mutation(&app, reloaded).await
+    mutate_models(&app, &config_svc, &ai, |c| c.add_model(config)).await
 }
 
 #[tauri::command]
@@ -158,13 +167,7 @@ pub async fn update_model(
     model_id: String,
     config: ModelConfig,
 ) -> crate::Result<()> {
-    let reloaded = {
-        let mut svc = config_svc.lock().await;
-        let reloaded = svc.mutate(|c| c.update_model(&model_id, config))?.reloaded;
-        rebuild_ai(&svc, &mut *ai.lock().await);
-        reloaded
-    };
-    finish_mutation(&app, reloaded).await
+    mutate_models(&app, &config_svc, &ai, |c| c.update_model(&model_id, config)).await
 }
 
 #[tauri::command]
@@ -174,13 +177,7 @@ pub async fn delete_model(
     ai: State<'_, Arc<Mutex<AiService>>>,
     model_id: String,
 ) -> crate::Result<()> {
-    let reloaded = {
-        let mut svc = config.lock().await;
-        let reloaded = svc.mutate(|c| c.delete_model(&model_id))?.reloaded;
-        rebuild_ai(&svc, &mut *ai.lock().await);
-        reloaded
-    };
-    finish_mutation(&app, reloaded).await
+    mutate_models(&app, &config, &ai, |c| c.delete_model(&model_id)).await
 }
 
 #[tauri::command]
