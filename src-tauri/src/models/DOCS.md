@@ -34,7 +34,7 @@ Non-settings model files define types that cross the Rust↔TypeScript IPC bound
 - Enums use `rename_all = "snake_case"` or `"lowercase"`; the attribute on the type decides, and the TS mirror must use the same strings.
 - `ContextItem` is an internally tagged enum (`tag = "item_type"`), mirrored as a discriminated union, not an interface with optional fields; both members carry `number`, assigned per kind by `ContextManagerService`.
 - `MessageContent` is `untagged`; `ContentPart` is tagged with `tag = "type"`.
-- `Option<T>` maps to `T | null`, except where the Rust field is skipped when `None`: `ImageData.number` is `number?: number` (`types/ai.ts`). `serde_json::Value` maps to `unknown`.
+- `Option<T>` maps to `T | null`, except where the Rust field is skipped when `None`: `ImageData.number` is `number?: number` on `ConversationImage` (`types/conversation.ts`). `serde_json::Value` maps to `unknown`.
 
 ### Adding new settings fields
 
