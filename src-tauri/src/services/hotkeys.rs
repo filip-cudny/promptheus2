@@ -321,7 +321,7 @@ async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
             if let Err(e) = commands::context::emit_context_changed(app) {
                 log::warn!("emitting context-changed failed: {}", e);
             }
-            let _ = notifications.notify(
+            notifications.notify(
                 "context_set",
                 NotificationLevel::Success,
                 "Context set",
@@ -355,7 +355,7 @@ async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
             if let Err(e) = commands::context::emit_context_changed(app) {
                 log::warn!("emitting context-changed failed: {}", e);
             }
-            let _ = notifications.notify(
+            notifications.notify(
                 "context_append",
                 NotificationLevel::Success,
                 "Context appended",
@@ -369,7 +369,7 @@ async fn execute_context_action(app: &tauri::AppHandle, action: &str) {
             if let Err(e) = commands::context::emit_context_changed(app) {
                 log::warn!("emitting context-changed failed: {}", e);
             }
-            let _ = notifications.notify(
+            notifications.notify(
                 "context_cleared",
                 NotificationLevel::Success,
                 "Context cleared",

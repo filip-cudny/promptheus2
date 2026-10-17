@@ -25,12 +25,6 @@ pub struct NotificationPayload {
     pub monochromatic: bool,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum NotificationError {
-    #[error("Failed to emit notification event: {0}")]
-    EmitFailed(String),
-}
-
 #[derive(Clone)]
 pub struct NotificationService {
     handle: AppHandle,
@@ -48,12 +42,12 @@ impl NotificationService {
         title: impl Into<String>,
         message: Option<impl Into<String>>,
         settings: &crate::models::settings::NotificationSettings,
-    ) -> Result<(), NotificationError> {
+    ) {
         if !matches!(level, NotificationLevel::Error)
             && !is_event_enabled(event_name, &settings.events)
         {
             log::debug!("notification event '{event_name}' is disabled, skipping");
-            return Ok(());
+            return;
         }
 
         let id = format!("n-{}", NEXT_ID.fetch_add(1, Ordering::Relaxed));
@@ -72,7 +66,6 @@ impl NotificationService {
         );
 
         crate::commands::notification::show_notification(&self.handle, payload);
-        Ok(())
     }
 }
 

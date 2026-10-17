@@ -172,16 +172,11 @@ pub(super) async fn fallback(
         .notifications
         .clone();
     let title = if provider_name.is_empty() { provider_id } else { provider_name };
-    if let Err(e) = app.state::<NotificationService>().notify(
+    app.state::<NotificationService>().notify(
         "webview_send_failed",
         NotificationLevel::Error,
         format!("Not sent to {title}"),
         Some(format!("{reason} — {outcome}")),
         &settings,
-    ) {
-        log::warn!(
-            target: "app_lib::services::ai_webview",
-            "send fallback toast failed: {e}",
-        );
-    }
+    );
 }

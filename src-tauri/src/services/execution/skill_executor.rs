@@ -74,7 +74,7 @@ pub async fn run_skill_stream(
         Ok(prepared) => prepared,
         Err(error) => {
             if !notify_success {
-                let _ = notifications.notify(
+                notifications.notify(
                     "prompt_execution_error",
                     NotificationLevel::Error,
                     "Execution failed",
@@ -380,7 +380,7 @@ impl SkillExecutor {
         );
 
         if notify_success {
-            let _ = notifications.notify(
+            notifications.notify(
                 "prompt_execution_success",
                 NotificationLevel::Success,
                 skill_display_name.to_string(),
@@ -415,7 +415,7 @@ impl SkillExecutor {
         is_cancelled: bool,
     ) {
         if is_cancelled {
-            let _ = notifications.notify(
+            notifications.notify(
                 "prompt_execution_cancel",
                 NotificationLevel::Info,
                 "Prompt cancelled",
@@ -423,7 +423,7 @@ impl SkillExecutor {
                 &config.settings().notifications,
             );
         } else {
-            let _ = notifications.notify(
+            notifications.notify(
                 "prompt_execution_error",
                 NotificationLevel::Error,
                 "Execution failed",

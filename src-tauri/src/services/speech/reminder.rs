@@ -125,7 +125,7 @@ pub fn spawn(
             let Some(notifications) = app.try_state::<NotificationService>() else {
                 return;
             };
-            let _ = notifications.notify(
+            notifications.notify(
                 "speech_recording_reminder",
                 NotificationLevel::Warning,
                 "Still recording",

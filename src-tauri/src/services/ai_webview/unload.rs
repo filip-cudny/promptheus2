@@ -110,17 +110,12 @@ pub(super) fn emit_provider_lifecycle_toast(
             .settings()
             .notifications
             .clone();
-        if let Err(e) = app.state::<NotificationService>().notify(
+        app.state::<NotificationService>().notify(
             event_name,
             level,
             title,
             message,
             &settings,
-        ) {
-            log::warn!(
-                target: "app_lib::services::ai_webview",
-                "lifecycle toast emit failed: {e}",
-            );
-        }
+        );
     });
 }

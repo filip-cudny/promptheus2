@@ -4,7 +4,6 @@ use crate::services::config::ConfigError;
 use crate::services::database::DatabaseError;
 use crate::services::execution::ExecutionError;
 use crate::services::mcp::McpError;
-use crate::services::notification::NotificationError;
 use crate::services::skill::SkillError;
 use crate::services::speech::SpeechError;
 use crate::services::sqlite_history::HistoryError;
@@ -50,9 +49,6 @@ pub enum Error {
 
     #[error(transparent)]
     Speech(#[from] SpeechError),
-
-    #[error(transparent)]
-    Notification(#[from] NotificationError),
 
     #[error(transparent)]
     Execution(#[from] ExecutionError),

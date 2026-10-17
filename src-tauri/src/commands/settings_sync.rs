@@ -130,15 +130,13 @@ async fn notify_state_entered(app: &AppHandle, report: &CycleReport) {
     let notifications = config.lock().await.settings().notifications.clone();
     log::info!("settings sync: showing '{title}' toast");
     let notifier = app.state::<NotificationService>();
-    if let Err(e) = notifier.notify(
+    notifier.notify(
         NOTIFICATION_EVENT,
         NotificationLevel::Error,
         title,
         Some(message),
         &notifications,
-    ) {
-        log::warn!("settings sync: toast failed: {e}");
-    }
+    );
 }
 
 #[tauri::command]

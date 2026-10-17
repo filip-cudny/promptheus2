@@ -125,7 +125,7 @@ async fn notify_retry_started(
 ) {
     let notification_settings = config_state.lock().await.settings().notifications.clone();
     let notifications = app.state::<NotificationService>();
-    let _ = notifications.notify(
+    notifications.notify(
         "speech_transcription_retry",
         NotificationLevel::Warning,
         "Retrying transcription",
@@ -277,7 +277,7 @@ async fn run_pill_skill(app: &AppHandle, skill_id: String, text: String, generat
 
 async fn notify_no_speech(app: &AppHandle, config: &Arc<Mutex<ConfigService>>) {
     let notification_settings = config.lock().await.settings().notifications.clone();
-    let _ = app.state::<NotificationService>().notify(
+    app.state::<NotificationService>().notify(
         "speech_transcription_success",
         NotificationLevel::Error,
         "No speech detected",
@@ -310,7 +310,7 @@ pub async fn toggle_speech_recording(
             log::debug!("toggle_speech_recording: ignored, transcription in progress");
             let notification_settings =
                 config_state.lock().await.settings().notifications.clone();
-            let _ = notifications.notify(
+            notifications.notify(
                 "speech_recording_start",
                 NotificationLevel::Warning,
                 "Transcription in progress",
@@ -364,7 +364,7 @@ pub async fn toggle_speech_recording(
             None => false,
         };
         if !widget_shown {
-            let _ = notifications.notify(
+            notifications.notify(
                 "speech_recording_start",
                 NotificationLevel::Info,
                 "Recording started",
@@ -432,7 +432,7 @@ pub async fn toggle_speech_recording(
             if !widget.is_shown().await {
                 let notification_settings =
                     config_state.lock().await.settings().notifications.clone();
-                let _ = notifications.notify(
+                notifications.notify(
                     "speech_recording_stop",
                     NotificationLevel::Info,
                     "Processing audio",
@@ -552,7 +552,7 @@ pub async fn toggle_speech_recording(
                             let notification_settings =
                                 config_inner.lock().await.settings().notifications.clone();
                             let duration_display = format!("Processed in {:.1}s", duration_secs);
-                            let _ = notifications_inner.notify(
+                            notifications_inner.notify(
                                 "speech_transcription_success",
                                 NotificationLevel::Success,
                                 "Speech transcribed",
@@ -636,7 +636,7 @@ pub async fn toggle_speech_recording(
 
                 let notification_settings =
                     config_inner.lock().await.settings().notifications.clone();
-                let _ = notifications_inner.notify(
+                notifications_inner.notify(
                     "speech_transcription_success",
                     NotificationLevel::Info,
                     title,
@@ -703,7 +703,7 @@ pub async fn toggle_speech_recording(
                 } else {
                     message
                 };
-                let _ = notifications_inner.notify(
+                notifications_inner.notify(
                     "speech_transcription_success",
                     NotificationLevel::Error,
                     "Transcription error",
@@ -842,7 +842,7 @@ pub async fn retry_transcription(app: AppHandle, entry_id: String) -> crate::Res
                     },
                 );
 
-                let _ = notifications.notify(
+                notifications.notify(
                     "speech_transcription_success",
                     NotificationLevel::Success,
                     "Transcription recovered",
@@ -879,7 +879,7 @@ pub async fn retry_transcription(app: AppHandle, entry_id: String) -> crate::Res
                         attempts,
                     },
                 );
-                let _ = notifications.notify(
+                notifications.notify(
                     "speech_transcription_success",
                     NotificationLevel::Error,
                     "Retry failed",
