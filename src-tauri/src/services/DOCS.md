@@ -163,6 +163,8 @@ Holds an `AppHandle`.
 
 **Event gating**: `notify()` checks `NotificationSettings.events` before showing. If the event is disabled in settings, the notification is silently dropped. Error-level notifications bypass the gate.
 
+**`notify_now(app, event, level, title, message)`**: async; reads `NotificationSettings` from the managed `ConfigService` itself, then calls `notify`. Callers that have no settings at hand use it instead of locking the config and cloning `notifications`.
+
 **Display**: `notify()` calls `commands::notification::show_notification`. On GNOME Wayland it routes to the extension's `ShowToast` (falling back to the notification webview window if the call fails); elsewhere it uses the notification webview window. See `docs/gotchas/linux-wayland-gnome-extension.md`.
 
 **`is_event_enabled` mapping**: maps the string event names (9) (e.g., `"prompt_execution_success"`, `"context_set"`) to the corresponding bool field on `NotificationEvents`. Unknown event names return `true` (safe default — show rather than hide).

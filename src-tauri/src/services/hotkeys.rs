@@ -292,23 +292,10 @@ pub async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
 type WriteItem = fn(&mut ContextManagerService, PastedItem);
 
 async fn announce_context_change(app: &tauri::AppHandle, id: &str, title: &str) {
-    let notification_settings = app
-        .state::<Arc<Mutex<ConfigService>>>()
-        .lock()
-        .await
-        .settings()
-        .notifications
-        .clone();
     if let Err(e) = commands::context::emit_context_changed(app) {
         log::warn!("emitting context-changed failed: {}", e);
     }
-    app.state::<NotificationService>().notify(
-        id,
-        NotificationLevel::Success,
-        title,
-        None::<String>,
-        &notification_settings,
-    );
+    NotificationService::notify_now(app, id, NotificationLevel::Success, title, None::<String>).await;
 }
 
 async fn execute_context_action(app: &tauri::AppHandle, action: &str) {

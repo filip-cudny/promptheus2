@@ -84,11 +84,16 @@ async fn map_http_error(status: reqwest::StatusCode, response: reqwest::Response
     }
 }
 
-async fn transcribe_openai(
-    wav_bytes: Vec<u8>,
+struct TranscriptionRequest {
+    url: String,
+    auth_header: (&'static str, String),
+    fields: Vec<(&'static str, String)>,
+}
+
+fn openai_request(
     config: &ModelConfig,
     options: &SttOptions,
-) -> Result<String, SpeechError> {
+) -> Result<TranscriptionRequest, SpeechError> {
     let api_key = config
         .resolved_api_key()
         .ok_or(SpeechError::ApiKeyMissing)?;
@@ -99,64 +104,27 @@ async fn transcribe_openai(
         .unwrap_or("https://api.openai.com/v1")
         .trim_end_matches('/');
 
-    let url = format!("{base_url}/audio/transcriptions");
-
-    log::debug!(
-        "STT transcribe provider=openai model={} bytes={} has_prompt={}",
-        config.model,
-        wav_bytes.len(),
-        options.prompt.is_some()
-    );
-
-    let payload_bytes = wav_bytes.len();
-    let file_part = reqwest::multipart::Part::bytes(wav_bytes)
-        .file_name("recording.wav")
-        .mime_str("audio/wav")
-        .map_err(|e| SpeechError::permanent(e.to_string()))?;
-
-    let mut form = reqwest::multipart::Form::new()
-        .part("file", file_part)
-        .text("model", config.model.clone());
+    let mut fields = vec![("model", config.model.clone())];
 
     if let Some(ref lang) = options.language {
-        form = form.text("language", lang.clone());
+        fields.push(("language", lang.clone()));
     }
 
     if let Some(ref prompt) = options.prompt {
-        form = form.text("prompt", prompt.clone());
+        fields.push(("prompt", prompt.clone()));
     }
 
-    let response = build_http_client(payload_bytes)?
-        .post(&url)
-        .header("Authorization", format!("Bearer {api_key}"))
-        .multipart(form)
-        .send()
-        .await
-        .map_err(map_send_error)?;
-
-    let status = response.status();
-    if !status.is_success() {
-        return Err(map_http_error(status, response).await);
-    }
-
-    let parsed: TranscriptionResponse = response
-        .json()
-        .await
-        .map_err(|e| SpeechError::transient(format!("Failed to parse response: {e}")))?;
-
-    let text = parsed.text.trim().to_string();
-    if text.is_empty() {
-        return Err(SpeechError::NoSpeechDetected);
-    }
-
-    Ok(text)
+    Ok(TranscriptionRequest {
+        url: format!("{base_url}/audio/transcriptions"),
+        auth_header: ("Authorization", format!("Bearer {api_key}")),
+        fields,
+    })
 }
 
-async fn transcribe_elevenlabs(
-    wav_bytes: Vec<u8>,
+fn elevenlabs_request(
     config: &ModelConfig,
     options: &SttOptions,
-) -> Result<String, SpeechError> {
+) -> Result<TranscriptionRequest, SpeechError> {
     let api_key = config
         .resolved_api_key()
         .ok_or(SpeechError::ApiKeyMissing)?;
@@ -167,7 +135,52 @@ async fn transcribe_elevenlabs(
         .unwrap_or("https://api.elevenlabs.io/v1")
         .trim_end_matches('/');
 
-    let url = format!("{base_url}/speech-to-text");
+    let mut fields = vec![("model_id", config.model.clone())];
+
+    if let Some(ref lang) = options.language {
+        fields.push(("language_code", lang.clone()));
+    }
+
+    if let Some(flag) = options.no_verbatim {
+        fields.push(("no_verbatim", flag.to_string()));
+    }
+
+    fields.push(("tag_audio_events", "false".to_string()));
+
+    for term in options.keyterms.iter() {
+        fields.push(("keyterms", term.clone()));
+    }
+
+    Ok(TranscriptionRequest {
+        url: format!("{base_url}/speech-to-text"),
+        auth_header: ("xi-api-key", api_key),
+        fields,
+    })
+}
+
+async fn transcribe_openai(
+    wav_bytes: Vec<u8>,
+    config: &ModelConfig,
+    options: &SttOptions,
+) -> Result<String, SpeechError> {
+    let request = openai_request(config, options)?;
+
+    log::debug!(
+        "STT transcribe provider=openai model={} bytes={} has_prompt={}",
+        config.model,
+        wav_bytes.len(),
+        options.prompt.is_some()
+    );
+
+    send_transcription(wav_bytes, request).await
+}
+
+async fn transcribe_elevenlabs(
+    wav_bytes: Vec<u8>,
+    config: &ModelConfig,
+    options: &SttOptions,
+) -> Result<String, SpeechError> {
+    let request = elevenlabs_request(config, options)?;
 
     log::debug!(
         "STT transcribe provider=elevenlabs model={} bytes={} keyterms={}",
@@ -176,33 +189,28 @@ async fn transcribe_elevenlabs(
         options.keyterms.len()
     );
 
+    send_transcription(wav_bytes, request).await
+}
+
+async fn send_transcription(
+    wav_bytes: Vec<u8>,
+    request: TranscriptionRequest,
+) -> Result<String, SpeechError> {
     let payload_bytes = wav_bytes.len();
     let file_part = reqwest::multipart::Part::bytes(wav_bytes)
         .file_name("recording.wav")
         .mime_str("audio/wav")
         .map_err(|e| SpeechError::permanent(e.to_string()))?;
 
-    let mut form = reqwest::multipart::Form::new()
-        .part("file", file_part)
-        .text("model_id", config.model.clone());
+    let form = request.fields.into_iter().fold(
+        reqwest::multipart::Form::new().part("file", file_part),
+        |form, (name, value)| form.text(name, value),
+    );
 
-    if let Some(ref lang) = options.language {
-        form = form.text("language_code", lang.clone());
-    }
-
-    if let Some(flag) = options.no_verbatim {
-        form = form.text("no_verbatim", flag.to_string());
-    }
-
-    form = form.text("tag_audio_events", "false");
-
-    for term in options.keyterms.iter() {
-        form = form.text("keyterms", term.clone());
-    }
-
+    let (auth_name, auth_value) = request.auth_header;
     let response = build_http_client(payload_bytes)?
-        .post(&url)
-        .header("xi-api-key", api_key)
+        .post(&request.url)
+        .header(auth_name, auth_value)
         .multipart(form)
         .send()
         .await
@@ -218,6 +226,10 @@ async fn transcribe_elevenlabs(
         .await
         .map_err(|e| SpeechError::transient(format!("Failed to parse response: {e}")))?;
 
+    transcript_text(parsed)
+}
+
+fn transcript_text(parsed: TranscriptionResponse) -> Result<String, SpeechError> {
     let text = parsed.text.trim().to_string();
     if text.is_empty() {
         return Err(SpeechError::NoSpeechDetected);
@@ -274,5 +286,69 @@ mod tests {
         config.provider = Some(Provider::ElevenLabs);
         let result = transcribe(vec![0; 44], &config, &SttOptions::default()).await;
         assert!(matches!(result, Err(SpeechError::ApiKeyMissing)));
+    }
+
+    #[test]
+    fn openai_request_uses_default_url_bearer_auth_and_model() {
+        let config = stt_test_config(Some("sk-test"));
+        let request = openai_request(&config, &SttOptions::default()).unwrap();
+        assert_eq!(request.url, "https://api.openai.com/v1/audio/transcriptions");
+        assert_eq!(request.auth_header, ("Authorization", "Bearer sk-test".to_string()));
+        assert_eq!(request.fields, vec![("model", "whisper-1".to_string())]);
+    }
+
+    #[test]
+    fn openai_request_trims_base_url_and_adds_language_then_prompt() {
+        let mut config = stt_test_config(Some("sk-test"));
+        config.base_url = Some("http://localhost:8080/v1/".into());
+        let options = SttOptions {
+            language: Some("pl".into()),
+            prompt: Some("hello".into()),
+            ..SttOptions::default()
+        };
+        let request = openai_request(&config, &options).unwrap();
+        assert_eq!(request.url, "http://localhost:8080/v1/audio/transcriptions");
+        assert_eq!(
+            request.fields,
+            vec![
+                ("model", "whisper-1".to_string()),
+                ("language", "pl".to_string()),
+                ("prompt", "hello".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn elevenlabs_request_uses_xi_api_key_and_ordered_fields() {
+        let mut config = stt_test_config(Some("xi-test"));
+        config.provider = Some(Provider::ElevenLabs);
+        let options = SttOptions {
+            language: Some("en".into()),
+            no_verbatim: Some(true),
+            prompt: Some("ignored".into()),
+            keyterms: vec!["Promptheus".into(), "Tauri".into()],
+        };
+        let request = elevenlabs_request(&config, &options).unwrap();
+        assert_eq!(request.url, "https://api.elevenlabs.io/v1/speech-to-text");
+        assert_eq!(request.auth_header, ("xi-api-key", "xi-test".to_string()));
+        assert_eq!(
+            request.fields,
+            vec![
+                ("model_id", "whisper-1".to_string()),
+                ("language_code", "en".to_string()),
+                ("no_verbatim", "true".to_string()),
+                ("tag_audio_events", "false".to_string()),
+                ("keyterms", "Promptheus".to_string()),
+                ("keyterms", "Tauri".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn transcript_text_trims_and_rejects_blank_as_no_speech() {
+        let text = transcript_text(TranscriptionResponse { text: "  hi there \n".into() });
+        assert_eq!(text.unwrap(), "hi there");
+        let blank = transcript_text(TranscriptionResponse { text: " \n ".into() });
+        assert!(matches!(blank, Err(SpeechError::NoSpeechDetected)));
     }
 }

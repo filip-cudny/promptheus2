@@ -126,17 +126,8 @@ async fn notify_state_entered(app: &AppHandle, report: &CycleReport) {
         ),
         _ => return,
     };
-    let config = app.state::<Arc<Mutex<ConfigService>>>().inner().clone();
-    let notifications = config.lock().await.settings().notifications.clone();
     log::info!("settings sync: showing '{title}' toast");
-    let notifier = app.state::<NotificationService>();
-    notifier.notify(
-        NOTIFICATION_EVENT,
-        NotificationLevel::Error,
-        title,
-        Some(message),
-        &notifications,
-    );
+    NotificationService::notify_now(app, NOTIFICATION_EVENT, NotificationLevel::Error, title, Some(message)).await;
 }
 
 #[tauri::command]

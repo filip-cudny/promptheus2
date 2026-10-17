@@ -1,9 +1,12 @@
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
+use tokio::sync::Mutex;
 
 use crate::models::settings::NotificationEvents;
+use crate::services::config::ConfigService;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -66,6 +69,24 @@ impl NotificationService {
         );
 
         crate::commands::notification::show_notification(&self.handle, payload);
+    }
+
+    pub async fn notify_now(
+        app: &AppHandle,
+        event_name: &str,
+        level: NotificationLevel,
+        title: impl Into<String>,
+        message: Option<impl Into<String>>,
+    ) {
+        let settings = app
+            .state::<Arc<Mutex<ConfigService>>>()
+            .lock()
+            .await
+            .settings()
+            .notifications
+            .clone();
+        app.state::<NotificationService>()
+            .notify(event_name, level, title, message, &settings);
     }
 }
 

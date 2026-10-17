@@ -6,8 +6,10 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize};
 use tokio::sync::Mutex;
 
-use super::reminder::rms;
-use super::{webview_target_id, PendingPrompt, SpeechService, DICTATION_ID, DICTATION_LABEL};
+use super::{
+    lock_active_session, start_session_task, tail_rms, webview_target_id, PendingPrompt,
+    SpeechService, DICTATION_ID, DICTATION_LABEL,
+};
 use crate::commands::context::current_context_version;
 use crate::models::context::ContextItem;
 use crate::models::settings::{PillAnchor, WebviewProvider};
@@ -1234,18 +1236,8 @@ async fn push_model(app: &AppHandle, inner: &mut Inner, mut model: PillModel, co
 
 fn spawn_level_task(app: AppHandle, session: u64, generation: u64) {
     tauri::async_runtime::spawn(async move {
-        let Some(speech) = app
-            .try_state::<Arc<Mutex<SpeechService>>>()
-            .map(|s| s.inner().clone())
-        else {
+        let Some((speech, buffer)) = start_session_task(&app, session).await else {
             return;
-        };
-        let buffer = {
-            let s = speech.lock().await;
-            if !s.is_recording() || s.session() != session {
-                return;
-            }
-            s.audio_buffer()
         };
         let widget = app.state::<RecordingWidget>();
         let mut cursor = 0usize;
@@ -1255,21 +1247,12 @@ fn spawn_level_task(app: AppHandle, session: u64, generation: u64) {
             tokio::time::sleep(TICK).await;
 
             let elapsed = {
-                let s = speech.lock().await;
-                if !s.is_recording() || s.session() != session {
+                let Some(s) = lock_active_session(&speech, session).await else {
                     return;
-                }
+                };
                 s.elapsed().map_or(0, elapsed_ms)
             };
-            let level = {
-                let buf = buffer.lock().unwrap_or_else(|e| e.into_inner());
-                if buf.len() < cursor {
-                    cursor = buf.len();
-                }
-                let tail = &buf[cursor..];
-                cursor = buf.len();
-                level_from_rms(rms(tail))
-            };
+            let level = level_from_rms(tail_rms(&buffer, &mut cursor));
 
             let mut inner = widget.inner.lock().await;
             if inner.generation != generation || !inner.state.is_live() {

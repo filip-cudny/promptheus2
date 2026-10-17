@@ -489,6 +489,43 @@ impl SpeechService {
     }
 }
 
+type AudioBuffer = Arc<Mutex<Vec<i16>>>;
+
+/// Locks the speech service only while `session` is still the active recording.
+async fn lock_active_session(
+    speech: &Arc<tokio::sync::Mutex<SpeechService>>,
+    session: u64,
+) -> Option<tokio::sync::MutexGuard<'_, SpeechService>> {
+    let s = speech.lock().await;
+    (s.is_recording() && s.session() == session).then_some(s)
+}
+
+/// Startup of a background task bound to one recording session.
+async fn start_session_task(
+    app: &tauri::AppHandle,
+    session: u64,
+) -> Option<(Arc<tokio::sync::Mutex<SpeechService>>, AudioBuffer)> {
+    use tauri::Manager;
+
+    let speech = app
+        .try_state::<Arc<tokio::sync::Mutex<SpeechService>>>()?
+        .inner()
+        .clone();
+    let buffer = lock_active_session(&speech, session).await?.audio_buffer();
+    Some((speech, buffer))
+}
+
+/// RMS of the samples recorded since `cursor`, which then moves to the end of the buffer.
+fn tail_rms(buffer: &Mutex<Vec<i16>>, cursor: &mut usize) -> f64 {
+    let buf = buffer.lock().unwrap_or_else(|e| e.into_inner());
+    if buf.len() < *cursor {
+        *cursor = buf.len();
+    }
+    let tail = &buf[*cursor..];
+    *cursor = buf.len();
+    reminder::rms(tail)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

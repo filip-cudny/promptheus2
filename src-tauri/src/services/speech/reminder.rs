@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 use crate::models::settings::RecordingReminderSettings;
 use crate::services::config::ConfigService;
 use crate::services::notification::{NotificationLevel, NotificationService};
-use crate::services::speech::SpeechService;
+use crate::services::speech::{lock_active_session, start_session_task, tail_rms, SpeechService};
 
 const TICK: Duration = Duration::from_secs(1);
 const SILENCE_RMS_THRESHOLD: f64 = 400.0;
@@ -26,18 +26,8 @@ pub fn spawn(
     }
 
     tauri::async_runtime::spawn(async move {
-        let Some(speech) = app
-            .try_state::<Arc<Mutex<SpeechService>>>()
-            .map(|s| s.inner().clone())
-        else {
+        let Some((speech, buffer)) = start_session_task(&app, session).await else {
             return;
-        };
-        let buffer = {
-            let s = speech.lock().await;
-            if !s.is_recording() || s.session() != session {
-                return;
-            }
-            s.audio_buffer()
         };
 
         let silence_window = Duration::from_secs(config.silence_window_secs.max(1));
@@ -69,15 +59,7 @@ pub fn spawn(
                 continue;
             }
 
-            let rms = {
-                let buf = buffer.lock().unwrap_or_else(|e| e.into_inner());
-                if buf.len() < cursor {
-                    cursor = buf.len();
-                }
-                let tail = &buf[cursor..];
-                cursor = buf.len();
-                rms(tail)
-            };
+            let rms = tail_rms(&buffer, &mut cursor);
 
             let now = Instant::now();
             if rms < SILENCE_RMS_THRESHOLD {
@@ -143,10 +125,7 @@ async fn recording_state(
     speech: &Arc<Mutex<SpeechService>>,
     session: u64,
 ) -> Option<(Duration, bool)> {
-    let s = speech.lock().await;
-    if !s.is_recording() || s.session() != session {
-        return None;
-    }
+    let s = lock_active_session(speech, session).await?;
     s.elapsed().map(|elapsed| (elapsed, s.is_paused()))
 }
 

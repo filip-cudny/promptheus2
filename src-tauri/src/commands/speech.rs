@@ -114,14 +114,9 @@ fn emit_retry(
     );
 }
 
-async fn notify_retry_started(
-    app: &AppHandle,
-    config_state: &Arc<Mutex<ConfigService>>,
-    notice: speech::retry::RetryNotice,
-) {
-    let notification_settings = config_state.lock().await.settings().notifications.clone();
-    let notifications = app.state::<NotificationService>();
-    notifications.notify(
+async fn notify_retry_started(app: &AppHandle, notice: speech::retry::RetryNotice) {
+    NotificationService::notify_now(
+        app,
         "speech_transcription_retry",
         NotificationLevel::Warning,
         "Retrying transcription",
@@ -129,8 +124,8 @@ async fn notify_retry_started(
             "Attempt {} of {} failed — retrying in {}s",
             notice.attempt, notice.max_attempts, notice.delay_secs
         )),
-        &notification_settings,
-    );
+    )
+    .await;
 }
 
 #[derive(Debug, PartialEq)]
@@ -262,15 +257,30 @@ async fn run_pill_skill(app: &AppHandle, skill_id: String, text: String, generat
     }
 }
 
-async fn notify_no_speech(app: &AppHandle, config: &Arc<Mutex<ConfigService>>) {
-    let notification_settings = config.lock().await.settings().notifications.clone();
-    app.state::<NotificationService>().notify(
+async fn notify_no_speech(app: &AppHandle) {
+    NotificationService::notify_now(
+        app,
         "speech_transcription_success",
         NotificationLevel::Error,
         "No speech detected",
         Some("No speech was detected in the recording"),
-        &notification_settings,
+    )
+    .await;
+}
+
+fn emit_empty_transcription(app: &AppHandle, duration_secs: f64) {
+    let _ = app.emit(
+        "speech-transcription-complete",
+        TranscriptionComplete { text: String::new(), duration_secs, entry_id: None },
     );
+}
+
+async fn abort_transcription(app: &AppHandle) {
+    app.state::<RecordingWidget>().close(app).await;
+    let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
+    let mut s = speech_state.lock().await;
+    s.set_transcribing(false);
+    s.clear_pending_prompt();
 }
 
 #[tauri::command]
@@ -280,7 +290,6 @@ pub async fn toggle_speech_recording(
 ) -> crate::Result<()> {
     let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
     let config_state = app.state::<Arc<Mutex<ConfigService>>>();
-    let notifications = app.state::<NotificationService>();
     let history_state = app.state::<Arc<Mutex<SqliteHistoryService>>>();
     let clip_state = app.state::<Arc<AudioClipStore>>();
     let widget = app.state::<RecordingWidget>();
@@ -295,15 +304,14 @@ pub async fn toggle_speech_recording(
 
         if s.is_transcribing() {
             log::debug!("toggle_speech_recording: ignored, transcription in progress");
-            let notification_settings =
-                config_state.lock().await.settings().notifications.clone();
-            notifications.notify(
+            NotificationService::notify_now(
+                &app,
                 "speech_recording_start",
                 NotificationLevel::Warning,
                 "Transcription in progress",
                 Some("Wait until it finishes"),
-                &notification_settings,
-            );
+            )
+            .await;
             return Ok(());
         }
 
@@ -338,11 +346,11 @@ pub async fn toggle_speech_recording(
                 action_id: started_action_id,
             },
         );
-        let (notification_settings, shortcut_hint) = {
+        let (reminder_settings, shortcut_hint) = {
             let guard = config_state.lock().await;
             let settings = guard.settings();
             (
-                settings.notifications.clone(),
+                settings.notifications.recording_reminder.clone(),
                 crate::services::hotkeys::shortcut_for_action(settings, "speech_to_text_toggle"),
             )
         };
@@ -351,19 +359,20 @@ pub async fn toggle_speech_recording(
             None => false,
         };
         if !widget_shown {
-            notifications.notify(
+            NotificationService::notify_now(
+                &app,
                 "speech_recording_start",
                 NotificationLevel::Info,
                 "Recording started",
                 Some("Click Speech to Text again to stop."),
-                &notification_settings,
-            );
+            )
+            .await;
         }
         if let Some(session) = started_session {
             speech::reminder::spawn(
                 app.clone(),
                 session,
-                notification_settings.recording_reminder.clone(),
+                reminder_settings,
                 shortcut_hint,
             );
         }
@@ -389,14 +398,8 @@ pub async fn toggle_speech_recording(
             sample_count,
             min_samples,
         );
-        let _ = app.emit(
-            "speech-transcription-complete",
-            TranscriptionComplete { text: String::new(), duration_secs: 0.0, entry_id: None },
-        );
-        widget.close(&app).await;
-        let mut s = speech_state.lock().await;
-        s.set_transcribing(false);
-        s.clear_pending_prompt();
+        emit_empty_transcription(&app, 0.0);
+        abort_transcription(&app).await;
         return Ok(());
     }
 
@@ -406,10 +409,7 @@ pub async fn toggle_speech_recording(
     {
         Ok(bytes) => bytes,
         Err(e) => {
-            widget.close(&app).await;
-            let mut s = speech_state.lock().await;
-            s.set_transcribing(false);
-            s.clear_pending_prompt();
+            abort_transcription(&app).await;
             return Err(e.into());
         }
     };
@@ -417,23 +417,19 @@ pub async fn toggle_speech_recording(
     let runtime = match load_stt_runtime(&config_state).await {
         Ok(runtime) => {
             if !widget.is_shown().await {
-                let notification_settings =
-                    config_state.lock().await.settings().notifications.clone();
-                notifications.notify(
+                NotificationService::notify_now(
+                    &app,
                     "speech_recording_stop",
                     NotificationLevel::Info,
                     "Processing audio",
                     Some("Transcribing your speech to text"),
-                    &notification_settings,
-                );
+                )
+                .await;
             }
             runtime
         }
         Err(e) => {
-            widget.close(&app).await;
-            let mut s = speech_state.lock().await;
-            s.set_transcribing(false);
-            s.clear_pending_prompt();
+            abort_transcription(&app).await;
             return Err(Error::Speech(e));
         }
     };
@@ -459,12 +455,10 @@ pub async fn toggle_speech_recording(
 
     let app_clone = app.clone();
     let speech_inner = Arc::clone(&*speech_state);
-    let config_inner = Arc::clone(&*config_state);
     let history_inner = Arc::clone(&*history_state);
     let clip_inner = Arc::clone(&*clip_state);
 
     tokio::spawn(async move {
-        let notifications_inner = app_clone.state::<NotificationService>();
         let widget_inner = app_clone.state::<RecordingWidget>();
         let start = std::time::Instant::now();
 
@@ -487,7 +481,7 @@ pub async fn toggle_speech_recording(
         .await;
 
         if let Some(notice) = first_retry {
-            notify_retry_started(&app_clone, &config_inner, notice).await;
+            notify_retry_started(&app_clone, notice).await;
         }
 
         match result {
@@ -521,7 +515,7 @@ pub async fn toggle_speech_recording(
                     }
                     TranscriptPlan::NoSpeech => {
                         widget_inner.close_if_current(&app_clone, generation).await;
-                        notify_no_speech(&app_clone, &config_inner).await;
+                        notify_no_speech(&app_clone).await;
                     }
                     TranscriptPlan::SkillRun { skill_id } => {
                         run_pill_skill(&app_clone, skill_id, text.clone(), generation).await;
@@ -536,16 +530,15 @@ pub async fn toggle_speech_recording(
                         if widget_inner.is_shown().await {
                             widget_inner.done(&app_clone).await;
                         } else {
-                            let notification_settings =
-                                config_inner.lock().await.settings().notifications.clone();
                             let duration_display = format!("Processed in {:.1}s", duration_secs);
-                            notifications_inner.notify(
+                            NotificationService::notify_now(
+                                &app_clone,
                                 "speech_transcription_success",
                                 NotificationLevel::Success,
                                 "Speech transcribed",
                                 Some(duration_display),
-                                &notification_settings,
-                            );
+                            )
+                            .await;
                         }
                     }
                     TranscriptPlan::Chat(request) => {
@@ -593,14 +586,7 @@ pub async fn toggle_speech_recording(
             }
             Err(SpeechError::NoSpeechDetected) => {
                 widget_inner.close(&app_clone).await;
-                let _ = app_clone.emit(
-                    "speech-transcription-complete",
-                    TranscriptionComplete {
-                        text: String::new(),
-                        duration_secs: start.elapsed().as_secs_f64(),
-                        entry_id: None,
-                    },
-                );
+                emit_empty_transcription(&app_clone, start.elapsed().as_secs_f64());
 
                 if let Some(clip_id) = clip_id {
                     let history = history_inner.lock().await;
@@ -621,15 +607,14 @@ pub async fn toggle_speech_recording(
                     "No speech was detected in the recording"
                 };
 
-                let notification_settings =
-                    config_inner.lock().await.settings().notifications.clone();
-                notifications_inner.notify(
+                NotificationService::notify_now(
+                    &app_clone,
                     "speech_transcription_success",
                     NotificationLevel::Info,
                     title,
                     Some(body),
-                    &notification_settings,
-                );
+                )
+                .await;
 
                 s.set_transcribing(false);
             }
@@ -680,8 +665,6 @@ pub async fn toggle_speech_recording(
                     },
                 );
 
-                let notification_settings =
-                    config_inner.lock().await.settings().notifications.clone();
                 let body = if has_audio {
                     format!(
                         "{message} — audio kept for {}h, retry from the menu or history",
@@ -690,13 +673,14 @@ pub async fn toggle_speech_recording(
                 } else {
                     message
                 };
-                notifications_inner.notify(
+                NotificationService::notify_now(
+                    &app_clone,
                     "speech_transcription_success",
                     NotificationLevel::Error,
                     "Transcription error",
                     Some(body),
-                    &notification_settings,
-                );
+                )
+                .await;
 
                 speech_inner.lock().await.set_transcribing(false);
             }
@@ -757,12 +741,10 @@ pub async fn retry_transcription(app: AppHandle, entry_id: String) -> crate::Res
 
     let app_clone = app.clone();
     let speech_inner = Arc::clone(&*speech_state);
-    let config_inner = Arc::clone(&*config_state);
     let history_inner = Arc::clone(&*history_state);
     let clip_inner = Arc::clone(&*clip_state);
 
     tokio::spawn(async move {
-        let notifications = app_clone.state::<NotificationService>();
         let attempts = runtime.auto_retry_attempts.max(1);
 
         emit_retry(
@@ -792,8 +774,6 @@ pub async fn retry_transcription(app: AppHandle, entry_id: String) -> crate::Res
             },
         )
         .await;
-
-        let notification_settings = config_inner.lock().await.settings().notifications.clone();
 
         match result {
             Ok(text) => {
@@ -829,13 +809,14 @@ pub async fn retry_transcription(app: AppHandle, entry_id: String) -> crate::Res
                     },
                 );
 
-                notifications.notify(
+                NotificationService::notify_now(
+                    &app_clone,
                     "speech_transcription_success",
                     NotificationLevel::Success,
                     "Transcription recovered",
                     Some("Text copied to clipboard"),
-                    &notification_settings,
-                );
+                )
+                .await;
             }
             Err(e) => {
                 let message = e.to_string();
@@ -866,13 +847,14 @@ pub async fn retry_transcription(app: AppHandle, entry_id: String) -> crate::Res
                         attempts,
                     },
                 );
-                notifications.notify(
+                NotificationService::notify_now(
+                    &app_clone,
                     "speech_transcription_success",
                     NotificationLevel::Error,
                     "Retry failed",
                     Some(message),
-                    &notification_settings,
-                );
+                )
+                .await;
             }
         }
 
@@ -993,10 +975,7 @@ pub async fn cancel_speech_recording(app: AppHandle) -> crate::Result<()> {
         "speech-recording-stopped",
         SpeechRecordingStoppedEvent { had_audio: false },
     );
-    let _ = app.emit(
-        "speech-transcription-complete",
-        TranscriptionComplete { text: String::new(), duration_secs: 0.0, entry_id: None },
-    );
+    emit_empty_transcription(&app, 0.0);
     Ok(())
 }
 
