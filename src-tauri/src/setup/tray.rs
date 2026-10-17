@@ -1,6 +1,11 @@
 use crate::commands;
 use crate::services::recent_apps::RecentAppsState;
 
+#[cfg(target_os = "macos")]
+const TRAY_ICON_PNG: &[u8] = include_bytes!("../../icons/tray-macos.png");
+#[cfg(not(target_os = "macos"))]
+const TRAY_ICON_PNG: &[u8] = include_bytes!("../../icons/tray-linux.png");
+
 pub fn install(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::Error>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::TrayIconBuilder;
@@ -13,12 +18,13 @@ pub fn install(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::
 
     let menu = Menu::with_items(app, &[&show_menu_i, &sep1, &settings_i, &sep2, &quit_i])?;
 
-    let tray_icon_image =
-        tauri::image::Image::from_bytes(include_bytes!("../../icons/tray_icon.png"))?;
+    let tray_icon_image = tauri::image::Image::from_bytes(TRAY_ICON_PNG)?;
 
-    TrayIconBuilder::with_id("main-tray")
-        .icon(tray_icon_image)
-        .icon_as_template(true)
+    let tray = TrayIconBuilder::with_id("main-tray").icon(tray_icon_image);
+    #[cfg(target_os = "macos")]
+    let tray = tray.icon_as_template(true);
+
+    tray
         .menu(&menu)
         .show_menu_on_left_click(true)
         .tooltip("Promptheus")
@@ -50,4 +56,17 @@ pub fn install(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::
         .build(app)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn tray_pngs_decode_with_expected_sizes() {
+        let macos =
+            tauri::image::Image::from_bytes(include_bytes!("../../icons/tray-macos.png")).unwrap();
+        assert_eq!((macos.width(), macos.height()), (36, 36));
+        let linux =
+            tauri::image::Image::from_bytes(include_bytes!("../../icons/tray-linux.png")).unwrap();
+        assert_eq!((linux.width(), linux.height()), (32, 32));
+    }
 }

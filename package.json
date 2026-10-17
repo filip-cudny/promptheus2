@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "icons": "node scripts/icons.mjs",
     "bundle:linux": "tauri build --bundles deb",
     "bundle:mac": "tauri build --bundles app"
   },
@@ -32,7 +33,7 @@
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5",
-    "@tauri-apps/cli": "^2",
+    "@tauri-apps/cli": "^2.12.3",
     "svelte": "^5",
     "svelte-check": "^4",
     "typescript": "^5",

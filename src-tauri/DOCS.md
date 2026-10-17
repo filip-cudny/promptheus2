@@ -217,6 +217,13 @@ Cwd is **not** part of either contract. Tauri inherits the launch cwd (Finder/la
 - `serde`, `tokio`, `thiserror` track latest stable major lines — they're pulled in transitively anyway, divergence costs duplicate compilation.
 - Before adding any dependency, verify the current latest version (`cargo search`); follow the verification process in `docs/api-verification.md`.
 
+### Icons
+
+- `src-tauri/icons/logo.svg`, `logo-mono.svg` and `logo-symbolic.svg` are the only hand-edited logo files. After changing one, run `pnpm icons` (`scripts/icons.mjs`) and commit the outputs: `32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.icns`, `icon.ico`, `tray-macos.png`, `tray-linux.png`, `Promptheus.icon/Assets/flame.png`. `Promptheus.icon/icon.json` is hand-written.
+- The macOS tray PNG is a template image: black pixels, shading only in alpha. A gray-valued opaque PNG turns into a silhouette. `tray-linux.png` is the same artwork in white.
+- `Promptheus.icon` is the macOS 26 appearance-following icon (the flame layer on a solid fill from the dark `--surface-base`). The bundler compiles it with `actool` (Xcode 26); on an `actool` crash under `pnpm tauri build`, run `killall ibtoold` and retry (Tauri issue #15315). The `.icns` stays as the fallback for older macOS.
+- `@tauri-apps/api` must stay on the `tauri` crate's major.minor (`tauri build` fails otherwise). Upgrade only `@tauri-apps/cli` (`pnpm add -D @tauri-apps/cli@latest`), never `pnpm update`; `tauri icon` and `.icon` support need the CLI ≥ 2.11.
+
 ### Testing
 
 - Services are plain Rust structs — unit-test them with `#[cfg(test)]` blocks like any library; that's the expected pattern.

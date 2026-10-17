@@ -1,0 +1,9 @@
+{
+  "fill": { "solid": "srgb:0.11373,0.11765,0.12941,1.00000" },
+  "groups": [{
+    "layers": [{ "image-name": "flame.png", "name": "flame" }],
+    "shadow": { "kind": "neutral", "opacity": 0.5 },
+    "translucency": { "enabled": false, "value": 0.5 }
+  }],
+  "supported-platforms": { "squares": "shared" }
+}
