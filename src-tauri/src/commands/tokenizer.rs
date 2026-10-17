@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use tauri::State;
@@ -20,14 +19,6 @@ use crate::services::tokenizer;
 use crate::Error;
 
 use crate::services::execution::{build_system_prompt_base, resolve_environment_section_template};
-
-fn parse_provider(s: &str) -> Provider {
-    match s {
-        "anthropic" => Provider::Anthropic,
-        "gemini" => Provider::Gemini,
-        _ => Provider::Openai,
-    }
-}
 
 fn extract_text_from_messages(messages: &[ProcessedMessage]) -> String {
     let mut parts = Vec::new();
@@ -69,41 +60,10 @@ fn image_tokens_for_provider(provider: &Provider) -> usize {
 }
 
 #[tauri::command]
-pub async fn count_tokens(
-    text: String,
-    provider: String,
-) -> crate::Result<usize> {
-    let provider = parse_provider(&provider);
-    tokio::task::spawn_blocking(move || tokenizer::count_tokens(&text, &provider))
+pub async fn count_tokens(text: String) -> crate::Result<usize> {
+    tokio::task::spawn_blocking(move || tokenizer::count_tokens(&text))
         .await
         .map_err(|e| Error::Other(e.to_string()))
-}
-
-#[tauri::command]
-pub async fn get_skill_token_counts(
-    provider: String,
-    skill_service: State<'_, Arc<Mutex<SkillService>>>,
-) -> crate::Result<HashMap<String, usize>> {
-    let skills: Vec<(String, String)> = skill_service
-        .lock()
-        .await
-        .list_skills()
-        .iter()
-        .map(|skill| (skill.name.clone(), skill.body.clone()))
-        .collect();
-
-    let provider = parse_provider(&provider);
-    tokio::task::spawn_blocking(move || {
-        skills
-            .into_iter()
-            .map(|(name, body)| {
-                let count = tokenizer::count_tokens(&body, &provider);
-                (name, count)
-            })
-            .collect()
-    })
-    .await
-    .map_err(|e| Error::Other(e.to_string()))
 }
 
 #[tauri::command]
@@ -225,11 +185,9 @@ pub async fn count_conversation_tokens(
 
     let image_tokens = image_count * image_tokens_for_provider(&provider);
 
-    let text_tokens = tokio::task::spawn_blocking(move || {
-        tokenizer::count_tokens(&all_text, &provider)
-    })
-    .await
-    .map_err(|e| Error::Other(e.to_string()))?;
+    let text_tokens = tokio::task::spawn_blocking(move || tokenizer::count_tokens(&all_text))
+        .await
+        .map_err(|e| Error::Other(e.to_string()))?;
 
     Ok(text_tokens + image_tokens)
 }

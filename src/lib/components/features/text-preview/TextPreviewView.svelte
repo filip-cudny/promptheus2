@@ -26,7 +26,7 @@
   let tokenCount = $state(0);
 
   $effect(() => {
-    countTokensDebounced(text, "openai", (count) => {
+    countTokensDebounced(text, (count) => {
       tokenCount = count;
     });
   });

@@ -31,7 +31,7 @@
   let tokenCount = $derived(textTokens + images.length * estimateImageTokens("openai"));
 
   $effect(() => {
-    countTokensDebounced(text, "openai", (count) => {
+    countTokensDebounced(text, (count) => {
       textTokens = count;
     });
   });

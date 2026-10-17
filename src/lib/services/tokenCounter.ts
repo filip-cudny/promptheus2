@@ -5,7 +5,6 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function countTokensDebounced(
   text: string,
-  provider: Provider,
   callback: (count: number) => void,
   delay = 300,
 ): void {
@@ -18,24 +17,12 @@ export function countTokensDebounced(
 
   debounceTimer = setTimeout(async () => {
     try {
-      const count = await invoke<number>("count_tokens", { text, provider });
+      const count = await invoke<number>("count_tokens", { text });
       callback(count);
     } catch {
       callback(0);
     }
   }, delay);
-}
-
-export async function countTokens(
-  text: string,
-  provider: Provider,
-): Promise<number> {
-  if (!text.trim()) return 0;
-  try {
-    return await invoke<number>("count_tokens", { text, provider });
-  } catch {
-    return 0;
-  }
 }
 
 const IMAGE_TOKENS: Record<Provider, number> = {

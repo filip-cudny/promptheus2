@@ -198,7 +198,6 @@ macro_rules! handlers {
             $crate::commands::text_preview::save_text_preview_geometry,
             // === tokenizer ===
             $crate::commands::tokenizer::count_tokens,
-            $crate::commands::tokenizer::get_skill_token_counts,
             $crate::commands::tokenizer::count_conversation_tokens,
             // === ui_state ===
             $crate::commands::ui_state::get_ui_state,
