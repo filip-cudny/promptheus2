@@ -1,6 +1,7 @@
 <script lang="ts">
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { saveSvg } from "$lib/services/fileSave";
+  import { formatDuration } from "$lib/utils/format";
   import type { ConversationNode, ContentSegment } from "$lib/types/conversation";
   import type { ToolCall } from "$lib/types/ai";
   import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
@@ -155,20 +156,13 @@
   async function copyContent() {
     await navigator.clipboard.writeText(displayContent);
   }
-
-  function formatDuration(seconds: number): string {
-    if (seconds < 60) return `${seconds.toFixed(1)}s`;
-    const m = Math.floor(seconds / 60);
-    const s = Math.round(seconds % 60);
-    return s > 0 ? `${m}m ${s}s` : `${m}m`;
-  }
 </script>
 
 <div class="assistant-message-wrapper">
   <div class="assistant-bubble" class:editing={editMode}>
     <div class="bubble-body">
       {#if thinkingContent || isThinkingActive}
-        <ThinkingBlock {thinkingContent} {isThinkingActive} {isStreaming} thinkingDuration={node.thinking_duration} />
+        <ThinkingBlock {thinkingContent} {isThinkingActive} {isStreaming} thinkingDuration={node.thinking_duration} onsavesvg={saveSvg} />
       {/if}
 
       {#if editMode}

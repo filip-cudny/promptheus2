@@ -1,12 +1,6 @@
-const SKILL_TOKEN_RE = /(^|(?<=\s))(\/[a-z0-9-]+)(\s|$)?/g;
+import { escapeHtml } from "$lib/utils/format";
 
-export function escapeHtml(t: string): string {
-  return t
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+const SKILL_TOKEN_RE = /(^|(?<=\s))(\/[a-z0-9-]+)(\s|$)?/g;
 
 export function highlightSkills(
   text: string,

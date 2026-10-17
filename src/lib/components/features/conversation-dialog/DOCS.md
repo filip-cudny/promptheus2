@@ -20,7 +20,7 @@ Files whose role does not follow from the name:
 - `ContextSection.svelte` — inline context bar (text/image chips + clear/edit).
 - `AttachMenu.svelte`, `components/SidebarMoreMenu.svelte` — `FloatingPanel` + `MenuList` dropdowns (the attach menu opens above its button, the sidebar menu aligns to the end of its button).
 - `sidebarItems.ts` — pure helpers building `SidebarItem[]` from history.
-- `$lib/utils/historySearchSnippet.ts` — `displayName`, `snippetFor`, `formatTimestamp` for `ChatPalette`.
+- `$lib/utils/historySearchSnippet.ts` — `displayName`, `snippetFor`, `formatTimestamp` (Today/Yesterday/"Nd ago" scheme, not the relative one in `$lib/utils/format.ts`) for `ChatPalette`.
 - `tool-call/` — self-contained tool-invocation renderer; external entrypoint `ToolCallGroup` (used by `AssistantBubble`).
 - `components/ToolCall*.svelte` — pieces of `tool-call/ToolCallItem`; `ToolCallDetails` imports `tool-call/ToolResultRenderer`.
 - `drivers/useConversationDialogIpc.svelte.ts` — the dialog's IPC listeners.

@@ -5,8 +5,9 @@
 - `windows/<name>/` — one folder per window: `entry.ts` + `App.svelte`.
 - `lib/components/shared/ui/` — presentational primitives; `shared/widgets/` — reusable composites with state or IPC; `features/<feature>/` — feature UI.
 - `lib/components/shared/drivers/` — runes drivers shared by features (`useListSelection`: highlighted index, scroll into view and Escape/Enter/arrow keys of a palette list).
+- `features/<feature>/drivers/` — runes drivers (`use*.svelte.ts`) that keep window `App.svelte` files thin, e.g. `features/history/drivers/` (`useHistoryAudio`: audio-clip state and speech listeners; `useHistoryKeyboard`: search focus, paging and row navigation, bubble phase).
 - `lib/shortcuts.ts` — shortcut table and `createHostShortcutHandler` (tab shortcuts + open palette, registered in bubble phase by the shell toolbar and chat windows); `lib/utils/platform.ts` — `isMac`, `isLinux`: the only place that reads `navigator`.
-- `lib/stores/` — rune stores (`*.svelte.ts`); `lib/services/` — per-domain `invoke()` wrappers and event listeners; `lib/types/` — types mirroring Rust structs; `lib/utils/`, `lib/constants/`.
+- `lib/stores/` — rune stores (`*.svelte.ts`); `lib/services/` — per-domain `invoke()` wrappers and event listeners; `lib/types/` — types mirroring Rust structs; `lib/utils/` (`format.ts`: `escapeHtml`, `formatDuration`, relative `formatTimestamp`), `lib/constants/`.
 - `styles/theme.css` — CSS variables; `styles/global.css` — global styles.
 
 ## Conventions
@@ -49,7 +50,7 @@ Adding a new window:
 ### Services (IPC Layer)
 
 - `lib/services/` has one file per domain (`settings.ts`, `history.ts`, `skills.ts`, …) wrapping `invoke()` with typed signatures.
-- Components call services, not `invoke()`; this keeps the IPC boundary explicit. Preference, not enforced: direct calls exist in `ContextMenu.svelte`, `shared/widgets/ContextEditor.svelte`, `ContextEditorView.svelte`, `windows/provider-menu/App.svelte`, `windows/recording-widget/App.svelte` and `windows/conversation-dialog/App.svelte` (`get_dialog_init_params`).
+- Components call services, not `invoke()`; this keeps the IPC boundary explicit. Preference, not enforced: direct calls exist in `windows/provider-menu/App.svelte`, `windows/recording-widget/App.svelte` and `windows/conversation-dialog/App.svelte` (`get_dialog_init_params`).
 
 ### Types
 

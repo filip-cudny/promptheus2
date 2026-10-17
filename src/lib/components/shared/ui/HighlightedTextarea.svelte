@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { escapeHtml } from "$lib/utils/format";
+
   let {
     value = $bindable<string>(""),
     highlightPattern,
@@ -21,13 +23,6 @@
   const decorate = $derived(Boolean(highlightPattern));
 
   const highlighted = $derived(buildHighlighted(value, decorate));
-
-  function escapeHtml(s: string): string {
-    return s
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-  }
 
   function buildHighlighted(text: string, on: boolean): string {
     const padded = text.endsWith("\n") ? text + " " : text;

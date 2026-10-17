@@ -1,4 +1,5 @@
 import type { FieldMatch, SearchField } from "$lib/types/historySearch";
+import { escapeHtml } from "$lib/utils/format";
 
 export interface TruncateResult {
   text: string;
@@ -99,13 +100,6 @@ export function highlightFor(
   const m = fields.map((f) => matches.find((x) => x.field === f)).find(Boolean);
   if (!m) return escapeHtml(text);
   return interleave(text, m.indices);
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(
-    /[&<>"']/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[c]!,
-  );
 }
 
 function interleave(text: string, indices: readonly number[]): string {

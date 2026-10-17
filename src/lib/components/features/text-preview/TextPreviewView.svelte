@@ -1,11 +1,10 @@
 <script lang="ts">
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { save as saveDialog } from "@tauri-apps/plugin-dialog";
-  import { writeTextFile } from "@tauri-apps/plugin-fs";
   import EditorToolbar from "$lib/components/shared/ui/EditorToolbar.svelte";
   import MarkdownRenderer from "$lib/components/shared/ui/MarkdownRenderer.svelte";
   import { resizeTextarea } from "$lib/utils/autoResize";
   import { countTokensDebounced } from "$lib/services/tokenCounter";
+  import { saveSvg } from "$lib/services/fileSave";
 
   let {
     text = $bindable(),
@@ -41,14 +40,6 @@
   function handleInput(e: Event) {
     text = (e.target as HTMLTextAreaElement).value;
   }
-
-  async function handleSaveSvg(svg: string) {
-    const path = await saveDialog({
-      defaultPath: "mermaid-diagram.svg",
-      filters: [{ name: "SVG", extensions: ["svg"] }],
-    });
-    if (path) await writeTextFile(path, svg);
-  }
 </script>
 
 <div class="text-preview">
@@ -64,7 +55,7 @@
       ></textarea>
     {:else}
       <div class="markdown-view">
-        <MarkdownRenderer content={text} isStreaming={false} onopen={openUrl} onsavesvg={handleSaveSvg} />
+        <MarkdownRenderer content={text} isStreaming={false} onopen={openUrl} onsavesvg={saveSvg} />
       </div>
     {/if}
   </div>

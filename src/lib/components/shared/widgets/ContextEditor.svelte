@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
   import ImageChipBar from "$lib/components/shared/ui/ImageChipBar.svelte";
+  import { openImagePreview } from "$lib/services/windowPreviews";
   import { getImageFromPasteEvent } from "$lib/utils/paste";
   import { autoResize, resizeTextarea } from "$lib/utils/autoResize";
   import type { ConversationImage } from "$lib/types/conversation";
@@ -41,7 +41,7 @@
 <div class="context-editor" class:flat={variant === "flat"}>
   {#if !hideChipRow && images.length > 0}
     <div class="chip-row">
-      <ImageChipBar bind:images readonly={disabled} onopen={(image) => invoke("open_image_preview", { data: image.data, mediaType: image.media_type })} />
+      <ImageChipBar bind:images readonly={disabled} onopen={(image) => openImagePreview(image.data, image.media_type)} />
     </div>
   {/if}
   <textarea

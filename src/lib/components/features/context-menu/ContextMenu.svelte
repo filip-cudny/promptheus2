@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
   import { MessageSquare } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import type { MenuItem } from "$lib/types/menu";
@@ -15,6 +14,7 @@
   import FloatingPanel from "$lib/components/shared/ui/FloatingPanel.svelte";
   import { focusOrOpenChat, openConversationDialog } from "$lib/services/conversationDialog";
   import { newTab } from "$lib/services/tabs";
+  import { openImagePreview } from "$lib/services/windowPreviews";
   import {
     clearContext,
     getContextText,
@@ -152,7 +152,7 @@
 
   async function handleOpenImagePreview(data: string, mediaType: string) {
     menu.suppressClose();
-    await invoke("open_image_preview", { data, mediaType });
+    await openImagePreview(data, mediaType);
   }
 
   async function handleCopyChip(chip: LastInteractionChip) {

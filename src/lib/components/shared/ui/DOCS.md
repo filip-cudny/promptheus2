@@ -6,7 +6,7 @@ Reusable UI primitives shared across features. See [src/DOCS.md](../../../../DOC
 
 ### Component patterns
 
-- Files here are presentational: they import no stores, services or `invoke()`. Besides types, constants, `$lib/utils` helpers and sibling `ui/` components they use only rendering libraries (`morphdom` and `mermaid` in `MarkdownRenderer`). Components that need state or IPC go in `shared/widgets/`; the exception is `ThinkingBlock`, which calls the Tauri plugins `opener`, `dialog` and `fs` directly (open a link, save and write a file).
+- Files here are presentational: they import no stores, services or `invoke()`. Besides types, constants, `$lib/utils` helpers and sibling `ui/` components they use only rendering libraries (`morphdom` and `mermaid` in `MarkdownRenderer`). Components that need state or IPC go in `shared/widgets/`; the exception is `ThinkingBlock`, which calls the Tauri plugin `opener` directly (open a link); saving a Mermaid SVG comes in through its `onsavesvg` prop.
 - Scoped `<style>` blocks for all CSS — no global style leakage.
 - Custom Svelte transitions defined inline when built-in transitions (`fade`, `fly`) don't match the required animation curve (e.g., capped opacity).
 
@@ -72,7 +72,7 @@ For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconPro
 
 ### ContextEditor
 
-Lives in `shared/widgets/ContextEditor.svelte` (it calls `invoke("open_image_preview")` for `ImageChipBar`'s `onopen`), not here. Parents control persistence.
+Lives in `shared/widgets/ContextEditor.svelte` (it calls `openImagePreview` from `$lib/services/windowPreviews` for `ImageChipBar`'s `onopen`), not here. Parents control persistence.
 
 ### CommandPalette
 

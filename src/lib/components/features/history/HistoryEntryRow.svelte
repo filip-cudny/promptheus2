@@ -15,6 +15,7 @@
   } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { highlightFor, truncateAroundMatch } from "$lib/utils/highlightMatches";
+  import { formatDuration, formatTimestamp } from "$lib/utils/format";
   import type { AudioClipInfo, HistoryEntry } from "$lib/types";
   import type { FieldMatch } from "$lib/types/historySearch";
 
@@ -117,13 +118,6 @@
     return hasAny ? sum : null;
   });
 
-  function formatDuration(seconds: number): string {
-    if (seconds < 60) return `${seconds.toFixed(1)}s`;
-    const m = Math.floor(seconds / 60);
-    const s = Math.round(seconds % 60);
-    return s > 0 ? `${m}m ${s}s` : `${m}m`;
-  }
-
   function formatExpiry(expiresAt: string | null): string | null {
     if (!expiresAt) return null;
     const expires = new Date(expiresAt.replace(" ", "T")).getTime();
@@ -134,20 +128,6 @@
     const hours = Math.floor(remainingMin / 60);
     const minutes = remainingMin % 60;
     return minutes > 0 ? `${hours}h ${minutes}m left` : `${hours}h left`;
-  }
-
-  function formatTimestamp(entry: HistoryEntry): string {
-    const raw = entry.updated_at ?? entry.created_at ?? entry.timestamp;
-    const date = new Date(raw);
-    if (isNaN(date.getTime())) return raw;
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMin = Math.floor(diffMs / 60000);
-    if (diffMin < 1) return "Just now";
-    if (diffMin < 60) return `${diffMin}m ago`;
-    const diffHours = Math.floor(diffMin / 60);
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return date.toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
   }
 </script>
 
@@ -181,7 +161,7 @@
         {#if totalDuration != null}
           <span class="duration">{formatDuration(totalDuration)}</span>
         {/if}
-        <span class="timestamp">{formatTimestamp(entry)}</span>
+        <span class="timestamp">{formatTimestamp(entry.updated_at ?? entry.created_at ?? entry.timestamp, true)}</span>
         {#if isTranscription}
           <button class="copy-btn" class:copied onclick={copyToClipboard} title="Copy transcription">
             {#if copied}

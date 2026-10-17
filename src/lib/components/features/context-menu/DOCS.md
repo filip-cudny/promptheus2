@@ -29,7 +29,7 @@ Files whose role does not follow from the name:
 ### Layer contracts
 
 - `components/*` and other UI primitives **must not** import `services/`, `stores/`, or `invoke()`. They take props and emit callbacks.
-- `ContextMenu.svelte` itself calls `invoke("open_image_preview")` directly (the one direct call here).
+- `ContextMenu.svelte` opens the image preview through `openImagePreview` from `$lib/services/windowPreviews`.
 - `drivers/*.svelte.ts` are pure runes — no JSX, no CSS. They may call `invoke()` (positioning calls `show_context_menu_panel` / `focus_context_menu`) or attach window listeners (blur).
 - Mutex `open*` methods atomically close the other two panels, removing the previous bug-prone `closePanels(); settingsOpen = true;` pattern.
 - `skillMetadata` cache is a module-level singleton (`$state`) so it survives menu close/reopen — fewer redundant `get_skill` IPC calls.

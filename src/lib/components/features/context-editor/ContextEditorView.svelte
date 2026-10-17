@@ -1,13 +1,12 @@
 <script lang="ts">
-  import { invoke } from "@tauri-apps/api/core";
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { save as saveDialog } from "@tauri-apps/plugin-dialog";
-  import { writeTextFile } from "@tauri-apps/plugin-fs";
   import ContextEditor from "$lib/components/shared/widgets/ContextEditor.svelte";
   import ImageChipBar from "$lib/components/shared/ui/ImageChipBar.svelte";
   import EditorToolbar from "$lib/components/shared/ui/EditorToolbar.svelte";
   import MarkdownRenderer from "$lib/components/shared/ui/MarkdownRenderer.svelte";
   import { countTokensDebounced } from "$lib/services/tokenCounter";
+  import { saveSvg } from "$lib/services/fileSave";
+  import { openImagePreview } from "$lib/services/windowPreviews";
   import type { ConversationImage } from "$lib/types/conversation";
 
   let {
@@ -38,14 +37,6 @@
       images.length,
     );
   });
-
-  async function handleSaveSvg(svg: string) {
-    const path = await saveDialog({
-      defaultPath: "mermaid-diagram.svg",
-      filters: [{ name: "SVG", extensions: ["svg"] }],
-    });
-    if (path) await writeTextFile(path, svg);
-  }
 </script>
 
 <div class="editor-content">
@@ -55,14 +46,14 @@
   {/if}
   {#if images.length > 0}
     <div class="image-row">
-      <ImageChipBar bind:images readonly={!editMode} onopen={(image) => invoke("open_image_preview", { data: image.data, mediaType: image.media_type })} />
+      <ImageChipBar bind:images readonly={!editMode} onopen={(image) => openImagePreview(image.data, image.media_type)} />
     </div>
   {/if}
   {#if editMode}
     <ContextEditor bind:text bind:images variant="flat" hideChipRow />
   {:else}
     <div class="markdown-view">
-      <MarkdownRenderer content={text} isStreaming={false} onopen={openUrl} onsavesvg={handleSaveSvg} />
+      <MarkdownRenderer content={text} isStreaming={false} onopen={openUrl} onsavesvg={saveSvg} />
     </div>
   {/if}
 </div>

@@ -2,8 +2,6 @@
   import { onDestroy } from "svelte";
   import { slide } from "svelte/transition";
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { save } from "@tauri-apps/plugin-dialog";
-  import { writeTextFile } from "@tauri-apps/plugin-fs";
   import { ChevronRight, ChevronDown, Brain } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import MarkdownRenderer from "./MarkdownRenderer.svelte";
@@ -13,11 +11,13 @@
     isThinkingActive,
     isStreaming = false,
     thinkingDuration = null,
+    onsavesvg,
   }: {
     thinkingContent: string;
     isThinkingActive: boolean;
     isStreaming: boolean;
     thinkingDuration?: number | null;
+    onsavesvg?: (svg: string) => void;
   } = $props();
 
   let expanded = $state(false);
@@ -59,14 +59,6 @@
     if (intervalId) clearInterval(intervalId);
   });
 
-  async function handleSaveSvg(svg: string) {
-    const path = await save({
-      defaultPath: "mermaid-diagram.svg",
-      filters: [{ name: "SVG", extensions: ["svg"] }],
-    });
-    if (path) await writeTextFile(path, svg);
-  }
-
   function formatElapsed(seconds: number): string {
     if (seconds < 60) return `${seconds}s`;
     const m = Math.floor(seconds / 60);
@@ -89,7 +81,7 @@
     </div>
     {#if hasContent}
       <div class="thinking-content thinking-content--live" bind:this={liveThinkingEl}>
-        <MarkdownRenderer content={thinkingContent} isStreaming={true} onopen={openUrl} onsavesvg={handleSaveSvg} />
+        <MarkdownRenderer content={thinkingContent} isStreaming={true} onopen={openUrl} {onsavesvg} />
       </div>
     {/if}
   </div>
@@ -112,7 +104,7 @@
     </button>
     {#if expanded}
       <div class="thinking-content" transition:slide={{ duration: 150 }}>
-        <MarkdownRenderer content={thinkingContent} isStreaming={false} onopen={openUrl} onsavesvg={handleSaveSvg} />
+        <MarkdownRenderer content={thinkingContent} isStreaming={false} onopen={openUrl} {onsavesvg} />
       </div>
     {/if}
   </div>

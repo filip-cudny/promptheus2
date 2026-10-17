@@ -1,4 +1,5 @@
 import type { HistoryEntry } from "$lib/types";
+import { formatTimestamp } from "$lib/utils/format";
 
 export type SidebarItem = { kind: "history"; entry: HistoryEntry };
 
@@ -33,16 +34,4 @@ export function itemTimestamp(item: SidebarItem): string | null {
   const entry = item.entry;
   const raw = entry.updated_at ?? entry.created_at ?? entry.timestamp;
   return raw ? formatTimestamp(raw) : null;
-}
-
-export function formatTimestamp(raw: string): string {
-  const date = new Date(raw);
-  if (isNaN(date.getTime())) return raw;
-  const diffMs = Date.now() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "Just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }

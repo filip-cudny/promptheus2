@@ -1,26 +1,19 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { X } from "lucide-svelte";
   import { getHistorySearchStore } from "$lib/stores/historySearch.svelte";
   import { openConversationDialog } from "$lib/services/conversationDialog";
   import { copyHistoryEntryContent, searchHistory } from "$lib/services/history";
   import { onHistoryChanged } from "$lib/services/events";
   import { getUiState, setUiState } from "$lib/services/uiState";
-  import type { AudioClipInfo, HistoryEntry } from "$lib/types";
-  import {
-    discardAudioClip,
-    exportAudioClip,
-    getAudioClipInfo,
-    retryTranscription,
-    type TranscriptionErrorEvent,
-    type TranscriptionRetryEvent,
-  } from "$lib/services/speech";
-  import { listen } from "@tauri-apps/api/event";
+  import type { HistoryEntry } from "$lib/types";
   import { error as logError } from "@tauri-apps/plugin-log";
   import HistoryEntryRow from "$lib/components/features/history/HistoryEntryRow.svelte";
   import HistoryEmptyState from "$lib/components/features/history/HistoryEmptyState.svelte";
   import HistoryToolbar from "$lib/components/features/history/HistoryToolbar.svelte";
   import HistoryPagination from "$lib/components/features/history/HistoryPagination.svelte";
+  import HistoryFilterChips from "$lib/components/features/history/HistoryFilterChips.svelte";
+  import { useHistoryAudio } from "$lib/components/features/history/drivers/useHistoryAudio.svelte";
+  import { useHistoryKeyboard } from "$lib/components/features/history/drivers/useHistoryKeyboard.svelte";
   import { formatActiveFilters, getActiveFilterChips } from "$lib/utils/historyFilters";
 
   const PAGE_SIZES = [10, 25, 50] as const;
@@ -34,9 +27,7 @@
     currentPage: () => currentPage,
   });
 
-  let audioClips = $state<Record<string, AudioClipInfo>>({});
-  let retryingIds = $state<Set<string>>(new Set());
-  let unlistens: Array<() => void> = [];
+  let unlisten: (() => void) | undefined;
   let historyEmpty = $state(false);
 
   let searchInput = $state<HTMLInputElement | null>(null);
@@ -98,141 +89,21 @@
     void searchStore.refreshSkills();
   }
 
-  function mayHaveAudio(entry: HistoryEntry): boolean {
-    return entry.entry_type === "speech";
+  const audio = useHistoryAudio({ entries: () => pageResults.map((r) => r.entry) });
+
+  function stepPage(delta: 1 | -1): boolean {
+    const next = currentPage + delta;
+    if (next < 0 || next >= totalPages) return false;
+    currentPage = next;
+    return true;
   }
 
-  async function loadAudioClip(entryId: string) {
-    try {
-      const info = await getAudioClipInfo(entryId);
-      audioClips = { ...audioClips, [entryId]: info };
-      if (info.is_retrying) markRetrying(entryId, true);
-    } catch (e) {
-      logError(`get_audio_clip_info failed for ${entryId}: ${e}`);
-    }
-  }
-
-  function markRetrying(entryId: string, active: boolean) {
-    const next = new Set(retryingIds);
-    if (active) next.add(entryId);
-    else next.delete(entryId);
-    retryingIds = next;
-  }
-
-  $effect(() => {
-    for (const result of pageResults) {
-      if (!mayHaveAudio(result.entry)) continue;
-      if (result.entry.id in audioClips) continue;
-      void loadAudioClip(result.entry.id);
-    }
+  useHistoryKeyboard({
+    searchInput: () => searchInput,
+    entriesList: () => entriesListEl,
+    hasResults: () => pageResults.length > 0,
+    stepPage,
   });
-
-  async function handleRetry(entry: HistoryEntry) {
-    markRetrying(entry.id, true);
-    try {
-      await retryTranscription(entry.id);
-    } catch (e) {
-      markRetrying(entry.id, false);
-      logError(`retry_transcription failed for ${entry.id}: ${e}`);
-    }
-  }
-
-  async function handleExportAudio(entry: HistoryEntry) {
-    try {
-      await exportAudioClip(entry.id, `voice-note-${entry.id.slice(0, 8)}.wav`);
-    } catch (e) {
-      logError(`export_audio_clip failed for ${entry.id}: ${e}`);
-    }
-  }
-
-  async function handleDiscardAudio(entry: HistoryEntry) {
-    try {
-      await discardAudioClip(entry.id);
-    } catch (e) {
-      logError(`discard_audio_clip failed for ${entry.id}: ${e}`);
-    }
-    await loadAudioClip(entry.id);
-  }
-
-  function getRowButtons(): HTMLButtonElement[] {
-    if (!entriesListEl) return [];
-    return Array.from(entriesListEl.querySelectorAll<HTMLButtonElement>(".entry-row"));
-  }
-
-  function focusedRowIndex(): number {
-    const rows = getRowButtons();
-    for (let i = 0; i < rows.length; i++) {
-      if (rows[i] === document.activeElement) return i;
-    }
-    return -1;
-  }
-
-  function focusRow(idx: number) {
-    const rows = getRowButtons();
-    if (rows.length === 0) return;
-    const clamped = Math.max(0, Math.min(rows.length - 1, idx));
-    rows[clamped]?.focus();
-  }
-
-  function isInSearchInput(target: EventTarget | null): boolean {
-    return !!searchInput && target === searchInput;
-  }
-
-  function handleWindowKeydown(e: KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
-      e.preventDefault();
-      searchInput?.focus();
-      searchInput?.select();
-      return;
-    }
-
-    if (e.key === "PageDown") {
-      if (currentPage < totalPages - 1) {
-        e.preventDefault();
-        currentPage++;
-      }
-      return;
-    }
-    if (e.key === "PageUp") {
-      if (currentPage > 0) {
-        e.preventDefault();
-        currentPage--;
-      }
-      return;
-    }
-
-    const inSearch = isInSearchInput(e.target);
-    const rowIdx = focusedRowIndex();
-    const onRow = rowIdx >= 0;
-
-    if (inSearch && e.key === "ArrowDown") {
-      if (pageResults.length > 0) {
-        e.preventDefault();
-        focusRow(0);
-      }
-      return;
-    }
-
-    if (onRow) {
-      if (e.key === "ArrowDown" || e.key === "j") {
-        e.preventDefault();
-        focusRow(rowIdx + 1);
-      } else if (e.key === "ArrowUp" || e.key === "k") {
-        e.preventDefault();
-        if (rowIdx === 0) searchInput?.focus();
-        else focusRow(rowIdx - 1);
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        searchInput?.focus();
-      } else if (e.key === "Home") {
-        e.preventDefault();
-        focusRow(0);
-      } else if (e.key === "End") {
-        e.preventDefault();
-        focusRow(getRowButtons().length - 1);
-      }
-    }
-  }
 
   function handleListScroll() {
     if (!entriesListEl) return;
@@ -251,35 +122,13 @@
     if (saved && PAGE_SIZES.includes(saved as (typeof PAGE_SIZES)[number])) {
       pageSize = saved;
     }
-    window.addEventListener("keydown", handleWindowKeydown);
     searchInput?.focus();
 
-    unlistens = await Promise.all([
-      onHistoryChanged(refreshAll),
-      listen<TranscriptionRetryEvent>("speech-transcription-retry", (event) => {
-        const entryId = event.payload.entry_id;
-        if (entryId) markRetrying(entryId, true);
-      }),
-      listen<TranscriptionErrorEvent>("speech-transcription-error", (event) => {
-        const entryId = event.payload.entry_id;
-        if (!entryId) return;
-        markRetrying(entryId, false);
-        void loadAudioClip(entryId);
-      }),
-      listen<{ entry_id: string | null }>("speech-transcription-complete", (event) => {
-        const entryId = event.payload.entry_id;
-        if (!entryId) return;
-        markRetrying(entryId, false);
-        void loadAudioClip(entryId);
-      }),
-    ]);
+    unlisten = await onHistoryChanged(refreshAll);
     refreshAll();
   });
 
-  onDestroy(() => {
-    window.removeEventListener("keydown", handleWindowKeydown);
-    for (const fn of unlistens) fn();
-  });
+  onDestroy(() => unlisten?.());
 
   async function handleOpen(entry: HistoryEntry) {
     await openConversationDialog(entry.skill_id ?? "", entry.title ?? entry.skill_name ?? "", entry.id);
@@ -305,22 +154,7 @@
     <HistoryToolbar {searchStore} bind:searchInput />
 
     {#if showChipBar}
-      <div class="chip-bar">
-        <div class="chips">
-          {#each chips as chip (chip.key)}
-            <button class="chip" type="button" onclick={chip.remove} aria-label={`Remove filter: ${chip.label}`}>
-              <span class="chip-label">{chip.label}</span>
-              <X size={10} />
-            </button>
-          {/each}
-        </div>
-        {#if searchStore.total > 0}
-          <span class="result-count">
-            {searchStore.total}
-            {searchStore.total === 1 ? "result" : "results"}
-          </span>
-        {/if}
-      </div>
+      <HistoryFilterChips {chips} total={searchStore.total} />
     {/if}
 
     <div class="progress-line" class:visible={showProgressBar} aria-hidden="true">
@@ -350,13 +184,13 @@
         <HistoryEntryRow
           entry={result.entry}
           matches={result.matches}
-          audioClip={audioClips[result.entry.id] ?? null}
-          retrying={retryingIds.has(result.entry.id)}
+          audioClip={audio.audioClips[result.entry.id] ?? null}
+          retrying={audio.retryingIds.has(result.entry.id)}
           onOpen={handleOpen}
           oncopy={handleCopy}
-          onRetry={handleRetry}
-          onExportAudio={handleExportAudio}
-          onDiscardAudio={handleDiscardAudio}
+          onRetry={audio.retry}
+          onExportAudio={audio.exportAudio}
+          onDiscardAudio={audio.discardAudio}
         />
       {/each}
       {#if emptyVariant}
@@ -406,64 +240,6 @@
   .topbar.scrolled {
     border-bottom-color: var(--border-default);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
-  }
-
-  .chip-bar {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    padding: 0 var(--space-6) var(--space-4);
-  }
-
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    flex: 1;
-    min-width: 0;
-  }
-
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 2px var(--space-3);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-full);
-    background: var(--surface-overlay-faint);
-    color: var(--text-secondary);
-    cursor: pointer;
-    font: inherit;
-    font-size: var(--font-size-sm);
-    line-height: 1.4;
-    transition: background var(--motion-fast) var(--ease-default),
-      color var(--motion-fast) var(--ease-default),
-      border-color var(--motion-fast) var(--ease-default);
-  }
-
-  .chip:hover {
-    background: var(--surface-overlay);
-    color: var(--text-primary);
-    border-color: var(--border-default);
-  }
-
-  .chip:focus-visible {
-    outline: 2px solid var(--accent-ring);
-    outline-offset: 1px;
-  }
-
-  .chip-label {
-    max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .result-count {
-    flex-shrink: 0;
-    color: var(--text-muted);
-    font-size: var(--font-size-sm);
-    letter-spacing: var(--tracking-label);
   }
 
   .progress-line {
