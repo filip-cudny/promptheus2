@@ -14,7 +14,7 @@ Wraps `rmcp::RunningService<RoleClient, ()>`. Each instance manages one MCP serv
 
 ## Closing on exit
 
-`lib.rs` handles `RunEvent::Exit` by blocking (`tauri::async_runtime::block_on`) on `McpRegistry::close_all(&self, timeout)`, which closes all servers concurrently with a timeout of 2 s, so the whole close takes at most about 2 s. Dropping the registry is not enough: Tauri ends the process with `std::process::exit`, so the managed `Arc<McpRegistry>` is never dropped, and rmcp's drop of the child only spawns the kill task, which does not get to run.
+`lib.rs` handles `RunEvent::Exit` by blocking (`tauri::async_runtime::block_on`) on `McpRegistry::close_all(&self, timeout)`, which closes all servers concurrently with a timeout of 4 s, so the whole close takes at most about 4 s. The timeout must exceed rmcp 1.4.0's `MAX_WAIT_ON_DROP_SECS = 3` (`transport/child_process.rs`): after that wait `graceful_shutdown` kills a child that did not exit on its own, and a shorter timeout returns first, the process exits and the kill never runs. Dropping the registry is not enough: Tauri ends the process with `std::process::exit`, so the managed `Arc<McpRegistry>` is never dropped, and rmcp's drop of the child only spawns the kill task, which does not get to run.
 
 ## McpError
 

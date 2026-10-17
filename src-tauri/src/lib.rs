@@ -80,6 +80,6 @@ fn close_mcp_servers(app: &tauri::AppHandle) {
         return;
     };
     log::info!("Closing MCP servers");
-    tauri::async_runtime::block_on(registry.close_all(tokio::time::Duration::from_secs(2)));
+    tauri::async_runtime::block_on(registry.close_all(tokio::time::Duration::from_secs(4)));
     log::info!("MCP servers closed");
 }
