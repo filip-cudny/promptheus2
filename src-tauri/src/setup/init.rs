@@ -16,9 +16,8 @@ pub fn run(app: &mut tauri::App) -> std::result::Result<(), Box<dyn std::error::
     }
 
     let config_dir = app.path().app_config_dir()?;
-    let resource_dir = app.path().resolve("", tauri::path::BaseDirectory::Resource)?;
     services::config::load_env(&config_dir);
-    let config_service = ConfigService::load(&config_dir, Some(&resource_dir))
+    let config_service = ConfigService::load(&config_dir)
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
     log::info!("config loaded from {}", config_dir.display());
 
@@ -39,7 +38,7 @@ pub fn run(app: &mut tauri::App) -> std::result::Result<(), Box<dyn std::error::
 
     setup::windows::create(app)?;
     setup::shortcuts::register(app, config_service.settings())?;
-    setup::state::manage(app, &config_dir, &resource_dir, config_service)?;
+    setup::state::manage(app, &config_dir, config_service)?;
     setup::background::spawn_heartbeat(app.handle().clone());
     setup::background::spawn_ai_webview_unload(app.handle().clone());
     setup::background::spawn_audio_clip_sweeper(app.handle().clone());

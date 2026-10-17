@@ -73,17 +73,13 @@ pub fn is_event_enabled(event_name: &str, events: &NotificationEvents) -> bool {
     match event_name {
         "prompt_execution_success" => events.prompt_execution_success,
         "prompt_execution_cancel" => events.prompt_execution_cancel,
-        "prompt_execution_in_progress" => events.prompt_execution_in_progress,
         "speech_recording_start" => events.speech_recording_start,
         "speech_recording_stop" => events.speech_recording_stop,
         "speech_transcription_success" => events.speech_transcription_success,
         "speech_transcription_retry" => events.speech_transcription_retry,
-        "context_saved" => events.context_saved,
         "context_set" => events.context_set,
         "context_append" => events.context_append,
         "context_cleared" => events.context_cleared,
-        "clipboard_copy" => events.clipboard_copy,
-        "image_added" => events.image_added,
         _ => true,
     }
 }
@@ -97,31 +93,27 @@ mod tests {
     fn test_is_event_enabled_known_events() {
         let mut events = NotificationEvents::default();
         assert!(is_event_enabled("prompt_execution_success", &events));
-        assert!(is_event_enabled("clipboard_copy", &events));
+        assert!(is_event_enabled("context_set", &events));
 
         events.prompt_execution_success = false;
         assert!(!is_event_enabled("prompt_execution_success", &events));
 
-        events.clipboard_copy = false;
-        assert!(!is_event_enabled("clipboard_copy", &events));
+        events.context_set = false;
+        assert!(!is_event_enabled("context_set", &events));
     }
 
     #[test]
-    fn test_is_event_enabled_all_twelve_events() {
+    fn test_is_event_enabled_all_nine_events() {
         let mut events = NotificationEvents::default();
         let event_names = [
             "prompt_execution_success",
             "prompt_execution_cancel",
-            "prompt_execution_in_progress",
             "speech_recording_start",
             "speech_recording_stop",
             "speech_transcription_success",
-            "context_saved",
             "context_set",
             "context_append",
             "context_cleared",
-            "clipboard_copy",
-            "image_added",
         ];
 
         for name in &event_names {
@@ -130,16 +122,12 @@ mod tests {
 
         events.prompt_execution_success = false;
         events.prompt_execution_cancel = false;
-        events.prompt_execution_in_progress = false;
         events.speech_recording_start = false;
         events.speech_recording_stop = false;
         events.speech_transcription_success = false;
-        events.context_saved = false;
         events.context_set = false;
         events.context_append = false;
         events.context_cleared = false;
-        events.clipboard_copy = false;
-        events.image_added = false;
 
         for name in &event_names {
             assert!(!is_event_enabled(name, &events), "{name} should be disabled");

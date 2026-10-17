@@ -408,8 +408,8 @@ impl ReloadFixture {
         fixture.git(&fixture.b(), &["pull"]);
 
         let config_dir = fixture.config_dir_for(&fixture.a(), "config-a");
-        let config = ConfigService::load(&config_dir, None).unwrap();
-        let skills = SkillService::load(&config_dir.join("skills"), None, &[]).unwrap();
+        let config = ConfigService::load(&config_dir).unwrap();
+        let skills = SkillService::load(&config_dir.join("skills"), &[]).unwrap();
         fixture.git(&fixture.a(), &["add", "-A"]);
         fixture.git(&fixture.a(), &["commit", "--allow-empty", "-m", "normalized by load"]);
         fixture.git(&fixture.a(), &["push"]);

@@ -13,29 +13,14 @@ pub fn load_env(config_dir: &Path) {
     std::env::set_var("CONFIG_DIR", config_dir);
 }
 
-pub(super) fn initialize_defaults(
-    config_dir: &Path,
-    resource_dir: Option<&Path>,
-) -> Result<(), ConfigError> {
+pub(super) fn initialize_defaults(config_dir: &Path) -> Result<(), ConfigError> {
     std::fs::create_dir_all(config_dir)?;
     log::info!("initializing default settings in {}", config_dir.display());
 
-    let copied = if let Some(res_dir) = resource_dir {
-        let default_settings = res_dir.join("resources/default_settings.json");
-        if default_settings.exists() {
-            std::fs::copy(&default_settings, config_dir.join("settings.json"))?;
-            true
-        } else {
-            false
-        }
-    } else {
-        false
-    };
-
-    if !copied {
-        let fallback_json = include_str!("../../../resources/default_settings.json");
-        std::fs::write(config_dir.join("settings.json"), fallback_json)?;
-    }
+    std::fs::write(
+        config_dir.join("settings.json"),
+        include_str!("../../../resources/default_settings.json"),
+    )?;
 
     initialize_env(config_dir)?;
     initialize_prompt_defaults(config_dir)?;

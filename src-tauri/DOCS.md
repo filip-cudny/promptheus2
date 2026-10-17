@@ -8,7 +8,7 @@ Directories follow their names (`commands/`, `services/`, `models/`, `providers/
 src-tauri/
 ├── Info.plist                  # macOS bundle keys merged into the .app
 ├── entitlements.plist          # macOS code-signing entitlements
-├── resources/                  # files bundled into the app
+├── resources/                  # default settings, prompts and skills, embedded into the binary with `include_str!`
 └── src/
     ├── main.rs                 # shim — calls `app_lib::run()`
     ├── lib.rs                  # `pub fn run()`: plugins, setup hook, invoke handler

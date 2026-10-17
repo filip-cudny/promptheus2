@@ -465,7 +465,6 @@ mod tests {
     use crate::services::context::ContextManagerService;
     use crate::services::database::Database;
     use crate::services::skill::SkillService;
-    use std::path::PathBuf;
     use tempfile::TempDir;
 
     fn setup_skill_service(name: &str, model: &str) -> (TempDir, SkillService) {
@@ -478,8 +477,7 @@ mod tests {
         );
         std::fs::write(&skill_path, body).unwrap();
 
-        let resource: Option<PathBuf> = None;
-        let svc = SkillService::load(dir.path(), resource.as_deref(), &[]).unwrap();
+        let svc = SkillService::load(dir.path(), &[]).unwrap();
         (dir, svc)
     }
 
@@ -506,7 +504,7 @@ mod tests {
         settings.surfaces.quick_actions.generation.model_id = Some(model_id.to_string());
         let settings_path = dir.path().join("settings.json");
         std::fs::write(&settings_path, serde_json::to_string(&settings).unwrap()).unwrap();
-        let config = ConfigService::load(dir.path(), None).unwrap();
+        let config = ConfigService::load(dir.path()).unwrap();
         (dir, config)
     }
 

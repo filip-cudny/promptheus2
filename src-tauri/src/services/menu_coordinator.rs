@@ -260,7 +260,7 @@ mod tests {
         let dir = tempfile::TempDir::new().unwrap();
         let default_json = include_str!("../../resources/default_settings.json");
         std::fs::write(dir.path().join("settings.json"), default_json).unwrap();
-        let svc = ConfigService::load(dir.path(), None).unwrap();
+        let svc = ConfigService::load(dir.path()).unwrap();
         std::mem::forget(dir);
         svc
     }

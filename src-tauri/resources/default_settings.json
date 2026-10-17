@@ -1,8 +1,6 @@
 {
   "show_tray_icon": true,
   "launch_at_startup": false,
-  "debug_mode": false,
-  "code_theme": "paraiso-dark",
   "theme": "dark",
   "menu_section_order": [
     "ContextMenuProvider",
@@ -18,19 +16,9 @@
       "speech_recording_start": true,
       "speech_recording_stop": true,
       "speech_transcription_success": true,
-      "context_saved": true,
       "context_set": true,
       "context_append": true,
-      "context_cleared": true,
-      "clipboard_copy": true,
-      "image_added": true,
-      "prompt_execution_in_progress": true
-    },
-    "background_colors": {
-      "success": "#FFFFFF",
-      "error": "#FFFFFF",
-      "info": "#FFFFFF",
-      "warning": "#FFFFFF"
+      "context_cleared": true
     },
     "monochromatic_notification_icons": true,
     "recording_reminder": {

@@ -63,7 +63,7 @@ Reads text and images with the `arboard` crate; writes text through `write_text`
 
 ### ConfigService specifics
 
-**Load sequence** (`ConfigService::load`): `load_env` (`<config dir>/.env`, then `dotenvy::dotenv_override()` from the working directory and its parents, both overriding the process environment; sets `CONFIG_DIR`) → default assets copied when `settings.json` is missing → read and `parse_and_migrate` (schema migration in `migrator.rs`) → legacy prompt file moves and defaults → `migrate_model_params` → capability sanitizing → `ensure_surface_defaults` → `validate` → `write`. A model's `api_key` is a literal key or a `${VAR}` reference, resolved at use by `ModelConfig::resolved_api_key`; `write` serializes the settings as they are, with no key stripping.
+**Load sequence** (`ConfigService::load`): `load_env` (`<config dir>/.env`, then `dotenvy::dotenv_override()` from the working directory and its parents, both overriding the process environment; sets `CONFIG_DIR`) → default `settings.json` (embedded with `include_str!`), `.env` and prompt files written when `settings.json` is missing → read and `parse_and_migrate` (schema migration in `migrator.rs`) → legacy prompt file moves and defaults → `migrate_model_params` → capability sanitizing → `ensure_surface_defaults` → `validate` → `write`. A model's `api_key` is a literal key or a `${VAR}` reference, resolved at use by `ModelConfig::resolved_api_key`; `write` serializes the settings as they are, with no key stripping.
 
 **Mutations go through `ConfigService::mutate`**: it reloads `settings.json` when its bytes differ from the last read or written, runs the closure, then writes. No public `save` exists. A reload inside `mutate` is applied to runtime state by `commands::settings::apply_settings_reload`, called after the config guard is dropped. A failed reload fails the mutation and writes nothing. `settings.json` is written in place with `std::fs::write` because it may be a symlink into the settings repo; a temp-file rename would replace the symlink and stop sync.
 
@@ -165,7 +165,7 @@ Holds an `AppHandle`.
 
 **Display**: `notify()` calls `commands::notification::show_notification`. On GNOME Wayland it routes to the extension's `ShowToast` (falling back to the notification webview window if the call fails); elsewhere it uses the notification webview window. See `docs/gotchas/linux-wayland-gnome-extension.md`.
 
-**`is_event_enabled` mapping**: maps the string event names (13) (e.g., `"prompt_execution_success"`, `"clipboard_copy"`) to the corresponding bool field on `NotificationEvents`. Unknown event names return `true` (safe default — show rather than hide).
+**`is_event_enabled` mapping**: maps the string event names (9) (e.g., `"prompt_execution_success"`, `"context_set"`) to the corresponding bool field on `NotificationEvents`. Unknown event names return `true` (safe default — show rather than hide).
 
 ### MenuCoordinator specifics
 

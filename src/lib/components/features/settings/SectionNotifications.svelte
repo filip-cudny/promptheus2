@@ -10,17 +10,13 @@
   const EVENT_LABELS: ReadonlyArray<{ key: keyof NotificationEvents; label: string }> = [
     { key: "prompt_execution_success", label: "Prompt finished" },
     { key: "prompt_execution_cancel", label: "Prompt cancelled" },
-    { key: "prompt_execution_in_progress", label: "Prompt already running" },
     { key: "speech_recording_start", label: "Recording started" },
     { key: "speech_recording_stop", label: "Recording stopped" },
     { key: "speech_transcription_success", label: "Transcription finished" },
     { key: "speech_transcription_retry", label: "Transcription retrying" },
-    { key: "context_saved", label: "Context saved" },
     { key: "context_set", label: "Context set" },
     { key: "context_append", label: "Context appended" },
     { key: "context_cleared", label: "Context cleared" },
-    { key: "clipboard_copy", label: "Copied to clipboard" },
-    { key: "image_added", label: "Image added" },
   ];
 
   const store = getSettingsStore();

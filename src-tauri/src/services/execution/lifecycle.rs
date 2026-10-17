@@ -223,7 +223,7 @@ mod tests {
         settings.surfaces.chat.generation.model_id = Some("model-1".to_string());
         let settings_path = dir.path().join("settings.json");
         std::fs::write(&settings_path, serde_json::to_string(&settings).unwrap()).unwrap();
-        let config = ConfigService::load(dir.path(), None).unwrap();
+        let config = ConfigService::load(dir.path()).unwrap();
         (dir, config)
     }
 

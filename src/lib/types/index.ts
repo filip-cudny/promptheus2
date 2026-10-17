@@ -10,8 +10,6 @@ export type SurfaceKind = "chat" | "quick_actions" | "title_generation" | "speec
 
 export interface Settings {
   show_tray_icon: boolean;
-  debug_mode: boolean;
-  code_theme: string;
   theme: string;
   menu_section_order: string[];
   notifications: NotificationSettings;
@@ -158,9 +156,7 @@ export interface KeymapGroup {
 
 export interface NotificationSettings {
   events: NotificationEvents;
-  background_colors: NotificationColors;
   monochromatic_notification_icons: boolean;
-  opacity: number | null;
   recording_reminder: RecordingReminderSettings;
 }
 
@@ -174,24 +170,13 @@ export interface RecordingReminderSettings {
 export interface NotificationEvents {
   prompt_execution_success: boolean;
   prompt_execution_cancel: boolean;
-  prompt_execution_in_progress: boolean;
   speech_recording_start: boolean;
   speech_recording_stop: boolean;
   speech_transcription_success: boolean;
   speech_transcription_retry: boolean;
-  context_saved: boolean;
   context_set: boolean;
   context_append: boolean;
   context_cleared: boolean;
-  clipboard_copy: boolean;
-  image_added: boolean;
-}
-
-export interface NotificationColors {
-  success: string;
-  error: string;
-  info: string;
-  warning: string;
 }
 
 export type OfferedIn = "context_menu" | "pill";

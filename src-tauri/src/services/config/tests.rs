@@ -49,7 +49,7 @@ fn setup_test_dir() -> TempDir {
 #[test]
 fn test_load_default_settings() {
     let dir = setup_test_dir();
-    let service = ConfigService::load(dir.path(), None).expect("should load default settings");
+    let service = ConfigService::load(dir.path()).expect("should load default settings");
     assert!(!service.settings().models.is_empty());
     assert!(service.settings().models.iter().any(|m| m.is_text()));
     assert!(service.settings().models.iter().any(|m| m.is_stt()));
@@ -60,7 +60,7 @@ fn test_load_default_settings() {
 #[test]
 fn test_resolve_stt_model_returns_stt_entry() {
     let dir = setup_test_dir();
-    let service = ConfigService::load(dir.path(), None).expect("load");
+    let service = ConfigService::load(dir.path()).expect("load");
     let stt = service.resolve_stt_model().expect("stt model should resolve");
     assert!(stt.is_stt());
     assert_eq!(
@@ -72,10 +72,10 @@ fn test_resolve_stt_model_returns_stt_entry() {
 #[test]
 fn test_save_and_reload() {
     let dir = setup_test_dir();
-    let service = ConfigService::load(dir.path(), None).expect("load");
+    let service = ConfigService::load(dir.path()).expect("load");
     service.save().expect("save");
 
-    let mut service2 = ConfigService::load(dir.path(), None).expect("reload");
+    let mut service2 = ConfigService::load(dir.path()).expect("reload");
     assert_eq!(service.settings().models.len(), service2.settings().models.len());
     assert_eq!(service.settings().models[0].id, service2.settings().models[0].id);
 
@@ -86,7 +86,7 @@ fn test_save_and_reload() {
 #[test]
 fn test_env_ref_preserved_on_save() {
     let dir = setup_test_dir();
-    let service = ConfigService::load(dir.path(), None).expect("load");
+    let service = ConfigService::load(dir.path()).expect("load");
     service.save().expect("save");
 
     let content = fs::read_to_string(dir.path().join("settings.json")).unwrap();
@@ -101,7 +101,7 @@ fn test_env_ref_preserved_on_save() {
 #[test]
 fn test_delete_model_clears_references() {
     let dir = setup_test_dir();
-    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    let mut service = ConfigService::load(dir.path()).expect("load");
     service.add_model(test_stt_model("stt-to-delete", "${KEY}"));
     service.settings.surfaces.speech_to_text.model_id = Some("stt-to-delete".to_string());
 
@@ -112,7 +112,7 @@ fn test_delete_model_clears_references() {
 #[test]
 fn test_direct_api_key_preserved_on_save() {
     let dir = setup_test_dir();
-    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    let mut service = ConfigService::load(dir.path()).expect("load");
     service.add_model(test_model("direct-model", "sk-direct-secret"));
     service.save().expect("save");
 
@@ -126,7 +126,7 @@ fn test_direct_api_key_preserved_on_save() {
 #[test]
 fn test_mutation_methods() {
     let dir = setup_test_dir();
-    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    let mut service = ConfigService::load(dir.path()).expect("load");
 
     let new_model = test_model("new-model", "${KEY}");
     let initial_count = service.settings().models.len();
@@ -149,37 +149,23 @@ fn test_mutation_methods() {
     service.delete_model("upsert-model");
     assert!(service.settings().models.iter().all(|m| m.id != "upsert-model"));
 
-    service.update_setting("debug_mode", serde_json::Value::Bool(true));
-    assert!(service.settings().debug_mode);
+    service.update_setting("theme", serde_json::json!("light"));
+    assert_eq!(service.settings().theme, "light");
 }
 
 #[test]
-fn test_first_run_creates_defaults_from_fallback() {
+fn test_first_run_creates_defaults() {
     let dir = TempDir::new().unwrap();
-    let service = ConfigService::load(dir.path(), None).expect("should create defaults");
+    let service = ConfigService::load(dir.path()).expect("should create defaults");
     assert!(dir.path().join("settings.json").exists());
     assert!(dir.path().join(".env").exists());
     assert!(!service.settings().models.is_empty());
 }
 
 #[test]
-fn test_first_run_copies_from_resource() {
-    let dir = TempDir::new().unwrap();
-    let resource_dir = TempDir::new().unwrap();
-    let resource_settings_dir = resource_dir.path().join("resources");
-    fs::create_dir_all(&resource_settings_dir).unwrap();
-    let default_json = include_str!("../../../resources/default_settings.json");
-    fs::write(resource_settings_dir.join("default_settings.json"), default_json).unwrap();
-
-    let service = ConfigService::load(dir.path(), Some(resource_dir.path())).expect("should load");
-    assert!(dir.path().join("settings.json").exists());
-    assert!(!service.settings().models.is_empty());
-}
-
-#[test]
 fn test_first_run_env_template_created() {
     let dir = TempDir::new().unwrap();
-    let _service = ConfigService::load(dir.path(), None).expect("should create defaults");
+    let _service = ConfigService::load(dir.path()).expect("should create defaults");
     let env_content = fs::read_to_string(dir.path().join(".env")).unwrap();
     assert!(env_content.contains("OPENAI_API_KEY"));
 }
@@ -189,7 +175,7 @@ fn test_existing_env_not_overwritten() {
     let dir = TempDir::new().unwrap();
     fs::create_dir_all(dir.path()).unwrap();
     fs::write(dir.path().join(".env"), "OPENAI_API_KEY=real_key\n").unwrap();
-    let _service = ConfigService::load(dir.path(), None).expect("should create defaults");
+    let _service = ConfigService::load(dir.path()).expect("should create defaults");
     let env_content = fs::read_to_string(dir.path().join(".env")).unwrap();
     assert_eq!(env_content, "OPENAI_API_KEY=real_key\n");
 }
@@ -249,7 +235,7 @@ fn test_migrates_legacy_schema() {
     }"#;
 
     fs::write(dir.path().join("settings.json"), legacy).unwrap();
-    let service = ConfigService::load(dir.path(), None).expect("load migrated");
+    let service = ConfigService::load(dir.path()).expect("load migrated");
     let s = service.settings();
 
     assert_eq!(s.surfaces.chat.generation.model_id.as_deref(), Some("model-a"));
@@ -294,7 +280,7 @@ fn test_migrate_minimal_legacy() {
         ]
     }"#;
     fs::write(dir.path().join("settings.json"), legacy).unwrap();
-    let service = ConfigService::load(dir.path(), None).expect("load");
+    let service = ConfigService::load(dir.path()).expect("load");
     let s = service.settings();
     assert_eq!(s.surfaces.chat.generation.model_id.as_deref(), Some("m1"));
     assert_eq!(s.surfaces.quick_actions.generation.model_id.as_deref(), Some("m1"));
@@ -319,7 +305,7 @@ fn test_migrate_chat_prompt_fields_into_prompt_base() {
         ]
     }"#;
     fs::write(dir.path().join("settings.json"), legacy).unwrap();
-    let service = ConfigService::load(dir.path(), None).expect("load");
+    let service = ConfigService::load(dir.path()).expect("load");
     let s = service.settings();
 
     assert_eq!(s.prompt_base.system, "prompts/base/system.md");
@@ -365,7 +351,7 @@ fn test_rewrite_legacy_default_path_when_new_file_present() {
         ]
     }"#;
     fs::write(dir.path().join("settings.json"), legacy).unwrap();
-    let service = ConfigService::load(dir.path(), None).expect("load");
+    let service = ConfigService::load(dir.path()).expect("load");
     assert_eq!(
         service.settings().prompt_base.about_you,
         "prompts/base/about_you.md",
@@ -389,7 +375,7 @@ fn test_legacy_default_path_preserved_when_no_canonical_file() {
         ]
     }"#;
     fs::write(dir.path().join("settings.json"), legacy).unwrap();
-    let service = ConfigService::load(dir.path(), None).expect("load");
+    let service = ConfigService::load(dir.path()).expect("load");
     assert_eq!(
         service.settings().prompt_base.about_you,
         "prompts/base/about_you.md",
@@ -424,7 +410,7 @@ fn test_migrates_about_me_key_to_about_you_in_prompt_base() {
         ]
     }"#;
     fs::write(dir.path().join("settings.json"), legacy).unwrap();
-    let service = ConfigService::load(dir.path(), None).expect("load");
+    let service = ConfigService::load(dir.path()).expect("load");
     assert_eq!(
         service.settings().prompt_base.about_you,
         "prompts/base/about_you.md"
@@ -463,7 +449,7 @@ fn test_renames_legacy_nested_about_me_md_file() {
         ]
     }"#;
     fs::write(dir.path().join("settings.json"), legacy).unwrap();
-    let service = ConfigService::load(dir.path(), None).expect("load");
+    let service = ConfigService::load(dir.path()).expect("load");
 
     assert!(!dir.path().join("prompts/base/about_me.md").exists());
     assert!(dir.path().join("prompts/base/about_you.md").exists());
@@ -482,7 +468,7 @@ fn test_replaces_legacy_system_prompt_default() {
         "You are a helpful assistant.\n",
     )
     .unwrap();
-    let service = ConfigService::load(dir.path(), None).expect("load");
+    let service = ConfigService::load(dir.path()).expect("load");
     let content = service.read_prompt(PromptKind::System);
     assert_ne!(content, "You are a helpful assistant.\n");
     assert!(content.contains("candid"));
@@ -497,7 +483,7 @@ fn test_does_not_replace_user_edited_system_prompt() {
         "You are a helpful assistant. Answer in haiku.\n",
     )
     .unwrap();
-    let service = ConfigService::load(dir.path(), None).expect("load");
+    let service = ConfigService::load(dir.path()).expect("load");
     assert_eq!(
         service.read_prompt(PromptKind::System),
         "You are a helpful assistant. Answer in haiku.\n"
@@ -524,14 +510,14 @@ fn test_preferred_name_defaults_to_empty_for_legacy_settings() {
         ]
     }"#;
     fs::write(dir.path().join("settings.json"), legacy).unwrap();
-    let service = ConfigService::load(dir.path(), None).expect("load");
+    let service = ConfigService::load(dir.path()).expect("load");
     assert_eq!(service.preferred_name(), "");
 }
 
 #[test]
 fn test_update_setting_preferred_name_trims_and_clamps() {
     let dir = setup_test_dir();
-    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    let mut service = ConfigService::load(dir.path()).expect("load");
 
     service.update_setting(
         "preferred_name",
@@ -555,7 +541,7 @@ fn test_migrate_stt_only_legacy() {
         ]
     }"#;
     fs::write(dir.path().join("settings.json"), legacy).unwrap();
-    let service = ConfigService::load(dir.path(), None).expect("load");
+    let service = ConfigService::load(dir.path()).expect("load");
     let s = service.settings();
     assert_eq!(s.surfaces.speech_to_text.model_id.as_deref(), Some("stt-1"));
     assert_eq!(s.surfaces.speech_to_text.language.as_deref(), Some("en"));
@@ -569,7 +555,7 @@ fn test_stt_keyterms_reads_relative_file() {
         "Promptheus\n# comment\nTauri\n\n  rmcp  \n",
     )
     .unwrap();
-    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    let mut service = ConfigService::load(dir.path()).expect("load");
     service.settings.surfaces.speech_to_text.keyterms_file =
         Some("keyterms.txt".to_string());
 
@@ -584,7 +570,7 @@ fn test_stt_keyterms_rejects_absolute_path() {
     let outside_file = outside.path().join("leak.txt");
     fs::write(&outside_file, "Secret\n").unwrap();
 
-    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    let mut service = ConfigService::load(dir.path()).expect("load");
     service.settings.surfaces.speech_to_text.keyterms_file =
         Some(outside_file.to_string_lossy().into_owned());
 
@@ -594,7 +580,7 @@ fn test_stt_keyterms_rejects_absolute_path() {
 #[test]
 fn test_stt_keyterms_rejects_parent_dir_traversal() {
     let dir = setup_test_dir();
-    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    let mut service = ConfigService::load(dir.path()).expect("load");
     service.settings.surfaces.speech_to_text.keyterms_file =
         Some("../escape.txt".to_string());
 
@@ -606,7 +592,7 @@ fn test_stt_keyterms_resolves_config_dir_placeholder_to_relative() {
     let dir = setup_test_dir();
     fs::write(dir.path().join("keyterms.txt"), "Alpha\n").unwrap();
 
-    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    let mut service = ConfigService::load(dir.path()).expect("load");
     service.settings.surfaces.speech_to_text.keyterms_file =
         Some("${CONFIG_DIR}/keyterms.txt".to_string());
 
@@ -649,9 +635,9 @@ fn test_load_writes_sorted_maps_byte_stable() {
     let path = dir.path().join("settings.json");
     fs::write(&path, serde_json::to_string_pretty(&raw).unwrap()).unwrap();
 
-    ConfigService::load(dir.path(), None).unwrap();
+    ConfigService::load(dir.path()).unwrap();
     let first = fs::read_to_string(&path).unwrap();
-    ConfigService::load(dir.path(), None).unwrap();
+    ConfigService::load(dir.path()).unwrap();
     let second = fs::read_to_string(&path).unwrap();
 
     assert_eq!(first, second);
@@ -671,7 +657,7 @@ fn test_unknown_top_level_key_survives_load() {
     raw["zz_future_key"] = serde_json::json!({"a": 1});
     fs::write(&path, serde_json::to_string_pretty(&raw).unwrap()).unwrap();
 
-    ConfigService::load(dir.path(), None).unwrap();
+    ConfigService::load(dir.path()).unwrap();
 
     let saved: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
@@ -714,7 +700,7 @@ fn mutate_reloads_external_change_before_saving() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("settings.json");
     fs::write(&path, models_json(&["x", "y"], "Old")).unwrap();
-    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    let mut service = ConfigService::load(dir.path()).expect("load");
 
     fs::write(&path, models_json(&["x", "z"], "New")).unwrap();
     let outcome = service
@@ -737,7 +723,7 @@ fn mutate_without_external_change_does_not_reload() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("settings.json");
     fs::write(&path, models_json(&["x"], "X")).unwrap();
-    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    let mut service = ConfigService::load(dir.path()).expect("load");
 
     let first = service
         .mutate(|c| c.update_setting("theme", serde_json::json!("dark")))
@@ -751,12 +737,12 @@ fn mutate_without_external_change_does_not_reload() {
     service.reload().expect("reload");
 
     let second = service
-        .mutate(|c| c.update_setting("code_theme", serde_json::json!("monokai")))
+        .mutate(|c| c.update_setting("autosave_debounce_ms", serde_json::json!(2000)))
         .expect("mutate");
     assert!(!second.reloaded);
     let saved = read_json(&path);
     assert_eq!(saved["theme"], "light");
-    assert_eq!(saved["code_theme"], "monokai");
+    assert_eq!(saved["autosave_debounce_ms"], 2000);
 }
 
 #[test]
@@ -764,7 +750,7 @@ fn mutate_with_invalid_file_fails_without_writing() {
     let dir = TempDir::new().unwrap();
     let path = dir.path().join("settings.json");
     fs::write(&path, models_json(&["x"], "X")).unwrap();
-    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    let mut service = ConfigService::load(dir.path()).expect("load");
     let theme_before = service.settings().theme.clone();
 
     fs::write(&path, "{ not json").unwrap();
@@ -783,7 +769,7 @@ fn mutate_keeps_settings_symlink() {
     let link = dir.path().join("settings.json");
     fs::write(&target, models_json(&["x"], "X")).unwrap();
     std::os::unix::fs::symlink(&target, &link).unwrap();
-    let mut service = ConfigService::load(dir.path(), None).expect("load");
+    let mut service = ConfigService::load(dir.path()).expect("load");
 
     service
         .mutate(|c| c.update_setting("theme", serde_json::json!("dark")))

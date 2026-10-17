@@ -43,13 +43,11 @@ pub struct SkillService {
 }
 
 impl SkillService {
-    pub fn load(
-        skills_dir: &Path,
-        resource_dir: Option<&Path>,
-        order: &[String],
-    ) -> Result<Self, SkillError> {
+    pub fn load(skills_dir: &Path, order: &[String]) -> Result<Self, SkillError> {
         if !skills_dir.exists() {
-            Self::initialize_defaults(skills_dir, resource_dir)?;
+            std::fs::create_dir_all(skills_dir)?;
+            info!("initializing default skills in {}", skills_dir.display());
+            write_bundled_defaults(skills_dir)?;
         }
 
         let mut service = Self {
@@ -59,25 +57,6 @@ impl SkillService {
 
         service.scan_and_load(order)?;
         Ok(service)
-    }
-
-    fn initialize_defaults(
-        skills_dir: &Path,
-        resource_dir: Option<&Path>,
-    ) -> Result<(), SkillError> {
-        std::fs::create_dir_all(skills_dir)?;
-        info!("initializing default skills in {}", skills_dir.display());
-
-        if let Some(res_dir) = resource_dir {
-            let default_skills = res_dir.join("resources/skills");
-            if default_skills.exists() {
-                copy_skill_dirs(&default_skills, skills_dir)?;
-                return Ok(());
-            }
-        }
-
-        write_bundled_defaults(skills_dir)?;
-        Ok(())
     }
 
     fn scan_and_load(&mut self, order: &[String]) -> Result<(), SkillError> {
@@ -342,22 +321,6 @@ pub fn validate_slug(slug: &str) -> Result<(), SkillError> {
     Ok(())
 }
 
-fn copy_skill_dirs(src: &Path, dest: &Path) -> Result<(), SkillError> {
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let src_path = entry.path();
-        if src_path.is_dir() {
-            let skill_file = src_path.join("SKILL.md");
-            if skill_file.exists() {
-                let dest_dir = dest.join(entry.file_name());
-                std::fs::create_dir_all(&dest_dir)?;
-                std::fs::copy(&skill_file, dest_dir.join("SKILL.md"))?;
-            }
-        }
-    }
-    Ok(())
-}
-
 fn write_bundled_defaults(skills_dir: &Path) -> Result<(), SkillError> {
     let defaults = [
         (
@@ -438,7 +401,7 @@ mod tests {
         write_skill_dir(&skills_dir, "alpha", "alpha", "Alpha skill", "Alpha body");
         write_skill_dir(&skills_dir, "beta", "beta", "Beta skill", "Beta body");
 
-        let service = SkillService::load(&skills_dir, None, &[]).unwrap();
+        let service = SkillService::load(&skills_dir, &[]).unwrap();
         assert_eq!(service.list_skills().len(), 2);
         assert_eq!(service.list_skills()[0].display_name, "Alpha");
     }
@@ -454,7 +417,7 @@ mod tests {
         write_skill_dir(&skills_dir, "gamma", "gamma", "desc", "body");
 
         let order = vec!["gamma".into(), "alpha".into(), "beta".into()];
-        let service = SkillService::load(&skills_dir, None, &order).unwrap();
+        let service = SkillService::load(&skills_dir, &order).unwrap();
         let names: Vec<&str> = service.list_skills().iter().map(|s| s.name.as_str()).collect();
         assert_eq!(names, vec!["gamma", "alpha", "beta"]);
     }
@@ -467,7 +430,7 @@ mod tests {
 
         write_skill_dir(&skills_dir, "test-skill", "test-skill", "desc", "body");
 
-        let service = SkillService::load(&skills_dir, None, &[]).unwrap();
+        let service = SkillService::load(&skills_dir, &[]).unwrap();
         assert!(service.get_skill("test-skill").is_some());
         assert!(service.get_skill("nonexistent").is_none());
     }
@@ -479,7 +442,7 @@ mod tests {
         std::fs::create_dir(&skills_dir).unwrap();
 
         write_skill_dir(&skills_dir, "one", "one", "desc", "body");
-        let mut service = SkillService::load(&skills_dir, None, &[]).unwrap();
+        let mut service = SkillService::load(&skills_dir, &[]).unwrap();
         assert_eq!(service.list_skills().len(), 1);
 
         write_skill_dir(&skills_dir, "two", "two", "desc", "body");
@@ -496,7 +459,7 @@ mod tests {
         write_skill_dir(&skills_dir, "valid", "valid", "desc", "body");
         std::fs::write(skills_dir.join("readme.txt"), "not a skill").unwrap();
 
-        let service = SkillService::load(&skills_dir, None, &[]).unwrap();
+        let service = SkillService::load(&skills_dir, &[]).unwrap();
         assert_eq!(service.list_skills().len(), 1);
     }
 
@@ -509,7 +472,7 @@ mod tests {
         write_skill_dir(&skills_dir, "good", "good", "desc", "body");
         std::fs::create_dir(skills_dir.join("empty-dir")).unwrap();
 
-        let service = SkillService::load(&skills_dir, None, &[]).unwrap();
+        let service = SkillService::load(&skills_dir, &[]).unwrap();
         assert_eq!(service.list_skills().len(), 1);
         assert_eq!(service.list_skills()[0].name, "good");
     }
@@ -529,7 +492,7 @@ mod tests {
             "body",
         );
 
-        let service = SkillService::load(&skills_dir, None, &[]).unwrap();
+        let service = SkillService::load(&skills_dir, &[]).unwrap();
         assert_eq!(service.list_skills()[0].display_name, "Translate - English");
     }
 
@@ -542,7 +505,7 @@ mod tests {
 
         let db_dir = TempDir::new().unwrap();
         let database = Database::open(db_dir.path()).unwrap();
-        let mut service = SkillService::load(&skills_dir, None, &[]).unwrap();
+        let mut service = SkillService::load(&skills_dir, &[]).unwrap();
 
         let first = service.ensure_version("alpha", database.conn()).unwrap();
         let second = service.ensure_version("alpha", database.conn()).unwrap();
@@ -559,7 +522,7 @@ mod tests {
 
         let db_dir = TempDir::new().unwrap();
         let database = Database::open(db_dir.path()).unwrap();
-        let mut service = SkillService::load(&skills_dir, None, &[]).unwrap();
+        let mut service = SkillService::load(&skills_dir, &[]).unwrap();
         let v1 = service.ensure_version("alpha", database.conn()).unwrap();
 
         let skill_dir = skills_dir.join("alpha");
@@ -583,7 +546,7 @@ mod tests {
 
         let db_dir = TempDir::new().unwrap();
         let database = Database::open(db_dir.path()).unwrap();
-        let mut service = SkillService::load(&skills_dir, None, &[]).unwrap();
+        let mut service = SkillService::load(&skills_dir, &[]).unwrap();
         service.ensure_version("alpha", database.conn()).unwrap();
         service.ensure_version("beta", database.conn()).unwrap();
 
@@ -609,7 +572,7 @@ mod tests {
         std::fs::create_dir(&skills_dir).unwrap();
         write_skill_dir(&skills_dir, "translate", "translate", "desc", "body");
 
-        let service = SkillService::load(&skills_dir, None, &[]).unwrap();
+        let service = SkillService::load(&skills_dir, &[]).unwrap();
 
         assert_eq!(strip_skill_prefix("/translate hello", &service), "hello");
         assert_eq!(strip_skill_prefix("/unknown hello", &service), "/unknown hello");
@@ -643,7 +606,7 @@ mod tests {
     fn service_in(dir: &TempDir) -> SkillService {
         let skills_dir = dir.path().join("skills");
         std::fs::create_dir(&skills_dir).unwrap();
-        SkillService::load(&skills_dir, None, &[]).unwrap()
+        SkillService::load(&skills_dir, &[]).unwrap()
     }
 
     #[test]
@@ -709,7 +672,7 @@ mod tests {
         write_bundled_defaults(tmp.path()).unwrap();
         assert_eq!(std::fs::read_dir(tmp.path()).unwrap().count(), expected.len());
 
-        let service = SkillService::load(tmp.path(), None, &order).unwrap();
+        let service = SkillService::load(tmp.path(), &order).unwrap();
         let skills = service.list_skills();
         let names: Vec<&str> = skills.iter().map(|s| s.name.as_str()).collect();
         assert_eq!(names, expected);

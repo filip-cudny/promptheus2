@@ -29,7 +29,6 @@ use crate::services::{self, conversation_context, ui_state};
 pub fn manage(
     app: &tauri::App,
     config_dir: &Path,
-    resource_dir: &Path,
     config_service: ConfigService,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
     app.manage(DockManager::new());
@@ -38,7 +37,6 @@ pub fn manage(
     let skills_dir = config_dir.join("skills");
     let skill_service = SkillService::load(
         &skills_dir,
-        Some(resource_dir),
         &config_service.settings().skills_order,
     )
     .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;

@@ -62,12 +62,12 @@ pub struct Mutated<R> {
 }
 
 impl ConfigService {
-    pub fn load(config_dir: &Path, resource_dir: Option<&Path>) -> Result<Self, ConfigError> {
+    pub fn load(config_dir: &Path) -> Result<Self, ConfigError> {
         load_env(config_dir);
 
         let settings_path = config_dir.join("settings.json");
         if !settings_path.exists() {
-            initialize_defaults(config_dir, resource_dir)?;
+            initialize_defaults(config_dir)?;
         }
 
         let content = std::fs::read_to_string(&settings_path)?;
@@ -176,16 +176,6 @@ impl ConfigService {
             "show_tray_icon" => {
                 if let Some(v) = value.as_bool() {
                     self.settings.show_tray_icon = v;
-                }
-            }
-            "debug_mode" => {
-                if let Some(v) = value.as_bool() {
-                    self.settings.debug_mode = v;
-                }
-            }
-            "code_theme" => {
-                if let Some(v) = value.as_str() {
-                    self.settings.code_theme = v.to_string();
                 }
             }
             "theme" => {

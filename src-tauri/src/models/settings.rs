@@ -55,12 +55,6 @@ pub struct Settings {
     #[serde(default)]
     pub launch_at_startup: bool,
 
-    #[serde(default)]
-    pub debug_mode: bool,
-
-    #[serde(default = "default_code_theme")]
-    pub code_theme: String,
-
     #[serde(default = "default_theme")]
     pub theme: String,
 
@@ -434,14 +428,8 @@ pub struct NotificationSettings {
     #[serde(default)]
     pub events: NotificationEvents,
 
-    #[serde(default)]
-    pub background_colors: NotificationColors,
-
     #[serde(default = "default_true")]
     pub monochromatic_notification_icons: bool,
-
-    #[serde(default)]
-    pub opacity: Option<f64>,
 
     #[serde(default)]
     pub recording_reminder: RecordingReminderSettings,
@@ -475,8 +463,6 @@ pub struct NotificationEvents {
     #[serde(default = "default_true")]
     pub prompt_execution_cancel: bool,
     #[serde(default = "default_true")]
-    pub prompt_execution_in_progress: bool,
-    #[serde(default = "default_true")]
     pub speech_recording_start: bool,
     #[serde(default = "default_true")]
     pub speech_recording_stop: bool,
@@ -485,29 +471,11 @@ pub struct NotificationEvents {
     #[serde(default = "default_true")]
     pub speech_transcription_retry: bool,
     #[serde(default = "default_true")]
-    pub context_saved: bool,
-    #[serde(default = "default_true")]
     pub context_set: bool,
     #[serde(default = "default_true")]
     pub context_append: bool,
     #[serde(default = "default_true")]
     pub context_cleared: bool,
-    #[serde(default = "default_true")]
-    pub clipboard_copy: bool,
-    #[serde(default = "default_true")]
-    pub image_added: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NotificationColors {
-    #[serde(default = "default_white")]
-    pub success: String,
-    #[serde(default = "default_white")]
-    pub error: String,
-    #[serde(default = "default_white")]
-    pub info: String,
-    #[serde(default = "default_white")]
-    pub warning: String,
 }
 
 fn default_true() -> bool {
@@ -524,10 +492,6 @@ fn default_silence_window_secs() -> u64 {
 
 fn default_max_interval_secs() -> u64 {
     180
-}
-
-fn default_code_theme() -> String {
-    "paraiso-dark".to_string()
 }
 
 fn default_theme() -> String {
@@ -573,17 +537,11 @@ fn default_recent_apps_count() -> usize {
     4
 }
 
-fn default_white() -> String {
-    "#FFFFFF".to_string()
-}
-
 impl Default for Settings {
     fn default() -> Self {
         Self {
             show_tray_icon: true,
             launch_at_startup: false,
-            debug_mode: false,
-            code_theme: default_code_theme(),
             theme: default_theme(),
             menu_section_order: default_menu_section_order(),
             notifications: NotificationSettings::default(),
@@ -607,9 +565,7 @@ impl Default for NotificationSettings {
     fn default() -> Self {
         Self {
             events: NotificationEvents::default(),
-            background_colors: NotificationColors::default(),
             monochromatic_notification_icons: true,
-            opacity: None,
             recording_reminder: RecordingReminderSettings::default(),
         }
     }
@@ -631,28 +587,13 @@ impl Default for NotificationEvents {
         Self {
             prompt_execution_success: true,
             prompt_execution_cancel: true,
-            prompt_execution_in_progress: true,
             speech_recording_start: true,
             speech_recording_stop: true,
             speech_transcription_success: true,
             speech_transcription_retry: true,
-            context_saved: true,
             context_set: true,
             context_append: true,
             context_cleared: true,
-            clipboard_copy: true,
-            image_added: true,
-        }
-    }
-}
-
-impl Default for NotificationColors {
-    fn default() -> Self {
-        Self {
-            success: "#FFFFFF".to_string(),
-            error: "#FFFFFF".to_string(),
-            info: "#FFFFFF".to_string(),
-            warning: "#FFFFFF".to_string(),
         }
     }
 }
@@ -665,8 +606,6 @@ mod tests {
     fn test_default_settings() {
         let settings = Settings::default();
         assert!(settings.show_tray_icon);
-        assert!(!settings.debug_mode);
-        assert_eq!(settings.code_theme, "paraiso-dark");
         assert_eq!(settings.autosave_debounce_ms, 1000);
         assert_eq!(settings.history_retention_days, 0);
         assert_eq!(settings.menu_section_order.len(), 6);
@@ -733,8 +672,6 @@ mod tests {
         let settings: Settings = serde_json::from_str("{}").expect("empty JSON should use defaults");
         assert!(settings.show_tray_icon);
         assert!(!settings.launch_at_startup);
-        assert!(!settings.debug_mode);
-        assert_eq!(settings.code_theme, "paraiso-dark");
         assert_eq!(settings.autosave_debounce_ms, 1000);
         assert_eq!(settings.history_retention_days, 0);
         assert!(settings.models.is_empty());
@@ -808,9 +745,19 @@ mod tests {
 
     #[test]
     fn test_deserialize_without_mcp_servers() {
-        let json = r#"{ "debug_mode": true }"#;
+        let json = r#"{ "theme": "dark" }"#;
         let settings: Settings = serde_json::from_str(json).expect("should deserialize without mcp_servers");
         assert!(settings.mcp_servers.is_empty());
+    }
+
+    #[test]
+    fn removed_settings_keys_drop_from_notifications_and_survive_in_extra() {
+        let json = r#"{ "debug_mode": true, "notifications": { "opacity": 0.5 } }"#;
+        let settings: Settings = serde_json::from_str(json).expect("legacy settings should deserialize");
+
+        let saved = serde_json::to_value(&settings).unwrap();
+        assert_eq!(saved["debug_mode"], true);
+        assert!(saved["notifications"].get("opacity").is_none());
     }
 
     #[test]
