@@ -8,6 +8,8 @@ use crate::services::dialog::window;
 use crate::services::monitor::{cursor_work_area, CursorWorkArea};
 use crate::Error;
 
+pub const IMAGE_PREVIEW_TITLE: &str = "Promptheus Image Preview";
+
 static PENDING: Mutex<Option<ImagePayload>> = Mutex::new(None);
 static WORK_AREA: Mutex<Option<CursorWorkArea>> = Mutex::new(None);
 

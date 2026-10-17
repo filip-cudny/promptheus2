@@ -81,9 +81,15 @@ pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::E
         }
     });
 
-    overlay(app, "image-preview", "", 800.0, 800.0)
-        .shadow(false)
-        .build()?;
+    overlay(
+        app,
+        "image-preview",
+        crate::commands::image_preview::IMAGE_PREVIEW_TITLE,
+        800.0,
+        800.0,
+    )
+    .shadow(false)
+    .build()?;
 
     overlay(
         app,

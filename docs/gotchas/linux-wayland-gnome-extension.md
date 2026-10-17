@@ -21,6 +21,7 @@ Interface `com.promptheus.Shell`, object `/com/promptheus/Shell`, served by `org
 | `PlaceWindow` | `(s title, i x, i y, b activate) → b` | move the window with that title, optionally activate it |
 | `PlaceWindowAnchored` | `(s title, i right, i bottom, b activate) → b` | keep the frame's bottom-right corner at `(right, bottom)` until the window is unmanaged, optionally activate it |
 | `PlaceWindowOnParent` | `(s title, i dx, i dy, b activate) → b` | move the window with that title to its transient parent's frame origin plus `(dx, dy)`, optionally activate it; `false` when it has no transient parent |
+| `ActivateWindow` | `(s title) → b` | activates the `promptheus` window with that title through `Main.activateWindow`, waiting up to 1000 ms for it; `false` on timeout |
 | `GetFocusedWmClass` | `() → s` | `wm_class` of the focused window |
 | `ShowToast` | `(s level, s title, s message, b monochromatic) → ()` | draw a toast as a shell actor; `level` is `success`/`error`/`info`/`warning`, empty `message` = no description |
 | `ShowRecordingWidget` | `(i x, i y, b has_position, b monochromatic) → (i x, i y, i work_x, i work_y, i work_width, i work_height)` | show the recording widget at `(x, y)` logical stage pixels when `has_position`, else at the default position (the extension never clamps; Rust passes a clamped origin when the widget opens at the cursor); returns the placed origin and the work area of the monitor it is on; `monochromatic` picks the `done` check icon (`recording-check-mono.svg` in the widget foreground or green `recording-check.svg`) |
@@ -44,8 +45,19 @@ Lifecycle:
 - Accelerators come from `get_active_bindings` converted by `to_gtk_accelerator` in `services/hotkeys.rs`. An accelerator GNOME already uses is returned by `SetShortcuts` and logged at `warn`; the other shortcuts keep working.
 
 Window identification:
-- Windows are found by title. The context menu title is `CONTEXT_MENU_TITLE` (`commands/menu.rs`), the notification title is `NOTIFICATION_TITLE` (`services/notification_window.rs`); both are set in `setup/windows.rs`, as are `PROVIDER_MENU_TITLE` (`commands/provider_menu.rs`), `PALETTE_TITLE` and `PALETTE_BACKDROP_TITLE` (`services/ai_webview/palette.rs`). Change a title only in its constant.
+- Windows are found by title. The context menu title is `CONTEXT_MENU_TITLE` (`commands/menu.rs`), the notification title is `NOTIFICATION_TITLE` (`services/notification_window.rs`); both are set in `setup/windows.rs`, as are `PROVIDER_MENU_TITLE` (`commands/provider_menu.rs`), `PALETTE_TITLE` and `PALETTE_BACKDROP_TITLE` (`services/ai_webview/palette.rs`). `IMAGE_PREVIEW_TITLE` (`commands/image_preview.rs`) is the image-preview title. Change a title only in its constant.
+- The overlay titles in `extension.js` (`OVERLAY_TITLES`) must equal the Rust constants byte for byte; renaming a title constant needs the same edit in `extension.js`.
+- For overlay typing and `ActivateWindow` the extension matches its own windows by WM class `promptheus` (the binary name), never by title alone: titles such as "Settings" and "History" collide with other apps.
 - Any process on the session bus can call `PlaceWindow` and `SetShortcuts`; there is no caller check.
+
+Dock icon and overlays:
+- GTK3 sends no skip-taskbar hint on Wayland, so every mapped overlay is a normal toplevel and shows a dock icon. The extension sets `Meta.WindowType.UTILITY` on each window of WM class `promptheus` whose title is in `OVERLAY_TITLES`; the dock and Alt+Tab then skip it.
+- The type is set per map: GTK3 destroys the surface on `hide()`, so every show is a new `MetaWindow`. The extension handles `window-created`, the windows that exist at `enable()` (after unlock), and a title or WM class that arrives after creation (`notify::title`, `notify::wm-class`); the watch is dropped after the first match, on `unmanaged` and in `disable()`.
+- The six overlay titles: `CONTEXT_MENU_TITLE`, `PALETTE_TITLE`, `PALETTE_BACKDROP_TITLE`, `PROVIDER_MENU_TITLE`, `NOTIFICATION_TITLE`, `IMAGE_PREVIEW_TITLE`.
+- The image-preview window is activated by the extension right after it is typed (`Main.activateWindow`); `set_focus()` on a mapped window is denied by Mutter. The other overlays get no activation from this path.
+- Regular windows (chat, settings, history, context editor, text previews) are never typed and keep the dock icon.
+- Neither the typing path nor `ActivateWindow` logs a window title: text-preview titles hold user text.
+- A second `ActivateWindow` for the same title while one waits finishes the first with `false`; `disable()` finishes every waiting call with `false`.
 
 Context menu placement:
 - GTK3 on Wayland creates the surface at `show()`, so the window does not exist for Mutter before it.
@@ -107,7 +119,7 @@ Install:
 - A changed `extension.js` needs a re-login: GNOME Shell caches loaded ES modules, so `gnome-extensions disable`/`enable` re-runs the old code.
 
 Debugging:
-- `gdbus introspect --session --dest org.gnome.Shell --object-path /com/promptheus/Shell` — 11 methods, 6 signals when the extension is enabled.
+- `gdbus introspect --session --dest org.gnome.Shell --object-path /com/promptheus/Shell` — 12 methods, 6 signals when the extension is enabled.
 - `gdbus monitor --session --dest org.gnome.Shell` — watch `Ready` and `ShortcutActivated`.
 - `journalctl --user /usr/bin/gnome-shell` — extension errors.
 - `journalctl --user -f -o cat /usr/bin/gnome-shell | grep Promptheus` — host-relative placement: `Promptheus: place on parent "<title>" parent=X,Y frame=X,Y WxH`; anchored placement lines: `Promptheus: make_above "<title>"` on every anchor, then `Promptheus: anchor "<title>" right=R bottom=B moved=… frame=X,Y WxH`, then `re-anchor after placement` and `re-anchor on size-changed` with the same fields, and `anchor released "<title>"` on hide. A correct anchor has `X + W = R` and `Y + H = B`.

@@ -11,6 +11,16 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 const PLACE_WINDOW_TIMEOUT_MS = 1000;
 const OBJECT_PATH = '/com/promptheus/Shell';
 const PROVIDER_MENU_TITLE = 'Promptheus Provider Menu';
+const APP_WM_CLASS = 'promptheus';
+const IMAGE_PREVIEW_TITLE = 'Promptheus Image Preview';
+const OVERLAY_TITLES = new Set([
+    'Promptheus Context Menu',
+    'Promptheus Palette',
+    'Promptheus Palette Backdrop',
+    PROVIDER_MENU_TITLE,
+    'Promptheus Notifications',
+    IMAGE_PREVIEW_TITLE,
+]);
 const TOAST_DURATIONS_MS = {success: 2000, error: 4000, info: 2000, warning: 3000};
 const TOAST_MARGIN = 20;
 const TOAST_GAP = 14;
@@ -118,6 +128,10 @@ function widgetItemsHeight(rows) {
     return widgetItemsContentHeight(rows) + WIDGET_ITEMS_ROW_PADDING;
 }
 
+function isAppWindow(win, title) {
+    return win.get_wm_class() === APP_WM_CLASS && win.get_title() === title;
+}
+
 function formatElapsed(elapsedMs) {
     const seconds = Math.floor(elapsedMs / 1000);
     return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
@@ -158,6 +172,10 @@ const INTERFACE_XML = `
       <arg type="i" direction="in" name="dy"/>
       <arg type="b" direction="in" name="activate"/>
       <arg type="b" direction="out" name="placed"/>
+    </method>
+    <method name="ActivateWindow">
+      <arg type="s" direction="in" name="title"/>
+      <arg type="b" direction="out" name="activated"/>
     </method>
     <method name="GetFocusedWmClass">
       <arg type="s" direction="out" name="wm_class"/>
@@ -226,6 +244,8 @@ export default class PromptheusExtension extends Extension {
     enable() {
         this._grabbed = new Map();
         this._pending = new Map();
+        this._activations = new Map();
+        this._overlayStops = new Set();
         this._anchors = new Map();
         this._watchId = 0;
         this._toasts = [];
@@ -239,7 +259,45 @@ export default class PromptheusExtension extends Extension {
             (display, action, device, timestamp) => this._onAcceleratorActivated(action));
         this._mapId = global.window_manager.connect_after('map', (shellwm, actor) => this._pivotProviderMenuAtTop(actor));
         this._destroyId = global.window_manager.connect_after('destroy', (shellwm, actor) => this._pivotProviderMenuAtTop(actor));
+        this._overlayCreatedId = global.display.connect(
+            'window-created', (display, win) => this._typeOverlayWhenReady(win));
+        for (const actor of global.get_window_actors())
+            this._typeOverlayWhenReady(actor.get_meta_window());
         this._dbus.emit_signal('Ready', null);
+    }
+
+    _typeOverlay(win) {
+        const title = win.get_title();
+        if (win.get_wm_class() !== APP_WM_CLASS || !OVERLAY_TITLES.has(title))
+            return false;
+        win.set_type(Meta.WindowType.UTILITY);
+        if (title === IMAGE_PREVIEW_TITLE)
+            Main.activateWindow(win);
+        return true;
+    }
+
+    _typeOverlayWhenReady(win) {
+        if (this._typeOverlay(win))
+            return;
+        const stop = this._watchWindow(win, this._overlayStops, () => {
+            if (this._typeOverlay(win))
+                stop();
+        });
+    }
+
+    _watchWindow(win, stops, onChange) {
+        const ids = [
+            win.connect('notify::title', onChange),
+            win.connect('notify::wm-class', onChange),
+            win.connect('unmanaged', () => stop()),
+        ];
+        const stop = () => {
+            for (const id of ids.splice(0))
+                win.disconnect(id);
+            stops.delete(stop);
+        };
+        stops.add(stop);
+        return stop;
     }
 
     _pivotProviderMenuAtTop(actor) {
@@ -260,15 +318,25 @@ export default class PromptheusExtension extends Extension {
             global.window_manager.disconnect(this._destroyId);
             this._destroyId = 0;
         }
+        if (this._overlayCreatedId) {
+            global.display.disconnect(this._overlayCreatedId);
+            this._overlayCreatedId = 0;
+        }
+        for (const stop of [...this._overlayStops])
+            stop();
         this._unwatchSender();
         this._ungrabAll();
         for (const pending of [...this._pending.values()])
             pending.finish(false);
+        for (const activation of [...this._activations.values()])
+            activation.finish(false);
         for (const anchor of [...this._anchors.values()])
             this._releaseAnchor(anchor);
         this._clearToasts();
         this._removeRecordingWidget();
         this._pending = null;
+        this._activations = null;
+        this._overlayStops = null;
         this._anchors = null;
         this._grabbed = null;
         this._dbus.unexport();
@@ -324,6 +392,25 @@ export default class PromptheusExtension extends Extension {
         const [title, dx, dy, activate] = params;
         this._placeOrWait('PlaceWindowOnParent', title, invocation,
             win => this._placeOnParent(win, title, dx, dy, activate));
+    }
+
+    ActivateWindowAsync(params, invocation) {
+        const [title] = params;
+        try {
+            this._activations.get(title)?.finish(false);
+            const win = global.get_window_actors()
+                .map(actor => actor.get_meta_window())
+                .find(candidate => isAppWindow(candidate, title));
+            if (win) {
+                Main.activateWindow(win);
+                invocation.return_value(new GLib.Variant('(b)', [true]));
+                return;
+            }
+            this._waitForActivation(title, invocation);
+        } catch (e) {
+            logError(e, 'Promptheus: ActivateWindow failed');
+            invocation.return_dbus_error('com.promptheus.Shell.Error', String(e));
+        }
     }
 
     GetFocusedWmClass() {
@@ -1169,6 +1256,59 @@ export default class PromptheusExtension extends Extension {
         if (this._anchors?.get(anchor.title) === anchor)
             this._anchors.delete(anchor.title);
         console.log(`Promptheus: anchor released "${anchor.title}"`);
+    }
+
+    _waitForActivation(title, invocation) {
+        const display = global.display;
+        const stops = new Set();
+        let createdId = 0;
+        let timeoutId = 0;
+        let done = false;
+
+        const finish = activated => {
+            if (done)
+                return;
+            done = true;
+            for (const stop of [...stops])
+                stop();
+            if (createdId) {
+                display.disconnect(createdId);
+                createdId = 0;
+            }
+            if (timeoutId) {
+                GLib.Source.remove(timeoutId);
+                timeoutId = 0;
+            }
+            if (this._activations?.get(title) === pending)
+                this._activations.delete(title);
+            invocation.return_value(new GLib.Variant('(b)', [activated]));
+        };
+        const pending = {finish};
+
+        const activateIfMatch = win => {
+            if (!isAppWindow(win, title))
+                return false;
+            Main.activateWindow(win);
+            finish(true);
+            return true;
+        };
+        const watch = win => this._watchWindow(win, stops, () => activateIfMatch(win));
+
+        for (const actor of global.get_window_actors()) {
+            const win = actor.get_meta_window();
+            if (win.get_wm_class() === APP_WM_CLASS)
+                watch(win);
+        }
+        createdId = display.connect('window-created', (_display, win) => {
+            if (!activateIfMatch(win))
+                watch(win);
+        });
+        timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, PLACE_WINDOW_TIMEOUT_MS, () => {
+            timeoutId = 0;
+            finish(false);
+            return GLib.SOURCE_REMOVE;
+        });
+        this._activations.set(title, pending);
     }
 
     _waitForWindow(title, place, invocation) {
