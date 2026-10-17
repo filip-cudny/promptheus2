@@ -4,6 +4,8 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension};
 
+use crate::services::database::DB_TIMESTAMP_FORMAT;
+
 #[derive(Debug, thiserror::Error)]
 pub enum ClipStoreError {
     #[error("IO error: {0}")]
@@ -231,7 +233,7 @@ impl AudioClipStore {
 }
 
 fn format_ts(value: chrono::DateTime<chrono::Local>) -> String {
-    value.format("%Y-%m-%d %H:%M:%S").to_string()
+    value.format(DB_TIMESTAMP_FORMAT).to_string()
 }
 
 fn row_to_clip(row: &rusqlite::Row<'_>) -> rusqlite::Result<AudioClip> {

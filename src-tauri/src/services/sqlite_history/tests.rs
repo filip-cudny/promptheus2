@@ -4,15 +4,11 @@ use crate::services::database::Database;
 
 impl SqliteHistoryService {
     fn get_last_item_by_type(&self, entry_type: HistoryEntryType) -> Option<HistoryEntry> {
-        let type_str = match entry_type {
-            HistoryEntryType::Text => "text",
-            HistoryEntryType::Speech => "speech",
-        };
         let sql = format!(
             "SELECT {ENTRY_COLUMNS} FROM conversations WHERE entry_type = ?1
              ORDER BY COALESCE(updated_at, created_at) DESC, rowid DESC LIMIT 1"
         );
-        self.db.conn().query_row(&sql, [type_str], row_to_entry).ok()
+        self.db.conn().query_row(&sql, [entry_type_str(&entry_type)], row_to_entry).ok()
     }
 
     fn clear(&self) {

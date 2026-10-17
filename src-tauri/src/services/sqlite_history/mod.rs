@@ -12,7 +12,7 @@ use crate::models::history::{
     InvocationSource, OutputRoute, SerializedConversationNode,
 };
 use crate::models::message::ImageData;
-use crate::services::database::Database;
+use crate::services::database::{Database, DB_TIMESTAMP_FORMAT};
 use serde::Serialize;
 use crate::services::history_search::{HistoryStatusFilter, HistoryTypeFilter};
 
@@ -20,6 +20,7 @@ use codec::{
     build_applied_skill_names, build_input_summary, build_output_summary, last_role_content,
     row_to_entry, TreeJson, ENTRY_COLUMNS,
 };
+pub(crate) use codec::entry_type_str;
 
 #[derive(Debug, thiserror::Error)]
 pub enum HistoryError {
@@ -67,17 +68,13 @@ impl SqliteHistoryService {
     ) -> Option<String> {
         let id = Self::generate_id();
         let now = Self::now_timestamp();
-        let entry_type_str = match entry_type {
-            HistoryEntryType::Text => "text",
-            HistoryEntryType::Speech => "speech",
-        };
 
         let result = self.db.conn().execute(
             "INSERT INTO conversations (id, entry_type, input_content, output_content, skill_id, skill_name, success, error, is_multi_turn, quick_action, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             rusqlite::params![
                 id,
-                entry_type_str,
+                entry_type_str(&entry_type),
                 input_content,
                 output_content,
                 skill_id,
@@ -244,19 +241,15 @@ impl SqliteHistoryService {
 
     pub fn get_entry_by_id(&self, id: &str) -> Option<HistoryEntry> {
         let conn = self.db.conn();
-        let mut stmt = conn
-            .prepare(
-                "SELECT id, title, skill_id, skill_name, entry_type, input_content, output_content,
-                        success, error, is_multi_turn, quick_action, context_text, tree_json,
-                        created_at, updated_at
-                 FROM conversations WHERE id = ?1",
-            )
-            .ok()?;
+        let sql = format!(
+            "SELECT {ENTRY_COLUMNS}, context_text, tree_json FROM conversations WHERE id = ?1"
+        );
+        let mut stmt = conn.prepare(&sql).ok()?;
 
         let entry = stmt
             .query_row([id], |row| {
-                let context_text: String = row.get::<_, Option<String>>(11)?.unwrap_or_default();
-                let tree_json_str: Option<String> = row.get(12)?;
+                let context_text: String = row.get::<_, Option<String>>(13)?.unwrap_or_default();
+                let tree_json_str: Option<String> = row.get(14)?;
 
                 let conversation_data = tree_json_str
                     .and_then(|json| serde_json::from_str::<TreeJson>(&json).ok())
@@ -273,23 +266,7 @@ impl SqliteHistoryService {
                     });
 
                 Ok((
-                    HistoryEntry {
-                        id: row.get(0)?,
-                        title: row.get(1)?,
-                        skill_id: row.get(2)?,
-                        skill_name: row.get(3)?,
-                        entry_type: codec::parse_entry_type(row.get::<_, String>(4)?.as_str()),
-                        input_preview: row.get(5)?,
-                        output_preview: row.get(6)?,
-                        success: row.get(7)?,
-                        error: row.get(8)?,
-                        is_multi_turn: row.get(9)?,
-                        quick_action: row.get(10)?,
-                        created_at: row.get(13)?,
-                        updated_at: row.get(14)?,
-                        timestamp: row.get::<_, Option<String>>(13)?.unwrap_or_default(),
-                        conversation_data: None,
-                    },
+                    row_to_entry(row)?,
                     conversation_data,
                 ))
             })
@@ -337,15 +314,11 @@ impl SqliteHistoryService {
     }
 
     pub fn get_last_quick_action(&self, entry_type: HistoryEntryType) -> Option<HistoryEntry> {
-        let type_str = match entry_type {
-            HistoryEntryType::Text => "text",
-            HistoryEntryType::Speech => "speech",
-        };
         let sql = format!(
             "SELECT {ENTRY_COLUMNS} FROM conversations WHERE entry_type = ?1 AND quick_action = 1
              ORDER BY COALESCE(updated_at, created_at) DESC, rowid DESC LIMIT 1"
         );
-        self.db.conn().query_row(&sql, [type_str], row_to_entry).ok()
+        self.db.conn().query_row(&sql, [entry_type_str(&entry_type)], row_to_entry).ok()
     }
 
     /// Full stored text of one side of an entry, bypassing the capped
@@ -618,7 +591,7 @@ impl SqliteHistoryService {
 
     fn now_timestamp() -> String {
         chrono::Local::now()
-            .format("%Y-%m-%d %H:%M:%S")
+            .format(DB_TIMESTAMP_FORMAT)
             .to_string()
     }
 }

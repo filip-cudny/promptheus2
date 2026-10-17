@@ -6,7 +6,8 @@ use log::{info, warn};
 use rusqlite::{Connection, OptionalExtension};
 
 use crate::models::skill::{Skill, SkillFrontmatter};
-use crate::services::database::sha256_hex;
+use crate::services::database::{sha256_hex, DB_TIMESTAMP_FORMAT};
+use crate::services::fs_util::write_atomic;
 
 use parser::{parse_skill_file, split_frontmatter};
 
@@ -146,9 +147,7 @@ impl SkillService {
         let skill_dir = self.skill_dir(slug);
         std::fs::create_dir_all(&skill_dir)?;
         let final_path = skill_dir.join("SKILL.md");
-        let temp_path = skill_dir.join("SKILL.md.tmp");
-        std::fs::write(&temp_path, content.as_bytes())?;
-        std::fs::rename(&temp_path, &final_path)?;
+        write_atomic(&final_path, content.as_bytes())?;
 
         info!("wrote skill '{slug}' to {}", final_path.display());
         Ok(())
@@ -182,7 +181,7 @@ impl SkillService {
         conn: &Connection,
     ) -> Result<i64, SkillError> {
         let now = chrono::Local::now()
-            .format("%Y-%m-%d %H:%M:%S")
+            .format(DB_TIMESTAMP_FORMAT)
             .to_string();
 
         let skill = self
@@ -223,7 +222,7 @@ impl SkillService {
 
     pub fn prune_missing_skills(&self, conn: &Connection) -> Result<(), SkillError> {
         let now = chrono::Local::now()
-            .format("%Y-%m-%d %H:%M:%S")
+            .format(DB_TIMESTAMP_FORMAT)
             .to_string();
         let active_names: Vec<String> = self.skills.iter().map(|s| s.name.clone()).collect();
 

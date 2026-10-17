@@ -4,9 +4,9 @@ use nucleo_matcher::{Config, Matcher, Utf32Str};
 use serde::{Deserialize, Serialize};
 
 use crate::models::history::{HistoryEntry, HistoryEntryType};
+use crate::services::database::DB_TIMESTAMP_FORMAT;
 use crate::services::sqlite_history::SqliteHistoryService;
 
-const TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 const FTS_MIN_QUERY_LEN: usize = 3;
 const FTS_CANDIDATE_LIMIT: usize = 1000;
 const RECENCY_TAU_DAYS: f64 = 30.0;
@@ -132,14 +132,43 @@ fn sort_key(entry: &HistoryEntry) -> &str {
 }
 
 fn entry_timestamp(entry: &HistoryEntry) -> Option<i64> {
-    let raw = entry
-        .updated_at
-        .as_deref()
-        .or(entry.created_at.as_deref())
-        .unwrap_or(entry.timestamp.as_str());
-    let naive = NaiveDateTime::parse_from_str(raw, TIMESTAMP_FORMAT).ok()?;
+    let naive = NaiveDateTime::parse_from_str(sort_key(entry), DB_TIMESTAMP_FORMAT).ok()?;
     let local_dt = Local.from_local_datetime(&naive).single()?;
     Some(local_dt.with_timezone(&Utc).timestamp())
+}
+
+fn filter_entries<'a>(entries: &'a [HistoryEntry], query: &SearchQuery) -> Vec<&'a HistoryEntry> {
+    entries
+        .iter()
+        .filter(|e| matches_type_filter(e, query.type_filter))
+        .filter(|e| matches_status_filter(e, query.status_filter))
+        .filter(|e| {
+            query.skill_ids.is_empty()
+                || e.skill_id
+                    .as_ref()
+                    .map_or(false, |id| query.skill_ids.contains(id))
+        })
+        .filter(|e| {
+            query
+                .date_from
+                .map_or(true, |from| entry_timestamp(e).map_or(false, |ts| ts >= from))
+        })
+        .collect()
+}
+
+fn page_results<T>(
+    items: Vec<T>,
+    query: &SearchQuery,
+    to_result: impl FnMut(T) -> SearchResult,
+) -> SearchResponse {
+    let total = items.len();
+    let results = items
+        .into_iter()
+        .skip(query.offset)
+        .take(query.limit)
+        .map(to_result)
+        .collect();
+    SearchResponse { results, total }
 }
 
 fn recency_multiplier(entry: &HistoryEntry, now: i64) -> f32 {
@@ -258,37 +287,13 @@ impl HistorySearch {
         query: &SearchQuery,
     ) -> SearchResponse {
         let entries = history.get_history();
-        let mut filtered: Vec<&HistoryEntry> = entries
-            .iter()
-            .filter(|e| matches_type_filter(e, query.type_filter))
-            .filter(|e| matches_status_filter(e, query.status_filter))
-            .collect();
-
-        if !query.skill_ids.is_empty() {
-            filtered.retain(|e| {
-                e.skill_id
-                    .as_ref()
-                    .map_or(false, |id| query.skill_ids.iter().any(|q| q == id))
-            });
-        }
-
-        if let Some(from) = query.date_from {
-            filtered.retain(|e| entry_timestamp(e).map_or(false, |ts| ts >= from));
-        }
-
+        let mut filtered = filter_entries(&entries, query);
         filtered.sort_by(|a, b| sort_key(b).cmp(sort_key(a)));
-        let total = filtered.len();
-        let results = filtered
-            .into_iter()
-            .skip(query.offset)
-            .take(query.limit)
-            .map(|entry| SearchResult {
-                entry: entry.clone(),
-                matches: Vec::new(),
-                score: 0,
-            })
-            .collect();
-        SearchResponse { results, total }
+        page_results(filtered, query, |entry| SearchResult {
+            entry: entry.clone(),
+            matches: Vec::new(),
+            score: 0,
+        })
     }
 
     fn run_fts(
@@ -358,19 +363,11 @@ impl HistorySearch {
         }
 
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-        let total = scored.len();
-        let results = scored
-            .into_iter()
-            .skip(query.offset)
-            .take(query.limit)
-            .map(|(score, matches, entry)| SearchResult {
-                entry,
-                matches,
-                score: (score * 100.0) as i32,
-            })
-            .collect();
-
-        Some(SearchResponse { results, total })
+        Some(page_results(scored, query, |(score, matches, entry)| SearchResult {
+            entry,
+            matches,
+            score: (score * 100.0) as i32,
+        }))
     }
 
     fn run_with_query_nucleo(
@@ -381,23 +378,7 @@ impl HistorySearch {
         tokens: &[String],
     ) -> SearchResponse {
         let entries = history.get_history();
-        let mut filtered: Vec<&HistoryEntry> = entries
-            .iter()
-            .filter(|e| matches_type_filter(e, query.type_filter))
-            .filter(|e| matches_status_filter(e, query.status_filter))
-            .collect();
-
-        if !query.skill_ids.is_empty() {
-            filtered.retain(|e| {
-                e.skill_id
-                    .as_ref()
-                    .map_or(false, |id| query.skill_ids.iter().any(|q| q == id))
-            });
-        }
-
-        if let Some(from) = query.date_from {
-            filtered.retain(|e| entry_timestamp(e).map_or(false, |ts| ts >= from));
-        }
+        let filtered = filter_entries(&entries, query);
 
         let avg_lens = compute_avg_lens(&filtered);
         let now = Utc::now().timestamp();
@@ -488,20 +469,11 @@ impl HistorySearch {
         }
 
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-        let total = scored.len();
-
-        let results = scored
-            .into_iter()
-            .skip(query.offset)
-            .take(query.limit)
-            .map(|(score, matches, entry)| SearchResult {
-                entry: entry.clone(),
-                matches,
-                score: score as i32,
-            })
-            .collect();
-
-        SearchResponse { results, total }
+        page_results(scored, query, |(score, matches, entry)| SearchResult {
+            entry: entry.clone(),
+            matches,
+            score: score as i32,
+        })
     }
 }
 
@@ -542,6 +514,7 @@ mod tests {
     use super::*;
     use crate::models::history::{HistoryEntry, HistoryEntryType};
     use crate::services::database::Database;
+    use crate::services::sqlite_history::entry_type_str;
 
     fn make_entry(id: &str, input: &str) -> HistoryEntry {
         HistoryEntry {
@@ -576,7 +549,7 @@ mod tests {
     }
 
     fn local_format(ts: chrono::DateTime<Local>) -> String {
-        ts.format(TIMESTAMP_FORMAT).to_string()
+        ts.format(DB_TIMESTAMP_FORMAT).to_string()
     }
 
     fn make_history(entries: Vec<HistoryEntry>) -> SqliteHistoryService {
@@ -589,16 +562,12 @@ mod tests {
     }
 
     fn insert_raw(svc: &SqliteHistoryService, e: HistoryEntry) {
-        let entry_type_str = match e.entry_type {
-            HistoryEntryType::Text => "text",
-            HistoryEntryType::Speech => "speech",
-        };
         svc.conn().execute(
             "INSERT INTO conversations (id, title, skill_id, skill_name, entry_type, input_content, output_content,
                 success, error, is_multi_turn, quick_action, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             rusqlite::params![
-                e.id, e.title, e.skill_id, e.skill_name, entry_type_str,
+                e.id, e.title, e.skill_id, e.skill_name, entry_type_str(&e.entry_type),
                 e.input_preview, e.output_preview, e.success, e.error,
                 e.is_multi_turn, e.quick_action, e.created_at, e.updated_at,
             ],

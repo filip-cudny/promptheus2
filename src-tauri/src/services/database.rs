@@ -12,6 +12,8 @@ pub enum DatabaseError {
     Io(#[from] std::io::Error),
 }
 
+pub const DB_TIMESTAMP_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
+
 pub struct Database {
     conn: Connection,
 }
@@ -472,7 +474,7 @@ fn migrate_to_v5(conn: &Connection) -> Result<(), DatabaseError> {
     )?;
 
     let now = chrono::Local::now()
-        .format("%Y-%m-%d %H:%M:%S")
+        .format(DB_TIMESTAMP_FORMAT)
         .to_string();
 
     let rows: Vec<(String, Option<String>)> = {

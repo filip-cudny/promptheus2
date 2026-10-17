@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::path::resolve_config_relative;
 use super::ConfigError;
+use crate::services::fs_util::write_atomic;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -91,7 +92,7 @@ impl<'a> PromptStore<'a> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        write_atomic(&path, content)
+        write_atomic(&path, content.as_bytes()).map_err(ConfigError::from)
     }
 
     pub fn ensure_default(&self, kind: PromptKind, raw_path: &str) -> Result<(), ConfigError> {
@@ -102,7 +103,7 @@ impl<'a> PromptStore<'a> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        write_atomic(&path, kind.default_content())
+        write_atomic(&path, kind.default_content().as_bytes()).map_err(ConfigError::from)
     }
 
     pub fn resolve(&self, raw_path: &str) -> Result<PathBuf, ConfigError> {
@@ -127,21 +128,6 @@ impl<'a> PromptStore<'a> {
 
         Ok(path)
     }
-}
-
-fn write_atomic(path: &Path, content: &str) -> Result<(), ConfigError> {
-    let parent = path.parent().ok_or_else(|| {
-        ConfigError::InvalidSettings(format!("path has no parent: {}", path.display()))
-    })?;
-    let mut tmp = parent.to_path_buf();
-    let file_name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("prompt");
-    tmp.push(format!(".{file_name}.tmp"));
-    std::fs::write(&tmp, content)?;
-    std::fs::rename(&tmp, path)?;
-    Ok(())
 }
 
 #[cfg(test)]

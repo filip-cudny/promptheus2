@@ -23,6 +23,13 @@ pub(super) fn parse_entry_type(s: &str) -> HistoryEntryType {
     }
 }
 
+pub(crate) fn entry_type_str(entry_type: &HistoryEntryType) -> &'static str {
+    match entry_type {
+        HistoryEntryType::Text => "text",
+        HistoryEntryType::Speech => "speech",
+    }
+}
+
 pub(super) fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<HistoryEntry> {
     Ok(HistoryEntry {
         id: row.get(0)?,
@@ -60,50 +67,32 @@ pub(super) fn last_role_content(
         .filter(|c| !c.is_empty())
 }
 
+fn summarize_last_of_role(
+    nodes: &[SerializedConversationNode],
+    role: &str,
+    empty_placeholder: &str,
+) -> Option<String> {
+    let last = nodes.iter().rev().find(|n| n.role == role)?;
+    if last.content.is_empty() {
+        return Some(empty_placeholder.to_string());
+    }
+    let count = nodes.iter().filter(|n| n.role == role).count();
+    if count > 1 {
+        let truncated: String = last.content.chars().take(100).collect();
+        Some(format!("{}... (+{} more)", truncated, count - 1))
+    } else {
+        Some(last.content.chars().take(200).collect())
+    }
+}
+
 /// Display-only summary of the last user node, capped at 200 characters.
 pub(super) fn build_input_summary(nodes: &[SerializedConversationNode]) -> String {
-    let last_user = nodes.iter().rev().find(|n| n.role == "user");
-    match last_user {
-        None => "(no input)".to_string(),
-        Some(node) => {
-            let text = &node.content;
-            if text.is_empty() {
-                return "(empty)".to_string();
-            }
-            let user_count = nodes.iter().filter(|n| n.role == "user").count();
-            if user_count > 1 {
-                let truncated: String = text.chars().take(100).collect();
-                format!("{}... (+{} more)", truncated, user_count - 1)
-            } else if text.chars().count() > 200 {
-                text.chars().take(200).collect()
-            } else {
-                text.to_string()
-            }
-        }
-    }
+    summarize_last_of_role(nodes, "user", "(empty)").unwrap_or_else(|| "(no input)".to_string())
 }
 
 /// Display-only summary of the last assistant node, capped at 200 characters.
 pub(super) fn build_output_summary(nodes: &[SerializedConversationNode]) -> Option<String> {
-    let last_assistant = nodes.iter().rev().find(|n| n.role == "assistant");
-    match last_assistant {
-        None => None,
-        Some(node) => {
-            let text = &node.content;
-            if text.is_empty() {
-                return Some("(no output yet)".to_string());
-            }
-            let asst_count = nodes.iter().filter(|n| n.role == "assistant").count();
-            if asst_count > 1 {
-                let truncated: String = text.chars().take(100).collect();
-                Some(format!("{}... (+{} more)", truncated, asst_count - 1))
-            } else if text.chars().count() > 200 {
-                Some(text.chars().take(200).collect())
-            } else {
-                Some(text.to_string())
-            }
-        }
-    }
+    summarize_last_of_role(nodes, "assistant", "(no output yet)")
 }
 
 pub(super) fn build_applied_skill_names(nodes: &[SerializedConversationNode]) -> Option<String> {

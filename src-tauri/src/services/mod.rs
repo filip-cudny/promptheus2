@@ -5,6 +5,7 @@ pub mod capability_audit;
 pub mod clipboard;
 pub mod env_resolve;
 pub mod frontmost_app;
+pub mod fs_util;
 #[cfg(target_os = "linux")]
 pub mod gnome_shell;
 pub mod settings_sync;

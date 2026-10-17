@@ -16,6 +16,8 @@ use crate::models::settings::{
 
 use path::resolve_config_relative;
 
+use crate::services::fs_util::write_atomic;
+
 use defaults::{ensure_surface_defaults, validate};
 use loader::initialize_defaults;
 use migrator::{
@@ -71,21 +73,7 @@ impl ConfigService {
         }
 
         let content = std::fs::read_to_string(&settings_path)?;
-        let outcome = parse_and_migrate(&content)?;
-        let mut settings = outcome.settings;
-
-        apply_inline_prompts(config_dir, &outcome.inline_prompts)?;
-        apply_legacy_flat_md_renames(config_dir, &outcome.legacy_flat_md_renames);
-        rewrite_legacy_default_paths(config_dir, &mut settings);
-        ensure_prompt_defaults(config_dir, &settings);
-        replace_legacy_system_default(config_dir, &settings.prompt_base.system);
-
-        migrate_model_params(&mut settings);
-        sanitize_capabilities(&mut settings);
-        migrate_explicit_capabilities(&mut settings);
-        ensure_surface_defaults(&mut settings);
-
-        validate(&settings)?;
+        let settings = build_settings(config_dir, &content)?;
 
         let mut service = ConfigService {
             settings,
@@ -145,22 +133,7 @@ impl ConfigService {
         let bytes = std::fs::read(&settings_path)?;
         let content = std::str::from_utf8(&bytes)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-        let outcome = parse_and_migrate(content)?;
-        let mut settings = outcome.settings;
-
-        apply_inline_prompts(&self.config_dir, &outcome.inline_prompts)?;
-        apply_legacy_flat_md_renames(&self.config_dir, &outcome.legacy_flat_md_renames);
-        rewrite_legacy_default_paths(&self.config_dir, &mut settings);
-        ensure_prompt_defaults(&self.config_dir, &settings);
-        replace_legacy_system_default(&self.config_dir, &settings.prompt_base.system);
-
-        migrate_model_params(&mut settings);
-        sanitize_capabilities(&mut settings);
-        migrate_explicit_capabilities(&mut settings);
-        ensure_surface_defaults(&mut settings);
-
-        validate(&settings)?;
-        self.settings = settings;
+        self.settings = build_settings(&self.config_dir, content)?;
         self.baseline = bytes;
         log::debug!("settings reloaded");
 
@@ -458,7 +431,7 @@ impl ConfigService {
         if let Some(parent) = resolved.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        write_keyterms_atomic(&resolved, content)?;
+        write_atomic(&resolved, content.as_bytes())?;
         if self.settings.surfaces.speech_to_text.keyterms_file.is_none() {
             self.settings.surfaces.speech_to_text.keyterms_file = Some(path.clone());
         }
@@ -470,6 +443,25 @@ impl ConfigService {
             term_count,
         })
     }
+}
+
+fn build_settings(config_dir: &Path, content: &str) -> Result<Settings, ConfigError> {
+    let outcome = parse_and_migrate(content)?;
+    let mut settings = outcome.settings;
+
+    apply_inline_prompts(config_dir, &outcome.inline_prompts)?;
+    apply_legacy_flat_md_renames(config_dir, &outcome.legacy_flat_md_renames);
+    rewrite_legacy_default_paths(config_dir, &mut settings);
+    ensure_prompt_defaults(config_dir, &settings);
+    replace_legacy_system_default(config_dir, &settings.prompt_base.system);
+
+    migrate_model_params(&mut settings);
+    sanitize_capabilities(&mut settings);
+    migrate_explicit_capabilities(&mut settings);
+    ensure_surface_defaults(&mut settings);
+
+    validate(&settings)?;
+    Ok(settings)
 }
 
 const DEFAULT_STT_KEYTERMS_PATH: &str = "data/keyterms.txt";
@@ -489,20 +481,6 @@ fn parse_keyterms(content: &str) -> Vec<String> {
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .map(str::to_string)
         .collect()
-}
-
-fn write_keyterms_atomic(path: &Path, content: &str) -> Result<(), ConfigError> {
-    let parent = path.parent().ok_or_else(|| {
-        ConfigError::InvalidSettings(format!("path has no parent: {}", path.display()))
-    })?;
-    let file_name = path
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("keyterms.txt");
-    let tmp = parent.join(format!(".{file_name}.tmp"));
-    std::fs::write(&tmp, content)?;
-    std::fs::rename(&tmp, path)?;
-    Ok(())
 }
 
 fn apply_inline_prompts(

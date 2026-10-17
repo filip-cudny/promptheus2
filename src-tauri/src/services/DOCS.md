@@ -63,7 +63,7 @@ Reads text and images with the `arboard` crate; writes text through `write_text`
 
 ### ConfigService specifics
 
-**Load sequence** (`ConfigService::load`): `load_env` (`<config dir>/.env`, then `dotenvy::dotenv_override()` from the working directory and its parents, both overriding the process environment; sets `CONFIG_DIR`) → default `settings.json` (embedded with `include_str!`), `.env` and prompt files written when `settings.json` is missing → read and `parse_and_migrate` (schema migration in `migrator.rs`) → legacy prompt file moves and defaults → `migrate_model_params` → capability sanitizing → `ensure_surface_defaults` → `validate` → `write`. A model's `api_key` is a literal key or a `${VAR}` reference, resolved at use by `ModelConfig::resolved_api_key`; `write` serializes the settings as they are, with no key stripping.
+**Load sequence** (`ConfigService::load`): `load_env` (`<config dir>/.env`, then `dotenvy::dotenv_override()` from the working directory and its parents, both overriding the process environment; sets `CONFIG_DIR`) → default `settings.json` (embedded with `include_str!`), `.env` and prompt files written when `settings.json` is missing → read and `build_settings` (also used by `reload`): `parse_and_migrate` (schema migration in `migrator.rs`) → legacy prompt file moves and defaults → `migrate_model_params` → capability sanitizing → `ensure_surface_defaults` → `validate` → `write`. A model's `api_key` is a literal key or a `${VAR}` reference, resolved at use by `ModelConfig::resolved_api_key`; `write` serializes the settings as they are, with no key stripping.
 
 **Mutations go through `ConfigService::mutate`**: it reloads `settings.json` when its bytes differ from the last read or written, runs the closure, then writes. No public `save` exists. A reload inside `mutate` is applied to runtime state by `commands::settings::apply_settings_reload`, called after the config guard is dropped. A failed reload fails the mutation and writes nothing. `settings.json` is written in place with `std::fs::write` because it may be a symlink into the settings repo; a temp-file rename would replace the symlink and stop sync.
 
@@ -72,6 +72,16 @@ Reads text and images with the `arboard` crate; writes text through `write_text`
 **Prompt files**: All prompts live as `.md` files under `<config_dir>/prompts/{base,surfaces}/`. JSON config holds only paths. Six `PromptKind`s — `System`, `AboutYou`, `Environment`, `InputFormat`, `TitleGeneration`, `SpeechToText`. Read via `config.read_prompt(kind)` / write via `config.write_prompt(kind, content)`. `PromptStore` enforces path safety: relative-only, no `..`, must end with `.md`/`.markdown`, env-var refs resolved (`config/path.rs`) before those checks. Migrator extracts inline-string prompts from legacy `settings.json` into files on first load and renames legacy field names (`system_prompt` → `system`, `environment_section` → `environment`, `about_me` → `about_you`). The `prompts/base/about_me.md` file is renamed to `about_you.md` on disk; the historical `system.md` default `"You are a helpful assistant."` is replaced with the new anti-sycophancy default (user-edited content is not touched). Only `Environment` substitutes `{{date}}`/`{{time}}`/`{{timezone}}`/`{{os}}`/`{{active_app}}`/`{{recent_apps}}` placeholders (`placeholder_registry.rs`) — other prompts are sent verbatim.
 
 **System prompt assembly**: `build_system_prompt_base` composes the runtime system message as XML-tagged sections joined with `\n\n` (no `---` separators). Order: raw system prompt → `<user_context>` (contains `Name: {preferred_name}` + about_you body) → `<environment>` → `<input_format>`. Empty/whitespace-only sections are dropped entirely; the `Name:` line is dropped if `preferred_name` is empty. `preferred_name` is a top-level `Settings` field (default empty, trimmed and clamped to 60 chars on `update_setting`).
+
+### Window geometry and UI state
+
+`ui_state.rs` (`ui_state.json`, local) and the geometry persistence in `dialog.rs` stay our own code (about 90 lines). Why not `tauri-plugin-window-state` / `tauri-plugin-store` (CLAUDE.md "Rules" exception), the same three reasons cover both:
+
+- `tauri-plugin-window-state` (2.5.0) writes its file only on `RunEvent::Exit`, so a crash or kill loses every move and resize; geometry is saved on window close here.
+- Its `VISIBLE` flag restores visibility and would show the hidden chat window at startup.
+- The recording pill stores user drags only, not every programmatic placement; the plugin tracks all moves.
+
+Accepted cost: the own lines and no monitor-bounds check on restore (a window saved on a since-disconnected monitor is restored off-screen).
 
 ### Testing pattern
 
@@ -107,7 +117,7 @@ Persistent history storage via SQLite. Database file at `{app_data_dir}/history.
 
 **ID generation**: UUID v4 via `uuid::Uuid::new_v4()`.
 
-**Timestamp format**: `chrono::Local::now().format("%Y-%m-%d %H:%M:%S")`.
+**Timestamp format**: `chrono::Local::now().format(DB_TIMESTAMP_FORMAT)`; the constant lives in `database.rs` and every writer and parser of stored timestamps (history, skills, clip store, search) uses it.
 
 **Retention**: time-based, not count-based — there is no cap on the number of entries. `enforce_retention()` deletes rows whose `COALESCE(updated_at, created_at)` is older than `datetime('now', 'localtime', '-N days')`; `retention_days == 0` disables it entirely (the default). `'localtime'` is mandatory because timestamps are written as `chrono::Local`; comparing against UTC `now` would prune fresh entries at positive offsets. The sweep is **not** on the insert path — it runs once at startup (`setup/state.rs`) and again from the `update_history_retention` command when the user changes the setting. Deletes cascade to `conversation_images` and are mirrored into `conversations_fts` by the `conversations_fts_ad` trigger.
 
