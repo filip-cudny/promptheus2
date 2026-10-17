@@ -14,9 +14,9 @@
   import InputArea from "$lib/components/features/conversation-dialog/InputArea.svelte";
   import TabSidebar from "$lib/components/features/conversation-dialog/TabSidebar.svelte";
   import { useConversationDialogIpc } from "$lib/components/features/conversation-dialog/drivers/useConversationDialogIpc.svelte";
-  import { openPalette, reloadActiveInHost } from "$lib/services/shellToolbar";
-  import { reportNativeTabs, tabShortcutAction, type NativeTabReport } from "$lib/services/tabs";
-  import { SHORTCUTS, matches } from "$lib/shortcuts";
+  import { reloadActiveInHost } from "$lib/services/shellToolbar";
+  import { reportNativeTabs, type NativeTabReport } from "$lib/services/tabs";
+  import { SHORTCUTS, createHostShortcutHandler, matches } from "$lib/shortcuts";
   import { focusConversationInput } from "$lib/utils/conversationFocus";
   import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
   import { initTheme } from "$lib/stores/theme.svelte";
@@ -91,6 +91,8 @@
     });
   });
 
+  const handleHostShortcut = createHostShortcutHandler(HOST_LABEL);
+
   async function handleGlobalKeydown(e: KeyboardEvent) {
     if (matches(e, SHORTCUTS.reloadActive)) {
       e.preventDefault();
@@ -102,24 +104,7 @@
 
     if (chatPaletteOpen) return;
 
-    if (matches(e, SHORTCUTS.openPalette)) {
-      e.preventDefault();
-      e.stopPropagation();
-      try {
-        await openPalette(HOST_LABEL);
-      } catch (err) {
-        console.error("open_palette failed", err);
-      }
-      return;
-    }
-
-    const tabAction = tabShortcutAction(e);
-    if (tabAction) {
-      e.preventDefault();
-      e.stopPropagation();
-      tabAction().catch((err) => console.error("tab shortcut failed", err));
-      return;
-    }
+    if (handleHostShortcut(e)) return;
 
     if (matches(e, SHORTCUTS.openChatPalette)) {
       e.preventDefault();

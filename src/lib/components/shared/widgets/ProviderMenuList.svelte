@@ -3,7 +3,7 @@
   import MenuItem from "$lib/components/shared/ui/MenuItem.svelte";
   import { providerIconSvg } from "$lib/icons/providerIcons";
 
-  type Provider = { id: string; name: string; url?: string | null };
+  type Provider = { id: string; name: string; url?: string | null; icon?: string };
 
   let {
     providers,
@@ -20,7 +20,7 @@
 
 <MenuList {expand}>
   {#each providers as p (p.id)}
-    {@const iconSvg = providerIconSvg(p)}
+    {@const iconSvg = providerIconSvg({ id: p.icon ?? p.id, url: p.url })}
     {#snippet providerIcon()}
       {#if iconSvg}
         <span class="provider-icon" aria-hidden="true">{@html iconSvg}</span>

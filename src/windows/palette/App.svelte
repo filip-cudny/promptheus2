@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
+  import { isLinux } from "$lib/utils/platform";
   import Palette from "$lib/components/features/palette/Palette.svelte";
   import { usePaletteIpc } from "$lib/components/features/palette/drivers/usePaletteIpc.svelte";
 
@@ -10,13 +11,7 @@
   });
 
   onMount(() => {
-    const ua = navigator.userAgent;
-    const platform = ua.includes("Mac")
-      ? "macos"
-      : ua.includes("Win")
-        ? "windows"
-        : "linux";
-    document.documentElement.setAttribute("data-platform", platform);
+    if (isLinux) document.documentElement.setAttribute("data-platform", "linux");
     ipc.init();
   });
   onDestroy(() => ipc.destroy());

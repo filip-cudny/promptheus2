@@ -21,6 +21,7 @@
   import type { ModelConfig } from "$lib/types";
   import { openImagePreview, openTextPreview } from "$lib/services/windowPreviews";
   import { readClipboardForEditable } from "$lib/services/clipboardPaste";
+  import { isMac } from "$lib/utils/platform";
   import { useInputSync } from "./drivers/useInputSync.svelte";
   import { useMcpTools } from "./drivers/useMcpTools.svelte";
   import { useTextAttachmentBridge } from "./drivers/useTextAttachmentBridge.svelte";
@@ -127,8 +128,6 @@
     store.toggleTool(id, false);
     focusConversationInput();
   }
-
-  const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
 
   const contextFillRatio = $derived.by(() => {
     if (contextWindowSize <= 0 || store.totalTokens <= 0) return 0;

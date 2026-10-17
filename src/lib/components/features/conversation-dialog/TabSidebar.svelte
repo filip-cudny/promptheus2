@@ -35,7 +35,6 @@
   const mutex = useSidebarMutex<SidebarItem>();
 
   let tabListEl: HTMLDivElement | undefined = $state();
-  let menuContainerEls = $state<Record<string, HTMLDivElement>>({});
   let unlistenList: (() => void) | undefined;
 
   const items = $derived(buildSidebarItems(list.conversations));
@@ -60,14 +59,6 @@
     mutex.openMenu(itemId(item));
   }
 
-  function handleWindowPointerDown(e: PointerEvent) {
-    const openId = mutex.menuOpenId;
-    if (!openId) return;
-    const container = menuContainerEls[openId];
-    if (container && container.contains(e.target as Node)) return;
-    mutex.closeMenu();
-  }
-
   function commitRename(item: SidebarItem, newValue: string) {
     const trimmed = newValue.trim();
     if (trimmed && trimmed !== itemTitle(item)) {
@@ -88,6 +79,7 @@
   }
 
   function handleScroll() {
+    mutex.closeMenu();
     if (!tabListEl || !list.hasMore || list.loading) return;
     const { scrollTop, scrollHeight, clientHeight } = tabListEl;
     if (scrollHeight - scrollTop - clientHeight < 100) list.loadMore();
@@ -101,8 +93,6 @@
     unlistenList?.();
   });
 </script>
-
-<svelte:window onpointerdown={handleWindowPointerDown} />
 
 {#if open}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -136,9 +126,9 @@
           <SidebarMoreMenu
             open={mutex.menuOpenId === id}
             onToggle={(e) => toggleMenu(e, item)}
+            onClose={() => mutex.closeMenu()}
             onRename={() => mutex.startRename(id)}
             onDelete={() => mutex.startDelete(item)}
-            bind:containerEl={menuContainerEls[id]}
           />
         {/snippet}
       </SidebarItemRow>

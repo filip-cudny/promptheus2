@@ -3,16 +3,23 @@
   import { invoke } from "@tauri-apps/api/core";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import MenuList from "$lib/components/shared/ui/MenuList.svelte";
-  import MenuItem from "$lib/components/shared/ui/MenuItem.svelte";
+  import ProviderMenuList from "$lib/components/shared/widgets/ProviderMenuList.svelte";
   import { getWebviewProviders, type WebviewProvider } from "$lib/services/aiWebview";
-  import { providerIconSvg } from "$lib/icons/providerIcons";
   import type { ProviderMenuItem } from "$lib/services/shellToolbar";
 
   type ShowPayload = { items: ProviderMenuItem[] };
 
   let items = $state<ProviderMenuItem[]>([]);
   let webviewProviders = $state<WebviewProvider[]>([]);
+  const providers = $derived(
+    items.map((item) => ({
+      id: item.id,
+      name: item.title,
+      icon: item.icon,
+      url: webviewProviders.find((p) => p.id === item.icon)?.url,
+    })),
+  );
+  const activeId = $derived(items.find((item) => item.active)?.id ?? "");
   let unlistenShow: UnlistenFn | undefined;
   let unlistenBlur: UnlistenFn | undefined;
 
@@ -80,24 +87,7 @@
 </script>
 
 <div id="menu-root" class="menu-shell">
-  <MenuList>
-    {#each items as item (item.id)}
-      {@const iconSvg = providerIconSvg({
-        id: item.icon,
-        url: webviewProviders.find((p) => p.id === item.icon)?.url,
-      })}
-      {#snippet itemIcon()}
-        <span class="item-icon" aria-hidden="true">{#if iconSvg}{@html iconSvg}{/if}</span>
-      {/snippet}
-      <MenuItem
-        label={item.title}
-        icon={itemIcon}
-        active={item.active}
-        activeStyle="rail"
-        onclick={() => pick(item.id)}
-      />
-    {/each}
-  </MenuList>
+  <ProviderMenuList {providers} {activeId} onSelect={pick} />
 </div>
 
 <style>
@@ -105,23 +95,6 @@
   :global(body) {
     background: transparent;
     margin: var(--space-0);
-  }
-
-  .item-icon {
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .item-icon :global(svg),
-  .item-icon :global(img) {
-    width: 100%;
-    height: 100%;
-    display: block;
-    object-fit: contain;
   }
 
   .menu-shell {

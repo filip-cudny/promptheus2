@@ -1,3 +1,6 @@
+import { openPalette } from "$lib/services/shellToolbar";
+import { tabShortcutAction } from "$lib/services/tabs";
+
 export type Shortcut = {
   key: string;
   mod?: boolean;
@@ -29,6 +32,27 @@ export function matches(e: KeyboardEvent, s: Shortcut): boolean {
 export function tabPosition(e: KeyboardEvent): number | null {
   if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return null;
   return /^[1-9]$/.test(e.key) ? Number(e.key) : null;
+}
+
+export function createHostShortcutHandler(hostLabel: string): (e: KeyboardEvent) => boolean {
+  return (e) => {
+    const tabAction = tabShortcutAction(e);
+    if (tabAction) {
+      e.preventDefault();
+      e.stopPropagation();
+      tabAction().catch((err) => console.error("tab shortcut failed", err));
+      return true;
+    }
+
+    if (matches(e, SHORTCUTS.openPalette)) {
+      e.preventDefault();
+      e.stopPropagation();
+      openPalette(hostLabel).catch((err) => console.error("open_palette failed", err));
+      return true;
+    }
+
+    return false;
+  };
 }
 
 const MAC_SYMBOLS = { mod: "⌘", shift: "⇧", alt: "⌥" } as const;

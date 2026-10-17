@@ -1,11 +1,13 @@
 <script lang="ts">
-  import { tick } from "svelte";
   import { ChevronDown, Brain } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import {
     REASONING_LEVEL_LABELS,
     type ReasoningLevel,
   } from "$lib/constants/models";
+  import FloatingPanel from "$lib/components/shared/ui/FloatingPanel.svelte";
+  import MenuList from "$lib/components/shared/ui/MenuList.svelte";
+  import MenuItem from "$lib/components/shared/ui/MenuItem.svelte";
   import type { ModelCapabilities, ModelConfig } from "$lib/types";
 
   let {
@@ -31,13 +33,6 @@
 
   let modelChipEl: HTMLButtonElement | undefined = $state();
   let reasoningChipEl: HTMLButtonElement | undefined = $state();
-  let modelDropdownEl: HTMLDivElement | undefined = $state();
-  let reasoningDropdownEl: HTMLDivElement | undefined = $state();
-  let modelDropdownStyle = $state("");
-  let reasoningDropdownStyle = $state("");
-
-  const DROPDOWN_GAP = 4;
-  const VIEWPORT_PADDING = 4;
 
   let selectedModel = $derived(
     models.find((m) => m.id === selectedModelId) ?? models[0] ?? null,
@@ -73,77 +68,23 @@
 
   let showGroupHeaders = $derived(groupedModels.size > 1);
 
-  function positionDropdown(
-    chipEl: HTMLElement | undefined,
-    dropdownEl: HTMLDivElement | undefined,
-  ): string {
-    if (!chipEl || !dropdownEl) return "";
-    const chipRect = chipEl.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-
-    const dropdownWidth = dropdownEl.offsetWidth;
-    const naturalHeight = dropdownEl.scrollHeight;
-
-    const spaceAbove = chipRect.top - VIEWPORT_PADDING - DROPDOWN_GAP;
-    const spaceBelow = viewportHeight - chipRect.bottom - VIEWPORT_PADDING - DROPDOWN_GAP;
-    const openUp = spaceAbove >= naturalHeight || spaceAbove >= spaceBelow;
-
-    const available = Math.max(80, openUp ? spaceAbove : spaceBelow);
-    const fits = naturalHeight <= available;
-    const height = fits ? naturalHeight : available;
-
-    let top: number;
-    if (openUp) {
-      top = chipRect.top - DROPDOWN_GAP - height;
-    } else {
-      top = chipRect.bottom + DROPDOWN_GAP;
-    }
-    top = Math.max(VIEWPORT_PADDING, top);
-
-    let left = chipRect.right - dropdownWidth;
-    left = Math.max(VIEWPORT_PADDING, Math.min(left, viewportWidth - dropdownWidth - VIEWPORT_PADDING));
-
-    if (fits) {
-      return `top: ${top}px; left: ${left}px;`;
-    }
-    return `top: ${top}px; left: ${left}px; max-height: ${height}px; overflow-y: auto;`;
-  }
-
-  function refreshDropdownPositions() {
-    if (modelDropdownOpen) {
-      modelDropdownStyle = positionDropdown(modelChipEl, modelDropdownEl);
-    }
-    if (reasoningDropdownOpen) {
-      reasoningDropdownStyle = positionDropdown(reasoningChipEl, reasoningDropdownEl);
-    }
-  }
-
-  function toggleModelDropdown(e: MouseEvent) {
-    e.stopPropagation();
+  function toggleModelDropdown() {
     if (modelDropdownOpen) {
       closeAll();
     } else {
       reasoningDropdownOpen = false;
       modelDropdownOpen = true;
       preventDismiss?.suppress();
-      tick().then(() => {
-        modelDropdownStyle = positionDropdown(modelChipEl, modelDropdownEl);
-      });
     }
   }
 
-  function toggleReasoningDropdown(e: MouseEvent) {
-    e.stopPropagation();
+  function toggleReasoningDropdown() {
     if (reasoningDropdownOpen) {
       closeAll();
     } else {
       modelDropdownOpen = false;
       reasoningDropdownOpen = true;
       preventDismiss?.suppress();
-      tick().then(() => {
-        reasoningDropdownStyle = positionDropdown(reasoningChipEl, reasoningDropdownEl);
-      });
     }
   }
 
@@ -163,20 +104,7 @@
     onReasoningSelect(level);
     closeAll();
   }
-
-  function handleClickOutside(e: MouseEvent) {
-    const target = e.target as HTMLElement;
-    if (!target.closest(".model-selector")) {
-      closeAll();
-    }
-  }
 </script>
-
-<svelte:window
-  onclick={handleClickOutside}
-  onresize={refreshDropdownPositions}
-  onscroll={refreshDropdownPositions}
-/>
 
 <div class="model-selector">
   <button
@@ -188,62 +116,59 @@
     <span class="chip-label">{selectedModel?.display_name ?? "No model"}</span>
     <ChevronDown size={ICON_SIZE.sm} />
   </button>
-
-  {#if showReasoning}
-    {#if reasoningKind === "effort"}
-      <div class="reasoning-wrapper">
-        <button
-          class="selector-chip reasoning-chip"
-          bind:this={reasoningChipEl}
-          onclick={toggleReasoningDropdown}
-          title="Reasoning level"
-        >
-          <Brain size={ICON_SIZE.sm} />
-          <span class="chip-label">{REASONING_LEVEL_LABELS[currentLevel]}</span>
-          <ChevronDown size={ICON_SIZE.sm} />
-        </button>
-        {#if reasoningDropdownOpen}
-          <div
-            class="dropdown reasoning-dropdown"
-            bind:this={reasoningDropdownEl}
-            style={reasoningDropdownStyle}
-          >
-            {#each availableLevels as level}
-              <button
-                class="dropdown-item"
-                class:active={level === currentLevel}
-                onclick={() => selectReasoning(level)}
-              >
-                <span class="dropdown-label">{REASONING_LEVEL_LABELS[level]}</span>
-              </button>
-            {/each}
-          </div>
-        {/if}
-      </div>
-    {/if}
-  {/if}
-
-  {#if modelDropdownOpen}
-    <div
-      class="dropdown model-dropdown"
-      bind:this={modelDropdownEl}
-      style={modelDropdownStyle}
-    >
+  <FloatingPanel
+    visible={modelDropdownOpen}
+    anchorEl={modelChipEl}
+    position="above"
+    align="end"
+    fitContent
+    onclose={closeAll}
+  >
+    <MenuList>
       {#each [...groupedModels] as [groupName, groupModels]}
         {#if showGroupHeaders}
           <div class="dropdown-group-label">{groupName}</div>
         {/if}
         {#each groupModels as model}
-          <button
-            class="dropdown-item"
-            class:active={model.id === selectedModel?.id}
+          <MenuItem
+            label={model.display_name}
+            active={model.id === selectedModel?.id}
             onclick={() => selectModel(model.id)}
-          >
-            <span class="dropdown-label">{model.display_name}</span>
-          </button>
+          />
         {/each}
       {/each}
-    </div>
+    </MenuList>
+  </FloatingPanel>
+
+  {#if showReasoning && reasoningKind === "effort"}
+    <button
+      class="selector-chip reasoning-chip"
+      bind:this={reasoningChipEl}
+      onclick={toggleReasoningDropdown}
+      title="Reasoning level"
+    >
+      <Brain size={ICON_SIZE.sm} />
+      <span class="chip-label">{REASONING_LEVEL_LABELS[currentLevel]}</span>
+      <ChevronDown size={ICON_SIZE.sm} />
+    </button>
+    <FloatingPanel
+      visible={reasoningDropdownOpen}
+      anchorEl={reasoningChipEl}
+      position="above"
+      align="end"
+      fitContent
+      onclose={closeAll}
+    >
+      <MenuList>
+        {#each availableLevels as level}
+          <MenuItem
+            label={REASONING_LEVEL_LABELS[level]}
+            active={level === currentLevel}
+            onclick={() => selectReasoning(level)}
+          />
+        {/each}
+      </MenuList>
+    </FloatingPanel>
   {/if}
 </div>
 
@@ -252,7 +177,6 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    position: relative;
   }
 
   .selector-chip {
@@ -281,60 +205,11 @@
     color: var(--text-secondary);
   }
 
-  .reasoning-wrapper {
-    position: relative;
-  }
-
   .reasoning-chip {
     max-width: 120px;
   }
 
   .chip-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .dropdown {
-    position: fixed;
-    z-index: var(--z-overlay);
-    width: 220px;
-    background: var(--surface-raised);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-lg);
-    padding: var(--space-2) var(--space-0);
-    box-shadow: var(--shadow-md);
-    overscroll-behavior: contain;
-  }
-
-  .reasoning-dropdown {
-    width: 160px;
-  }
-
-  .dropdown-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    width: 100%;
-    padding: 5px 10px;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-md);
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .dropdown-item:hover {
-    background: var(--surface-overlay);
-  }
-
-  .dropdown-item.active {
-    color: var(--accent);
-  }
-
-  .dropdown-label {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

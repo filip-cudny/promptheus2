@@ -1,16 +1,10 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { isLinux } from "$lib/utils/platform";
 
 const INSET = 5;
 const STYLE_ELEMENT_ID = "edge-resize-cursor-override";
 
 export type EdgeResizeRole = "toolbar" | "content";
-
-function isLinux(): boolean {
-  if (typeof navigator === "undefined") return false;
-  const platform = navigator.platform || "";
-  const ua = navigator.userAgent || "";
-  return /Linux/i.test(platform) && !/Mac|Win/i.test(platform) && !/Android/i.test(ua);
-}
 
 function ensureStyleEl(): HTMLStyleElement {
   let el = document.getElementById(STYLE_ELEMENT_ID) as HTMLStyleElement | null;
@@ -44,7 +38,7 @@ function cursorForEdges(left: boolean, right: boolean, top: boolean, bottom: boo
 }
 
 export function attachEdgeResizeCursor(role: EdgeResizeRole): () => void {
-  if (!isLinux()) return () => {};
+  if (!isLinux) return () => {};
 
   const styleEl = ensureStyleEl();
   let maximized = false;

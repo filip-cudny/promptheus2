@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { attachConsole } from "@tauri-apps/plugin-log";
+  import { isLinux } from "$lib/utils/platform";
   import NotificationStack from "$lib/components/features/notification/NotificationStack.svelte";
   import { useNotificationDrain } from "$lib/components/features/notification/drivers/useNotificationDrain.svelte";
 
-  const isLinux = navigator.userAgent.includes("Linux");
   const drain = useNotificationDrain();
 
   onMount(() => {

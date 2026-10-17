@@ -3,7 +3,7 @@
   import { ChevronRight, MessagesSquare, Plus, X } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { highlightFor } from "$lib/utils/highlightMatches";
-  import { handleListNavKey } from "$lib/utils/listNavigation";
+  import { useListSelection } from "$lib/components/shared/drivers/useListSelection.svelte";
   import type { SearchResult } from "$lib/types/historySearch";
   import { useHistorySearch } from "$lib/stores/useHistorySearch.svelte";
   import CommandPalette from "$lib/components/shared/ui/CommandPalette.svelte";
@@ -20,15 +20,7 @@
   const historySearch = useHistorySearch();
 
   let query = $state("");
-  let highlightedIndex = $state(0);
   let inputEl = $state<HTMLInputElement | undefined>();
-  let itemEls: (HTMLElement | null)[] = $state([]);
-
-  $effect(() => {
-    if (!open) return;
-    const el = itemEls[highlightedIndex];
-    if (el) el.scrollIntoView({ block: "nearest" });
-  });
 
   type Item =
     | { kind: "new-chat" }
@@ -39,17 +31,21 @@
     ...historySearch.results.map<Item>((r) => ({ kind: "recent", result: r })),
   ]);
 
-  $effect(() => {
-    const _ = items.length;
-    if (highlightedIndex >= items.length) {
-      highlightedIndex = Math.max(0, items.length - 1);
-    }
+  const selection = useListSelection({
+    count: () => items.length,
+    active: () => open,
+    onEscape: onClose,
+    onEnter: (i) => {
+      const item = items[i];
+      if (item) activate(item);
+    },
+    stopPropagation: true,
   });
 
   $effect(() => {
     if (open) {
       query = "";
-      highlightedIndex = 0;
+      selection.index = 0;
       historySearch.clear();
       historySearch.search("");
       tick().then(() => inputEl?.focus());
@@ -73,25 +69,7 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (!open) return;
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
-      return;
-    }
-    if (e.key === "Enter") {
-      e.preventDefault();
-      e.stopPropagation();
-      const item = items[highlightedIndex];
-      if (item) activate(item);
-      return;
-    }
-    const nav = handleListNavKey(e, highlightedIndex, items.length);
-    if (nav !== null) {
-      e.preventDefault();
-      e.stopPropagation();
-      highlightedIndex = nav;
-    }
+    selection.handleKeydown(e);
   }
 
   onMount(() => {
@@ -131,13 +109,13 @@
     {#each items as item, i (item.kind === "new-chat" ? "new-chat" : item.result.entry.id)}
       {#if item.kind === "new-chat"}
         <button
-          bind:this={itemEls[i]}
+          bind:this={selection.itemEls[i]}
           type="button"
           role="option"
-          aria-selected={i === highlightedIndex}
+          aria-selected={i === selection.index}
           class="palette-item"
-          class:highlight={i === highlightedIndex}
-          onmouseenter={() => (highlightedIndex = i)}
+          class:highlight={i === selection.index}
+          onmouseenter={() => (selection.index = i)}
           onclick={() => activate(item)}
         >
           <span class="palette-item-icon"><Plus size={ICON_SIZE.md} /></span>
@@ -153,13 +131,13 @@
         {/if}
         {@const snippet = snippetFor(item.result)}
         <button
-          bind:this={itemEls[i]}
+          bind:this={selection.itemEls[i]}
           type="button"
           role="option"
-          aria-selected={i === highlightedIndex}
+          aria-selected={i === selection.index}
           class="palette-item"
-          class:highlight={i === highlightedIndex}
-          onmouseenter={() => (highlightedIndex = i)}
+          class:highlight={i === selection.index}
+          onmouseenter={() => (selection.index = i)}
           onclick={() => activate(item)}
         >
           <span class="palette-item-icon"><MessagesSquare size={ICON_SIZE.md} /></span>

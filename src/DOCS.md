@@ -4,6 +4,8 @@
 
 - `windows/<name>/` — one folder per window: `entry.ts` + `App.svelte`.
 - `lib/components/shared/ui/` — presentational primitives; `shared/widgets/` — reusable composites with state or IPC; `features/<feature>/` — feature UI.
+- `lib/components/shared/drivers/` — runes drivers shared by features (`useListSelection`: highlighted index, scroll into view and Escape/Enter/arrow keys of a palette list).
+- `lib/shortcuts.ts` — shortcut table and `createHostShortcutHandler` (tab shortcuts + open palette, registered in bubble phase by the shell toolbar and chat windows); `lib/utils/platform.ts` — `isMac`, `isLinux`: the only place that reads `navigator`.
 - `lib/stores/` — rune stores (`*.svelte.ts`); `lib/services/` — per-domain `invoke()` wrappers and event listeners; `lib/types/` — types mirroring Rust structs; `lib/utils/`, `lib/constants/`.
 - `styles/theme.css` — CSS variables; `styles/global.css` — global styles.
 

@@ -4,7 +4,7 @@
   import KbdHint from "$lib/components/shared/ui/KbdHint.svelte";
   import { providerIconSvg } from "$lib/icons/providerIcons";
   import { PROMPTHEUS_PROVIDER_ID } from "$lib/services/shellToolbar";
-  import { handleListNavKey } from "$lib/utils/listNavigation";
+  import { useListSelection } from "$lib/components/shared/drivers/useListSelection.svelte";
   import { SHORTCUTS, matches } from "$lib/shortcuts";
   import type { TabEntry } from "./drivers/usePaletteIpc.svelte";
 
@@ -45,8 +45,6 @@
   } = $props();
 
   let query = $state("");
-  let index = $state(0);
-  let itemEls: (HTMLElement | null)[] = $state([]);
 
   let providers = $derived<ProviderEntry[]>([
     { kind: "provider", id: PROMPTHEUS_PROVIDER_ID, name: "Promptheus" },
@@ -85,24 +83,21 @@
 
   let headerLabel = $derived((currentTitle ?? "").trim());
 
+  const selection = useListSelection({
+    count: () => filtered.length,
+    active: () => visible,
+    onEscape: () => onDismiss(null),
+    onEnter: (i) => {
+      const entry = filtered[i];
+      if (entry) selectEntry(entry);
+    },
+  });
+
   $effect(() => {
     if (visible) {
       query = "";
-      index = 0;
+      selection.index = 0;
     }
-  });
-
-  $effect(() => {
-    const _ = filtered.length;
-    if (index >= filtered.length) {
-      index = Math.max(0, filtered.length - 1);
-    }
-  });
-
-  $effect(() => {
-    if (!visible) return;
-    const el = itemEls[index];
-    if (el) el.scrollIntoView({ block: "nearest" });
   });
 
   function selectEntry(entry: PaletteEntry) {
@@ -127,23 +122,7 @@
       onReloadActive();
       return;
     }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      onDismiss(null);
-      return;
-    }
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const entry = filtered[index];
-      if (entry) selectEntry(entry);
-      return;
-    }
-    const nav = handleListNavKey(e, index, filtered.length);
-    if (nav !== null) {
-      e.preventDefault();
-      index = nav;
-      return;
-    }
+    if (selection.handleKeydown(e)) return;
     if (matches(e, SHORTCUTS.openPalette)) {
       e.preventDefault();
       onDismiss(null);
@@ -184,13 +163,13 @@
         <div class="palette-divider" role="separator"></div>
       {/if}
       <button
-        bind:this={itemEls[i]}
+        bind:this={selection.itemEls[i]}
         type="button"
         role="option"
-        aria-selected={i === index}
+        aria-selected={i === selection.index}
         class="palette-item"
-        class:highlight={i === index}
-        onmouseenter={() => (index = i)}
+        class:highlight={i === selection.index}
+        onmouseenter={() => (selection.index = i)}
         onclick={() => selectEntry(entry)}
       >
         {#if entry.kind === "provider"}

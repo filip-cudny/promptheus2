@@ -16,7 +16,7 @@
     active?: boolean;
     activeStyle?: "tint" | "rail";
     disabled?: boolean;
-    onclick?: () => void;
+    onclick?: (e: MouseEvent) => void;
   } = $props();
 </script>
 

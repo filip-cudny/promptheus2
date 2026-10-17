@@ -1,58 +1,56 @@
 <script lang="ts">
   import { EllipsisVertical, Pencil, Trash2 } from "lucide-svelte";
+  import { ICON_SIZE } from "$lib/constants/ui";
+  import FloatingPanel from "$lib/components/shared/ui/FloatingPanel.svelte";
+  import MenuList from "$lib/components/shared/ui/MenuList.svelte";
+  import MenuItem from "$lib/components/shared/ui/MenuItem.svelte";
 
   let {
     open,
     onToggle,
+    onClose,
     onRename,
     onDelete,
-    containerEl = $bindable(undefined),
   }: {
     open: boolean;
     onToggle: (e: MouseEvent) => void;
+    onClose: () => void;
     onRename: () => void;
     onDelete: () => void;
-    containerEl?: HTMLDivElement | undefined;
   } = $props();
+
+  let buttonEl: HTMLButtonElement | undefined = $state();
 </script>
 
-<div class="more-menu" bind:this={containerEl}>
-  <button class="more-btn" onclick={onToggle}>
-    <EllipsisVertical size={14} />
-  </button>
-  {#if open}
-    <div class="menu-dropdown">
-      <button
-        class="menu-item"
-        onclick={(e: MouseEvent) => {
-          e.stopPropagation();
-          onRename();
-        }}
-      >
-        <Pencil size={14} />
-        <span>Rename</span>
-      </button>
-      <button
-        class="menu-item destructive"
-        onclick={(e: MouseEvent) => {
-          e.stopPropagation();
-          onDelete();
-        }}
-      >
-        <Trash2 size={14} />
-        <span>Delete</span>
-      </button>
-    </div>
-  {/if}
-</div>
+<button class="more-btn" bind:this={buttonEl} onclick={onToggle}>
+  <EllipsisVertical size={14} />
+</button>
+<FloatingPanel visible={open} anchorEl={buttonEl} align="end" fitContent onclose={onClose}>
+  <MenuList role="menu">
+    <MenuItem
+      label="Rename"
+      onclick={(e) => {
+        e.stopPropagation();
+        onRename();
+      }}
+    >
+      {#snippet icon()}<Pencil size={ICON_SIZE.md} />{/snippet}
+    </MenuItem>
+    <MenuItem
+      label="Delete"
+      onclick={(e) => {
+        e.stopPropagation();
+        onDelete();
+      }}
+    >
+      {#snippet icon()}<Trash2 size={ICON_SIZE.md} />{/snippet}
+    </MenuItem>
+  </MenuList>
+</FloatingPanel>
 
 <style>
-  .more-menu {
-    position: relative;
-    flex-shrink: 0;
-  }
-
   .more-btn {
+    flex-shrink: 0;
     width: 20px;
     height: 20px;
     border-radius: var(--radius-md);
@@ -75,41 +73,5 @@
   .more-btn:hover {
     color: var(--text-primary);
     background: var(--surface-overlay);
-  }
-
-  .menu-dropdown {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: var(--space-1);
-    min-width: 120px;
-    background: var(--surface-floating-popover);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-lg);
-    padding: var(--space-2);
-    z-index: 300;
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-  }
-
-  .menu-item {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    padding: var(--space-3) var(--space-4);
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    font-size: var(--font-size-md);
-    cursor: pointer;
-    border-radius: var(--radius-md);
-    white-space: nowrap;
-  }
-
-  .menu-item:hover,
-  .menu-item.destructive:hover {
-    background: var(--surface-overlay);
-    color: var(--text-primary);
   }
 </style>

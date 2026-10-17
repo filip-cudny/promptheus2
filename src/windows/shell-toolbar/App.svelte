@@ -2,16 +2,14 @@
   import { onDestroy, onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
-  import { openPalette } from "$lib/services/shellToolbar";
-  import { SHORTCUTS, matches } from "$lib/shortcuts";
-  import { tabShortcutAction } from "$lib/services/tabs";
+  import { createHostShortcutHandler } from "$lib/shortcuts";
+  import { isMac } from "$lib/utils/platform";
   import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
   import Titlebar from "$lib/components/features/shell-toolbar/Titlebar.svelte";
   import { useShellToolbar } from "$lib/components/features/shell-toolbar/drivers/useShellToolbar.svelte";
 
   const HOST_LABEL = getCurrentWindow().label;
   const SELF_TARGET = getCurrentWebview().label;
-  const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
 
   const toolbar = useShellToolbar({ hostLabel: HOST_LABEL, selfTarget: SELF_TARGET });
 
@@ -42,25 +40,7 @@
     }
   }
 
-  async function handleGlobalKeydown(e: KeyboardEvent) {
-    const tabAction = tabShortcutAction(e);
-    if (tabAction) {
-      e.preventDefault();
-      e.stopPropagation();
-      tabAction().catch((err) => console.error("tab shortcut failed", err));
-      return;
-    }
-
-    if (matches(e, SHORTCUTS.openPalette)) {
-      e.preventDefault();
-      e.stopPropagation();
-      try {
-        await openPalette(HOST_LABEL);
-      } catch (err) {
-        console.error("open_palette failed", err);
-      }
-    }
-  }
+  const handleGlobalKeydown = createHostShortcutHandler(HOST_LABEL);
 
   let detachEdgeResizeCursor: (() => void) | null = null;
 

@@ -15,6 +15,7 @@
     Type,
     X,
   } from "lucide-svelte";
+  import { isMac } from "$lib/utils/platform";
   import claudeIcon from "$lib/icons/providers/claude.svg?raw";
   import chatgptIcon from "$lib/icons/providers/chatgpt.svg?raw";
 
@@ -89,7 +90,6 @@
   const WAVE_PERIOD_MS = 1200;
   const WAVE_BARS = Array.from({ length: WAVE_BAR_COUNT }, (_, i) => (i / WAVE_BAR_COUNT - 1) * WAVE_PERIOD_MS);
 
-  const isMac = /Mac/.test(navigator.platform);
 
   let widgetState = $state<WidgetState>("recording");
   let level = $state(0);

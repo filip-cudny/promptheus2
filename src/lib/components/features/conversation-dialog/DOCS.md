@@ -18,6 +18,7 @@ Files whose role does not follow from the name:
 
 - `AssistantBubble.svelte`, `UserBubble.svelte`, `InputArea.svelte`, `TabSidebar.svelte` — orchestrators; the two bubbles use `ActionIconButton` for the footer buttons (`active` on the Edit button, `variant="danger"` on Delete); `AssistantBubble` edits its segments through `drivers/useEditSegments`, `UserBubble` through `BubbleEditField` and `SkillEditable` with its own `editMode`/`editText`.
 - `ContextSection.svelte` — inline context bar (text/image chips + clear/edit).
+- `AttachMenu.svelte`, `components/SidebarMoreMenu.svelte` — `FloatingPanel` + `MenuList` dropdowns (the attach menu opens above its button, the sidebar menu aligns to the end of its button).
 - `sidebarItems.ts` — pure helpers building `SidebarItem[]` from history.
 - `$lib/utils/historySearchSnippet.ts` — `displayName`, `snippetFor`, `formatTimestamp` for `ChatPalette`.
 - `tool-call/` — self-contained tool-invocation renderer; external entrypoint `ToolCallGroup` (used by `AssistantBubble`).
@@ -54,7 +55,7 @@ This avoids feedback loops while preserving the cursor on user typing and resett
 
 ### Sidebar mutex
 
-`useSidebarMutex` holds three states (`menuOpenId`, `editingId`, `confirmDelete`). Each `open*` / `start*` calls `closeAll()` first, so opening any one atomically closes the other two. Outside-click and Escape route through `closeAll()` / `clear*` to keep the model consistent.
+`useSidebarMutex` holds three states (`menuOpenId`, `editingId`, `confirmDelete`). Each `open*` / `start*` calls `closeAll()` first, so opening any one atomically closes the other two. Outside click (the `onclose` of `SidebarMoreMenu`'s `FloatingPanel`), the `.tab-list` scroll and Escape route through `closeMenu()` / `closeAll()` / `clear*` to keep the model consistent.
 
 ### Global context loading
 

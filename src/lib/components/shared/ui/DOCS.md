@@ -47,7 +47,14 @@ For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconPro
 
 ### MenuItem
 
-- `label`, `icon` and `shortcut` snippets, `active`, `activeStyle`, `disabled`, `onclick`. Rows inside `MenuList`.
+- `label`, `icon` and `shortcut` snippets, `active`, `activeStyle`, `disabled`, `onclick` (receives the `MouseEvent`). Rows inside `MenuList`.
+
+### FloatingPanel
+
+- Every dropdown uses it with `MenuList` + `MenuItem` rows (`ModelSelector`, `AttachMenu`, `SidebarMoreMenu`, `SelectDropdown`, the context menu panels); no component positions its own dropdown or handles its outside click.
+- `visible`, `anchorEl`, `onclose` (called by a pointer-down outside the panel and the anchor), `position` (`"auto"` below when it fits; `"below"` forced; `"above"` preferred, falls back below when there is more room there), `align` (`"start"`/`"end"`: left or right edge of the anchor, only with `fitContent`), `fitContent` (content width, anchored to the anchor), `flush` (no padding, defaults to `fitContent`).
+- Positioned once on open, `position: fixed`, z-index `--z-overlay`: it does not follow its anchor, so an owner that scrolls (sidebar list) closes it on scroll. A panel taller than the room on its side gets a `max-height` and scrolls inside.
+- A `transform` or `backdrop-filter` on an ancestor makes that ancestor the containing block of the fixed panel.
 
 ### CollapsibleSection
 

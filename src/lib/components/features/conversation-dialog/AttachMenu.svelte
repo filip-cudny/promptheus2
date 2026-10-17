@@ -4,6 +4,7 @@
   import type { ComponentType, SvelteComponent } from "svelte";
   import type { IconProps } from "lucide-svelte";
   import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
+  import FloatingPanel from "$lib/components/shared/ui/FloatingPanel.svelte";
   import MenuList from "$lib/components/shared/ui/MenuList.svelte";
   import MenuItem from "$lib/components/shared/ui/MenuItem.svelte";
 
@@ -22,13 +23,7 @@
   } = $props();
 
   let menuOpen = $state(false);
-  let containerEl: HTMLDivElement | undefined = $state();
-
-  function handleWindowPointerDown(e: PointerEvent) {
-    if (menuOpen && containerEl && !containerEl.contains(e.target as Node)) {
-      menuOpen = false;
-    }
-  }
+  let buttonEl: HTMLSpanElement | undefined = $state();
 
   function handleContextClick() {
     if (contextDisabled) return;
@@ -37,10 +32,8 @@
   }
 </script>
 
-<svelte:window onpointerdown={handleWindowPointerDown} />
-
-<div class="attach-menu" bind:this={containerEl}>
-  <span class="attach-btn-wrap">
+<div class="attach-menu">
+  <span class="attach-btn-wrap" bind:this={buttonEl}>
     <ActionIconButton
       icon={Plus}
       size={ICON_SIZE.md}
@@ -49,43 +42,42 @@
     />
   </span>
 
-  {#if menuOpen}
-    <div class="menu-dropdown">
-      <MenuList role="menu">
-        <MenuItem
-          label="Context"
-          disabled={contextDisabled}
-          onclick={handleContextClick}
-        >
-          {#snippet icon()}
-            <FileText size={ICON_SIZE.md} />
-          {/snippet}
-        </MenuItem>
-        {#if availableTools.length > 0}
-          <div class="menu-list-separator"></div>
-          {#each availableTools as tool (tool.id)}
-            <MenuItem
-              label={tool.label}
-              active={tool.active}
-              onclick={() => { onToggleTool?.(tool.id, !tool.active); menuOpen = false; }}
-            >
-              {#snippet icon()}
-                {#if tool.icon}
-                  {@const Icon = tool.icon}
-                  <Icon size={ICON_SIZE.md} />
-                {/if}
-              {/snippet}
-            </MenuItem>
-          {/each}
-        {/if}
-      </MenuList>
-    </div>
-  {/if}
+  <FloatingPanel
+    visible={menuOpen}
+    anchorEl={buttonEl}
+    position="above"
+    fitContent
+    onclose={() => (menuOpen = false)}
+  >
+    <MenuList role="menu">
+      <MenuItem label="Context" disabled={contextDisabled} onclick={handleContextClick}>
+        {#snippet icon()}
+          <FileText size={ICON_SIZE.md} />
+        {/snippet}
+      </MenuItem>
+      {#if availableTools.length > 0}
+        <div class="menu-list-separator"></div>
+        {#each availableTools as tool (tool.id)}
+          <MenuItem
+            label={tool.label}
+            active={tool.active}
+            onclick={() => { onToggleTool?.(tool.id, !tool.active); menuOpen = false; }}
+          >
+            {#snippet icon()}
+              {#if tool.icon}
+                {@const Icon = tool.icon}
+                <Icon size={ICON_SIZE.md} />
+              {/if}
+            {/snippet}
+          </MenuItem>
+        {/each}
+      {/if}
+    </MenuList>
+  </FloatingPanel>
 </div>
 
 <style>
   .attach-menu {
-    position: relative;
     flex-shrink: 0;
     align-self: flex-end;
   }
@@ -100,18 +92,5 @@
     padding: var(--space-0);
     border-radius: var(--radius-lg);
     color: var(--text-muted);
-  }
-
-  .menu-dropdown {
-    position: absolute;
-    bottom: calc(100% + 4px);
-    left: 0;
-    min-width: 160px;
-    background: var(--surface-elevated);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-md);
-    padding: var(--space-2) var(--space-0);
-    z-index: var(--z-dropdown);
   }
 </style>

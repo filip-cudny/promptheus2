@@ -6,6 +6,7 @@
     visible,
     anchorEl,
     position = "auto",
+    align = "start",
     fitContent = false,
     flush,
     onclose,
@@ -14,11 +15,16 @@
     visible: boolean;
     anchorEl: HTMLElement | undefined;
     position?: "above" | "below" | "auto";
+    align?: "start" | "end";
     fitContent?: boolean;
     flush?: boolean;
     onclose: () => void;
     children: Snippet;
   } = $props();
+
+  const GAP = 4;
+  const VIEWPORT_PADDING = 4;
+  const MIN_CLAMPED_HEIGHT = 80;
 
   let isFlush = $derived(flush ?? fitContent);
 
@@ -32,6 +38,7 @@
     if (visible && anchorEl) {
       armed = false;
       animating = true;
+      style = "";
       tick().then(() => {
         computePosition();
         armed = true;
@@ -50,25 +57,29 @@
     const viewportHeight = window.innerHeight;
     const viewportWidth = window.innerWidth;
 
-    const spaceBelow = viewportHeight - anchorRect.bottom;
+    const spaceAbove = anchorRect.top - GAP - VIEWPORT_PADDING;
+    const spaceBelow = viewportHeight - anchorRect.bottom - GAP - VIEWPORT_PADDING;
 
-    let top: number;
-    if (position === "below" || (position === "auto" && spaceBelow >= panelHeight + 4)) {
-      top = anchorRect.bottom + 4;
-      expandDirection = "down";
-    } else {
-      top = anchorRect.top - panelHeight - 4;
-      expandDirection = "up";
-    }
+    let up: boolean;
+    if (position === "below") up = false;
+    else if (position === "above") up = spaceAbove >= panelHeight || spaceAbove >= spaceBelow;
+    else up = spaceBelow < panelHeight && spaceAbove > spaceBelow;
+    expandDirection = up ? "up" : "down";
 
-    top = Math.max(4, Math.min(top, viewportHeight - panelHeight - 4));
+    const available = Math.max(MIN_CLAMPED_HEIGHT, up ? spaceAbove : spaceBelow);
+    const height = Math.min(panelHeight, available);
+    const clamp = panelHeight > available ? ` max-height: ${available}px; overflow-y: auto;` : "";
+
+    const top = up ? anchorRect.top - GAP - height : anchorRect.bottom + GAP;
+    const clampedTop = Math.max(VIEWPORT_PADDING, Math.min(top, viewportHeight - height - VIEWPORT_PADDING));
 
     if (fitContent) {
-      const maxLeft = Math.max(4, viewportWidth - panelWidth - 4);
-      const left = Math.max(4, Math.min(anchorRect.left, maxLeft));
-      style = `top: ${top}px; left: ${left}px;`;
+      const maxLeft = Math.max(VIEWPORT_PADDING, viewportWidth - panelWidth - VIEWPORT_PADDING);
+      const anchorLeft = align === "end" ? anchorRect.right - panelWidth : anchorRect.left;
+      const left = Math.max(VIEWPORT_PADDING, Math.min(anchorLeft, maxLeft));
+      style = `top: ${clampedTop}px; left: ${left}px;${clamp}`;
     } else {
-      style = `top: ${top}px`;
+      style = `top: ${clampedTop}px;${clamp}`;
     }
   }
 
