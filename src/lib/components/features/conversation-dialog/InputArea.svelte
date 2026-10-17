@@ -72,8 +72,8 @@
     return models.find((m) => m.id === activeModelId) ?? null;
   });
 
-  $effect(() => { prefetchCapabilities(activeModel); });
-  const activeModelCapabilities = $derived(getCachedCapabilities(activeModel));
+  $effect(() => { prefetchCapabilities(activeModel?.id ?? null); });
+  const activeModelCapabilities = $derived(getCachedCapabilities(activeModel?.id ?? null));
 
   const builtinWebSearchAvailable = $derived(activeModel?.provider === "openai");
   const mcpWebSearchAvailable = $derived(!!mcp.webSearchQualifiedId && !!activeModel);

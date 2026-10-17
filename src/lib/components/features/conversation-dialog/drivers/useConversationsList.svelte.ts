@@ -1,4 +1,5 @@
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { UnlistenFn } from "@tauri-apps/api/event";
+import { onHistoryChanged } from "$lib/services/events";
 import { getConversations } from "$lib/services/history";
 import type { HistoryEntry } from "$lib/types";
 
@@ -38,7 +39,7 @@ export function useConversationsList(pageSize: number) {
 
   async function init(): Promise<() => void> {
     await reload();
-    unlisten = await listen("history-changed", () => {
+    unlisten = await onHistoryChanged(() => {
       if (loading) return;
       reload();
     });

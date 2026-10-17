@@ -23,7 +23,7 @@ Files whose role does not follow from the name:
 - `drivers/useFloatingPanelMutex.svelte.ts` — mutually exclusive settings / action menu / chat providers panels plus anchors.
 - `drivers/useMenuPositioning.svelte.ts` — resizes and positions the window at the cursor (clamp via `clamp_menu_origin`), hover-enable gate.
 - `drivers/useMenuBlurClose.svelte.ts` — window blur listener, suppressed-blur recheck timer, blur-grace passthrough.
-- `$lib/stores/contextMenu.svelte.ts` — items, selection, open/close lifecycle, IPC listeners; `useContextMenu.svelte.ts` is a getter wrapper around it.
+- `$lib/stores/contextMenu.svelte.ts` — items, selection, open/close lifecycle, IPC listeners.
 - `$lib/stores/modelsMenuData.svelte.ts`, `webviewProviders.svelte.ts`, `$lib/services/skillMetadata.svelte.ts` — data adapters for the panels.
 
 ### Layer contracts

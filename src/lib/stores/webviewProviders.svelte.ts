@@ -1,4 +1,5 @@
-import { getWebviewProviders, type WebviewProvider } from "$lib/services/aiWebview";
+import { getWebviewProviders } from "$lib/services/aiWebview";
+import type { WebviewProvider } from "$lib/types";
 import { PROMPTHEUS_PROVIDER_ID } from "$lib/services/shellToolbar";
 import { onSettingsChanged } from "$lib/services/events";
 

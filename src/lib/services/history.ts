@@ -1,15 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { SearchQuery, SearchResponse } from "$lib/types/historySearch";
 import type {
   HistoryEntry,
   InvocationSource,
   ImagePayload,
   SerializedConversationNode,
-  LastInteractionData,
   HistoryStorageStats,
 } from "$lib/types";
 
-export async function getHistory(): Promise<HistoryEntry[]> {
-  return invoke("get_history");
+export async function searchHistory(query: SearchQuery): Promise<SearchResponse> {
+  return invoke("search_history", { query });
 }
 
 export async function getConversations(
@@ -54,10 +54,6 @@ export async function updateConversationEntry(params: {
   reasoningEffort: string | null;
 }): Promise<void> {
   return invoke("update_conversation_entry", params);
-}
-
-export async function getLastInteraction(): Promise<LastInteractionData> {
-  return invoke("get_last_interaction");
 }
 
 export async function updateHistoryEntryTitle(

@@ -1,4 +1,5 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { onContextChanged } from "$lib/services/events";
 import type { InvocationSource } from "$lib/types/history";
 
 export function useConversationDialogIpc(opts: {
@@ -79,7 +80,7 @@ export function useConversationDialogIpc(opts: {
       { target: opts.selfTarget },
     );
 
-    const u7 = await listen("context-changed", () => opts.onContextChanged());
+    const u7 = await onContextChanged(() => opts.onContextChanged());
 
     const u8 = await listen<{ tab_id: string }>(
       "chat:activate-tab",

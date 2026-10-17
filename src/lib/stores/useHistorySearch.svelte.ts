@@ -1,69 +1,34 @@
-import { invoke } from "@tauri-apps/api/core";
-import { error as logError } from "@tauri-apps/plugin-log";
-import type { SearchResponse, SearchResult } from "$lib/types/historySearch";
+import { createSearchRunner } from "$lib/stores/historySearch.svelte";
 
 const DEBOUNCE_MS = 120;
 const RESULT_LIMIT = 30;
 
 export function useHistorySearch() {
   let query = $state("");
-  let results = $state<SearchResult[]>([]);
-  let isLoading = $state(false);
 
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  let inflight: AbortController | null = null;
-
-  async function runSearch() {
-    if (inflight) inflight.abort();
-    const ac = new AbortController();
-    inflight = ac;
-    isLoading = true;
-    try {
-      const response = await invoke<SearchResponse>("search_history", {
-        query: {
-          query: query.trim(),
-          type_filter: "chat",
-          status_filter: "all",
-          skill_ids: [],
-          date_from: null,
-          limit: RESULT_LIMIT,
-          offset: 0,
-        },
-      });
-      if (!ac.signal.aborted) {
-        results = response.results;
-      }
-    } catch (e) {
-      if (!ac.signal.aborted) {
-        logError(`search_history (chat-palette) failed: ${e}`);
-      }
-    } finally {
-      if (inflight === ac) inflight = null;
-      if (!ac.signal.aborted) isLoading = false;
-    }
-  }
+  const runner = createSearchRunner({
+    buildQuery: () => ({
+      query: query.trim(),
+      type_filter: "chat",
+      status_filter: "all",
+      skill_ids: [],
+      date_from: null,
+      limit: RESULT_LIMIT,
+      offset: 0,
+    }),
+    debounceMs: DEBOUNCE_MS,
+    label: "chat-palette",
+  });
 
   function search(q: string) {
     query = q;
-    if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(runSearch, q.trim() === "" ? 0 : DEBOUNCE_MS);
-  }
-
-  function cancel() {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer);
-      debounceTimer = null;
-    }
-    if (inflight) {
-      inflight.abort();
-      inflight = null;
-    }
+    runner.trigger();
   }
 
   function clear() {
     query = "";
-    results = [];
-    cancel();
+    runner.clearResults();
+    runner.cancel();
   }
 
   return {
@@ -71,13 +36,13 @@ export function useHistorySearch() {
       return query;
     },
     get results() {
-      return results;
+      return runner.response.results;
     },
     get isLoading() {
-      return isLoading;
+      return runner.loading;
     },
     search,
-    cancel,
+    cancel: runner.cancel,
     clear,
   };
 }

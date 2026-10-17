@@ -62,43 +62,11 @@ export function useModelsMenuData(getItems: () => MenuItem[]) {
   });
 
   $effect(() => {
-    if (quickActionModel) {
-      prefetchCapabilities({
-        id: quickActionModel.id,
-        type: "text",
-        model: quickActionModel.model,
-        display_name: quickActionModel.display_name,
-        provider: quickActionModel.provider,
-        group: quickActionModel.group,
-        api_key: null,
-        base_url: null,
-        parameters: null,
-        context_window_size: null,
-        api_mode: null,
-        store: true,
-      });
-    }
+    prefetchCapabilities(quickActionModel?.id ?? null);
   });
 
   const quickActionCapabilities = $derived<ModelCapabilities | null>(
-    getCachedCapabilities(
-      quickActionModel
-        ? {
-            id: quickActionModel.id,
-            type: "text",
-            model: quickActionModel.model,
-            display_name: quickActionModel.display_name,
-            provider: quickActionModel.provider,
-            group: quickActionModel.group,
-            api_key: null,
-            base_url: null,
-            parameters: null,
-            context_window_size: null,
-            api_mode: null,
-            store: true,
-          }
-        : null,
-    ),
+    getCachedCapabilities(quickActionModel?.id ?? null),
   );
 
   return {

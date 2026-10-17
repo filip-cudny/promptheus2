@@ -1,4 +1,4 @@
-import { listen } from "@tauri-apps/api/event";
+import { onSettingsChanged } from "$lib/services/events";
 import { getSettings, updateSetting } from "$lib/services/settings";
 
 type Theme = "dark" | "light";
@@ -26,15 +26,16 @@ export async function setTheme(t: Theme) {
   await updateSetting("theme", t);
 }
 
+export function syncTheme(value: string | undefined | null) {
+  applyTheme(normalize(value));
+}
+
 export async function initTheme() {
-  const settings = await getSettings();
-  applyTheme(normalize(settings.theme));
+  syncTheme((await getSettings()).theme);
 
   if (!unlisten) {
-    unlisten = await listen("settings-changed", async () => {
-      const settings = await getSettings();
-      const next = normalize(settings.theme);
-      if (next !== theme) applyTheme(next);
+    unlisten = await onSettingsChanged(async () => {
+      syncTheme((await getSettings()).theme);
     });
   }
 }

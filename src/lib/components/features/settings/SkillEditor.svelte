@@ -339,12 +339,12 @@
   });
 
   $effect(() => {
-    prefetchCapabilities(effectiveModelConfig);
+    prefetchCapabilities(effectiveModelConfig?.id ?? null);
   });
 
   const resolvedCapabilities = $derived<ModelCapabilities | null>(
     effectiveModelConfig?.capabilities ??
-      getCachedCapabilities(effectiveModelConfig) ??
+      getCachedCapabilities(effectiveModelConfig?.id ?? null) ??
       null,
   );
 

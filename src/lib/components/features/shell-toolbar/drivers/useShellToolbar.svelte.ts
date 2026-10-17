@@ -1,7 +1,6 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { getWebviewProviders, type WebviewProvider } from "$lib/services/aiWebview";
-import { onSettingsChanged } from "$lib/services/events";
+import { createWebviewProvidersStore } from "$lib/stores/webviewProviders.svelte";
 import {
   PROMPTHEUS_PROVIDER_ID,
   hideProviderMenu,
@@ -25,18 +24,10 @@ export function useShellToolbar(opts: {
   selfTarget: string;
 }) {
   let snapshot = $state<TabsSnapshot>({ tabs: [], active_id: null });
-  let webviewProviders = $state<WebviewProvider[]>([]);
+  const providersStore = createWebviewProvidersStore();
   let menuOpen = $state(false);
   let menuAnchor: HTMLElement | null = null;
   let unlistens: UnlistenFn[] = [];
-
-  async function refreshWebviewProviders() {
-    try {
-      webviewProviders = await getWebviewProviders();
-    } catch (e) {
-      console.error("getWebviewProviders failed", e);
-    }
-  }
 
   async function refreshTabs() {
     try {
@@ -92,7 +83,7 @@ export function useShellToolbar(opts: {
   function openPlusMenu(anchor: HTMLElement) {
     return toggleMenu(anchor, [
       { id: PROMPTHEUS_PROVIDER_ID, kind: "provider", icon: PROMPTHEUS_PROVIDER_ID, title: "Promptheus", active: false },
-      ...webviewProviders.map((p) => ({
+      ...providersStore.providers.map((p) => ({
         id: p.id,
         kind: "provider" as const,
         icon: p.id,
@@ -141,11 +132,8 @@ export function useShellToolbar(opts: {
       },
       target,
     );
-    const onSettings = await onSettingsChanged(() => {
-      void refreshWebviewProviders();
-    });
-    unlistens = [onTabs, onSelect, onClosed, onSettings];
-    await refreshWebviewProviders();
+    const onProviders = await providersStore.init();
+    unlistens = [onTabs, onSelect, onClosed, onProviders];
     await refreshTabs();
   }
 
@@ -162,7 +150,7 @@ export function useShellToolbar(opts: {
       return snapshot.active_id;
     },
     get webviewProviders() {
-      return webviewProviders;
+      return providersStore.providers;
     },
     init,
     destroy,

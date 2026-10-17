@@ -271,11 +271,11 @@
   const isText = $derived(draft.type === "text");
 
   $effect(() => {
-    prefetchCapabilities(model);
+    prefetchCapabilities(model?.id ?? null);
   });
 
   const resolvedCapabilities = $derived(
-    draft.capabilities ?? getCachedCapabilities(model),
+    draft.capabilities ?? getCachedCapabilities(model?.id ?? null),
   );
 </script>
 

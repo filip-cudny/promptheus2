@@ -1,4 +1,4 @@
-import { listen } from "@tauri-apps/api/event";
+import { onSettingsChanged } from "$lib/services/events";
 import { getSettings } from "$lib/services/settings";
 import { SURFACE_ORDER } from "$lib/constants/surfaces";
 import type { Settings, ModelConfig, SurfaceKind } from "$lib/types";
@@ -60,7 +60,7 @@ async function refresh() {
 
 async function init() {
   if (!unlisten) {
-    unlisten = await listen("settings-changed", () => {
+    unlisten = await onSettingsChanged(() => {
       refresh();
     });
   }

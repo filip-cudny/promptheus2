@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { X } from "lucide-svelte";
-  import { getHistoryStore } from "$lib/stores/history.svelte";
   import { getHistorySearchStore } from "$lib/stores/historySearch.svelte";
   import { openConversationDialog } from "$lib/services/conversationDialog";
-  import { copyHistoryEntryContent } from "$lib/services/history";
+  import { copyHistoryEntryContent, searchHistory } from "$lib/services/history";
+  import { onHistoryChanged } from "$lib/services/events";
   import { getUiState, setUiState } from "$lib/services/uiState";
   import type { AudioClipInfo, HistoryEntry } from "$lib/types";
   import {
@@ -26,8 +26,6 @@
   const PAGE_SIZES = [10, 25, 50] as const;
   const PAGE_SIZE_KEY = "history-dialog.page_size";
 
-  const store = getHistoryStore();
-
   let pageSize = $state(10);
   let currentPage = $state(0);
 
@@ -38,7 +36,8 @@
 
   let audioClips = $state<Record<string, AudioClipInfo>>({});
   let retryingIds = $state<Set<string>>(new Set());
-  let unlistenSpeech: Array<() => void> = [];
+  let unlistens: Array<() => void> = [];
+  let historyEmpty = $state(false);
 
   let searchInput = $state<HTMLInputElement | null>(null);
   let entriesListEl = $state<HTMLDivElement | null>(null);
@@ -55,7 +54,7 @@
   let emptyVariant = $derived.by<"no-history" | "no-query-match" | "no-filter-match" | null>(() => {
     if (searchStore.results.length > 0) return null;
     if (searchStore.loading) return null;
-    if (store.entries.length === 0) return "no-history";
+    if (historyEmpty) return "no-history";
     if (searchStore.query.trim() !== "") return "no-query-match";
     if (searchStore.hasActiveFilters) return "no-filter-match";
     return "no-history";
@@ -78,11 +77,26 @@
     currentPage = 0;
   });
 
-  $effect(() => {
-    store.entries.length;
-    searchStore.refresh();
-    searchStore.refreshSkills();
-  });
+  async function refreshHistoryEmpty() {
+    try {
+      const { total } = await searchHistory({
+        query: "",
+        type_filter: "all",
+        status_filter: "all",
+        limit: 1,
+        offset: 0,
+      });
+      historyEmpty = total === 0;
+    } catch (e) {
+      logError(`history emptiness check failed: ${e}`);
+    }
+  }
+
+  function refreshAll() {
+    void refreshHistoryEmpty();
+    void searchStore.refresh();
+    void searchStore.refreshSkills();
+  }
 
   function mayHaveAudio(entry: HistoryEntry): boolean {
     return entry.entry_type === "speech";
@@ -233,7 +247,6 @@
   });
 
   onMount(async () => {
-    await store.init();
     const saved = await getUiState<number>(PAGE_SIZE_KEY);
     if (saved && PAGE_SIZES.includes(saved as (typeof PAGE_SIZES)[number])) {
       pageSize = saved;
@@ -241,7 +254,8 @@
     window.addEventListener("keydown", handleWindowKeydown);
     searchInput?.focus();
 
-    unlistenSpeech = await Promise.all([
+    unlistens = await Promise.all([
+      onHistoryChanged(refreshAll),
       listen<TranscriptionRetryEvent>("speech-transcription-retry", (event) => {
         const entryId = event.payload.entry_id;
         if (entryId) markRetrying(entryId, true);
@@ -259,12 +273,12 @@
         void loadAudioClip(entryId);
       }),
     ]);
+    refreshAll();
   });
 
   onDestroy(() => {
     window.removeEventListener("keydown", handleWindowKeydown);
-    for (const unlisten of unlistenSpeech) unlisten();
-    store.destroy();
+    for (const fn of unlistens) fn();
   });
 
   async function handleOpen(entry: HistoryEntry) {

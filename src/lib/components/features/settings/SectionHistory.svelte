@@ -14,7 +14,7 @@
     getHistoryStorageStats,
   } from "$lib/services/history";
   import type { HistoryStorageStats } from "$lib/types";
-  import { listen } from "@tauri-apps/api/event";
+  import { onHistoryChanged } from "$lib/services/events";
   import { error as logError } from "@tauri-apps/plugin-log";
 
   const MAX_RETENTION_DAYS = 3650;
@@ -78,7 +78,7 @@
 
   $effect(() => {
     refreshStats();
-    const unlisten = listen("history-changed", () => refreshStats());
+    const unlisten = onHistoryChanged(() => refreshStats());
     return () => {
       unlisten.then((fn) => fn());
     };

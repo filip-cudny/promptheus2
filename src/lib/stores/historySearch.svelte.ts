@@ -1,14 +1,79 @@
 import { invoke } from "@tauri-apps/api/core";
 import { error as logError } from "@tauri-apps/plugin-log";
+import { searchHistory } from "$lib/services/history";
 import type {
   HistoryStatusFilter,
   HistoryTypeFilter,
+  SearchQuery,
   SearchResponse,
   SkillCount,
   TimeRangePreset,
 } from "$lib/types/historySearch";
 
 const SEARCH_DEBOUNCE_MS = 150;
+
+export function createSearchRunner(opts: {
+  buildQuery: () => SearchQuery;
+  debounceMs: number;
+  label: string;
+}) {
+  let response = $state<SearchResponse>({ results: [], total: 0 });
+  let loading = $state(false);
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let inflight: AbortController | null = null;
+
+  async function run() {
+    if (inflight) inflight.abort();
+    const ac = new AbortController();
+    inflight = ac;
+    loading = true;
+    try {
+      const result = await searchHistory(opts.buildQuery());
+      if (!ac.signal.aborted) response = result;
+    } catch (e) {
+      if (!ac.signal.aborted) {
+        logError(`search_history (${opts.label}) failed: ${e}`);
+      }
+    } finally {
+      if (inflight === ac) inflight = null;
+      if (!ac.signal.aborted) loading = false;
+    }
+  }
+
+  function trigger() {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    const wait = opts.buildQuery().query === "" ? 0 : opts.debounceMs;
+    debounceTimer = setTimeout(run, wait);
+  }
+
+  function cancel() {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+    if (inflight) {
+      inflight.abort();
+      inflight = null;
+    }
+  }
+
+  function clearResults() {
+    response = { results: [], total: 0 };
+  }
+
+  return {
+    get response() {
+      return response;
+    },
+    get loading() {
+      return loading;
+    },
+    run,
+    trigger,
+    cancel,
+    clearResults,
+  };
+}
 
 export interface HistorySearchStoreOptions {
   pageSize: () => number;
@@ -40,42 +105,19 @@ export function getHistorySearchStore(opts: HistorySearchStoreOptions) {
     }
   });
 
-  let response = $state<SearchResponse>({ results: [], total: 0 });
-  let loading = $state(false);
-
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  let inflight: AbortController | null = null;
-
-  async function runQuery() {
-    if (inflight) inflight.abort();
-    const ac = new AbortController();
-    inflight = ac;
-    loading = true;
-    try {
-      const offset = opts.currentPage() * opts.pageSize();
-      const result = await invoke<SearchResponse>("search_history", {
-        query: {
-          query: query.trim(),
-          type_filter: typeFilter,
-          status_filter: statusFilter,
-          skill_ids: Array.from(skillFilter),
-          date_from: dateFrom,
-          limit: opts.pageSize(),
-          offset,
-        },
-      });
-      if (!ac.signal.aborted) {
-        response = result;
-      }
-    } catch (e) {
-      if (!ac.signal.aborted) {
-        logError(`search_history invoke failed: ${e}`);
-      }
-    } finally {
-      if (inflight === ac) inflight = null;
-      if (!ac.signal.aborted) loading = false;
-    }
-  }
+  const runner = createSearchRunner({
+    buildQuery: () => ({
+      query: query.trim(),
+      type_filter: typeFilter,
+      status_filter: statusFilter,
+      skill_ids: Array.from(skillFilter),
+      date_from: dateFrom,
+      limit: opts.pageSize(),
+      offset: opts.currentPage() * opts.pageSize(),
+    }),
+    debounceMs: SEARCH_DEBOUNCE_MS,
+    label: "history-dialog",
+  });
 
   async function refreshSkills() {
     try {
@@ -96,12 +138,6 @@ export function getHistorySearchStore(opts: HistorySearchStoreOptions) {
     }
   }
 
-  function trigger() {
-    if (debounceTimer) clearTimeout(debounceTimer);
-    const wait = query.trim() === "" ? 0 : SEARCH_DEBOUNCE_MS;
-    debounceTimer = setTimeout(runQuery, wait);
-  }
-
   $effect(() => {
     query;
     typeFilter;
@@ -110,7 +146,7 @@ export function getHistorySearchStore(opts: HistorySearchStoreOptions) {
     timeRange;
     opts.pageSize();
     opts.currentPage();
-    trigger();
+    runner.trigger();
   });
 
   return {
@@ -154,13 +190,13 @@ export function getHistorySearchStore(opts: HistorySearchStoreOptions) {
       timeRange = v;
     },
     get results() {
-      return response.results;
+      return runner.response.results;
     },
     get total() {
-      return response.total;
+      return runner.response.total;
     },
     get loading() {
-      return loading;
+      return runner.loading;
     },
     get hasActiveFilters() {
       return (
@@ -180,7 +216,7 @@ export function getHistorySearchStore(opts: HistorySearchStoreOptions) {
       if (timeRange !== "all") n++;
       return n;
     },
-    refresh: runQuery,
+    refresh: runner.run,
     refreshSkills,
     clear() {
       query = "";

@@ -27,9 +27,8 @@
   import { openSettingsWindow } from "$lib/services/settingsDialog";
   import ProviderMenuList from "$lib/components/shared/widgets/ProviderMenuList.svelte";
   import { isExecuting, getExecutingSkillId } from "$lib/stores/execution.svelte";
-  import { useContextMenu } from "$lib/stores/useContextMenu.svelte";
+  import * as menu from "$lib/stores/contextMenu.svelte";
   import MenuShell from "./MenuShell.svelte";
-  import { getWorkArea } from "$lib/stores/contextMenu.svelte";
   import MenuEmptyState from "./components/MenuEmptyState.svelte";
   import MenuSeparator from "./components/MenuSeparator.svelte";
   import MenuItemRow from "./components/MenuItemRow.svelte";
@@ -47,8 +46,6 @@
   import { createWebviewProvidersStore } from "$lib/stores/webviewProviders.svelte";
   import { useModelsMenuData } from "$lib/stores/modelsMenuData.svelte";
 
-  const menu = useContextMenu();
-
   const panels = useFloatingPanelMutex({
     onSettingsClose: menu.resumeClose,
     onActionMenuClose: menu.resumeClose,
@@ -56,8 +53,8 @@
 
   const positioning = useMenuPositioning({
     getMenuEl: () => menuEl,
-    isVisible: () => menu.visible,
-    getWorkArea,
+    isVisible: () => menu.isVisible(),
+    getWorkArea: menu.getWorkArea,
   });
 
   const keyboard = useMenuKeyboard({
@@ -78,12 +75,12 @@
   });
 
   const providersStore = createWebviewProvidersStore();
-  const models = useModelsMenuData(() => menu.items);
+  const models = useModelsMenuData(() => menu.getItems());
 
   function isRecordingThisSkill(item: MenuItem): boolean {
-    if (!menu.recording) return false;
+    if (!menu.isRecording()) return false;
     const data = item.data as { skill_id: string } | null;
-    return data?.skill_id === menu.recordingSkillId;
+    return data?.skill_id === menu.getRecordingSkillId();
   }
 
   function isExecutingSkill(item: MenuItem): boolean {
@@ -119,21 +116,21 @@
   }
 
   $effect(() => {
-    void menu.openTrigger;
+    void menu.getOpenTrigger();
     if (menuVisible && menuItems.length > 0) {
       untrack(() => panels.closeAll());
       void positioning.triggerReposition();
     }
   });
 
-  let sections = $derived(groupBySection(menu.items));
+  let sections = $derived(groupBySection(menu.getItems()));
 
-  let menuVisible = $derived(menu.visible);
+  let menuVisible = $derived(menu.isVisible());
   $effect(() => { if (!menuVisible) panels.closeAll(); });
 
-  let menuItems = $derived(menu.items);
-  let allSkillItems = $derived(menu.allSkillItems);
-  let currentSelectedIndex = $derived(menu.selectedIndex);
+  let menuItems = $derived(menu.getItems());
+  let allSkillItems = $derived(menu.getAllSkillItems());
+  let currentSelectedIndex = $derived(menu.getSelectedIndex());
 
   $effect(() => {
     if (menuVisible && menuEl) {
@@ -200,7 +197,7 @@
         <MenuSeparator />
       {/if}
       {#if section.sectionId === "chat"}
-        {@const chatDisabled = menu.recording}
+        {@const chatDisabled = menu.isRecording()}
         <ChatRow
           disabled={chatDisabled}
           bind:rowEl={chatRowEl}

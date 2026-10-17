@@ -1,9 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { error, warn } from "@tauri-apps/plugin-log";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { MenuItem } from "$lib/types/menu";
 import { startExecution, isExecuting, getExecutingSkillId, cancelExecution } from "$lib/stores/execution.svelte";
+import { onContextChanged, onHistoryChanged } from "$lib/services/events";
 import { openConversationDialog } from "$lib/services/conversationDialog";
 import { fetchSkillMetadata, getSkillMeta } from "$lib/services/skillMetadata.svelte";
 
@@ -32,14 +33,7 @@ let _firstPlacementPending = false;
 const BLUR_GRACE_MS = 500;
 let numberBuffer = "";
 let numberTimer: ReturnType<typeof setTimeout> | null = null;
-let unlisten: (() => void) | null = null;
-let unlistenContextChanged: (() => void) | null = null;
-let unlistenExecutionCompleted: (() => void) | null = null;
-let unlistenHistoryChanged: (() => void) | null = null;
-let unlistenRecordingStopped: (() => void) | null = null;
-let unlistenTranscriptionComplete: (() => void) | null = null;
-let unlistenSpeechError: (() => void) | null = null;
-let unlistenSpeechRetry: (() => void) | null = null;
+let unlistens: UnlistenFn[] = [];
 
 const NUMBER_DEBOUNCE_MS = 200;
 
@@ -395,7 +389,7 @@ async function refreshItems() {
 
 async function init() {
   const win = getCurrentWebviewWindow();
-  unlisten = await win.listen<{
+  unlistens.push(await win.listen<{
     cursor_x: number;
     cursor_y: number;
     work_x: number;
@@ -414,71 +408,39 @@ async function init() {
       workHeight: p.work_height,
       shellPlacement: p.shell_placement,
     });
-  });
-  unlistenContextChanged = await listen("context-changed", () => {
-    refreshItems();
-  });
-  unlistenExecutionCompleted = await listen("execution-completed", () => {
-    refreshItems();
-  });
-  unlistenHistoryChanged = await listen("history-changed", () => {
-    refreshItems();
-  });
-  unlistenRecordingStopped = await listen("speech-recording-stopped", () => {
-    _isRecording = false;
-    _recordingSkillId = null;
-    _isTranscribing = true;
-    refreshItems();
-  });
-  unlistenTranscriptionComplete = await listen("speech-transcription-complete", () => {
-    clearRecordingState();
-    refreshItems();
-  });
-  unlistenSpeechError = await listen("speech-transcription-error", () => {
-    clearRecordingState();
-    refreshItems();
-  });
-  unlistenSpeechRetry = await listen("speech-transcription-retry", () => {
-    refreshItems();
-  });
+  }));
+  unlistens.push(await onContextChanged(() => refreshItems()));
+  unlistens.push(await listen("execution-completed", () => refreshItems()));
+  unlistens.push(await onHistoryChanged(() => refreshItems()));
+  unlistens.push(
+    await listen("speech-recording-stopped", () => {
+      _isRecording = false;
+      _recordingSkillId = null;
+      _isTranscribing = true;
+      refreshItems();
+    }),
+  );
+  unlistens.push(
+    await listen("speech-transcription-complete", () => {
+      clearRecordingState();
+      refreshItems();
+    }),
+  );
+  unlistens.push(
+    await listen("speech-transcription-error", () => {
+      clearRecordingState();
+      refreshItems();
+    }),
+  );
+  unlistens.push(await listen("speech-transcription-retry", () => refreshItems()));
 
   const prefetched = await invoke<MenuItem[]>("get_context_menu_items");
   _items = prefetched;
 }
 
 function destroy() {
-  if (unlisten) {
-    unlisten();
-    unlisten = null;
-  }
-  if (unlistenContextChanged) {
-    unlistenContextChanged();
-    unlistenContextChanged = null;
-  }
-  if (unlistenExecutionCompleted) {
-    unlistenExecutionCompleted();
-    unlistenExecutionCompleted = null;
-  }
-  if (unlistenHistoryChanged) {
-    unlistenHistoryChanged();
-    unlistenHistoryChanged = null;
-  }
-  if (unlistenRecordingStopped) {
-    unlistenRecordingStopped();
-    unlistenRecordingStopped = null;
-  }
-  if (unlistenTranscriptionComplete) {
-    unlistenTranscriptionComplete();
-    unlistenTranscriptionComplete = null;
-  }
-  if (unlistenSpeechError) {
-    unlistenSpeechError();
-    unlistenSpeechError = null;
-  }
-  if (unlistenSpeechRetry) {
-    unlistenSpeechRetry();
-    unlistenSpeechRetry = null;
-  }
+  for (const fn of unlistens) fn();
+  unlistens = [];
 }
 
 async function fetchSkillModel(skillId: string): Promise<string | null> {

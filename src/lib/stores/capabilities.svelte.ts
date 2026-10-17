@@ -1,27 +1,27 @@
 import { getModelCapabilities } from "$lib/services/capabilities";
-import type { ModelCapabilities, ModelConfig } from "$lib/types";
+import type { ModelCapabilities } from "$lib/types";
 
 let cache = $state<Record<string, ModelCapabilities>>({});
 const inflight = new Set<string>();
 
-export function prefetchCapabilities(config: ModelConfig | null): void {
-  if (!config?.id) return;
-  if (cache[config.id]) return;
-  if (inflight.has(config.id)) return;
-  inflight.add(config.id);
-  getModelCapabilities(config.id)
+export function prefetchCapabilities(modelId: string | null): void {
+  if (!modelId) return;
+  if (cache[modelId]) return;
+  if (inflight.has(modelId)) return;
+  inflight.add(modelId);
+  getModelCapabilities(modelId)
     .then((caps) => {
-      cache = { ...cache, [config.id]: caps };
+      cache = { ...cache, [modelId]: caps };
     })
     .catch(() => {})
     .finally(() => {
-      inflight.delete(config.id);
+      inflight.delete(modelId);
     });
 }
 
-export function getCachedCapabilities(config: ModelConfig | null): ModelCapabilities | null {
-  if (!config?.id) return null;
-  return cache[config.id] ?? null;
+export function getCachedCapabilities(modelId: string | null): ModelCapabilities | null {
+  if (!modelId) return null;
+  return cache[modelId] ?? null;
 }
 
 export function invalidateCapabilities(modelId: string): void {

@@ -55,11 +55,7 @@ Adding a new window:
 - Mirrors use the default serde field names (snake_case), so the TypeScript fields are snake_case too. Exception: `types/toolResult.ts` is camelCase.
 - The `$lib` alias resolves to `src/lib/` (configured in `vite.config.ts` and `tsconfig.json`).
 
-### Services (History)
-
-- `lib/stores/history.svelte.ts` — reactive store via `getHistoryStore()`. Listens to `"history-changed"` events. Call `init()` on mount, `destroy()` on teardown.
-
 ### Services (Settings)
 
-- `lib/services/events.ts` — Tauri event listener helpers (e.g., `onSettingsChanged`, `onHistoryChanged`).
+- `lib/services/events.ts` — the only place that listens to `settings-changed`, `history-changed` and `context-changed`: use `onSettingsChanged`, `onHistoryChanged`, `onContextChanged`.
 - `invoke()` command names are snake_case (the Rust fn name); parameter names are camelCase (e.g. `{ providerId }`).

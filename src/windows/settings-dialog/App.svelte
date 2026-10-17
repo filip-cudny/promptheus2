@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
-  import { initTheme } from "$lib/stores/theme.svelte";
+  import { syncTheme } from "$lib/stores/theme.svelte";
   import SettingsSidebar, {
     type SettingsSection,
   } from "$lib/components/features/settings/SettingsSidebar.svelte";
@@ -12,11 +12,14 @@
   let activeSection = $state<SettingsSection>("models");
 
   onMount(async () => {
-    await initTheme();
     const initial = (window as unknown as { __settingsInitialSection?: string })
       .__settingsInitialSection;
     if (initial === "models") activeSection = "models";
     await store.init();
+  });
+
+  $effect(() => {
+    if (store.settings) syncTheme(store.settings.theme);
   });
 
   onDestroy(() => store.destroy());
