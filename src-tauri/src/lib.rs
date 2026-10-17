@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use tauri::Manager;
-use tokio::sync::Mutex;
 
 mod commands;
 mod error;
@@ -13,8 +12,6 @@ mod traits;
 
 pub use error::{Error, Result};
 
-use services::config::ConfigService;
-use services::frontmost_app;
 use services::recent_apps::RecentAppsState;
 
 #[cfg(desktop)]
@@ -55,14 +52,7 @@ pub fn run() {
                 let app = window.app_handle().clone();
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                    let detected = frontmost_app::detect();
-                    let max = app
-                        .state::<Arc<Mutex<ConfigService>>>()
-                        .lock()
-                        .await
-                        .settings()
-                        .recent_apps_count;
-                    app.state::<Arc<RecentAppsState>>().push(detected, max).await;
+                    RecentAppsState::record_frontmost(&app).await;
                 });
             }
         })

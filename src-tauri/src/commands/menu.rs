@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::Mutex;
 
 use crate::models::history::HistoryEntryType;
@@ -12,22 +12,18 @@ use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
 use crate::services::execution::PromptExecutionService;
 use crate::services::menu_coordinator::MenuCoordinator;
-use crate::services::monitor::{clamp_origin, find_monitor_at};
+use crate::services::dialog::window;
+use crate::services::monitor::{clamp_origin, cursor_work_area, CursorWorkArea};
 use crate::services::skill::{strip_skill_prefix, SkillService};
 use crate::services::speech::{AudioClipStore, PendingOrigin, SpeechService};
 use crate::services::sqlite_history::SqliteHistoryService;
-use crate::Error;
 
 pub const CONTEXT_MENU_TITLE: &str = "Promptheus Context Menu";
 
 #[derive(Serialize, Clone)]
 struct ShowMenuPayload {
-    cursor_x: f64,
-    cursor_y: f64,
-    work_x: f64,
-    work_y: f64,
-    work_width: f64,
-    work_height: f64,
+    #[serde(flatten)]
+    area: CursorWorkArea,
     shell_placement: bool,
 }
 
@@ -35,12 +31,14 @@ struct ShowMenuPayload {
 fn payload_from_pointer(pointer: (i32, i32, i32, i32, i32, i32)) -> ShowMenuPayload {
     let (cursor_x, cursor_y, work_x, work_y, work_width, work_height) = pointer;
     ShowMenuPayload {
-        cursor_x: cursor_x as f64,
-        cursor_y: cursor_y as f64,
-        work_x: work_x as f64,
-        work_y: work_y as f64,
-        work_width: work_width as f64,
-        work_height: work_height as f64,
+        area: CursorWorkArea {
+            cursor_x: cursor_x as f64,
+            cursor_y: cursor_y as f64,
+            work_x: work_x as f64,
+            work_y: work_y as f64,
+            work_width: work_width as f64,
+            work_height: work_height as f64,
+        },
         shell_placement: true,
     }
 }
@@ -229,9 +227,7 @@ pub async fn execute_menu_item(
 #[tauri::command]
 pub async fn show_context_menu_window(app: tauri::AppHandle) -> crate::Result<()> {
     log::debug!(target: "app_lib::commands::menu", "show_context_menu_window: ENTER");
-    let win = app
-        .get_webview_window("context-menu")
-        .ok_or_else(|| Error::Other("context-menu window not found".into()))?;
+    let win = window(&app, "context-menu")?;
 
     #[cfg(target_os = "linux")]
     if crate::services::gnome_shell::is_gnome_wayland() {
@@ -241,41 +237,23 @@ pub async fn show_context_menu_window(app: tauri::AppHandle) -> crate::Result<()
         }
     }
 
-    log::debug!(target: "app_lib::commands::menu", "show_context_menu_window: calling cursor_position()");
     let t0 = std::time::Instant::now();
-    let cursor_pos = win.cursor_position()?;
+    let area = cursor_work_area(&win)?;
     log::debug!(
         target: "app_lib::commands::menu",
-        "show_context_menu_window: cursor_position OK in {:?} -> ({}, {})",
-        t0.elapsed(), cursor_pos.x, cursor_pos.y,
+        "show_context_menu_window: cursor_work_area OK in {:?}",
+        t0.elapsed(),
     );
-
-    let t1 = std::time::Instant::now();
-    let monitor = find_monitor_at(&app, cursor_pos.x as i32, cursor_pos.y as i32)
-        .map_err(Error::Other)?;
-    log::debug!(
-        target: "app_lib::commands::menu",
-        "show_context_menu_window: find_monitor_at OK in {:?}",
-        t1.elapsed(),
-    );
-
-    let work = monitor.work_area();
-    let scale = monitor.scale_factor();
 
     let payload = ShowMenuPayload {
-        cursor_x: cursor_pos.x / scale,
-        cursor_y: cursor_pos.y / scale,
-        work_x: work.position.x as f64 / scale,
-        work_y: work.position.y as f64 / scale,
-        work_width: work.size.width as f64 / scale,
-        work_height: work.size.height as f64 / scale,
+        area,
         shell_placement: false,
     };
 
     log::debug!(
         "show context menu: cursor=({}, {}), work_area=({}, {}, {}x{})",
-        payload.cursor_x, payload.cursor_y,
-        payload.work_x, payload.work_y, payload.work_width, payload.work_height,
+        payload.area.cursor_x, payload.area.cursor_y,
+        payload.area.work_x, payload.area.work_y, payload.area.work_width, payload.area.work_height,
     );
 
     let t2 = std::time::Instant::now();
@@ -291,22 +269,15 @@ pub async fn show_context_menu_window(app: tauri::AppHandle) -> crate::Result<()
 
 #[tauri::command]
 pub async fn show_context_menu_panel(app: tauri::AppHandle) -> crate::Result<()> {
-    let win = app
-        .get_webview_window("context-menu")
-        .ok_or_else(|| Error::Other("context-menu window not found".into()))?;
+    let win = window(&app, "context-menu")?;
 
     #[cfg(target_os = "macos")]
     {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        let win_clone = win.clone();
-        app.run_on_main_thread(move || {
-            let _ = tx.send(
-                crate::services::macos_panel::show_panel_without_activating(&win_clone),
-            );
-        })?;
-        rx.await
-            .map_err(|e| Error::Other(e.to_string()))?
-            .map_err(Error::Other)
+        crate::services::macos_panel::on_main(
+            &win,
+            crate::services::macos_panel::show_panel_without_activating,
+        )
+        .await
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -358,9 +329,7 @@ async fn place_context_menu_through_shell(
     y: i32,
     first: bool,
 ) -> crate::Result<()> {
-    let win = app
-        .get_webview_window("context-menu")
-        .ok_or_else(|| Error::Other("context-menu window not found".into()))?;
+    let win = window(app, "context-menu")?;
     let show = first.then_some(&win);
     crate::services::gnome_shell::place_window(CONTEXT_MENU_TITLE, x, y, first, show).await?;
     Ok(())
@@ -368,20 +337,11 @@ async fn place_context_menu_through_shell(
 
 #[tauri::command]
 pub async fn hide_context_menu_panel(app: tauri::AppHandle) -> crate::Result<()> {
-    let win = app
-        .get_webview_window("context-menu")
-        .ok_or_else(|| Error::Other("context-menu window not found".into()))?;
+    let win = window(&app, "context-menu")?;
 
     #[cfg(target_os = "macos")]
     {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        let win_clone = win.clone();
-        app.run_on_main_thread(move || {
-            let _ = tx.send(crate::services::macos_panel::hide_panel(&win_clone));
-        })?;
-        rx.await
-            .map_err(|e| Error::Other(e.to_string()))?
-            .map_err(Error::Other)
+        crate::services::macos_panel::on_main(&win, crate::services::macos_panel::hide_panel).await
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -394,20 +354,15 @@ pub async fn hide_context_menu_panel(app: tauri::AppHandle) -> crate::Result<()>
 #[tauri::command]
 pub async fn focus_context_menu(app: tauri::AppHandle) -> crate::Result<()> {
     log::debug!(target: "app_lib::commands::menu", "focus_context_menu: ENTER");
-    let win = app
-        .get_webview_window("context-menu")
-        .ok_or_else(|| Error::Other("context-menu window not found".into()))?;
+    let win = window(&app, "context-menu")?;
 
     #[cfg(target_os = "macos")]
     {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        let win_clone = win.clone();
-        app.run_on_main_thread(move || {
-            let _ = tx.send(crate::services::macos_panel::make_key_without_activating(&win_clone));
-        })?;
-        rx.await
-            .map_err(|e| Error::Other(e.to_string()))?
-            .map_err(Error::Other)
+        crate::services::macos_panel::on_main(
+            &win,
+            crate::services::macos_panel::make_key_without_activating,
+        )
+        .await
     }
 
     #[cfg(not(target_os = "macos"))]
@@ -424,9 +379,10 @@ mod tests {
     #[test]
     fn pointer_tuple_maps_to_shell_placement_payload() {
         let payload = payload_from_pointer((100, 200, 0, 32, 1920, 1048));
-        assert_eq!((payload.cursor_x, payload.cursor_y), (100.0, 200.0));
+        let area = payload.area;
+        assert_eq!((area.cursor_x, area.cursor_y), (100.0, 200.0));
         assert_eq!(
-            (payload.work_x, payload.work_y, payload.work_width, payload.work_height),
+            (area.work_x, area.work_y, area.work_width, area.work_height),
             (0.0, 32.0, 1920.0, 1048.0),
         );
         assert!(payload.shell_placement);

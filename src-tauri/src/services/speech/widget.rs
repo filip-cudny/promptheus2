@@ -106,7 +106,7 @@ struct WidgetPayload {
     monochromatic: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PillItem {
     pub index: u32,
     pub kind: String,
@@ -114,8 +114,10 @@ pub struct PillItem {
     pub preview: String,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PillModel {
+    #[serde(serialize_with = "serialize_targets")]
     pub targets: Vec<(String, String)>,
     pub selected_id: String,
     pub selected_label: String,
@@ -123,8 +125,23 @@ pub struct PillModel {
     pub items: Vec<PillItem>,
     pub item_rows: u32,
     pub context_version: u64,
+    #[serde(skip)]
     pub x: i32,
+    #[serde(skip)]
     pub y: i32,
+}
+
+#[derive(Serialize)]
+struct TargetView<'a> {
+    id: &'a str,
+    label: &'a str,
+}
+
+fn serialize_targets<S: serde::Serializer>(
+    targets: &[(String, String)],
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    serializer.collect_seq(targets.iter().map(|(id, label)| TargetView { id, label }))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -395,35 +412,6 @@ pub fn build_model(
         x: origin.0,
         y: origin.1,
     }
-}
-
-fn window_payload(model: &PillModel) -> serde_json::Value {
-    serde_json::json!({
-        "targets": model
-            .targets
-            .iter()
-            .map(|(id, label)| serde_json::json!({ "id": id, "label": label }))
-            .collect::<Vec<_>>(),
-        "selectedId": model.selected_id,
-        "selectedLabel": model.selected_label,
-        "targetLocked": model.target_locked,
-        "items": model
-            .items
-            .iter()
-            .map(|item| {
-                serde_json::json!({
-                    "index": item.index,
-                    "kind": item.kind,
-                    "label": item.label,
-                    "preview": item.preview,
-                })
-            })
-            .collect::<Vec<_>>(),
-        "itemRows": model.item_rows,
-        "contextVersion": model.context_version,
-        "x": model.x,
-        "y": model.y,
-    })
 }
 
 async fn gather_model(app: &AppHandle, origin: (i32, i32)) -> (PillModel, Vec<ContextItem>) {
@@ -1228,7 +1216,7 @@ async fn push_model(app: &AppHandle, inner: &mut Inner, mut model: PillModel, co
             None => Ok(()),
         },
         Transport::Window => app
-            .emit_to(WINDOW_LABEL, MODEL_EVENT, window_payload(&model))
+            .emit_to(WINDOW_LABEL, MODEL_EVENT, &model)
             .map_err(|e| e.to_string()),
     };
     note_update_failure(inner, result);
@@ -1717,5 +1705,37 @@ mod tests {
     fn default_origin_is_bottom_center_above_the_work_area_edge() {
         assert_eq!(default_origin((0, 0, 1920, 1040), (240, 44), 1.0), (840, 972));
         assert_eq!(default_origin((0, 0, 3840, 2080), (480, 88), 2.0), (1680, 1944));
+    }
+
+    #[test]
+    fn the_window_model_serializes_the_keys_the_webview_reads() {
+        let model = PillModel {
+            targets: vec![("__dictation__".into(), "Dictation".into())],
+            selected_id: "__dictation__".into(),
+            selected_label: "Dictation".into(),
+            target_locked: false,
+            items: vec![PillItem {
+                index: 0,
+                kind: "text".into(),
+                label: "Text #1".into(),
+                preview: "hello".into(),
+            }],
+            item_rows: 1,
+            context_version: 7,
+            x: 3,
+            y: 4,
+        };
+        assert_eq!(
+            serde_json::to_value(&model).unwrap(),
+            serde_json::json!({
+                "targets": [{ "id": "__dictation__", "label": "Dictation" }],
+                "selectedId": "__dictation__",
+                "selectedLabel": "Dictation",
+                "targetLocked": false,
+                "items": [{ "index": 0, "kind": "text", "label": "Text #1", "preview": "hello" }],
+                "itemRows": 1,
+                "contextVersion": 7,
+            })
+        );
     }
 }

@@ -14,7 +14,7 @@ use std::time::Instant;
 
 use crate::models::settings::WebviewProvider;
 
-use lifecycle::CONVERSATION_DIALOG_LABEL;
+use crate::services::dialog::CONVERSATION_DIALOG_LABEL;
 use tabs::{TabKind, TabList};
 
 pub use lifecycle::cleanup_host_state;

@@ -36,20 +36,7 @@ struct OpenForSkillEvent {
     skill_model: Option<String>,
 }
 
-struct PendingDialogParams {
-    skill_id: String,
-    skill_name: String,
-    skill_model: Option<String>,
-    history_entry_id: Option<String>,
-    last_interaction_only: bool,
-    initial_input: Option<String>,
-    auto_send_input: bool,
-    new_chat: bool,
-    invocation_source: Option<InvocationSource>,
-    copy_token: Option<String>,
-}
-
-static PENDING: Mutex<Option<PendingDialogParams>> = Mutex::new(None);
+static PENDING: Mutex<Option<DialogInitParams>> = Mutex::new(None);
 
 #[derive(Serialize)]
 pub struct DialogInitParams {
@@ -97,8 +84,7 @@ pub async fn open_conversation_dialog(
 
     if app.get_window(label).is_some() {
         ai_webview::surface(&app, "open_conversation_dialog", SurfaceTarget::NativeView)
-            .await
-            .map_err(Error::Other)?;
+            .await?;
         emit_reuse_event(
             &app,
             label,
@@ -116,7 +102,7 @@ pub async fn open_conversation_dialog(
         return Ok(());
     }
 
-    *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(PendingDialogParams {
+    *PENDING.lock().unwrap_or_else(|e| e.into_inner()) = Some(DialogInitParams {
         skill_id: skill_id.clone(),
         skill_name: skill_name.clone(),
         skill_model: skill_model.clone(),
@@ -129,36 +115,17 @@ pub async fn open_conversation_dialog(
         copy_token,
     });
 
-    ai_webview::surface(&app, "open_conversation_dialog", SurfaceTarget::NativeView)
-        .await
-        .map_err(Error::Other)
+    Ok(ai_webview::surface(&app, "open_conversation_dialog", SurfaceTarget::NativeView).await?)
 }
 
 #[tauri::command]
 pub async fn focus_or_open_chat(app: tauri::AppHandle) -> crate::Result<()> {
-    ai_webview::surface(&app, "focus_or_open_chat", SurfaceTarget::KeepActive)
-        .await
-        .map_err(Error::Other)
+    Ok(ai_webview::surface(&app, "focus_or_open_chat", SurfaceTarget::KeepActive).await?)
 }
 
 #[tauri::command]
 pub fn get_dialog_init_params() -> Option<DialogInitParams> {
-    PENDING
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .take()
-        .map(|p| DialogInitParams {
-            skill_id: p.skill_id,
-            skill_name: p.skill_name,
-            skill_model: p.skill_model,
-            history_entry_id: p.history_entry_id,
-            last_interaction_only: p.last_interaction_only,
-            initial_input: p.initial_input,
-            auto_send_input: p.auto_send_input,
-            new_chat: p.new_chat,
-            invocation_source: p.invocation_source,
-            copy_token: p.copy_token,
-        })
+    PENDING.lock().unwrap_or_else(|e| e.into_inner()).take()
 }
 
 fn emit_reuse_event(

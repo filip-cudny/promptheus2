@@ -9,14 +9,14 @@ use tauri::Manager;
 #[cfg(desktop)]
 use crate::models::settings::Settings;
 #[cfg(desktop)]
-use crate::services::hotkeys::{execute_hotkey_action, get_active_bindings, ShortcutActionMap};
+use crate::services::hotkeys::{execute_hotkey_action, reload_shortcuts, ShortcutActionMap};
 
 #[cfg(desktop)]
 pub fn register(
     app: &tauri::App,
     settings: &Settings,
 ) -> std::result::Result<(), Box<dyn std::error::Error>> {
-    use tauri_plugin_global_shortcut::{Shortcut, ShortcutState};
+    use tauri_plugin_global_shortcut::ShortcutState;
 
     #[cfg(target_os = "linux")]
     if crate::services::gnome_shell::is_gnome_wayland() {
@@ -28,25 +28,10 @@ pub fn register(
         return Ok(());
     }
 
-    let bindings = get_active_bindings(settings);
-    let mut action_map = HashMap::new();
-    let mut builder = tauri_plugin_global_shortcut::Builder::new();
-    for (shortcut_str, action) in &bindings {
-        match shortcut_str.parse::<Shortcut>() {
-            Ok(shortcut) => {
-                let canonical = shortcut.into_string();
-                action_map.insert(canonical, action.clone());
-                builder = builder.with_shortcut(shortcut_str.as_str())?;
-            }
-            Err(e) => {
-                log::warn!("invalid shortcut {}: {}", shortcut_str, e);
-            }
-        }
-    }
-    app.manage(ShortcutActionMap(RwLock::new(action_map)));
+    app.manage(ShortcutActionMap(RwLock::new(HashMap::new())));
 
     app.handle().plugin(
-        builder
+        tauri_plugin_global_shortcut::Builder::new()
             .with_handler(|app, shortcut, event| {
                 if event.state == ShortcutState::Pressed {
                     let shortcut_str = shortcut.into_string();
@@ -76,10 +61,7 @@ pub fn register(
             .build(),
     )?;
 
-    for (shortcut_str, action) in &bindings {
-        log::info!("registered shortcut: {} -> {}", shortcut_str, action);
-    }
-    log::info!("{} global shortcuts registered", bindings.len());
+    reload_shortcuts(app.handle(), settings);
 
     Ok(())
 }

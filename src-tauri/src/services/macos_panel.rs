@@ -1,6 +1,6 @@
 #![cfg(target_os = "macos")]
 
-use std::ffi::CStr;
+use std::ffi::{c_void, CStr};
 use std::sync::OnceLock;
 
 use objc2::ffi::object_setClass;
@@ -62,23 +62,42 @@ fn promptheus_widget_panel_class() -> &'static AnyClass {
     })
 }
 
+fn with_ns_window<R>(
+    ns_window: tauri::Result<*mut c_void>,
+    f: impl FnOnce(&NSWindow) -> R,
+) -> Result<R, String> {
+    let ptr = ns_window.map_err(|e| e.to_string())?;
+    if ptr.is_null() {
+        return Err("ns_window pointer is null".into());
+    }
+    Ok(f(unsafe { &*(ptr as *const NSWindow) }))
+}
+
+pub async fn on_main(
+    window: &tauri::WebviewWindow,
+    f: fn(&tauri::WebviewWindow) -> Result<(), String>,
+) -> crate::Result<()> {
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let target = window.clone();
+    window.run_on_main_thread(move || {
+        let _ = tx.send(f(&target));
+    })?;
+    rx.await.map_err(|e| e.to_string())??;
+    Ok(())
+}
+
 fn reclass_as_nonactivating_panel(
     window: &tauri::WebviewWindow,
     class: &'static AnyClass,
 ) -> Result<&'static NSPanel, String> {
-    let ptr = window.ns_window().map_err(|e| e.to_string())?;
-    if ptr.is_null() {
-        return Err("ns_window pointer is null".into());
-    }
+    with_ns_window(window.ns_window(), |ns_window| unsafe {
+        object_setClass(ns_window as *const NSWindow as *mut AnyObject, class);
 
-    unsafe {
-        object_setClass(ptr as *mut AnyObject, class);
-
-        let panel: &NSPanel = &*(ptr as *const NSPanel);
+        let panel: &'static NSPanel = &*(ns_window as *const NSWindow as *const NSPanel);
         let mask = panel.styleMask();
         panel.setStyleMask(mask | NSWindowStyleMask::NonactivatingPanel);
-        Ok(panel)
-    }
+        panel
+    })
 }
 
 // Convert a webview window's underlying NSWindow into a non-activating NSPanel
@@ -110,13 +129,7 @@ pub fn make_nonactivating_widget_panel(window: &tauri::WebviewWindow) -> Result<
 // process frontmost and routes the keystrokes to our panel without raising
 // our other windows.
 pub fn show_panel_without_activating(window: &tauri::WebviewWindow) -> Result<(), String> {
-    let ptr = window.ns_window().map_err(|e| e.to_string())?;
-    if ptr.is_null() {
-        return Err("ns_window pointer is null".into());
-    }
-
-    unsafe {
-        let ns_window: &NSWindow = &*(ptr as *const NSWindow);
+    with_ns_window(window.ns_window(), |ns_window| unsafe {
         ns_window.makeKeyAndOrderFront(None);
 
         let running: *mut AnyObject =
@@ -124,23 +137,13 @@ pub fn show_panel_without_activating(window: &tauri::WebviewWindow) -> Result<()
         if !running.is_null() {
             let _: bool = msg_send![running, activateWithOptions: 0usize];
         }
-    }
-
-    Ok(())
+    })
 }
 
 pub fn hide_panel(window: &tauri::WebviewWindow) -> Result<(), String> {
-    let ptr = window.ns_window().map_err(|e| e.to_string())?;
-    if ptr.is_null() {
-        return Err("ns_window pointer is null".into());
-    }
-
-    unsafe {
-        let ns_window: &NSWindow = &*(ptr as *const NSWindow);
+    with_ns_window(window.ns_window(), |ns_window| unsafe {
         ns_window.orderOut(None);
-    }
-
-    Ok(())
+    })
 }
 
 // Force the green traffic-light button into native fullscreen-arrows mode.
@@ -149,36 +152,20 @@ pub fn hide_panel(window: &tauri::WebviewWindow) -> Result<(), String> {
 // "+" (zoom) by default. Setting it explicitly restores the native default:
 // arrows on hover, "+" on Option+hover.
 pub fn enable_fullscreen_primary(window: &tauri::Window) -> Result<(), String> {
-    let ptr = window.ns_window().map_err(|e| e.to_string())?;
-    if ptr.is_null() {
-        return Err("ns_window pointer is null".into());
-    }
-
-    unsafe {
-        let ns_window: &NSWindow = &*(ptr as *const NSWindow);
+    with_ns_window(window.ns_window(), |ns_window| unsafe {
         let mut behavior = ns_window.collectionBehavior();
         behavior.remove(NSWindowCollectionBehavior::FullScreenNone);
         behavior.remove(NSWindowCollectionBehavior::FullScreenAuxiliary);
         behavior.insert(NSWindowCollectionBehavior::FullScreenPrimary);
         ns_window.setCollectionBehavior(behavior);
-    }
-
-    Ok(())
+    })
 }
 
 // Re-focus the (already visible) panel after a geometry change.
 pub fn make_key_without_activating(window: &tauri::WebviewWindow) -> Result<(), String> {
-    let ptr = window.ns_window().map_err(|e| e.to_string())?;
-    if ptr.is_null() {
-        return Err("ns_window pointer is null".into());
-    }
-
-    unsafe {
-        let ns_window: &NSWindow = &*(ptr as *const NSWindow);
+    with_ns_window(window.ns_window(), |ns_window| unsafe {
         ns_window.makeKeyAndOrderFront(None);
-    }
-
-    Ok(())
+    })
 }
 
 // Move and resize the panel in one `setFrame:display:` call on the main thread.
@@ -194,22 +181,17 @@ pub fn set_frame_physical(
     let target = window.clone();
     window
         .run_on_main_thread(move || {
-            let ptr = match target.ns_window() {
-                Ok(ptr) if !ptr.is_null() => ptr,
-                _ => {
-                    log::warn!("setFrame skipped: ns_window unavailable");
-                    return;
-                }
-            };
             let height = size.1 / scale;
-            unsafe {
-                let ns_window: &NSWindow = &*(ptr as *const NSWindow);
+            let moved = with_ns_window(target.ns_window(), |ns_window| unsafe {
                 let mut frame = ns_window.frame();
                 frame.origin.x = origin.0 / scale;
                 frame.origin.y = primary_height_points - origin.1 / scale - height;
                 frame.size.width = size.0 / scale;
                 frame.size.height = height;
                 ns_window.setFrame_display(frame, true);
+            });
+            if let Err(e) = moved {
+                log::warn!("setFrame skipped: {e}");
             }
         })
         .map_err(|e| e.to_string())
@@ -271,14 +253,10 @@ pub fn install_pointer_tracking(window: &tauri::WebviewWindow, app: AppHandle) -
     if POINTER_APP.set(app).is_err() {
         return Err("pointer tracking is already installed".into());
     }
-    let ptr = window.ns_window().map_err(|e| e.to_string())?;
-    if ptr.is_null() {
-        return Err("ns_window pointer is null".into());
-    }
+    let view = with_ns_window(window.ns_window(), |ns_window| unsafe { ns_window.contentView() })?
+        .ok_or("content view is missing")?;
 
     unsafe {
-        let ns_window: &NSWindow = &*(ptr as *const NSWindow);
-        let view = ns_window.contentView().ok_or("content view is missing")?;
         let owner: Retained<AnyObject> = msg_send![pointer_owner_class(), new];
         let options = NSTrackingAreaOptions::ActiveAlways
             | NSTrackingAreaOptions::MouseMoved

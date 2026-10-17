@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager};
 
-use crate::services::dialog::SHELL_TOOLBAR_LABEL;
+use crate::services::dialog::{window, SHELL_TOOLBAR_LABEL};
 use crate::Error;
 
 const MENU_LABEL: &str = "provider-menu";
@@ -62,9 +62,7 @@ pub async fn show_provider_menu(
         items.len(),
     );
 
-    let win = app
-        .get_webview_window(MENU_LABEL)
-        .ok_or_else(|| Error::Other("provider-menu window not found".into()))?;
+    let win = window(&app, MENU_LABEL)?;
 
     win.set_size(LogicalSize::new(width.max(80.0), height.max(20.0)))?;
 

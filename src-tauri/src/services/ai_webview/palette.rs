@@ -1,19 +1,20 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tauri::{Emitter, LogicalPosition, LogicalSize, Manager};
+use tauri::{LogicalPosition, LogicalSize, Manager};
 use tokio::sync::Mutex;
 
 use crate::models::settings::WebviewProvider;
 use crate::services::clipboard::ClipboardService;
 use crate::services::config::ConfigService;
-use crate::services::dialog::{SHELL_TOOLBAR_LABEL, TOOLBAR_HEIGHT};
+use crate::services::dialog::{window, CONVERSATION_DIALOG_LABEL, TOOLBAR_HEIGHT};
 
 use super::external_links::open_external_url;
-use super::lifecycle::{host_window_for_webview, CONVERSATION_DIALOG_LABEL};
+use super::lifecycle::host_window_for_webview;
 use super::provider_send::handle_send_outcome;
 use super::provider_swap::{
-    activate_adjacent_tab, activate_tab_at, close_active_tab, new_tab, new_tab_like_active,
+    activate_adjacent_tab, activate_tab_at, close_active_tab, emit_logged, emit_to_host_and_toolbar,
+    new_tab, new_tab_like_active,
 };
 use super::tabs::TabKind;
 use super::AiWebviewState;
@@ -227,9 +228,7 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
         .try_state::<AiWebviewState>()
         .ok_or_else(|| "ai webview state missing".to_string())?;
 
-    let palette_win = app
-        .get_webview_window(PALETTE_LABEL)
-        .ok_or_else(|| "palette window not found".to_string())?;
+    let palette_win = window(app, PALETTE_LABEL).map_err(|e| e.to_string())?;
 
     if state.is_palette_open(host_label) {
         log::debug!(
@@ -320,12 +319,7 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
         "tabs": tabs,
         "current_title": current_title,
     });
-    if let Err(e) = app.emit_to(PALETTE_LABEL, "palette:show", payload) {
-        log::warn!(
-            target: "app_lib::services::ai_webview",
-            "emit_to(palette) palette:show failed: {e}",
-        );
-    }
+    emit_logged(app, PALETTE_LABEL, "palette:show", payload);
 
     if host_relative {
         #[cfg(target_os = "linux")]
@@ -340,19 +334,12 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
         }
     }
 
-    let opened_payload = serde_json::json!({ "active_label": active_label });
-    if let Err(e) = app.emit_to(host_label, "shell:palette-opened", opened_payload.clone()) {
-        log::warn!(
-            target: "app_lib::services::ai_webview",
-            "emit_to({host_label}) shell:palette-opened failed: {e}",
-        );
-    }
-    if let Err(e) = app.emit_to(SHELL_TOOLBAR_LABEL, "shell:palette-opened", opened_payload) {
-        log::warn!(
-            target: "app_lib::services::ai_webview",
-            "emit_to({SHELL_TOOLBAR_LABEL}) shell:palette-opened failed: {e}",
-        );
-    }
+    emit_to_host_and_toolbar(
+        app,
+        host_label,
+        "shell:palette-opened",
+        serde_json::json!({ "active_label": active_label }),
+    );
 
     Ok(())
 }
@@ -396,19 +383,7 @@ pub async fn swap_from_palette(
         }
     }
 
-    let payload = serde_json::json!({});
-    if let Err(e) = app.emit_to(host_label, "shell:palette-closed", payload.clone()) {
-        log::warn!(
-            target: "app_lib::services::ai_webview",
-            "emit_to({host_label}) shell:palette-closed failed: {e}",
-        );
-    }
-    if let Err(e) = app.emit_to(SHELL_TOOLBAR_LABEL, "shell:palette-closed", payload) {
-        log::warn!(
-            target: "app_lib::services::ai_webview",
-            "emit_to({SHELL_TOOLBAR_LABEL}) shell:palette-closed failed: {e}",
-        );
-    }
+    emit_to_host_and_toolbar(app, host_label, "shell:palette-closed", serde_json::json!({}));
 
     match selected_provider_id.as_deref() {
         Some(id) => {

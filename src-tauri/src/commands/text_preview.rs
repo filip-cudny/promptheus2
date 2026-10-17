@@ -8,26 +8,27 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::services::dialog;
 use crate::services::dock::DockManager;
-use crate::services::monitor::find_monitor_at;
+use crate::services::monitor::{clamp_origin, find_monitor_at};
 use crate::services::ui_state::UiStateService;
 
 const GEOMETRY_KEY: &str = "text-preview";
 const LABEL_PREFIX: &str = "text-preview-";
 
-struct PendingText {
+#[derive(Serialize)]
+pub struct TextPayload {
     text: String,
     index: usize,
     source_window: String,
 }
 
-static PENDING: Mutex<Option<HashMap<String, PendingText>>> = Mutex::new(None);
+static PENDING: Mutex<Option<HashMap<String, TextPayload>>> = Mutex::new(None);
 
-fn pending_insert(label: String, payload: PendingText) {
+fn pending_insert(label: String, payload: TextPayload) {
     let mut guard = PENDING.lock().unwrap_or_else(|e| e.into_inner());
     guard.get_or_insert_with(HashMap::new).insert(label, payload);
 }
 
-fn pending_take(label: &str) -> Option<PendingText> {
+fn pending_take(label: &str) -> Option<TextPayload> {
     let mut guard = PENDING.lock().unwrap_or_else(|e| e.into_inner());
     guard.as_mut().and_then(|m| m.remove(label))
 }
@@ -43,13 +44,6 @@ fn label_for(text: &str) -> String {
     let mut hasher = DefaultHasher::new();
     text.hash(&mut hasher);
     format!("{}{:016x}", LABEL_PREFIX, hasher.finish())
-}
-
-#[derive(Serialize)]
-pub struct TextPayload {
-    text: String,
-    index: usize,
-    source_window: String,
 }
 
 #[tauri::command]
@@ -71,7 +65,7 @@ pub async fn open_text_preview(
 
     pending_insert(
         label.clone(),
-        PendingText { text, index, source_window },
+        TextPayload { text, index, source_window },
     );
 
     let geometry = app
@@ -148,24 +142,17 @@ fn position_near_cursor(win: &tauri::WebviewWindow) {
             height: 400,
         });
 
-        let right_edge = work.position.x + work.size.width as i32;
-        let bottom_edge = work.position.y + work.size.height as i32;
-
-        let mut x = cx;
-        let mut y = cy;
-        if x + win_size.width as i32 > right_edge {
-            x = right_edge - win_size.width as i32;
-        }
-        if y + win_size.height as i32 > bottom_edge {
-            y = bottom_edge - win_size.height as i32;
-        }
-        if x < work.position.x {
-            x = work.position.x;
-        }
-        if y < work.position.y {
-            y = work.position.y;
-        }
-        (x, y)
+        let (x, y) = clamp_origin(
+            (cx as f64, cy as f64),
+            (win_size.width as f64, win_size.height as f64),
+            (
+                work.position.x as f64,
+                work.position.y as f64,
+                work.size.width as f64,
+                work.size.height as f64,
+            ),
+        );
+        (x as i32, y as i32)
     } else {
         (cx, cy)
     };
@@ -180,9 +167,5 @@ pub fn save_text_preview_geometry(window: tauri::Window) {
 
 #[tauri::command]
 pub fn get_pending_text(window: tauri::Window) -> Option<TextPayload> {
-    pending_take(window.label()).map(|p| TextPayload {
-        text: p.text,
-        index: p.index,
-        source_window: p.source_window,
-    })
+    pending_take(window.label())
 }

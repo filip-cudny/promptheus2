@@ -1,16 +1,9 @@
-use std::sync::Arc;
-
-use tokio::sync::Mutex;
-
 use crate::commands;
-use crate::services::config::ConfigService;
-use crate::services::frontmost_app;
 use crate::services::recent_apps::RecentAppsState;
 
 pub fn install(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::Error>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::TrayIconBuilder;
-    use tauri::Manager;
 
     let show_menu_i = MenuItem::with_id(app, "show-menu", "Show Menu", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
@@ -32,18 +25,9 @@ pub fn install(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::
         .on_menu_event(
             |app: &tauri::AppHandle, event: tauri::menu::MenuEvent| match event.id().as_ref() {
                 "show-menu" => {
-                    let frontmost = frontmost_app::detect();
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move {
-                        let max = app
-                            .state::<Arc<Mutex<ConfigService>>>()
-                            .lock()
-                            .await
-                            .settings()
-                            .recent_apps_count;
-                        app.state::<Arc<RecentAppsState>>()
-                            .push(frontmost, max)
-                            .await;
+                        RecentAppsState::record_frontmost(&app).await;
                         let _ = commands::menu::show_context_menu_window(app).await;
                     });
                 }

@@ -36,7 +36,7 @@ Services are plain structs (not singletons). They are created once at startup in
 
 ### Window lookup
 
-Tauri's `get_webview_window(label)` returns `None` when the window holds any webview whose label differs from the window label (`Window::is_webview_window`). `conversation-dialog` (toolbar and content children added with `add_child`) is such a window: look it up with `get_window` (window APIs) and `get_webview` (`eval`, navigation). `dialog::open_or_focus` returns `(tauri::Window, created)` for this reason. To bring the chat window up from any entry path call `ai_webview::surface` (create or show the host, pick the view, `focus_host_window`); do not call `open_or_focus` or `focus_host_window` for `conversation-dialog` directly.
+Tauri's `get_webview_window(label)` returns `None` when the window holds any webview whose label differs from the window label (`Window::is_webview_window`). `conversation-dialog` (toolbar and content children added with `add_child`) is such a window: look it up with `get_window` (window APIs) and `get_webview` (`eval`, navigation). `dialog::open_or_focus` returns `(tauri::Window, created)` for this reason. To bring the chat window up from any entry path call `ai_webview::surface` (create or show the host, pick the view, `focus_host_window`); do not call `open_or_focus` or `focus_host_window` for `conversation-dialog` directly. For a window with one webview use `dialog::window(app, label)` (error `<label> window not found`); `monitor::cursor_work_area(win)` gives the cursor and its monitor's work area in logical px.
 
 ### Settings sync
 
@@ -143,7 +143,7 @@ Persistent history storage via SQLite. Database file at `{app_data_dir}/history.
 
 ### Hotkeys specifics
 
-Mostly free functions translating keymap settings into `tauri-plugin-global-shortcut`-compatible shortcut strings; the one state is `ShortcutActionMap` (shortcut → action, behind an `RwLock`), written by `reload_shortcuts` and read by the global-shortcut handler in `setup/shortcuts.rs`, which then calls `execute_hotkey_action`.
+Mostly free functions translating keymap settings into `tauri-plugin-global-shortcut`-compatible shortcut strings; the one state is `ShortcutActionMap` (shortcut → action, behind an `RwLock`), written by `reload_shortcuts` and read by the global-shortcut handler in `setup/shortcuts.rs`, which then calls `execute_hotkey_action`. `setup/shortcuts.rs` installs the plugin with that handler and an empty map, then calls `reload_shortcuts` to register the bindings.
 
 **OS-aware translation**: `translate_shortcut(shortcut, os)` converts config format (`"cmd+f1"`) to plugin format (`"Command+F1"`). The `os` parameter (`"macos"` or anything else, in practice `"linux"`) affects only `cmd`: `Command` on macOS, `Super` otherwise.
 

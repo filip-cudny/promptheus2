@@ -1,3 +1,31 @@
+use serde::Serialize;
+use tauri::Manager;
+
+#[derive(Serialize, Clone)]
+pub struct CursorWorkArea {
+    pub cursor_x: f64,
+    pub cursor_y: f64,
+    pub work_x: f64,
+    pub work_y: f64,
+    pub work_width: f64,
+    pub work_height: f64,
+}
+
+pub fn cursor_work_area(win: &tauri::WebviewWindow) -> crate::Result<CursorWorkArea> {
+    let cursor = win.cursor_position()?;
+    let monitor = find_monitor_at(win.app_handle(), cursor.x as i32, cursor.y as i32)?;
+    let work = monitor.work_area();
+    let scale = monitor.scale_factor();
+    Ok(CursorWorkArea {
+        cursor_x: cursor.x / scale,
+        cursor_y: cursor.y / scale,
+        work_x: work.position.x as f64 / scale,
+        work_y: work.position.y as f64 / scale,
+        work_width: work.size.width as f64 / scale,
+        work_height: work.size.height as f64 / scale,
+    })
+}
+
 pub fn find_monitor_at(
     handle: &tauri::AppHandle,
     cx: i32,

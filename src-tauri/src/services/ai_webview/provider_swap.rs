@@ -2,19 +2,17 @@ use std::time::Instant;
 
 use serde::Serialize;
 use tauri::webview::{PageLoadEvent, WebviewBuilder};
-use tauri::{Emitter, Manager, WebviewUrl};
+use tauri::{Emitter, LogicalSize, Manager, WebviewUrl};
 
 use crate::commands::conversation_dialog::NewConversationEvent;
 use crate::models::settings::WebviewProvider;
 use crate::services::dialog::{
     attach_undecorated_resize_handler, configure_linux_child_packing, content_layout,
-    focus_host_window, is_shell_toolbar_label, LinuxChildRole, SHELL_TOOLBAR_LABEL,
+    focus_host_window, is_shell_toolbar_label, logical_inner_size, LinuxChildRole,
+    CONVERSATION_DIALOG_LABEL, SHELL_BG, SHELL_TOOLBAR_LABEL,
 };
 
-use super::lifecycle::{
-    enable_media_for_webview, host_logical_size, AI_WEBVIEW_BG, CONVERSATION_DIALOG_LABEL,
-    CONVERSATION_DIALOG_TITLE,
-};
+use super::lifecycle::{enable_media_for_webview, CONVERSATION_DIALOG_TITLE};
 use super::palette::{handle_router_message, lookup_webview_provider, parse_router_message};
 use super::scripts::{initialization_script, reinject_script};
 use super::surface::{surface, SurfaceTarget};
@@ -54,21 +52,35 @@ pub(super) fn emit_tabs_changed(app: &tauri::AppHandle) {
         return;
     };
     let snapshot = state.with_tabs(|tabs| tabs.snapshot());
-    if let Err(e) = app.emit_to(SHELL_TOOLBAR_LABEL, "shell:tabs-changed", snapshot) {
+    emit_logged(app, SHELL_TOOLBAR_LABEL, "shell:tabs-changed", snapshot);
+}
+
+pub(super) fn emit_logged<S: Serialize + Clone>(
+    app: &tauri::AppHandle,
+    label: &str,
+    event: &str,
+    payload: S,
+) {
+    if let Err(e) = app.emit_to(label, event, payload) {
         log::warn!(
             target: "app_lib::services::ai_webview",
-            "emit shell:tabs-changed failed: {e}",
+            "emit_to({label}) {event} failed: {e}",
         );
     }
 }
 
+pub(super) fn emit_to_host_and_toolbar<S: Serialize + Clone>(
+    app: &tauri::AppHandle,
+    host_label: &str,
+    event: &str,
+    payload: S,
+) {
+    emit_logged(app, host_label, event, payload.clone());
+    emit_logged(app, SHELL_TOOLBAR_LABEL, event, payload);
+}
+
 fn emit_to_chat<S: Serialize + Clone>(app: &tauri::AppHandle, event: &str, payload: S) {
-    if let Err(e) = app.emit_to(CONVERSATION_DIALOG_LABEL, event, payload) {
-        log::warn!(
-            target: "app_lib::services::ai_webview",
-            "emit {event} failed: {e}",
-        );
-    }
+    emit_logged(app, CONVERSATION_DIALOG_LABEL, event, payload);
 }
 
 fn emit_active_changed(app: &tauri::AppHandle, provider_id: Option<&str>) {
@@ -212,7 +224,10 @@ fn create_provider_child(
 ) -> Result<String, String> {
     let state = state_of(app)?;
     let child_label = state.child_label_for_new_child(&tab.id, &provider.id);
-    let (logical_w, logical_h) = host_logical_size(host)?;
+    let LogicalSize {
+        width: logical_w,
+        height: logical_h,
+    } = logical_inner_size(host)?;
     let (pos, size) = content_layout(logical_w, logical_h);
     let start_url = tab.last_url.as_deref().unwrap_or(provider.url.as_str());
     log::debug!(
@@ -232,7 +247,7 @@ fn create_provider_child(
 
     let builder = WebviewBuilder::new(&child_label, WebviewUrl::External(content_url))
         .auto_resize()
-        .background_color(AI_WEBVIEW_BG)
+        .background_color(SHELL_BG)
         .enable_clipboard_access()
         .disable_drag_drop_handler()
         .initialization_script(&init_script)

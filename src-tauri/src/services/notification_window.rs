@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 
 use tauri::{Manager, WebviewWindow};
 
+use crate::services::dialog::window;
 use crate::services::monitor::find_monitor_at;
 #[cfg(target_os = "linux")]
 use crate::services::notification::NotificationLevel;
@@ -242,9 +243,7 @@ fn resize_and_place(
 }
 
 async fn show_notification_window(handle: &tauri::AppHandle) -> crate::Result<()> {
-    let win = handle
-        .get_webview_window("notification")
-        .ok_or_else(|| Error::Other("notification window not found".into()))?;
+    let win = window(handle, "notification")?;
 
     anchor_and_show(handle, &win, FIRST_SHOW_HEIGHT).await?;
 
@@ -264,9 +263,7 @@ pub async fn update_notification_window(
     count: u32,
     height: u32,
 ) -> crate::Result<()> {
-    let win = app
-        .get_webview_window("notification")
-        .ok_or_else(|| Error::Other("notification window not found".into()))?;
+    let win = window(&app, "notification")?;
 
     mark_webview_alive();
 

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use tauri::window::Color;
-use tauri::{LogicalPosition, LogicalSize, Manager, Rect, Window, WindowEvent};
+use tauri::{LogicalPosition, LogicalSize, Manager, Rect, WebviewWindow, Window, WindowEvent};
 use tokio::sync::Mutex;
 
 use super::ai_webview;
@@ -11,7 +11,7 @@ use super::ui_state::{UiStateService, WindowGeometry};
 pub const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
 pub const SHELL_TOOLBAR_LABEL: &str = "shell-toolbar";
 pub const TOOLBAR_HEIGHT: f64 = 40.0;
-const SHELL_BG: Color = Color(0x1e, 0x1e, 0x1e, 0xff);
+pub const SHELL_BG: Color = Color(0x1e, 0x1e, 0x1e, 0xff);
 
 pub struct DialogConfig {
     pub label: String,
@@ -20,6 +20,11 @@ pub struct DialogConfig {
     pub default_width: f64,
     pub default_height: f64,
     pub geometry_key: String,
+}
+
+pub fn window(app: &tauri::AppHandle, label: &str) -> crate::Result<WebviewWindow> {
+    app.get_webview_window(label)
+        .ok_or_else(|| crate::Error::Other(format!("{label} window not found")))
 }
 
 pub fn is_conversation_dialog_host(label: &str) -> bool {
@@ -34,13 +39,25 @@ pub fn is_shell_toolbar_label(label: &str) -> bool {
     label == SHELL_TOOLBAR_LABEL
 }
 
-fn logical_window_size(win: &tauri::Window) -> Result<(f64, f64), String> {
+pub fn logical_inner_size(win: &Window) -> Result<LogicalSize<f64>, String> {
     let physical = win.inner_size().map_err(|e| e.to_string())?;
     let scale = win.scale_factor().map_err(|e| e.to_string())?;
-    Ok((
-        physical.width as f64 / scale,
-        physical.height as f64 / scale,
-    ))
+    Ok(physical.to_logical(scale))
+}
+
+fn add_child_webview(
+    window: &Window,
+    label: &str,
+    app_url: &str,
+    position: LogicalPosition<f64>,
+    size: LogicalSize<f64>,
+) -> Result<tauri::Webview, String> {
+    let builder = tauri::webview::WebviewBuilder::new(label, tauri::WebviewUrl::App(app_url.into()))
+        .auto_resize()
+        .background_color(SHELL_BG);
+    window
+        .add_child(builder, position, size)
+        .map_err(|e| e.to_string())
 }
 
 pub fn toolbar_layout(logical_w: f64) -> (LogicalPosition<f64>, LogicalSize<f64>) {
@@ -311,36 +328,30 @@ pub async fn open_or_focus(
         }
     }
 
-    let (logical_w, logical_h) = logical_window_size(&window)?;
+    let LogicalSize {
+        width: logical_w,
+        height: logical_h,
+    } = logical_inner_size(&window)?;
 
     let needs_undecorated_resize = cfg!(target_os = "linux") && custom_titlebar;
 
     if custom_titlebar {
         let (toolbar_pos, toolbar_size) = toolbar_layout(logical_w);
-        let toolbar_builder = tauri::webview::WebviewBuilder::new(
+        let toolbar_webview = add_child_webview(
+            &window,
             SHELL_TOOLBAR_LABEL,
-            tauri::WebviewUrl::App("shell-toolbar.html".into()),
-        )
-        .auto_resize()
-        .background_color(SHELL_BG);
-        let toolbar_webview = window
-            .add_child(toolbar_builder, toolbar_pos, toolbar_size)
-            .map_err(|e| e.to_string())?;
+            "shell-toolbar.html",
+            toolbar_pos,
+            toolbar_size,
+        )?;
         configure_linux_child_packing(&toolbar_webview, LinuxChildRole::Toolbar);
         if needs_undecorated_resize {
             attach_undecorated_resize_handler(&toolbar_webview);
         }
 
         let (content_pos, content_size) = content_layout(logical_w, logical_h);
-        let content_builder = tauri::webview::WebviewBuilder::new(
-            &config.label,
-            tauri::WebviewUrl::App(config.url.clone().into()),
-        )
-        .auto_resize()
-        .background_color(SHELL_BG);
-        let content_webview = window
-            .add_child(content_builder, content_pos, content_size)
-            .map_err(|e| e.to_string())?;
+        let content_webview =
+            add_child_webview(&window, &config.label, &config.url, content_pos, content_size)?;
         configure_linux_child_packing(&content_webview, LinuxChildRole::Content);
         if needs_undecorated_resize {
             attach_undecorated_resize_handler(&content_webview);
@@ -354,19 +365,13 @@ pub async fn open_or_focus(
             );
         }
     } else {
-        let content_builder = tauri::webview::WebviewBuilder::new(
+        let content_webview = add_child_webview(
+            &window,
             &config.label,
-            tauri::WebviewUrl::App(config.url.clone().into()),
-        )
-        .auto_resize()
-        .background_color(SHELL_BG);
-        let content_webview = window
-            .add_child(
-                content_builder,
-                LogicalPosition::new(0.0, 0.0),
-                LogicalSize::new(logical_w, logical_h),
-            )
-            .map_err(|e| e.to_string())?;
+            &config.url,
+            LogicalPosition::new(0.0, 0.0),
+            LogicalSize::new(logical_w, logical_h),
+        )?;
         if needs_undecorated_resize {
             attach_undecorated_resize_handler(&content_webview);
         }

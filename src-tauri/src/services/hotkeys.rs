@@ -8,9 +8,7 @@ use tokio::sync::Mutex;
 use crate::commands;
 use crate::models::settings::Settings;
 use crate::services::clipboard::PastedItem;
-use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
-use crate::services::frontmost_app;
 use crate::services::notification::{NotificationLevel, NotificationService};
 use crate::services::recent_apps::RecentAppsState;
 
@@ -261,16 +259,7 @@ pub async fn execute_hotkey_action(app: &tauri::AppHandle, action: &str) {
             execute_context_action(app, action).await;
         }
         "open_context_menu" => {
-            let frontmost = frontmost_app::detect();
-            let max = app
-                .state::<Arc<Mutex<ConfigService>>>()
-                .lock()
-                .await
-                .settings()
-                .recent_apps_count;
-            app.state::<Arc<RecentAppsState>>()
-                .push(frontmost, max)
-                .await;
+            RecentAppsState::record_frontmost(app).await;
             if let Err(e) = commands::menu::show_context_menu_window(app.clone()).await {
                 log::error!("open_context_menu failed: {e}");
             }

@@ -1,5 +1,4 @@
 use crate::services::dialog::{self, DialogConfig};
-use crate::Error;
 use tauri::Manager;
 
 #[tauri::command]
@@ -24,9 +23,7 @@ pub async fn open_settings_window(
         geometry_key: "settings-dialog".into(),
     };
 
-    let (win, created) = dialog::open_or_focus(&app, &config)
-        .await
-        .map_err(Error::Other)?;
+    let (win, created) = dialog::open_or_focus(&app, &config).await?;
 
     if created {
         if let Err(e) = win.set_min_size(Some(tauri::LogicalSize::new(800.0, 560.0))) {

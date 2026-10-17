@@ -4,10 +4,9 @@ use tauri::Manager;
 
 use crate::commands::conversation_dialog::conversation_dialog_config;
 use crate::models::settings::WebviewProvider;
-use crate::services::dialog::{self, focus_host_window};
+use crate::services::dialog::{self, focus_host_window, CONVERSATION_DIALOG_LABEL};
 use crate::services::dock::DockManager;
 
-use super::lifecycle::CONVERSATION_DIALOG_LABEL;
 use super::provider_swap::{activate_tab, show_native_view};
 use super::unload::unload_tab;
 use super::AiWebviewState;

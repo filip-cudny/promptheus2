@@ -1,10 +1,7 @@
-use tauri::window::Color;
 use tauri::Manager;
 
 use super::AiWebviewState;
 
-pub(super) const AI_WEBVIEW_BG: Color = Color(0x1e, 0x1e, 0x1e, 0xff);
-pub(super) const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
 pub(super) const CONVERSATION_DIALOG_TITLE: &str = "Promptheus — chat";
 
 pub fn host_window_for_webview(app: &tauri::AppHandle, webview_label: &str) -> Option<String> {
@@ -16,15 +13,6 @@ pub fn cleanup_host_state(app: &tauri::AppHandle, host_label: &str) {
     if let Some(state) = app.try_state::<AiWebviewState>() {
         state.drop_host(host_label);
     }
-}
-
-pub(super) fn host_logical_size(host: &tauri::Window) -> Result<(f64, f64), String> {
-    let physical = host.inner_size().map_err(|e| e.to_string())?;
-    let scale = host.scale_factor().map_err(|e| e.to_string())?;
-    Ok((
-        physical.width as f64 / scale,
-        physical.height as f64 / scale,
-    ))
 }
 
 pub(super) fn enable_media_for_webview(webview: &tauri::Webview) {

@@ -1,19 +1,35 @@
 use tauri::webview::WebviewWindowBuilder;
 
-pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let context_menu_window = WebviewWindowBuilder::new(
+fn overlay<'a>(
+    app: &'a tauri::App,
+    label: &str,
+    title: &str,
+    width: f64,
+    height: f64,
+) -> WebviewWindowBuilder<'a, tauri::Wry, tauri::App> {
+    WebviewWindowBuilder::new(
         app,
-        "context-menu",
-        tauri::WebviewUrl::App("context-menu.html".into()),
+        label,
+        tauri::WebviewUrl::App(format!("{label}.html").into()),
     )
-    .title(crate::commands::menu::CONTEXT_MENU_TITLE)
-    .inner_size(320.0, 400.0)
+    .title(title)
+    .inner_size(width, height)
     .resizable(false)
     .decorations(false)
     .transparent(true)
     .always_on_top(true)
     .skip_taskbar(true)
     .visible(false)
+}
+
+pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let context_menu_window = overlay(
+        app,
+        "context-menu",
+        crate::commands::menu::CONTEXT_MENU_TITLE,
+        320.0,
+        400.0,
+    )
     .build()?;
 
     #[cfg(target_os = "macos")]
@@ -26,41 +42,22 @@ pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::E
     #[cfg(not(target_os = "macos"))]
     let _ = context_menu_window;
 
-    let notif = WebviewWindowBuilder::new(
+    overlay(
         app,
         "notification",
-        tauri::WebviewUrl::App("notification.html".into()),
+        crate::services::notification_window::NOTIFICATION_TITLE,
+        380.0,
+        100.0,
     )
-    .title(crate::services::notification_window::NOTIFICATION_TITLE)
-    .inner_size(380.0, 100.0)
-    .resizable(false)
-    .decorations(false)
-    .transparent(true)
     .shadow(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
     .focusable(false)
-    .visible(false);
-
-    notif.build()?;
-
-    let recording_widget = WebviewWindowBuilder::new(
-        app,
-        "recording-widget",
-        tauri::WebviewUrl::App("recording-widget.html".into()),
-    )
-    .title("")
-    .inner_size(264.0, 72.0)
-    .resizable(false)
-    .decorations(false)
-    .transparent(true)
-    .shadow(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .focusable(false)
-    .accept_first_mouse(true)
-    .visible(false)
     .build()?;
+
+    let recording_widget = overlay(app, "recording-widget", "", 264.0, 72.0)
+        .shadow(false)
+        .focusable(false)
+        .accept_first_mouse(true)
+        .build()?;
 
     #[cfg(target_os = "macos")]
     {
@@ -84,65 +81,39 @@ pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::E
         }
     });
 
-    WebviewWindowBuilder::new(
-        app,
-        "image-preview",
-        tauri::WebviewUrl::App("image-preview.html".into()),
-    )
-    .title("")
-    .inner_size(800.0, 800.0)
-    .resizable(false)
-    .decorations(false)
-    .transparent(true)
-    .shadow(false)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .visible(false)
-    .build()?;
+    overlay(app, "image-preview", "", 800.0, 800.0)
+        .shadow(false)
+        .build()?;
 
-    WebviewWindowBuilder::new(
+    overlay(
         app,
         "provider-menu",
-        tauri::WebviewUrl::App("provider-menu.html".into()),
+        crate::commands::provider_menu::PROVIDER_MENU_TITLE,
+        180.0,
+        120.0,
     )
-    .title(crate::commands::provider_menu::PROVIDER_MENU_TITLE)
-    .inner_size(180.0, 120.0)
-    .resizable(false)
-    .decorations(false)
-    .transparent(true)
-    .always_on_top(true)
-    .skip_taskbar(true)
-    .visible(false)
     .build()?;
 
-    WebviewWindowBuilder::new(
+    overlay(
         app,
         "palette-backdrop",
-        tauri::WebviewUrl::App("palette-backdrop.html".into()),
+        crate::services::ai_webview::PALETTE_BACKDROP_TITLE,
+        800.0,
+        600.0,
     )
-    .title(crate::services::ai_webview::PALETTE_BACKDROP_TITLE)
-    .inner_size(800.0, 600.0)
-    .resizable(false)
-    .decorations(false)
-    .transparent(true)
-    .always_on_top(true)
-    .skip_taskbar(true)
     .focusable(false)
     .shadow(false)
-    .visible(false)
     .build()?;
 
-    WebviewWindowBuilder::new(app, "palette", tauri::WebviewUrl::App("palette.html".into()))
-        .title(crate::services::ai_webview::PALETTE_TITLE)
-        .inner_size(520.0, 400.0)
-        .resizable(false)
-        .decorations(false)
-        .transparent(true)
-        .always_on_top(true)
-        .skip_taskbar(true)
-        .shadow(false)
-        .visible(false)
-        .build()?;
+    overlay(
+        app,
+        "palette",
+        crate::services::ai_webview::PALETTE_TITLE,
+        520.0,
+        400.0,
+    )
+    .shadow(false)
+    .build()?;
 
     #[cfg(target_os = "linux")]
     configure_overlay_windows_linux(app);
@@ -151,33 +122,25 @@ pub fn create(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::E
 }
 
 #[cfg(target_os = "linux")]
-fn configure_overlay_windows_linux(app: &tauri::App) {
+fn set_utility_hints(app: &tauri::App, label: &str) -> Option<gtk::ApplicationWindow> {
     use gtk::gdk::WindowTypeHint;
     use gtk::prelude::GtkWindowExt;
     use tauri::Manager;
 
-    if let Some(backdrop) = app.get_webview_window("palette-backdrop") {
-        if let Ok(gtk_win) = backdrop.gtk_window() {
-            gtk_win.set_type_hint(WindowTypeHint::Utility);
-            gtk_win.set_skip_pager_hint(true);
-            gtk_win.set_skip_taskbar_hint(true);
-            gtk_win.set_accept_focus(false);
-        }
-    }
+    let gtk_win = app.get_webview_window(label)?.gtk_window().ok()?;
+    gtk_win.set_type_hint(WindowTypeHint::Utility);
+    gtk_win.set_skip_pager_hint(true);
+    gtk_win.set_skip_taskbar_hint(true);
+    Some(gtk_win)
+}
 
-    if let Some(palette) = app.get_webview_window("palette") {
-        if let Ok(gtk_win) = palette.gtk_window() {
-            gtk_win.set_type_hint(WindowTypeHint::Utility);
-            gtk_win.set_skip_pager_hint(true);
-            gtk_win.set_skip_taskbar_hint(true);
-        }
-    }
+#[cfg(target_os = "linux")]
+fn configure_overlay_windows_linux(app: &tauri::App) {
+    use gtk::prelude::GtkWindowExt;
 
-    if let Some(ctx) = app.get_webview_window("context-menu") {
-        if let Ok(gtk_win) = ctx.gtk_window() {
-            gtk_win.set_type_hint(WindowTypeHint::Utility);
-            gtk_win.set_skip_pager_hint(true);
-            gtk_win.set_skip_taskbar_hint(true);
-        }
+    if let Some(backdrop) = set_utility_hints(app, "palette-backdrop") {
+        backdrop.set_accept_focus(false);
     }
+    set_utility_hints(app, "palette");
+    set_utility_hints(app, "context-menu");
 }

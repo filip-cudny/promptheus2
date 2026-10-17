@@ -1,5 +1,4 @@
 use crate::services::dialog::{self, DialogConfig};
-use crate::Error;
 
 #[tauri::command]
 pub async fn open_history_dialog(app: tauri::AppHandle) -> crate::Result<()> {
@@ -12,8 +11,6 @@ pub async fn open_history_dialog(app: tauri::AppHandle) -> crate::Result<()> {
         geometry_key: "history-dialog".into(),
     };
 
-    dialog::open_or_focus(&app, &config)
-        .await
-        .map_err(Error::Other)?;
+    dialog::open_or_focus(&app, &config).await?;
     Ok(())
 }
