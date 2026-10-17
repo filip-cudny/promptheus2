@@ -78,7 +78,7 @@ pub async fn run_skill_stream(
                     NotificationLevel::Error,
                     "Execution failed",
                     Some(error.to_string()),
-                    &config.lock().await.settings().notifications,
+                    config.lock().await.settings(),
                 );
             }
             return Err(error);
@@ -387,7 +387,7 @@ impl SkillExecutor {
                     "{model_display_name} · {:.1}s · copied to clipboard",
                     elapsed.as_secs_f64()
                 )),
-                &config.settings().notifications,
+                config.settings(),
             );
         }
 
@@ -419,7 +419,7 @@ impl SkillExecutor {
                 NotificationLevel::Info,
                 "Prompt cancelled",
                 None::<&str>,
-                &config.settings().notifications,
+                config.settings(),
             );
         } else {
             notifications.notify(
@@ -427,7 +427,7 @@ impl SkillExecutor {
                 NotificationLevel::Error,
                 "Execution failed",
                 Some(message.as_str()),
-                &config.settings().notifications,
+                config.settings(),
             );
         }
 

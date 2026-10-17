@@ -62,7 +62,7 @@ pub(super) fn parse_and_migrate(content: &str) -> Result<MigrationOutcome, Confi
 
     let mut inline_prompts = Vec::new();
 
-    let migrated = if needs_migration {
+    let mut migrated = if needs_migration {
         log::info!("migrating settings.json to new schema");
         let mut migrated = migrate_legacy_json(raw);
         migrate_prompt_paths(&mut migrated, &mut inline_prompts);
@@ -71,6 +71,8 @@ pub(super) fn parse_and_migrate(content: &str) -> Result<MigrationOutcome, Confi
         raw
     };
 
+    migrate_monochromatic_flags(&mut migrated);
+
     let settings: Settings = serde_json::from_value(migrated)?;
 
     Ok(MigrationOutcome {
@@ -78,6 +80,36 @@ pub(super) fn parse_and_migrate(content: &str) -> Result<MigrationOutcome, Confi
         inline_prompts,
         legacy_flat_md_renames: LEGACY_FLAT_MD_RENAMES.to_vec(),
     })
+}
+
+const LEGACY_MONOCHROMATIC_KEYS: [(&str, &str); 2] = [
+    ("/notifications", "monochromatic_notification_icons"),
+    ("/surfaces/speech_to_text", "monochromatic_widget_icon"),
+];
+
+fn migrate_monochromatic_flags(raw: &mut Value) {
+    let removed: Vec<Value> = LEGACY_MONOCHROMATIC_KEYS
+        .iter()
+        .filter_map(|(parent, key)| raw.pointer_mut(parent)?.as_object_mut()?.remove(*key))
+        .collect();
+    if removed.is_empty() {
+        return;
+    }
+    let icons = if removed.iter().any(|v| v.as_bool() == Some(true)) {
+        "mono"
+    } else {
+        "color"
+    };
+    let Some(obj) = raw.as_object_mut() else {
+        return;
+    };
+    let appearance = obj
+        .entry("appearance")
+        .or_insert_with(|| serde_json::json!({}));
+    if let Some(appearance) = appearance.as_object_mut() {
+        appearance.insert("icons".to_string(), Value::from(icons));
+        log::info!("migrated monochromatic icon flags to appearance.icons={icons}");
+    }
 }
 
 pub(super) fn replace_legacy_system_default(config_dir: &std::path::Path, system_path: &str) {

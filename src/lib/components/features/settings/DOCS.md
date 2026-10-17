@@ -10,6 +10,10 @@ The root is `src/windows/settings-dialog/App.svelte` (calls `store.init()` / `st
 
 ## Conventions
 
+### Appearance card
+
+`SectionAppearance.svelte` holds three rows: "Theme" (button toggling light/dark), "Logo" and "Icons" (each a `SelectDropdown` of Color / Mono). Logo and Icons save with `updateSetting("appearance", { ...current, <field>: value })`; a muted note under Icons says it applies to notification icons and the recording widget's check. The old notification-icon checkbox and widget-icon checkbox no longer exist.
+
 ### Adding a new section
 
 1. Add the id to the `SettingsSection` union and `SIDEBAR_ITEMS` array in `SettingsSidebar.svelte`. Set `enabled: true` only when the section actually renders.

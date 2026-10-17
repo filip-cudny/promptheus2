@@ -108,7 +108,6 @@ pub(super) fn emit_provider_lifecycle_toast(
             .lock()
             .await
             .settings()
-            .notifications
             .clone();
         app.state::<NotificationService>().notify(
             event_name,

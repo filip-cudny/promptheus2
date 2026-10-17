@@ -171,9 +171,11 @@ Linux-only D-Bus client for the `com.promptheus.Shell` interface served by the G
 
 Holds an `AppHandle`.
 
-**Event gating**: `notify()` checks `NotificationSettings.events` before showing. If the event is disabled in settings, the notification is silently dropped. Error-level notifications bypass the gate.
+`notify(event, level, title, message, settings: &Settings)` takes the whole `Settings`: the event gate reads `settings.notifications.events`, the payload field `monochromatic` is `settings.appearance.icons == Skin::Mono`.
 
-**`notify_now(app, event, level, title, message)`**: async; reads `NotificationSettings` from the managed `ConfigService` itself, then calls `notify`. Callers that have no settings at hand use it instead of locking the config and cloning `notifications`.
+**Event gating**: `notify()` checks `settings.notifications.events` before showing. If the event is disabled in settings, the notification is silently dropped. Error-level notifications bypass the gate.
+
+**`notify_now(app, event, level, title, message)`**: async; clones `Settings` from the managed `ConfigService` itself, then calls `notify`. Callers that have no settings at hand use it instead of locking the config and cloning `settings()`.
 
 **Display**: `notify()` calls `services/notification_window.rs::show_notification`, which also owns the toast window queue, anchoring and resizing (`drain_pending_notifications`, `update_notification_window`; the commands of `commands/notification.rs` wrap them). On GNOME Wayland it routes to the extension's `ShowToast` (falling back to the notification webview window if the call fails); elsewhere it uses the notification webview window. See `docs/gotchas/linux-wayland-gnome-extension.md`.
 

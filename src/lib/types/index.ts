@@ -12,6 +12,7 @@ export interface Settings {
   show_tray_icon: boolean;
   theme: string;
   menu_section_order: string[];
+  appearance: AppearanceSettings;
   notifications: NotificationSettings;
   autosave_debounce_ms: number;
   history_retention_days: number;
@@ -79,7 +80,6 @@ export interface SpeechToTextConfig {
   audio_retention_hours: number;
   keep_audio_on_success: boolean;
   show_recording_widget: boolean;
-  monochromatic_widget_icon: boolean;
   recording_widget_at_cursor: boolean;
   recording_widget_anchor: PillAnchor;
 }
@@ -154,9 +154,15 @@ export interface KeymapGroup {
   bindings: Record<string, string>;
 }
 
+export type Skin = "color" | "mono";
+
+export interface AppearanceSettings {
+  logo: Skin;
+  icons: Skin;
+}
+
 export interface NotificationSettings {
   events: NotificationEvents;
-  monochromatic_notification_icons: boolean;
   recording_reminder: RecordingReminderSettings;
 }
 

@@ -62,6 +62,9 @@ pub struct Settings {
     pub menu_section_order: Vec<String>,
 
     #[serde(default)]
+    pub appearance: AppearanceSettings,
+
+    #[serde(default)]
     pub notifications: NotificationSettings,
 
     #[serde(default = "default_autosave_debounce_ms")]
@@ -100,6 +103,39 @@ pub struct Settings {
 
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Skin {
+    Color,
+    Mono,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppearanceSettings {
+    #[serde(default = "default_logo")]
+    pub logo: Skin,
+
+    #[serde(default = "default_icons")]
+    pub icons: Skin,
+}
+
+impl Default for AppearanceSettings {
+    fn default() -> Self {
+        Self {
+            logo: default_logo(),
+            icons: default_icons(),
+        }
+    }
+}
+
+const fn default_logo() -> Skin {
+    Skin::Color
+}
+
+const fn default_icons() -> Skin {
+    Skin::Mono
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -247,9 +283,6 @@ pub struct SpeechToTextConfig {
     pub show_recording_widget: bool,
 
     #[serde(default = "default_true")]
-    pub monochromatic_widget_icon: bool,
-
-    #[serde(default = "default_true")]
     pub recording_widget_at_cursor: bool,
 
     #[serde(default)]
@@ -280,7 +313,6 @@ impl Default for SpeechToTextConfig {
             audio_retention_hours: default_audio_retention_hours(),
             keep_audio_on_success: false,
             show_recording_widget: true,
-            monochromatic_widget_icon: true,
             recording_widget_at_cursor: true,
             recording_widget_anchor: PillAnchor::default(),
         }
@@ -445,9 +477,6 @@ pub struct NotificationSettings {
     #[serde(default)]
     pub events: NotificationEvents,
 
-    #[serde(default = "default_true")]
-    pub monochromatic_notification_icons: bool,
-
     #[serde(default)]
     pub recording_reminder: RecordingReminderSettings,
 }
@@ -561,6 +590,7 @@ impl Default for Settings {
             launch_at_startup: false,
             theme: default_theme(),
             menu_section_order: default_menu_section_order(),
+            appearance: AppearanceSettings::default(),
             notifications: NotificationSettings::default(),
             autosave_debounce_ms: 1000,
             history_retention_days: 0,
@@ -582,7 +612,6 @@ impl Default for NotificationSettings {
     fn default() -> Self {
         Self {
             events: NotificationEvents::default(),
-            monochromatic_notification_icons: true,
             recording_reminder: RecordingReminderSettings::default(),
         }
     }
@@ -704,13 +733,10 @@ mod tests {
     }
 
     #[test]
-    fn speech_to_text_defaults_to_monochromatic_widget_icon() {
-        let surfaces: Surfaces = serde_json::from_str("{}").unwrap();
-        assert!(surfaces.speech_to_text.monochromatic_widget_icon);
-
-        let config: SpeechToTextConfig = serde_json::from_str("{}").unwrap();
-        assert!(config.monochromatic_widget_icon);
-        assert!(SpeechToTextConfig::default().monochromatic_widget_icon);
+    fn default_appearance_is_color_logo_and_mono_icons() {
+        let appearance = Settings::default().appearance;
+        assert_eq!(appearance.logo, Skin::Color);
+        assert_eq!(appearance.icons, Skin::Mono);
     }
 
     #[test]
@@ -726,8 +752,8 @@ mod tests {
     #[test]
     fn recording_reminder_defaults_when_absent_from_config() {
         let settings: Settings =
-            serde_json::from_str(r#"{ "notifications": { "monochromatic_notification_icons": false } }"#)
-                .expect("legacy notification config should deserialize");
+            serde_json::from_str(r#"{ "notifications": {} }"#)
+                .expect("notification config without a reminder should deserialize");
 
         let reminder = settings.notifications.recording_reminder;
         assert!(reminder.enabled);

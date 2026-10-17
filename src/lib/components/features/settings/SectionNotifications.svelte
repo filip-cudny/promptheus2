@@ -129,21 +129,6 @@
           {/each}
         </div>
       </div>
-
-      <div class="group">
-        <h3>Appearance</h3>
-        <label class="check">
-          <input
-            type="checkbox"
-            checked={notifications.monochromatic_notification_icons}
-            onchange={(e) =>
-              save({
-                monochromatic_notification_icons: (e.target as HTMLInputElement).checked,
-              })}
-          />
-          <span>Monochromatic icons</span>
-        </label>
-      </div>
     {/if}
   {/snippet}
 </SettingsSection>

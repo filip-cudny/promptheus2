@@ -169,7 +169,6 @@ pub(super) async fn fallback(
         .lock()
         .await
         .settings()
-        .notifications
         .clone();
     let title = if provider_name.is_empty() { provider_id } else { provider_name };
     app.state::<NotificationService>().notify(

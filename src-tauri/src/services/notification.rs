@@ -5,7 +5,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager};
 use tokio::sync::Mutex;
 
-use crate::models::settings::NotificationEvents;
+use crate::models::settings::{NotificationEvents, Settings, Skin};
 use crate::services::config::ConfigService;
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
@@ -44,10 +44,10 @@ impl NotificationService {
         level: NotificationLevel,
         title: impl Into<String>,
         message: Option<impl Into<String>>,
-        settings: &crate::models::settings::NotificationSettings,
+        settings: &Settings,
     ) {
         if !matches!(level, NotificationLevel::Error)
-            && !is_event_enabled(event_name, &settings.events)
+            && !is_event_enabled(event_name, &settings.notifications.events)
         {
             log::debug!("notification event '{event_name}' is disabled, skipping");
             return;
@@ -59,7 +59,7 @@ impl NotificationService {
             level,
             title: title.into(),
             message: message.map(|m| m.into()),
-            monochromatic: settings.monochromatic_notification_icons,
+            monochromatic: settings.appearance.icons == Skin::Mono,
         };
 
         log::debug!(
@@ -83,7 +83,6 @@ impl NotificationService {
             .lock()
             .await
             .settings()
-            .notifications
             .clone();
         app.state::<NotificationService>()
             .notify(event_name, level, title, message, &settings);

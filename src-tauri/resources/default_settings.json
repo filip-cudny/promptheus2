@@ -9,6 +9,10 @@
     "SpeechMenuProvider",
     "settings"
   ],
+  "appearance": {
+    "logo": "color",
+    "icons": "mono"
+  },
   "notifications": {
     "events": {
       "prompt_execution_success": true,
@@ -20,7 +24,6 @@
       "context_append": true,
       "context_cleared": true
     },
-    "monochromatic_notification_icons": true,
     "recording_reminder": {
       "enabled": true,
       "silence_after_secs": 60,

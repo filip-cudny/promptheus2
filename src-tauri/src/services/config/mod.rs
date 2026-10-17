@@ -173,6 +173,10 @@ impl ConfigService {
                     self.settings.preferred_name = clamped;
                 }
             }
+            "appearance" => match serde_json::from_value(value) {
+                Ok(appearance) => self.settings.appearance = appearance,
+                Err(e) => log::warn!("ignoring invalid appearance setting: {e}"),
+            },
             _ => {}
         }
     }

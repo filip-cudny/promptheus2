@@ -12,6 +12,10 @@ Model structs derive `Debug, Clone` and `Serialize` / `Deserialize` as the direc
 
 Maps in `Settings` serialize sorted by key (`serialize_sorted`, `BTreeMap` for `ModelParameters.extra`), so `settings.json` is byte-stable across saves. Unknown top-level keys are kept in `Settings.extra`.
 
+### Appearance and the icon-flag migration
+
+`Settings.appearance` (`AppearanceSettings`, `#[serde(default)]`) holds `logo` (default `color`) and `icons` (default `mono`), both `Skin` (`color` | `mono`, serialized lowercase). `appearance.icons` replaced `notifications.monochromatic_notification_icons` and `surfaces.speech_to_text.monochromatic_widget_icon`: `parse_and_migrate` (`services/config/migrator.rs`) runs `migrate_monochromatic_flags` on every load, not only for legacy files. When either old key is present it sets `appearance.icons` to `mono` if one of them is `true`, else `color`, keeps `appearance.logo` and deletes both keys, so the next save writes the file without them.
+
 ### Serde defaults pattern
 
 `surfaces.speech_to_text.recording_widget_at_cursor` (default `true` via `default_true` and the manual `Default` impl): the recording widget opens at the cursor and drags are not stored. `surfaces.speech_to_text.recording_widget_anchor` (`#[serde(default)]`, `PillAnchor`, default `above_right`) picks the side of the cursor: `above_right` puts the pill's bottom-left corner at the cursor; `above_*`/`below_*` × `right`/`center`/`left`.

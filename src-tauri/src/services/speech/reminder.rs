@@ -83,10 +83,9 @@ pub fn spawn(
             let Some(config_state) = app.try_state::<Arc<Mutex<ConfigService>>>() else {
                 return;
             };
-            let notification_settings =
-                config_state.lock().await.settings().notifications.clone();
+            let settings = config_state.lock().await.settings().clone();
 
-            if !notification_settings.recording_reminder.enabled {
+            if !settings.notifications.recording_reminder.enabled {
                 return;
             }
 
@@ -112,7 +111,7 @@ pub fn spawn(
                 NotificationLevel::Warning,
                 "Still recording",
                 Some(message),
-                &notification_settings,
+                &settings,
             );
 
             silence_since = None;

@@ -1,5 +1,5 @@
 use super::*;
-use crate::models::settings::{ModelConfig, ModelType, Provider};
+use crate::models::settings::{ModelConfig, ModelType, Provider, Skin};
 use std::fs;
 use tempfile::TempDir;
 
@@ -777,4 +777,69 @@ fn mutate_keeps_settings_symlink() {
 
     assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
     assert_eq!(read_json(&target)["theme"], "dark");
+}
+
+fn load_with_old_icon_keys(
+    notifications: Option<bool>,
+    widget: Option<bool>,
+) -> (TempDir, ConfigService) {
+    let dir = setup_test_dir();
+    let path = dir.path().join("settings.json");
+    let mut raw = read_json(&path);
+    if let Some(v) = notifications {
+        raw["notifications"]["monochromatic_notification_icons"] = serde_json::json!(v);
+    }
+    if let Some(v) = widget {
+        raw["surfaces"]["speech_to_text"]["monochromatic_widget_icon"] = serde_json::json!(v);
+    }
+    fs::write(&path, raw.to_string()).unwrap();
+    let service = ConfigService::load(dir.path()).expect("load");
+    (dir, service)
+}
+
+#[test]
+fn appearance_migration_both_false_gives_color() {
+    let (_dir, service) = load_with_old_icon_keys(Some(false), Some(false));
+    assert_eq!(service.settings().appearance.icons, Skin::Color);
+}
+
+#[test]
+fn appearance_migration_either_true_gives_mono() {
+    for (notifications, widget) in [(true, false), (false, true)] {
+        let (_dir, service) = load_with_old_icon_keys(Some(notifications), Some(widget));
+        assert_eq!(service.settings().appearance.icons, Skin::Mono);
+    }
+}
+
+#[test]
+fn appearance_migration_absent_keys_keep_defaults() {
+    let (_dir, service) = load_with_old_icon_keys(None, None);
+    assert_eq!(service.settings().appearance.logo, Skin::Color);
+    assert_eq!(service.settings().appearance.icons, Skin::Mono);
+}
+
+#[test]
+fn appearance_migration_removes_old_keys_and_survives_reload() {
+    let (dir, _service) = load_with_old_icon_keys(Some(false), Some(false));
+
+    let saved = read_json(&dir.path().join("settings.json"));
+    assert!(saved["notifications"].get("monochromatic_notification_icons").is_none());
+    assert!(saved["surfaces"]["speech_to_text"].get("monochromatic_widget_icon").is_none());
+    assert_eq!(saved["appearance"]["icons"], "color");
+
+    let reloaded = ConfigService::load(dir.path()).expect("reload");
+    assert_eq!(reloaded.settings().appearance.icons, Skin::Color);
+}
+
+#[test]
+fn update_setting_appearance_persists() {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+    service
+        .mutate(|c| c.update_setting("appearance", serde_json::json!({"logo": "mono", "icons": "color"})))
+        .expect("mutate");
+
+    let reloaded = ConfigService::load(dir.path()).expect("reload");
+    assert_eq!(reloaded.settings().appearance.logo, Skin::Mono);
+    assert_eq!(reloaded.settings().appearance.icons, Skin::Color);
 }

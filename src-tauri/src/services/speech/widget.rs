@@ -12,7 +12,7 @@ use super::{
 };
 use crate::commands::context::current_context_version;
 use crate::models::context::ContextItem;
-use crate::models::settings::{PillAnchor, WebviewProvider};
+use crate::models::settings::{PillAnchor, Skin, WebviewProvider};
 use crate::models::skill::{is_offered_in, OfferedIn, Skill};
 use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
@@ -526,7 +526,7 @@ async fn widget_settings(app: &AppHandle) -> WidgetSettings {
     let speech = &config.settings().surfaces.speech_to_text;
     WidgetSettings {
         enabled: speech.show_recording_widget,
-        monochromatic: speech.monochromatic_widget_icon,
+        monochromatic: config.settings().appearance.icons == Skin::Mono,
         at_cursor: speech.recording_widget_at_cursor,
         anchor: speech.recording_widget_anchor,
     }
