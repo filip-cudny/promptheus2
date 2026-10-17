@@ -6,7 +6,6 @@
   import BubbleEditField from "./components/BubbleEditField.svelte";
   import BubbleActionsFooter from "./components/BubbleActionsFooter.svelte";
   import { Trash2, Pencil, Copy, Check, SendHorizonal } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
   import { handleEditablePaste } from "$lib/utils/paste";
   import { highlightSkills } from "$lib/utils/skillHighlight";
   import { openImagePreview, openTextPreview } from "$lib/services/windowPreviews";
@@ -126,9 +125,12 @@
       onclick={copyContent}
       title="Copy text"
     />
-    <button class="icon-btn" class:active={editMode} onclick={toggleEditMode} title={editMode ? "View" : "Edit"}>
-      <Pencil size={ICON_SIZE.md} />
-    </button>
+    <ActionIconButton
+      icon={Pencil}
+      active={editMode}
+      onclick={toggleEditMode}
+      title={editMode ? "View" : "Edit"}
+    />
     {#if editMode}
       <ActionIconButton
         icon={SendHorizonal}
@@ -137,9 +139,12 @@
       />
     {/if}
     {#if showDelete}
-      <button class="icon-btn delete-btn" onclick={() => onDelete(node.node_id)} title="Delete">
-        <Trash2 size={ICON_SIZE.md} />
-      </button>
+      <ActionIconButton
+        icon={Trash2}
+        variant="danger"
+        onclick={() => onDelete(node.node_id)}
+        title="Delete"
+      />
     {/if}
   </BubbleActionsFooter>
 </div>
@@ -191,34 +196,6 @@
     font-weight: 500;
     line-height: 1.5;
     vertical-align: baseline;
-  }
-
-  .icon-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-2);
-    border: none;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-  }
-
-  .icon-btn:hover {
-    background: var(--surface-overlay);
-    color: var(--text-secondary);
-  }
-
-  .icon-btn.active {
-    background: rgba(74, 158, 187, 0.2);
-    color: var(--info);
-  }
-
-  .delete-btn:hover {
-    background: var(--danger-border);
-    border-color: var(--danger-border);
-    color: var(--danger);
   }
 
   .user-bubble.editing :global(.bubble-editable) {

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ContextItem } from "$lib/types/context";
   import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
+  import SectionHeader from "./components/SectionHeader.svelte";
   import Chip from "$lib/components/shared/ui/Chip.svelte";
   import ImageChipBar from "$lib/components/shared/ui/ImageChipBar.svelte";
   import {
@@ -13,6 +14,7 @@
     X,
   } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import { useCopyFeedback } from "$lib/utils/copyFeedback.svelte";
 
   let {
     items,
@@ -36,7 +38,7 @@
 
   let hasTextItems = $derived(items.some((i) => i.item_type === "text"));
   let isEmpty = $derived(items.length === 0);
-  let copyConfirm = $state<number | null>(null);
+  const copyFeedback = useCopyFeedback<number>();
 
   function truncateText(text: string, maxLength = 50): string {
     if (text.length <= maxLength) return text;
@@ -45,20 +47,13 @@
 
   async function handleChipCopy(idx: number, content: string) {
     await navigator.clipboard.writeText(content);
-    copyConfirm = idx;
-    setTimeout(() => (copyConfirm = null), 1200);
+    copyFeedback.flash(idx);
   }
 </script>
 
 <div class="context-section">
-  <div class="section-header">
-    <span class="header-label">
-      Context
-      {#if !isEmpty}
-        <span class="badge">{items.length}</span>
-      {/if}
-    </span>
-    <span class="header-actions">
+  <SectionHeader title="Context" count={isEmpty ? undefined : items.length}>
+    {#snippet actions()}
       <ActionIconButton
         icon={FileSymlink}
         confirmIcon={Check}
@@ -90,8 +85,8 @@
         title="Clear all context"
         disabled={isEmpty}
       />
-    </span>
-  </div>
+    {/snippet}
+  </SectionHeader>
 
   {#if !isEmpty}
     <div class="chips">
@@ -99,7 +94,7 @@
         {#if item.item_type === "text"}
           <Chip title={item.content} onclick={() => handleChipCopy(idx, item.content)}>
             <span class="chip-copy">
-              {#if copyConfirm === idx}
+              {#if copyFeedback.confirmed === idx}
                 <Check size={ICON_SIZE.md} />
               {:else}
                 <Copy size={ICON_SIZE.md} />
@@ -127,41 +122,6 @@
 <style>
   .context-section {
     padding: var(--space-1) var(--space-0);
-  }
-
-  .section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding: var(--space-2) var(--space-6);
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    font: inherit;
-    font-size: var(--font-size-sm);
-    text-transform: capitalize;
-    letter-spacing: var(--tracking-label);
-    box-sizing: border-box;
-  }
-
-  .header-label {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
-  .badge {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: var(--radius-xl);
-    padding: var(--space-0) var(--space-3);
-    font-size: var(--font-size-xs);
-    line-height: 16px;
-  }
-
-  .header-actions {
-    display: flex;
-    gap: var(--space-1);
   }
 
   .chips {

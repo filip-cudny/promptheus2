@@ -1,5 +1,6 @@
 <script lang="ts">
   import MenuList from "$lib/components/shared/ui/MenuList.svelte";
+  import MenuItem from "$lib/components/shared/ui/MenuItem.svelte";
   import { ArrowBigUp, MessageSquareShare, Mic, Play } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
@@ -29,38 +30,20 @@
 </script>
 
 <MenuList role="menu" expand>
-  <button
-    type="button"
-    role="menuitem"
-    class="menu-list-item"
-    onclick={onOpenInDialog}
-  >
-    <MessageSquareShare size={ICON_SIZE.md} />
-    <span class="menu-list-label">Open in dialog</span>
-  </button>
-  <button
-    type="button"
-    role="menuitem"
-    class="menu-list-item"
-    disabled={runDisabled}
-    onclick={onRunInDialog}
-  >
-    <Play size={ICON_SIZE.md} />
-    <span class="menu-list-label">Run in dialog</span>
-    <span class="menu-list-shortcut"><ArrowBigUp size={14} strokeWidth={2.25} /></span>
-  </button>
-  <button
-    type="button"
-    role="menuitem"
-    class="menu-list-item"
+  <MenuItem label="Open in dialog" onclick={onOpenInDialog}>
+    {#snippet icon()}<MessageSquareShare size={ICON_SIZE.md} />{/snippet}
+  </MenuItem>
+  <MenuItem label="Run in dialog" disabled={runDisabled} onclick={onRunInDialog}>
+    {#snippet icon()}<Play size={ICON_SIZE.md} />{/snippet}
+    {#snippet shortcut()}<ArrowBigUp size={14} strokeWidth={2.25} />{/snippet}
+  </MenuItem>
+  <MenuItem
+    label={recording ? "Stop recording" : "Run with transcription"}
     disabled={micDisabled}
     onclick={onAlternativeExecute}
   >
-    <Mic size={ICON_SIZE.md} />
-    <span class="menu-list-label">
-      {recording ? "Stop recording" : "Run with transcription"}
-    </span>
-  </button>
+    {#snippet icon()}<Mic size={ICON_SIZE.md} />{/snippet}
+  </MenuItem>
   {#if tooltip || metaEntries.length > 0}
     <div class="menu-list-separator"></div>
     {#if tooltip}

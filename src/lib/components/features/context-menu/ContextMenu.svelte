@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { MessageSquare } from "lucide-svelte";
+  import { ICON_SIZE } from "$lib/constants/ui";
   import type { MenuItem } from "$lib/types/menu";
   import {
     extractContextItems,
@@ -32,7 +34,6 @@
   import MenuEmptyState from "./components/MenuEmptyState.svelte";
   import MenuSeparator from "./components/MenuSeparator.svelte";
   import MenuItemRow from "./components/MenuItemRow.svelte";
-  import ChatRow from "./components/ChatRow.svelte";
   import SettingsToggleRow from "./components/SettingsToggleRow.svelte";
   import FooterHint from "./components/FooterHint.svelte";
   import ProviderMenuFooterHint from "./components/ProviderMenuFooterHint.svelte";
@@ -198,8 +199,12 @@
       {/if}
       {#if section.sectionId === "chat"}
         {@const chatDisabled = menu.isRecording()}
-        <ChatRow
+        {@const chatIndex = section.items[0]?.globalIndex}
+        <MenuItemRow
+          label="Chat"
+          selected={chatIndex === currentSelectedIndex}
           disabled={chatDisabled}
+          hoverHighlight
           bind:rowEl={chatRowEl}
           onhover={() => { if (positioning.hoverEnabled) menu.setSelectedIndex(-1); }}
           oncontextmenu={(e) => {
@@ -213,7 +218,9 @@
             await menu.closeMenu();
             await focusOrOpenChat();
           }}
-        />
+        >
+          {#snippet icon()}<MessageSquare size={ICON_SIZE.md} />{/snippet}
+        </MenuItemRow>
         <FloatingPanel
           visible={panels.chatProvidersOpen}
           anchorEl={chatRowEl}

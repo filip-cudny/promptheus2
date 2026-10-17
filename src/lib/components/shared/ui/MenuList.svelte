@@ -32,53 +32,6 @@
     width: 100%;
   }
 
-  .menu-list :global(.menu-list-item) {
-    appearance: none;
-    border: 0;
-    background: transparent;
-    color: var(--text-primary);
-    padding: 7px 12px;
-    text-align: left;
-    cursor: pointer;
-    font: inherit;
-    line-height: 1.35;
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .menu-list :global(.menu-list-item:hover:not(:disabled):not(.is-disabled)) {
-    background: var(--surface-overlay);
-    color: var(--text-primary);
-  }
-
-  .menu-list :global(.menu-list-item.is-active) {
-    color: var(--text-primary);
-    background: var(--surface-overlay-faint);
-  }
-
-  .menu-list :global(.menu-list-item:disabled),
-  .menu-list :global(.menu-list-item.is-disabled) {
-    color: var(--text-disabled);
-    cursor: default;
-  }
-
-  .menu-list :global(.menu-list-label) {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .menu-list :global(.menu-list-shortcut) {
-    color: var(--text-muted);
-    padding-left: 8px;
-    display: inline-flex;
-    align-items: center;
-  }
-
   .menu-list :global(.menu-list-separator) {
     height: 1px;
     background: var(--surface-overlay);
@@ -120,28 +73,5 @@
     margin-left: auto;
     text-align: right;
     word-break: break-all;
-  }
-
-  .menu-list :global(.menu-list-icon) {
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-primary);
-  }
-
-  .menu-list :global(.menu-list-icon svg) {
-    width: 100%;
-    height: 100%;
-    display: block;
-  }
-
-  .menu-list :global(.menu-list-icon img) {
-    width: 100%;
-    height: 100%;
-    display: block;
-    object-fit: contain;
   }
 </style>

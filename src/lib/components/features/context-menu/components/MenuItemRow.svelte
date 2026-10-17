@@ -1,10 +1,15 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import { Mic, Square, X } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
 
   type Props = {
-    selected: boolean;
-    disabled: boolean;
+    selected?: boolean;
+    disabled?: boolean;
+    rowEl?: HTMLElement;
+    hoverHighlight?: boolean;
+    icon?: Snippet;
+    trailing?: Snippet;
     executing?: boolean;
     recording?: boolean;
     iconName?: string | null;
@@ -16,8 +21,12 @@
   };
 
   let {
-    selected,
-    disabled,
+    selected = false,
+    disabled = false,
+    rowEl = $bindable(),
+    hoverHighlight = false,
+    icon,
+    trailing,
     executing = false,
     recording = false,
     iconName = null,
@@ -33,6 +42,9 @@
 <div
   class="menu-item-row"
   class:selected
+  class:has-trailing={trailing}
+  class:hover-highlight={hoverHighlight}
+  bind:this={rowEl}
   onmouseenter={onhover}
   oncontextmenu={oncontextmenu}
 >
@@ -45,6 +57,9 @@
     tabindex={-1}
     {onclick}
   >
+    {#if icon}
+      {@render icon()}
+    {/if}
     {#if iconName === "square"}
       <span class="item-icon"><Square size={ICON_SIZE.sm} /></span>
     {:else if iconName === "mic"}
@@ -61,6 +76,9 @@
     {/if}
     <span class="item-label">{label}</span>
   </button>
+  {#if trailing}
+    {@render trailing()}
+  {/if}
 </div>
 
 <style>
@@ -69,11 +87,21 @@
     align-items: center;
   }
 
-  .menu-item-row.selected {
+  .menu-item-row.has-trailing {
+    padding-right: var(--space-4);
+  }
+
+  .menu-item-row.has-trailing .menu-item {
+    padding-right: var(--space-2);
+  }
+
+  .menu-item-row.selected,
+  .menu-item-row.hover-highlight:hover {
     background: var(--surface-overlay);
   }
 
-  .menu-item-row.selected:active {
+  .menu-item-row.selected:active,
+  .menu-item-row.hover-highlight:active {
     background: rgba(255, 255, 255, 0.15);
   }
 

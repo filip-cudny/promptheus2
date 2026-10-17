@@ -9,6 +9,9 @@
     LoaderCircle,
   } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import { useCopyFeedback } from "$lib/utils/copyFeedback.svelte";
+  import SectionHeader from "./components/SectionHeader.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import Chip from "$lib/components/shared/ui/Chip.svelte";
   import type {
     LastInteractionData,
@@ -30,13 +33,12 @@
     onRetryTranscription: (entryId: string) => Promise<void>;
   } = $props();
 
-  let copyConfirm = $state<string | null>(null);
+  const copyFeedback = useCopyFeedback<LastInteractionChip>();
 
   async function handleCopy(chip: LastInteractionChip, available: boolean) {
     if (!available) return;
     await onCopyChip(chip);
-    copyConfirm = chip;
-    setTimeout(() => (copyConfirm = null), 1200);
+    copyFeedback.flash(chip);
   }
 
   async function handleOpenLastInteraction() {
@@ -78,26 +80,21 @@
 </script>
 
 <div class="last-interaction-section">
-  <div class="section-header">
-    <span class="header-label">Last interaction</span>
-    <div class="header-actions">
-      <button
-        class="action-btn"
+  <SectionHeader title="Last interaction">
+    {#snippet actions()}
+      <ActionIconButton
+        icon={SquareArrowOutUpRight}
         onclick={handleOpenLastInteraction}
         disabled={!data?.last_text_entry}
         title="Open last interaction"
-      >
-        <SquareArrowOutUpRight size={ICON_SIZE.md} />
-      </button>
-      <button
-        class="action-btn"
+      />
+      <ActionIconButton
+        icon={History}
         onclick={onOpenHistory}
         title="View execution history"
-      >
-        <History size={ICON_SIZE.md} />
-      </button>
-    </div>
-  </div>
+      />
+    {/snippet}
+  </SectionHeader>
 
   {#if hasAnyContent}
     <div class="chips">
@@ -108,7 +105,7 @@
           title={chip.preview ?? "No content"}
         >
           <span class="chip-copy">
-            {#if copyConfirm === chip.type}
+            {#if copyFeedback.confirmed === chip.type}
               <Check size={ICON_SIZE.md} />
             {:else}
               <Copy size={ICON_SIZE.md} />
@@ -129,7 +126,7 @@
               <span class="spinning"><LoaderCircle size={ICON_SIZE.md} /></span>
             {:else if transcriptionFailed}
               <CircleAlert size={ICON_SIZE.md} />
-            {:else if copyConfirm === "transcription"}
+            {:else if copyFeedback.confirmed === "transcription"}
               <Check size={ICON_SIZE.md} />
             {:else}
               <Copy size={ICON_SIZE.md} />
@@ -158,52 +155,6 @@
 <style>
   .last-interaction-section {
     padding: var(--space-1) var(--space-0);
-  }
-
-  .section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    padding: var(--space-2) var(--space-6);
-    color: var(--text-muted);
-    font-size: var(--font-size-sm);
-    text-transform: capitalize;
-    letter-spacing: var(--tracking-label);
-    box-sizing: border-box;
-  }
-
-  .header-label {
-    display: flex;
-    align-items: center;
-  }
-
-  .action-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 3px;
-    border: none;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-  }
-
-  .action-btn:hover:not(:disabled) {
-    background: var(--surface-overlay);
-    color: var(--text-secondary);
-  }
-
-  .action-btn:disabled {
-    color: rgba(255, 255, 255, 0.15);
-    cursor: default;
-  }
-
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
   }
 
   .chips {
@@ -253,11 +204,5 @@
   .spinning {
     display: flex;
     animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 </style>

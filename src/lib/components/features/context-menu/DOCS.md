@@ -84,7 +84,7 @@ Renders when `item.item_type === "context"`. Extracts `ContextItem[]` from `item
 
 | Element | Description |
 |---------|-------------|
-| Section header | "Context" label + item count badge (when not empty) |
+| Section header | `SectionHeader` (`components/`): "Context" label + item count badge (when not empty), action buttons in its `actions` snippet |
 | Text chip | `Text #{number}` then the truncated text preview (first 50 chars) |
 | Image chip | One `ImageChipBar` per image, labelled `Image #{number}` from the item's `number` |
 | Replace button | Replaces context with clipboard content via `setContextFromClipboard()` |
@@ -115,12 +115,14 @@ Renders when `item.item_type === "last_interaction"`. The backend injects last i
 
 | Element | Description |
 |---------|-------------|
-| Section header | "Last interaction" label + History button |
+| Section header | `SectionHeader`: "Last interaction" label + open and History buttons (`ActionIconButton`) |
 | Input chip | Preview of the last text entry's prompt (copy on click) |
 | Output chip | Preview of the last text entry's response (copy on click) |
 | Transcription chip | Last speech entry — stateful (see below) |
 
 `item.data` carries **previews only**, capped at 200 characters. Clicking a chip calls `copyLastInteraction(chip)` → the `copy_last_interaction` command, which resolves the full text from the stored conversation tree and writes it to the clipboard. Never put chip text on the clipboard from the frontend: the stored `output_preview` is a summary, and copying it hands the user a truncated response. Keeping the full text out of `item.data` also keeps long responses off the IPC path on every menu open.
+
+Both sections flash the check icon of a copied chip through `useCopyFeedback` (`$lib/utils/copyFeedback.svelte`, 1200 ms).
 
 Chips are disabled (grayed out) when there is no preview, which is also the signal that there is nothing to copy. The store refreshes on `"history-changed"` events so chips update after each execution.
 
@@ -138,4 +140,4 @@ A failed transcription is a real history entry (`success = false`), which is wha
 
 ### Other types
 
-Speech, settings, and other item types are rendered as `MenuItemRow` (label + icon + optional prompt number) and use the generic `execute_menu_item` backend command.
+Speech, settings, and other item types are rendered as `MenuItemRow` (label + icon + optional prompt number) and use the generic `execute_menu_item` backend command. `MenuItemRow` also renders the Chat row (`icon` snippet, `hoverHighlight`: highlighted on mouse hover and on arrow-key `selected`) and the Settings toggle row (`SettingsToggleRow`: chevron `icon` snippet, `trailing` snippet with the settings-window button).

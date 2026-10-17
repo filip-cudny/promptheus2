@@ -6,7 +6,6 @@
     placeholder,
     disabled = false,
     minHeight = 320,
-    onTextareaRef,
   }: {
     value?: string;
     highlightPattern?: RegExp;
@@ -14,15 +13,10 @@
     placeholder?: string;
     disabled?: boolean;
     minHeight?: number;
-    onTextareaRef?: (el: HTMLTextAreaElement | undefined) => void;
   } = $props();
 
   let textarea = $state<HTMLTextAreaElement | undefined>(undefined);
   let highlightLayer = $state<HTMLPreElement | undefined>(undefined);
-
-  $effect(() => {
-    onTextareaRef?.(textarea);
-  });
 
   const decorate = $derived(Boolean(highlightPattern));
 
@@ -63,6 +57,19 @@
     if (!textarea || !highlightLayer) return;
     highlightLayer.scrollTop = textarea.scrollTop;
     highlightLayer.scrollLeft = textarea.scrollLeft;
+  }
+
+  export function insert(token: string) {
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    value = value.slice(0, start) + token + value.slice(end);
+    queueMicrotask(() => {
+      if (!textarea) return;
+      const pos = start + token.length;
+      textarea.focus();
+      textarea.setSelectionRange(pos, pos);
+    });
   }
 
   function handleInput(e: Event) {

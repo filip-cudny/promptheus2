@@ -15,7 +15,6 @@
   import BubbleActionsFooter from "./components/BubbleActionsFooter.svelte";
   import { useEditSegments } from "./drivers/useEditSegments.svelte";
   import { Copy, Check, RefreshCw, Trash2, Pencil, Save } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
     node,
@@ -245,9 +244,12 @@
         onclick={copyContent}
         title="Copy"
       />
-      <button class="icon-btn" class:active={editMode} onclick={toggleEditMode} title={editMode ? "View" : "Edit"}>
-        <Pencil size={ICON_SIZE.md} />
-      </button>
+      <ActionIconButton
+        icon={Pencil}
+        active={editMode}
+        onclick={toggleEditMode}
+        title={editMode ? "View" : "Edit"}
+      />
       {#if editMode}
         <ActionIconButton
           icon={Save}
@@ -257,9 +259,12 @@
       {/if}
 
       {#if showDelete}
-        <button class="icon-btn delete-btn" onclick={() => onDelete(node.node_id)} title="Delete">
-          <Trash2 size={ICON_SIZE.md} />
-        </button>
+        <ActionIconButton
+          icon={Trash2}
+          variant="danger"
+          onclick={() => onDelete(node.node_id)}
+          title="Delete"
+        />
       {/if}
     </div>
   </BubbleActionsFooter>
@@ -283,34 +288,6 @@
     display: flex;
     gap: var(--space-2);
     align-items: center;
-  }
-
-  .icon-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-2);
-    border: none;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-  }
-
-  .icon-btn:hover {
-    background: var(--surface-overlay);
-    color: var(--text-secondary);
-  }
-
-  .icon-btn.active {
-    background: var(--surface-overlay-strong);
-    color: var(--text-primary);
-  }
-
-  .delete-btn:hover {
-    background: var(--danger-border);
-    border-color: var(--danger-border);
-    color: var(--danger);
   }
 
   .bubble-textarea {

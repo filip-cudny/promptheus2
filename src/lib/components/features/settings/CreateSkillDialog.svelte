@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { X } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
+  import Modal from "$lib/components/shared/ui/Modal.svelte";
   import { validateSkillSlug } from "$lib/services/skills";
 
   let {
@@ -73,29 +72,10 @@
       submitting = false;
     }
   }
-
-  function handleBackdrop(e: MouseEvent) {
-    if ((e.target as HTMLElement).classList.contains("backdrop")) {
-      onClose();
-    }
-  }
-
-  function handleKey(e: KeyboardEvent) {
-    if (e.key === "Escape") onClose();
-  }
 </script>
 
-<svelte:window onkeydown={handleKey} />
-
-<div class="backdrop" onmousedown={handleBackdrop} role="presentation">
-  <form class="dialog" onsubmit={handleSubmit}>
-    <header>
-      <h2>Create skill</h2>
-      <button type="button" class="close" onclick={onClose} aria-label="Close">
-        <X size={ICON_SIZE.md} />
-      </button>
-    </header>
-
+<Modal title="Create skill" {onClose}>
+  <form class="form" onsubmit={handleSubmit}>
     <div class="field">
       <label for="csd-slug">Slug</label>
       <div class="slug-input">
@@ -163,57 +143,11 @@
       </button>
     </footer>
   </form>
-</div>
+</Modal>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: var(--z-modal, 1000);
-  }
-
-  .dialog {
-    width: 480px;
-    max-width: calc(100vw - var(--space-8));
-    background: var(--surface-raised);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-lg);
-    padding: var(--space-6) var(--space-7) var(--space-5);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    box-shadow: var(--shadow-lg);
-  }
-
-  header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  header h2 {
-    margin: 0;
-    font-size: var(--font-size-lg);
-    font-weight: var(--font-weight-semibold);
-    color: var(--text-primary);
-  }
-
-  .close {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: var(--space-1);
-    border-radius: var(--radius-sm);
-  }
-
-  .close:hover {
-    background: var(--surface-overlay-faint);
-    color: var(--text-primary);
+  .form {
+    display: contents;
   }
 
   .field {

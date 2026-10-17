@@ -74,7 +74,7 @@ Inside a section, group related fields in `<section class="card">` with an upper
 
 ### Danger zone
 
-Last card, red border (`var(--danger-border)`), separated visually. Destructive actions use a two-step inline confirm — never an OS dialog or a modal-on-modal.
+`DangerZone.svelte` is the last card of `ModelEditor` and `SkillEditor`: red border (`var(--danger-border)`), separated visually. Props: `noun`, `name` (shown in the confirm), `compact`, `warning` snippet, `onDuplicate`, `onDelete`, optional `onExport`. Destructive actions use a two-step inline confirm — never an OS dialog or a modal-on-modal.
 
 ```
 [Delete model]  →  "Delete X? [Cancel] [Yes, delete]"
@@ -142,9 +142,9 @@ The list caption replaced a 7 px accent dot before the row name. The dot collide
 
 ### Prompt editor
 
-`PromptEditor.svelte` is the single component for any prompt slot. It loads via `getPrompt(kind)`, autosaves on change with the `autosave_debounce_ms` debounce, and supports `Cmd/Ctrl+S` to flush immediately. There is no Save button — the only persistence affordance is `<SaveStatusIndicator>` in the title row (driven by `useSaveTracker` — see "Persistence" above). The file path is hidden behind a small `…` overflow next to the title (custom paths require manual JSON edit).
+`PromptEditor.svelte` is the single component for any prompt slot. It loads via `getPrompt(kind)`, autosaves on change with the `autosave_debounce_ms` debounce, and supports `Cmd/Ctrl+S` to flush immediately. There is no Save button — the only persistence affordance is `<SaveStatusIndicator>` in the title row (driven by `useSaveTracker` — see "Persistence" above). The file path is hidden behind a `FilePathReveal` (`…`) next to the title (custom paths require manual JSON edit).
 
-Only `kind: "environment"` shows the placeholders affordance: a `{ }` icon button in the title row opens an `EnvPlaceholdersPopover` anchored to the button. Clicking a chip inserts the token at the cursor in the textarea and closes the popover. Other prompts get a description that says they are sent verbatim — no placeholder substitution happens for them.
+Only `kind: "environment"` shows the placeholders affordance: a `{ }` icon button in the title row opens an `EnvPlaceholdersPopover` anchored to the button. Clicking a chip calls `HighlightedTextarea.insert(token)` and closes the popover. The editor icon buttons use the global `.editor-icon-btn` class (`styles/global.css`). Other prompts get a description that says they are sent verbatim — no placeholder substitution happens for them.
 
 ### Section shells & tabbed prompts
 

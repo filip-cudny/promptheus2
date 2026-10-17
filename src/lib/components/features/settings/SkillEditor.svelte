@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from "svelte";
-  import { Copy, CopyPlus, Trash2, Download, ChevronRight } from "lucide-svelte";
+  import { Copy, ChevronRight } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { writeTextFile } from "@tauri-apps/plugin-fs";
   import FormRow from "$lib/components/shared/ui/FormRow.svelte";
+  import DangerZone from "./DangerZone.svelte";
   import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import ParametersKnown from "./ParametersKnown.svelte";
   import ParametersCustom, {
@@ -69,7 +70,6 @@
     untrack(() => entriesFromExtra(extraOf(skill.parameters))),
   );
   let customErrors = $state<Record<string, string>>({});
-  let confirmDelete = $state(false);
   let copiedSlug = $state(false);
   let bodyError = $state<string | null>(null);
   let inheritedExpanded = $state(false);
@@ -353,6 +353,11 @@
   );
 </script>
 
+{#snippet deleteWarning()}
+  Past conversations using it will keep their history, but
+  <code>/{skill.name}</code> will stop working.
+{/snippet}
+
 <div class="skill-editor">
   <header class="editor-header">
     <h1>{draft.display_name || skill.name}</h1>
@@ -510,40 +515,15 @@
 
   <SkillPreview body={draft.body} skillName={skill.name} />
 
-  <section class="card danger">
-    <h3>Danger zone</h3>
-    <div class="danger-row">
-      <button class="duplicate-btn" onclick={handleDuplicate}>
-        <CopyPlus size={ICON_SIZE.md} />
-        <span>Duplicate skill</span>
-      </button>
-      <button class="export-btn" onclick={handleExport}>
-        <Download size={ICON_SIZE.md} />
-        <span>Export .md</span>
-      </button>
-      {#if !confirmDelete}
-        <button class="delete-btn" onclick={() => (confirmDelete = true)}>
-          <Trash2 size={ICON_SIZE.md} />
-          <span>Delete skill</span>
-        </button>
-      {:else}
-        <div class="delete-confirm">
-          <p>
-            Delete <strong>{draft.display_name || skill.name}</strong>?
-            <br />
-            <span class="warn">
-              Past conversations using it will keep their history, but
-              <code>/{skill.name}</code> will stop working.
-            </span>
-          </p>
-          <div class="confirm-actions">
-            <button onclick={() => (confirmDelete = false)}>Cancel</button>
-            <button class="delete-btn confirm" onclick={handleDelete}>Yes, delete</button>
-          </div>
-        </div>
-      {/if}
-    </div>
-  </section>
+  <DangerZone
+    compact
+    noun="skill"
+    name={draft.display_name || skill.name}
+    warning={deleteWarning}
+    onDuplicate={handleDuplicate}
+    onExport={handleExport}
+    onDelete={handleDelete}
+  />
 </div>
 
 <style>
@@ -588,10 +568,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
-  }
-
-  .card.danger {
-    border-color: var(--danger-border);
   }
 
   h3 {
@@ -765,75 +741,5 @@
   .inherited-table tr:last-child th,
   .inherited-table tr:last-child td {
     border-bottom: none;
-  }
-
-  .danger-row {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-  }
-
-  .delete-btn,
-  .duplicate-btn,
-  .export-btn {
-    align-self: flex-start;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-3) var(--space-6);
-    background: transparent;
-    border: 1px solid var(--border-hard);
-    border-radius: 5px;
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-md);
-    cursor: pointer;
-  }
-
-  .duplicate-btn:hover,
-  .export-btn:hover {
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .delete-btn {
-    color: var(--danger);
-    border-color: var(--danger-border);
-  }
-
-  .delete-btn:hover {
-    background: var(--danger-bg-soft);
-  }
-
-  .delete-confirm p {
-    font-size: var(--font-size-md);
-    color: var(--text-primary);
-    margin: 0 0 var(--space-3);
-  }
-
-  .delete-confirm .warn {
-    color: var(--warning);
-    font-size: var(--font-size-sm);
-  }
-
-  .confirm-actions {
-    display: flex;
-    gap: var(--space-3);
-  }
-
-  .confirm-actions button {
-    padding: 5px var(--space-5);
-    background: var(--surface-elevated);
-    border: 1px solid var(--border-hard-2);
-    border-radius: var(--radius-md);
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-md);
-    cursor: pointer;
-  }
-
-  .confirm-actions .confirm {
-    background: var(--danger-bg-soft);
-    color: var(--danger);
-    border-color: var(--danger-border);
   }
 </style>

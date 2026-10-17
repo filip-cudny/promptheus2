@@ -13,6 +13,8 @@
     disabled = false,
     size = ICON_SIZE.md,
     confirmed = $bindable(false),
+    active = false,
+    variant = "default",
   }: {
     icon: LucideIcon;
     confirmIcon?: LucideIcon;
@@ -21,6 +23,8 @@
     disabled?: boolean;
     size?: number;
     confirmed?: boolean;
+    active?: boolean;
+    variant?: "default" | "danger";
   } = $props();
   let ActiveIcon = $derived(confirmed && confirmIcon ? confirmIcon : icon);
 
@@ -34,7 +38,7 @@
   }
 </script>
 
-<button class="action-icon-btn" {title} {disabled} onclick={handleClick}>
+<button class="action-icon-btn" class:active class:danger={variant === "danger"} {title} {disabled} onclick={handleClick}>
   <ActiveIcon {size} />
 </button>
 
@@ -54,6 +58,16 @@
   .action-icon-btn:hover:not(:disabled) {
     background: var(--surface-overlay);
     color: var(--text-secondary);
+  }
+
+  .action-icon-btn.active {
+    background: rgba(74, 158, 187, 0.2);
+    color: var(--info);
+  }
+
+  .action-icon-btn.danger:hover:not(:disabled) {
+    background: var(--danger-border);
+    color: var(--danger);
   }
 
   .action-icon-btn:disabled {

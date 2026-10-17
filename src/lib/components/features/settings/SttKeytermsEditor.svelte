@@ -8,6 +8,7 @@
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import HighlightedTextarea from "$lib/components/shared/ui/HighlightedTextarea.svelte";
+  import FilePathReveal from "$lib/components/shared/ui/FilePathReveal.svelte";
   import type { SttKeytermsDoc } from "$lib/types";
 
   let { description }: { description?: string } = $props();
@@ -20,7 +21,6 @@
   let mode = $state<"chips" | "raw">("chips");
   let inputValue = $state("");
   let inputEl = $state<HTMLInputElement | undefined>(undefined);
-  let pathOpen = $state(false);
 
   const tracker = useSaveTracker({
     debounceMs: settingsStore.settings?.autosave_debounce_ms ?? 1000,
@@ -207,7 +207,7 @@
       <div class="head-actions">
         <button
           type="button"
-          class="icon-btn"
+          class="editor-icon-btn"
           class:active={mode === "raw"}
           onclick={toggleMode}
           title={mode === "raw" ? "Switch to chip view" : "Edit raw file"}
@@ -220,10 +220,7 @@
           {/if}
         </button>
         {#if doc?.path}
-          <details class="path-details" bind:open={pathOpen}>
-            <summary title="Show file path">…</summary>
-            <code class="path">{doc.path}</code>
-          </details>
+          <FilePathReveal path={doc.path} />
         {/if}
       </div>
     </div>
@@ -382,79 +379,6 @@
     display: flex;
     align-items: center;
     gap: var(--space-1);
-  }
-
-  .icon-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    color: var(--text-muted);
-    cursor: pointer;
-    transition:
-      background var(--motion-fast) var(--ease-default),
-      color var(--motion-fast) var(--ease-default),
-      border-color var(--motion-fast) var(--ease-default);
-  }
-
-  .icon-btn:hover {
-    background: var(--surface-overlay-faint);
-    color: var(--text-primary);
-  }
-
-  .icon-btn.active {
-    background: var(--accent-bg-soft);
-    color: var(--accent);
-    border-color: var(--accent-border);
-  }
-
-  .path-details {
-    position: relative;
-    font-size: var(--font-size-xs);
-  }
-
-  .path-details summary {
-    list-style: none;
-    cursor: pointer;
-    color: var(--text-faint);
-    padding: 0 var(--space-2);
-    border-radius: var(--radius-sm);
-    user-select: none;
-  }
-
-  .path-details summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .path-details summary:hover {
-    color: var(--text-muted);
-    background: var(--surface-overlay-faint);
-  }
-
-  .path-details[open] summary {
-    color: var(--text-muted);
-  }
-
-  .path-details code {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: var(--space-1);
-    padding: var(--space-2) var(--space-3);
-    font-family: var(--font-mono);
-    font-size: var(--font-size-xs);
-    color: var(--text-muted);
-    background: var(--surface-floating-popover);
-    border: 1px solid var(--surface-floating-popover-border);
-    border-radius: var(--radius-sm);
-    white-space: nowrap;
-    box-shadow: var(--shadow-md);
-    z-index: var(--z-overlay);
   }
 
   .description {

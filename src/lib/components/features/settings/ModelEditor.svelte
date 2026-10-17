@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from "svelte";
-  import { Eye, EyeOff, Copy, Trash2, CopyPlus } from "lucide-svelte";
+  import { Eye, EyeOff, Copy } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { formatSurfaceList } from "$lib/constants/surfaces";
   import EnvRefChip, { parseEnvRef } from "./EnvRefChip.svelte";
@@ -12,6 +12,7 @@
     type CustomParamEntry,
   } from "./ParametersCustom.svelte";
   import FormRow from "$lib/components/shared/ui/FormRow.svelte";
+  import DangerZone from "./DangerZone.svelte";
   import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
   import {
@@ -62,7 +63,6 @@
   let envResolved = $state<boolean>(false);
   let envVarName = $state<string | null>(null);
   let showApiKey = $state(false);
-  let confirmDelete = $state(false);
   let copiedId = $state(false);
 
   const tracker = useSaveTracker({ debounceMs: untrack(() => debounceMs) });
@@ -278,6 +278,12 @@
     draft.capabilities ?? getCachedCapabilities(model?.id ?? null),
   );
 </script>
+
+{#snippet inUseWarning()}
+  It is currently in use by
+  {surfaces.length === 1 ? "surface" : "surfaces"}
+  "{surfacesLabel}".
+{/snippet}
 
 <div class="model-editor">
   <header class="editor-header">
@@ -497,41 +503,13 @@
     </section>
   {/if}
 
-  <section class="card danger">
-    <h3>Danger zone</h3>
-    <div class="danger-row">
-      <button class="duplicate-btn" onclick={handleDuplicate}>
-        <CopyPlus size={ICON_SIZE.md} />
-        <span>Duplicate model</span>
-      </button>
-      {#if !confirmDelete}
-        <button class="delete-btn" onclick={() => (confirmDelete = true)}>
-          <Trash2 size={ICON_SIZE.md} />
-          <span>Delete model</span>
-        </button>
-      {:else}
-        <div class="delete-confirm">
-          <p>
-            Delete <strong>{draft.display_name || "this model"}</strong>?
-            {#if surfaces.length > 0}
-              <br />
-              <span class="warn">
-                It is currently in use by
-                {surfaces.length === 1 ? "surface" : "surfaces"}
-                "{surfacesLabel}".
-              </span>
-            {/if}
-          </p>
-          <div class="confirm-actions">
-            <button onclick={() => (confirmDelete = false)}>Cancel</button>
-            <button class="delete-btn confirm" onclick={handleDelete}>
-              Yes, delete
-            </button>
-          </div>
-        </div>
-      {/if}
-    </div>
-  </section>
+  <DangerZone
+    noun="model"
+    name={draft.display_name || "this model"}
+    warning={surfaces.length > 0 ? inUseWarning : undefined}
+    onDuplicate={handleDuplicate}
+    onDelete={handleDelete}
+  />
 
   <footer class="meta">
     <span>ID: <code>{model.id}</code></span>
@@ -585,10 +563,6 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
-  }
-
-  .card.danger {
-    border-color: var(--danger-border);
   }
 
   h3 {
@@ -726,74 +700,6 @@
   .helper strong {
     color: var(--text-secondary);
     font-weight: var(--font-weight-semibold);
-  }
-
-  .danger-row {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-  }
-
-  .delete-btn,
-  .duplicate-btn {
-    align-self: flex-start;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-3) var(--space-6);
-    background: transparent;
-    border: 1px solid var(--border-hard);
-    border-radius: 5px;
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-md);
-    cursor: pointer;
-  }
-
-  .duplicate-btn:hover {
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .delete-btn {
-    color: var(--danger);
-    border-color: var(--danger-border);
-  }
-
-  .delete-btn:hover {
-    background: var(--danger-bg-soft);
-  }
-
-  .delete-confirm p {
-    font-size: var(--font-size-md);
-    color: var(--text-primary);
-    margin: var(--space-0) var(--space-0) var(--space-4);
-  }
-
-  .delete-confirm .warn {
-    color: var(--warning);
-    font-size: var(--font-size-sm);
-  }
-
-  .confirm-actions {
-    display: flex;
-    gap: var(--space-4);
-  }
-
-  .confirm-actions button {
-    padding: 5px var(--space-5);
-    background: var(--surface-elevated);
-    border: 1px solid var(--border-hard-2);
-    border-radius: var(--radius-md);
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-md);
-    cursor: pointer;
-  }
-
-  .confirm-actions .confirm {
-    background: var(--danger-bg-soft);
-    color: var(--danger);
-    border-color: var(--danger-border);
   }
 
   .meta {

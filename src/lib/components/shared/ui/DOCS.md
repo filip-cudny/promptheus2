@@ -29,6 +29,25 @@ For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconPro
 - Borderless transparent button — no border, hover adds subtle background.
 - Use `confirmIcon={Check}` for actions where the user needs visual feedback (copy, save). Omit for actions with immediate visible effect (navigate, regenerate).
 - Icon sizes are defined in `$lib/constants/ui.ts` — never hardcode pixel values.
+- `active` marks a toggled-on button (tint of `--info`); `variant="danger"` turns the hover red.
+
+### FilePathReveal
+
+- `path`; renders a small `…` summary that reveals the file path in a popover anchored to the right edge of its container (the title row of an editor).
+
+### HighlightedTextarea
+
+- `bind:value`, `highlightPattern` (placeholder regex), `unknownTokenChecker`, `placeholder`, `disabled`, `minHeight`.
+- Exports `insert(token)`: inserts at the caret, keeps the caret after the token and updates the bound `value`; callers use it through `bind:this`.
+
+### Modal
+
+- `title`, `width` (px, default 480), `onClose`, `children`. Backdrop, header with close button, panel; a mousedown on the backdrop or `Escape` calls `onClose`.
+- The panel is a flex column; children (fields, footer) are laid out inside it. Focus is the caller's job (`onMount`).
+
+### MenuItem
+
+- `label`, `icon` and `shortcut` snippets, `active`, `activeStyle`, `disabled`, `onclick`. Rows inside `MenuList`.
 
 ### CollapsibleSection
 
