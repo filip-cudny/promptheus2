@@ -13,14 +13,10 @@ use crate::models::speech::{
     SpeechTranscriptionError, SpeechTranscriptionRetry,
 };
 use crate::commands::settings::apply_settings_reload;
-use crate::services::ai::AiService;
 use crate::commands::clipboard::store_pending_copy;
 use crate::services::clipboard::{ClipboardFingerprint, ClipboardService};
 use crate::services::config::{ConfigService, KeytermsDoc};
-use crate::services::context::ContextManagerService;
 use crate::services::execution::skill_executor::run_skill_stream;
-use crate::services::execution::PromptExecutionService;
-use crate::services::recent_apps::RecentAppsState;
 use crate::services::notification::{NotificationLevel, NotificationService};
 use crate::services::skill::SkillService;
 use crate::services::speech::widget::{configured_providers, pill_targets, RecordingWidget};
@@ -241,16 +237,7 @@ async fn run_pill_skill(app: &AppHandle, skill_id: String, text: String, generat
     );
     let started = std::time::Instant::now();
     let result = run_skill_stream(
-        app.clone(),
-        Arc::clone(&*app.state::<Arc<Mutex<ConfigService>>>()),
-        (*app.state::<ClipboardService>()).clone(),
-        Arc::clone(&*app.state::<Arc<Mutex<AiService>>>()),
-        Arc::clone(&*app.state::<Arc<Mutex<SkillService>>>()),
-        Arc::clone(&*app.state::<Arc<Mutex<ContextManagerService>>>()),
-        Arc::clone(&*app.state::<Arc<Mutex<SqliteHistoryService>>>()),
-        (*app.state::<NotificationService>()).clone(),
-        Arc::clone(&*app.state::<Arc<Mutex<PromptExecutionService>>>()),
-        Arc::clone(&*app.state::<Arc<RecentAppsState>>()),
+        app,
         skill_id.clone(),
         Some(text),
         InvocationSource::Pill,

@@ -17,7 +17,7 @@ use crate::models::settings::ModelParameters;
 use crate::services::ai::AiService;
 use crate::services::config::ConfigService;
 use crate::services::conversation_context::ConversationContextCache;
-use crate::services::execution::lifecycle::{LiveExecution, PromptExecutionService};
+use crate::services::execution::lifecycle::PromptExecutionService;
 use crate::services::mcp::McpRegistry;
 use crate::services::recent_apps::RecentAppsState;
 use crate::services::skill_message;
@@ -300,14 +300,12 @@ impl ConversationExecutor {
                                 "Tool loop reached max iterations ({})",
                                 MAX_TOOL_LOOP_ITERATIONS
                             );
-                            ConversationExecutor::finalize_done(
-                                &live_execution,
+                            live_execution.lock().await.finish_done(
                                 result.full_text,
                                 result.full_thinking,
                                 result.prompt_tokens,
                                 result.completion_tokens,
-                            )
-                            .await;
+                            );
                         }
                         prompt_execution.lock().await.clear_live();
                         return Ok(());
@@ -352,24 +350,4 @@ impl ConversationExecutor {
             }
         }
     }
-
-    pub async fn finalize_done(
-        live: &Arc<tokio::sync::Mutex<LiveExecution>>,
-        full_text: String,
-        full_thinking: Option<String>,
-        prompt_tokens: Option<usize>,
-        completion_tokens: Option<usize>,
-    ) {
-        let mut live = live.lock().await;
-        live.snapshot.finished = true;
-        if let Some(ref ch) = live.channel {
-            let _ = ch.send(crate::models::ai::StreamEvent::Done {
-                full_text,
-                full_thinking,
-                prompt_tokens,
-                completion_tokens,
-            });
-        }
-    }
 }
-

@@ -8,49 +8,27 @@ use crate::models::ai::StreamEvent;
 use crate::models::history::{InvocationSource, OutputRoute};
 use crate::models::message::{AppliedSkill, ConversationNodeForExecution, ImageData};
 use crate::services::ai::AiService;
-use crate::services::clipboard::ClipboardService;
 use crate::services::config::ConfigService;
-use crate::services::context::ContextManagerService;
 use crate::services::conversation_context::ConversationContextCache;
 use crate::services::execution::conversation_executor::ConversationExecutor;
 use crate::services::execution::skill_executor::run_skill_stream;
 use crate::services::execution::PromptExecutionService;
 use crate::services::mcp::McpRegistry;
-use crate::services::notification::NotificationService;
 use crate::services::recent_apps::RecentAppsState;
 use crate::services::skill::SkillService;
 use crate::services::skill_message;
 use crate::services::sqlite_history::SqliteHistoryService;
 
-#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn execute_skill(
     app: AppHandle,
-    config: State<'_, Arc<Mutex<ConfigService>>>,
-    clipboard: State<'_, ClipboardService>,
-    ai: State<'_, Arc<Mutex<AiService>>>,
-    skill_service: State<'_, Arc<Mutex<SkillService>>>,
-    context: State<'_, Arc<Mutex<ContextManagerService>>>,
-    history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
-    notifications: State<'_, NotificationService>,
-    prompt_execution: State<'_, Arc<Mutex<PromptExecutionService>>>,
-    recent_apps: State<'_, Arc<RecentAppsState>>,
     skill_name: String,
     input_override: Option<String>,
     invocation_source: InvocationSource,
     on_event: Channel<StreamEvent>,
 ) -> crate::Result<()> {
     run_skill_stream(
-        app,
-        Arc::clone(&config),
-        (*clipboard).clone(),
-        Arc::clone(&ai),
-        Arc::clone(&skill_service),
-        Arc::clone(&context),
-        Arc::clone(&history),
-        (*notifications).clone(),
-        Arc::clone(&prompt_execution),
-        Arc::clone(&recent_apps),
+        &app,
         skill_name,
         input_override,
         invocation_source,

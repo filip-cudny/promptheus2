@@ -6,7 +6,7 @@ use tokio::sync::watch;
 use tokio::sync::Mutex as TokioMutex;
 use uuid::Uuid;
 
-use crate::models::ai::{StreamEvent, ToolCall};
+use crate::models::ai::{StreamEvent, ToolCall, ToolCallStatus};
 use crate::services::config::ConfigService;
 
 #[derive(Debug, thiserror::Error)]
@@ -35,6 +35,68 @@ pub struct ExecutionSnapshot {
 pub struct LiveExecution {
     pub snapshot: ExecutionSnapshot,
     pub channel: Option<Channel<StreamEvent>>,
+}
+
+impl LiveExecution {
+    pub fn send(&mut self, event: StreamEvent) {
+        if let Some(channel) = &self.channel {
+            if channel.send(event).is_err() {
+                self.channel = None;
+            }
+        }
+    }
+
+    pub fn finish_with_error(&mut self, message: String) {
+        self.snapshot.finished = true;
+        self.snapshot.error = Some(message.clone());
+        self.send(StreamEvent::Error { message });
+    }
+
+    pub fn finish_done(
+        &mut self,
+        full_text: String,
+        full_thinking: Option<String>,
+        prompt_tokens: Option<usize>,
+        completion_tokens: Option<usize>,
+    ) {
+        self.snapshot.finished = true;
+        self.snapshot.prompt_tokens = prompt_tokens;
+        self.snapshot.completion_tokens = completion_tokens;
+        self.send(StreamEvent::Done {
+            full_text,
+            full_thinking,
+            prompt_tokens,
+            completion_tokens,
+        });
+    }
+
+    pub fn finish_tool_call(
+        &mut self,
+        tool_call_id: String,
+        result: Option<String>,
+        error: Option<String>,
+    ) {
+        if let Some(tc) = self
+            .snapshot
+            .tool_calls
+            .iter_mut()
+            .find(|t| t.tool_call_id == tool_call_id)
+        {
+            tc.status = if error.is_some() {
+                ToolCallStatus::Failed
+            } else {
+                ToolCallStatus::Completed
+            };
+            tc.result.clone_from(&result);
+            tc.error.clone_from(&error);
+            tc.completed_at = Some(chrono::Utc::now().to_rfc3339());
+        }
+        self.send(StreamEvent::ToolCallDone {
+            tool_call_id,
+            result,
+            error,
+        });
+    }
 }
 
 pub struct PromptExecutionService {
@@ -135,64 +197,58 @@ impl PromptExecutionService {
         config: &ConfigService,
         model_id: Option<&str>,
     ) -> Result<String, ExecutionError> {
-        match model_id {
-            Some(id) => {
-                let exists = config.settings().models.iter().any(|m| m.id == id);
-                if exists {
-                    Ok(id.to_string())
-                } else {
-                    Err(ExecutionError::ModelNotFound(id.to_string()))
-                }
-            }
-            None => config
-                .settings()
-                .surfaces
-                .chat
-                .generation
-                .model_id
-                .clone()
-                .ok_or_else(|| ExecutionError::ModelNotFound("no chat model configured".to_string())),
-        }
+        resolve(config, model_id, Surface::Chat)
     }
 
     pub fn resolve_quick_action_model(
         config: &ConfigService,
         model_id: Option<&str>,
     ) -> Result<String, ExecutionError> {
-        match model_id {
-            Some(id) => {
-                let exists = config.settings().models.iter().any(|m| m.id == id);
-                if exists {
-                    Ok(id.to_string())
-                } else {
-                    Err(ExecutionError::ModelNotFound(id.to_string()))
-                }
-            }
-            None => config
-                .settings()
-                .surfaces
-                .quick_actions
-                .generation
-                .model_id
-                .clone()
-                .or_else(|| config.settings().surfaces.chat.generation.model_id.clone())
-                .ok_or_else(|| ExecutionError::ModelNotFound("no quick action model configured".to_string())),
-        }
+        resolve(config, model_id, Surface::QuickActions)
     }
 
     pub fn resolve_title_generation_model(
         config: &ConfigService,
     ) -> Result<String, ExecutionError> {
-        config
-            .settings()
-            .surfaces
-            .title_generation
-            .generation
-            .model_id
-            .clone()
-            .or_else(|| config.settings().surfaces.chat.generation.model_id.clone())
-            .ok_or_else(|| ExecutionError::ModelNotFound("no title generation model configured".to_string()))
+        resolve(config, None, Surface::TitleGeneration)
     }
+}
+
+#[derive(Clone, Copy)]
+enum Surface {
+    Chat,
+    QuickActions,
+    TitleGeneration,
+}
+
+fn resolve(
+    config: &ConfigService,
+    explicit: Option<&str>,
+    surface: Surface,
+) -> Result<String, ExecutionError> {
+    let settings = config.settings();
+    if let Some(id) = explicit {
+        return if settings.models.iter().any(|m| m.id == id) {
+            Ok(id.to_string())
+        } else {
+            Err(ExecutionError::ModelNotFound(id.to_string()))
+        };
+    }
+    let surfaces = &settings.surfaces;
+    let chat = surfaces.chat.generation.model_id.clone();
+    let (configured, label) = match surface {
+        Surface::Chat => (chat, "chat"),
+        Surface::QuickActions => (
+            surfaces.quick_actions.generation.model_id.clone().or(chat),
+            "quick action",
+        ),
+        Surface::TitleGeneration => (
+            surfaces.title_generation.generation.model_id.clone().or(chat),
+            "title generation",
+        ),
+    };
+    configured
+        .ok_or_else(|| ExecutionError::ModelNotFound(format!("no {label} model configured")))
 }
 
 #[cfg(test)]
@@ -201,6 +257,12 @@ mod tests {
     use tempfile::TempDir;
 
     fn setup_config() -> (TempDir, ConfigService) {
+        setup_config_with(|_| {})
+    }
+
+    fn setup_config_with(
+        configure: impl FnOnce(&mut crate::models::settings::Settings),
+    ) -> (TempDir, ConfigService) {
         let dir = TempDir::new().unwrap();
         let mut settings = crate::models::settings::Settings {
             models: vec![crate::models::settings::ModelConfig {
@@ -221,6 +283,7 @@ mod tests {
             ..Default::default()
         };
         settings.surfaces.chat.generation.model_id = Some("model-1".to_string());
+        configure(&mut settings);
         let settings_path = dir.path().join("settings.json");
         std::fs::write(&settings_path, serde_json::to_string(&settings).unwrap()).unwrap();
         let config = ConfigService::load(dir.path()).unwrap();
@@ -287,6 +350,36 @@ mod tests {
 
         let result = PromptExecutionService::resolve_model(&config, Some("nonexistent"));
         assert!(matches!(result, Err(ExecutionError::ModelNotFound(_))));
+    }
+
+    #[test]
+    fn resolve_quick_action_model_prefers_surface_then_chat() {
+        let (_dir, config) = setup_config();
+        let result = PromptExecutionService::resolve_quick_action_model(&config, None);
+        assert_eq!(result.unwrap(), "model-1");
+
+        let (_dir, config) = setup_config_with(|settings| {
+            settings.surfaces.quick_actions.generation.model_id = Some("quick".to_string());
+        });
+        let result = PromptExecutionService::resolve_quick_action_model(&config, None);
+        assert_eq!(result.unwrap(), "quick");
+
+        let result =
+            PromptExecutionService::resolve_quick_action_model(&config, Some("nonexistent"));
+        assert!(matches!(result, Err(ExecutionError::ModelNotFound(_))));
+    }
+
+    #[test]
+    fn resolve_title_generation_model_prefers_surface_then_chat() {
+        let (_dir, config) = setup_config();
+        let result = PromptExecutionService::resolve_title_generation_model(&config);
+        assert_eq!(result.unwrap(), "model-1");
+
+        let (_dir, config) = setup_config_with(|settings| {
+            settings.surfaces.title_generation.generation.model_id = Some("title".to_string());
+        });
+        let result = PromptExecutionService::resolve_title_generation_model(&config);
+        assert_eq!(result.unwrap(), "title");
     }
 
     #[test]

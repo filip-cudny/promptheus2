@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use chrono::Local;
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
@@ -27,18 +27,8 @@ use crate::services::skill_message;
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
 
-#[allow(clippy::too_many_arguments)]
 pub async fn run_skill_stream(
-    app: AppHandle,
-    config: Arc<Mutex<ConfigService>>,
-    clipboard: ClipboardService,
-    ai: Arc<Mutex<AiService>>,
-    skill_service: Arc<Mutex<SkillService>>,
-    context: Arc<Mutex<ContextManagerService>>,
-    history: Arc<Mutex<SqliteHistoryService>>,
-    notifications: NotificationService,
-    prompt_execution: Arc<Mutex<PromptExecutionService>>,
-    recent_apps: Arc<RecentAppsState>,
+    app: &AppHandle,
     skill_name: String,
     input_override: Option<String>,
     invocation_source: InvocationSource,
@@ -47,6 +37,15 @@ pub async fn run_skill_stream(
     on_event: Channel<StreamEvent>,
 ) -> crate::Result<Option<String>> {
     let start_time = Instant::now();
+    let config = app.state::<Arc<Mutex<ConfigService>>>();
+    let clipboard = app.state::<ClipboardService>();
+    let ai = app.state::<Arc<Mutex<AiService>>>();
+    let skill_service = app.state::<Arc<Mutex<SkillService>>>();
+    let context = app.state::<Arc<Mutex<ContextManagerService>>>();
+    let history = app.state::<Arc<Mutex<SqliteHistoryService>>>();
+    let notifications = app.state::<NotificationService>();
+    let prompt_execution = app.state::<Arc<Mutex<PromptExecutionService>>>();
+    let recent_apps = app.state::<Arc<RecentAppsState>>();
     let active_app = recent_apps.active().await;
     let recent_apps_display = recent_apps.display().await;
 
@@ -130,7 +129,7 @@ pub async fn run_skill_stream(
                 &notifications,
                 &config_guard,
                 &mut prompt_execution,
-                &app,
+                app,
                 &skill_name,
                 &prepared.skill_display_name,
                 prepared.skill_version_id,
@@ -153,7 +152,7 @@ pub async fn run_skill_stream(
                 &notifications,
                 &config_guard,
                 &mut prompt_execution,
-                &app,
+                app,
                 &prepared.execution_id,
                 message,
                 is_cancelled,

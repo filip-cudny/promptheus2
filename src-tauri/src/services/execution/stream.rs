@@ -50,12 +50,7 @@ pub async fn run_stream_loop(
                     biased;
                     result = rx.changed() => {
                         if result.is_ok() && *rx.borrow() {
-                            let mut live = live.lock().await;
-                            live.snapshot.finished = true;
-                            live.snapshot.error = Some("Cancelled".to_string());
-                            if let Some(ref ch) = live.channel {
-                                let _ = ch.send(StreamEvent::Error { message: "Cancelled".to_string() });
-                            }
+                            live.lock().await.finish_with_error("Cancelled".to_string());
                             return Err(Error::Other("Cancelled".to_string()));
                         }
                         continue;
@@ -101,11 +96,7 @@ pub async fn run_stream_loop(
                                 completed_at: None,
                             };
                             live.snapshot.tool_calls.push(tc.clone());
-                            if let Some(ref ch) = live.channel {
-                                if ch.send(StreamEvent::ToolCallStart { tool_call: tc }).is_err() {
-                                    live.channel = None;
-                                }
-                            }
+                            live.send(StreamEvent::ToolCallStart { tool_call: tc });
                         }
                         ToolCallEvent::ArgumentsComplete {
                             tool_call_id,
@@ -131,33 +122,7 @@ pub async fn run_stream_loop(
                             result,
                             error,
                         } => {
-                            if let Some(tc) = live
-                                .snapshot
-                                .tool_calls
-                                .iter_mut()
-                                .find(|t| t.tool_call_id == tool_call_id)
-                            {
-                                tc.status = if error.is_some() {
-                                    ToolCallStatus::Failed
-                                } else {
-                                    ToolCallStatus::Completed
-                                };
-                                tc.result.clone_from(&result);
-                                tc.error.clone_from(&error);
-                                tc.completed_at = Some(chrono::Utc::now().to_rfc3339());
-                            }
-                            if let Some(ref ch) = live.channel {
-                                if ch
-                                    .send(StreamEvent::ToolCallDone {
-                                        tool_call_id,
-                                        result,
-                                        error,
-                                    })
-                                    .is_err()
-                                {
-                                    live.channel = None;
-                                }
-                            }
+                            live.finish_tool_call(tool_call_id, result, error);
                         }
                     }
                     continue;
@@ -177,29 +142,16 @@ pub async fn run_stream_loop(
                     live.snapshot.is_thinking =
                         chunk.accumulated_thinking.is_some() && chunk.accumulated.is_empty();
 
-                    if let Some(ref ch) = live.channel {
-                        if ch
-                            .send(StreamEvent::Chunk {
-                                delta: chunk.delta,
-                                accumulated: prefixed_accumulated,
-                                thinking_delta: chunk.thinking_delta,
-                                accumulated_thinking: chunk.accumulated_thinking,
-                            })
-                            .is_err()
-                        {
-                            live.channel = None;
-                        }
-                    }
+                    live.send(StreamEvent::Chunk {
+                        delta: chunk.delta,
+                        accumulated: prefixed_accumulated,
+                        thinking_delta: chunk.thinking_delta,
+                        accumulated_thinking: chunk.accumulated_thinking,
+                    });
                 }
             }
             Err(e) => {
-                let msg = e.to_string();
-                let mut live = live.lock().await;
-                live.snapshot.finished = true;
-                live.snapshot.error = Some(msg.clone());
-                if let Some(ref ch) = live.channel {
-                    let _ = ch.send(StreamEvent::Error { message: msg });
-                }
+                live.lock().await.finish_with_error(e.to_string());
                 return Err(Error::from(e));
             }
         }
@@ -212,18 +164,12 @@ pub async fn run_stream_loop(
     };
 
     if pending_tool_calls.is_empty() {
-        let mut live = live.lock().await;
-        live.snapshot.finished = true;
-        live.snapshot.prompt_tokens = prompt_tokens;
-        live.snapshot.completion_tokens = completion_tokens;
-        if let Some(ref ch) = live.channel {
-            let _ = ch.send(StreamEvent::Done {
-                full_text: full_text.clone(),
-                full_thinking: thinking.clone(),
-                prompt_tokens,
-                completion_tokens,
-            });
-        }
+        live.lock().await.finish_done(
+            full_text.clone(),
+            thinking.clone(),
+            prompt_tokens,
+            completion_tokens,
+        );
     }
 
     Ok(StreamResult {
@@ -280,40 +226,14 @@ pub async fn execute_tool_calls(
                     },
                 };
 
-                let mut live = live.lock().await;
-                if let Some(tc) = live
-                    .snapshot
-                    .tool_calls
-                    .iter_mut()
-                    .find(|t| t.tool_call_id == execution_result.tool_call_id)
-                {
-                    tc.status = if execution_result.is_error {
-                        ToolCallStatus::Failed
-                    } else {
-                        ToolCallStatus::Completed
-                    };
-                    if execution_result.is_error {
-                        tc.error = Some(execution_result.result_text.clone());
-                    } else {
-                        tc.result = Some(execution_result.result_text.clone());
-                    }
-                    tc.completed_at = Some(chrono::Utc::now().to_rfc3339());
-                }
-                if let Some(ref ch) = live.channel {
-                    let _ = ch.send(StreamEvent::ToolCallDone {
-                        tool_call_id: execution_result.tool_call_id.clone(),
-                        result: if execution_result.is_error {
-                            None
-                        } else {
-                            Some(execution_result.result_text.clone())
-                        },
-                        error: if execution_result.is_error {
-                            Some(execution_result.result_text.clone())
-                        } else {
-                            None
-                        },
-                    });
-                }
+                let (result, error) = if execution_result.is_error {
+                    (None, Some(execution_result.result_text.clone()))
+                } else {
+                    (Some(execution_result.result_text.clone()), None)
+                };
+                live.lock()
+                    .await
+                    .finish_tool_call(execution_result.tool_call_id.clone(), result, error);
 
                 execution_result
             }
@@ -425,6 +345,168 @@ mod tests {
             usage: None,
             tool_call_event: None,
         }
+    }
+
+    fn recording_live() -> (
+        Arc<TokioMutex<LiveExecution>>,
+        Arc<std::sync::Mutex<Vec<serde_json::Value>>>,
+    ) {
+        let events = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = Arc::clone(&events);
+        let channel = tauri::ipc::Channel::new(move |body| {
+            if let tauri::ipc::InvokeResponseBody::Json(json) = body {
+                sink.lock().unwrap().push(serde_json::from_str(&json).unwrap());
+            }
+            Ok(())
+        });
+        let live = empty_live();
+        live.try_lock().unwrap().channel = Some(channel);
+        (live, events)
+    }
+
+    fn event_names(events: &Arc<std::sync::Mutex<Vec<serde_json::Value>>>) -> Vec<String> {
+        events
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|e| e["event"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    fn tool_event_chunk(event: ToolCallEvent) -> StreamChunk {
+        StreamChunk {
+            tool_call_event: Some(event),
+            ..text_chunk("", "")
+        }
+    }
+
+    fn stream_of(
+        items: Vec<Result<StreamChunk, AiError>>,
+    ) -> Pin<Box<dyn Stream<Item = Result<StreamChunk, AiError>> + Send>> {
+        Box::pin(stream::iter(items))
+    }
+
+    #[tokio::test]
+    async fn stream_loop_emits_tool_call_events_then_done() {
+        let (live, events) = recording_live();
+        let stream = stream_of(vec![
+            Ok(tool_event_chunk(ToolCallEvent::Started {
+                tool_call_id: "tc-1".to_string(),
+                tool_name: "web_search".to_string(),
+            })),
+            Ok(tool_event_chunk(ToolCallEvent::Done {
+                tool_call_id: "tc-1".to_string(),
+                result: Some("found".to_string()),
+                error: None,
+            })),
+            Ok(text_chunk("Hi", "Hi")),
+        ]);
+
+        let result = run_stream_loop(stream, Arc::clone(&live), None, "")
+            .await
+            .unwrap();
+
+        assert_eq!(
+            event_names(&events),
+            ["tool_call_start", "tool_call_done", "chunk", "done"]
+        );
+        assert_eq!(events.lock().unwrap()[1]["data"]["result"], "found");
+        assert_eq!(events.lock().unwrap()[3]["data"]["full_text"], "Hi");
+        assert_eq!(result.full_text, "Hi");
+        let live = live.lock().await;
+        assert!(live.snapshot.finished);
+        assert!(matches!(live.snapshot.tool_calls[0].status, ToolCallStatus::Completed));
+        assert_eq!(live.snapshot.tool_calls[0].result.as_deref(), Some("found"));
+        assert!(live.snapshot.tool_calls[0].completed_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn stream_loop_marks_failed_tool_call_with_error() {
+        let (live, events) = recording_live();
+        let stream = stream_of(vec![
+            Ok(tool_event_chunk(ToolCallEvent::Started {
+                tool_call_id: "tc-1".to_string(),
+                tool_name: "web_search".to_string(),
+            })),
+            Ok(tool_event_chunk(ToolCallEvent::Done {
+                tool_call_id: "tc-1".to_string(),
+                result: None,
+                error: Some("boom".to_string()),
+            })),
+        ]);
+
+        run_stream_loop(stream, Arc::clone(&live), None, "")
+            .await
+            .unwrap();
+
+        assert_eq!(events.lock().unwrap()[1]["data"]["error"], "boom");
+        let live = live.lock().await;
+        assert!(matches!(live.snapshot.tool_calls[0].status, ToolCallStatus::Failed));
+        assert_eq!(live.snapshot.tool_calls[0].error.as_deref(), Some("boom"));
+    }
+
+    #[tokio::test]
+    async fn stream_loop_keeps_pending_tool_calls_without_done() {
+        let (live, events) = recording_live();
+        let stream = stream_of(vec![
+            Ok(tool_event_chunk(ToolCallEvent::Started {
+                tool_call_id: "tc-1".to_string(),
+                tool_name: "srv.tool".to_string(),
+            })),
+            Ok(tool_event_chunk(ToolCallEvent::ArgumentsComplete {
+                tool_call_id: "tc-1".to_string(),
+                tool_name: "srv.tool".to_string(),
+                arguments: serde_json::json!({"q": 1}),
+            })),
+        ]);
+
+        let result = run_stream_loop(stream, Arc::clone(&live), None, "")
+            .await
+            .unwrap();
+
+        assert_eq!(event_names(&events), ["tool_call_start"]);
+        assert_eq!(result.pending_tool_calls.len(), 1);
+        let live = live.lock().await;
+        assert!(!live.snapshot.finished);
+        assert_eq!(live.snapshot.tool_calls[0].arguments, serde_json::json!({"q": 1}));
+    }
+
+    #[tokio::test]
+    async fn stream_loop_reports_stream_error() {
+        let (live, events) = recording_live();
+        let stream = stream_of(vec![
+            Ok(text_chunk("Hi", "Hi")),
+            Err(AiError::Connection("boom".to_string())),
+        ]);
+
+        let result = run_stream_loop(stream, Arc::clone(&live), None, "").await;
+
+        assert!(result.is_err());
+        assert_eq!(event_names(&events), ["chunk", "error"]);
+        assert_eq!(
+            events.lock().unwrap()[1]["data"]["message"],
+            "connection failed: boom"
+        );
+        let live = live.lock().await;
+        assert!(live.snapshot.finished);
+        assert_eq!(live.snapshot.error.as_deref(), Some("connection failed: boom"));
+    }
+
+    #[tokio::test]
+    async fn stream_loop_reports_cancellation() {
+        let (live, events) = recording_live();
+        let (cancel_tx, cancel_rx) = watch::channel(false);
+        cancel_tx.send(true).unwrap();
+        let stream: Pin<Box<dyn Stream<Item = Result<StreamChunk, AiError>> + Send>> =
+            Box::pin(stream::pending());
+
+        let result = run_stream_loop(stream, Arc::clone(&live), Some(cancel_rx), "").await;
+
+        assert_eq!(result.err().unwrap().to_string(), "Cancelled");
+        assert_eq!(event_names(&events), ["error"]);
+        let live = live.lock().await;
+        assert!(live.snapshot.finished);
+        assert_eq!(live.snapshot.error.as_deref(), Some("Cancelled"));
     }
 
     #[tokio::test]
