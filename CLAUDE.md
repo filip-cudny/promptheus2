@@ -31,6 +31,7 @@ Do not load all three — load only what applies to the current task.
 ## Code style
 
 - **No inline comments.** Code must be self-explanatory — use clear names, small functions, and logical structure instead of comments. If code needs a comment to be understood, refactor it.
+- **Exception: deliberate simplifications.** A simplification with a known limit gets a comment at the code site stating its limit, the upgrade path and the checkable condition under which it stops being correct (e.g. "more than one worker process").
 - Top-level doc comments (`///` in Rust, `/** */` in TS) are acceptable only when they add real value (e.g., documenting a public API contract that isn't obvious from the signature). Do not add trivial doc comments that restate the function name.
 - **Icons**: Always use `lucide-svelte` for icons. Never paste raw SVG — import the named component instead (e.g., `import { MessageSquareShare } from "lucide-svelte"`).
 
