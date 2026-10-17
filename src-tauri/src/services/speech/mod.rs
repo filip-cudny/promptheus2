@@ -489,8 +489,6 @@ impl SpeechService {
     }
 }
 
-type AudioBuffer = Arc<Mutex<Vec<i16>>>;
-
 /// Locks the speech service only while `session` is still the active recording.
 async fn lock_active_session(
     speech: &Arc<tokio::sync::Mutex<SpeechService>>,
@@ -500,11 +498,11 @@ async fn lock_active_session(
     (s.is_recording() && s.session() == session).then_some(s)
 }
 
-/// Startup of a background task bound to one recording session.
+/// The speech service and its audio buffer, or `None` once `session` is no longer the active recording.
 async fn start_session_task(
     app: &tauri::AppHandle,
     session: u64,
-) -> Option<(Arc<tokio::sync::Mutex<SpeechService>>, AudioBuffer)> {
+) -> Option<(Arc<tokio::sync::Mutex<SpeechService>>, Arc<Mutex<Vec<i16>>>)> {
     use tauri::Manager;
 
     let speech = app
