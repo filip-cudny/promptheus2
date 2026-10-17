@@ -9,15 +9,9 @@
   let {
     toolCalls,
     isStreaming = false,
-    onApprove,
-    onReject,
-    onRetry,
   }: {
     toolCalls: ToolCall[];
     isStreaming?: boolean;
-    onApprove?: (toolCallId: string) => void;
-    onReject?: (toolCallId: string) => void;
-    onRetry?: (toolCallId: string) => void;
   } = $props();
 
   let allCompletedOnMount = toolCalls.length > 0 &&
@@ -60,7 +54,7 @@
     </div>
     <div class="tool-group-items">
       {#each toolCalls as toolCall (toolCall.tool_call_id)}
-        <ToolCallItem {toolCall} {onApprove} {onReject} {onRetry} />
+        <ToolCallItem {toolCall} />
       {/each}
     </div>
   </section>
@@ -82,7 +76,7 @@
     {#if expanded}
       <div class="tool-group-items" transition:slide={{ duration: 150 }}>
         {#each toolCalls as toolCall (toolCall.tool_call_id)}
-          <ToolCallItem {toolCall} {onApprove} {onReject} {onRetry} />
+          <ToolCallItem {toolCall} />
         {/each}
       </div>
     {/if}

@@ -21,9 +21,7 @@ export interface ExecutionCallbacks {
   onError: (message: string) => void;
   onNodeUpdates?: (nodeId: string, updates: NodeUpdate[]) => void;
   onToolCallStart?: (toolCall: ToolCall) => void;
-  onToolCallProgress?: (toolCallId: string, partialResult: string) => void;
   onToolCallDone?: (toolCallId: string, result: string | null, error: string | null) => void;
-  onToolCallConfirmation?: (toolCallId: string) => void;
 }
 
 function routeStreamEvent(callbacks: ExecutionCallbacks): (event: StreamEvent) => void {
@@ -47,14 +45,8 @@ function routeStreamEvent(callbacks: ExecutionCallbacks): (event: StreamEvent) =
       case "tool_call_start":
         callbacks.onToolCallStart?.(event.data.tool_call);
         break;
-      case "tool_call_progress":
-        callbacks.onToolCallProgress?.(event.data.tool_call_id, event.data.partial_result);
-        break;
       case "tool_call_done":
         callbacks.onToolCallDone?.(event.data.tool_call_id, event.data.result, event.data.error);
-        break;
-      case "tool_call_confirmation":
-        callbacks.onToolCallConfirmation?.(event.data.tool_call_id);
         break;
     }
   };

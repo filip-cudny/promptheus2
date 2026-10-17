@@ -86,8 +86,6 @@ macro_rules! handlers {
             $crate::commands::execution_control::cancel_skill_execution,
             $crate::commands::execution_control::cancel_live_execution,
             $crate::commands::execution_control::get_executing_skill_id,
-            $crate::commands::execution_control::respond_to_tool_call,
-            $crate::commands::execution_control::retry_tool_call,
             // === execution_generation ===
             $crate::commands::execution_generation::generate_conversation_title,
             // === history ===

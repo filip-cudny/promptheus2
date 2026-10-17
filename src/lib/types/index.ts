@@ -2,7 +2,6 @@ import type { ModelCapabilities } from "./ai";
 
 export * from "./ai";
 export * from "./menu";
-export * from "./execution";
 export * from "./context";
 export * from "./history";
 export * from "./conversation";

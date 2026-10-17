@@ -108,10 +108,6 @@ impl ContextManagerService {
         !self.items.is_empty()
     }
 
-    pub fn get_context_or_default(&self, default: &str) -> String {
-        self.get_context().unwrap_or_else(|| default.to_string())
-    }
-
     pub fn set_context_image(&mut self, data: String, media_type: String) {
         self.clear();
         self.append_context_image(data, media_type);
@@ -310,16 +306,6 @@ mod tests {
 
         svc.append_context_image("img".into(), "image/png".into());
         assert_eq!(svc.item_count(), 2);
-    }
-
-    #[test]
-    fn get_context_or_default_returns_default_when_empty() {
-        let svc = service();
-        assert_eq!(svc.get_context_or_default("fallback"), "fallback");
-
-        let mut svc = service();
-        svc.append_context("real".into());
-        assert_eq!(svc.get_context_or_default("fallback"), "real");
     }
 
     #[test]

@@ -6,8 +6,6 @@ use tokio::sync::Mutex;
 
 use crate::models::ai::StreamEvent;
 use crate::services::execution::lifecycle::{ExecutionSnapshot, PromptExecutionService};
-use crate::services::tool_confirmation::ToolConfirmationService;
-use crate::Error;
 
 #[tauri::command]
 pub async fn cancel_skill_execution(
@@ -32,31 +30,6 @@ pub async fn get_executing_skill_id(
         .await
         .executing_skill_id()
         .map(|s| s.to_string()))
-}
-
-#[tauri::command]
-pub async fn respond_to_tool_call(
-    tool_confirmation: State<'_, Arc<Mutex<ToolConfirmationService>>>,
-    tool_call_id: String,
-    approved: bool,
-) -> crate::Result<()> {
-    tool_confirmation
-        .lock()
-        .await
-        .respond(&tool_call_id, approved)
-        .map_err(Error::Other)
-}
-
-#[tauri::command]
-pub async fn retry_tool_call(
-    tool_confirmation: State<'_, Arc<Mutex<ToolConfirmationService>>>,
-    tool_call_id: String,
-) -> crate::Result<()> {
-    tool_confirmation
-        .lock()
-        .await
-        .respond(&tool_call_id, true)
-        .map_err(Error::Other)
 }
 
 #[tauri::command]

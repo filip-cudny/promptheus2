@@ -32,9 +32,6 @@
     onBranchNext,
     onContentChange,
     onDelete,
-    onToolCallApprove,
-    onToolCallReject,
-    onToolCallRetry,
   }: {
     node: ConversationNode;
     displayContent: string;
@@ -50,9 +47,6 @@
     onBranchNext: (nodeId: string) => void;
     onContentChange: (content: string) => void;
     onDelete: (nodeId: string) => void;
-    onToolCallApprove?: (toolCallId: string) => void;
-    onToolCallReject?: (toolCallId: string) => void;
-    onToolCallRetry?: (toolCallId: string) => void;
   } = $props();
 
   const TOOL_CALL_MARKER_PATTERN = /\{\{tool_call:([^}]+)\}\}/g;
@@ -205,13 +199,7 @@
               .map((id) => allToolCalls.get(id))
               .filter((tc): tc is ToolCall => tc != null)}
             {#if groupToolCalls.length > 0}
-              <ToolCallGroup
-                toolCalls={groupToolCalls}
-                {isStreaming}
-                onApprove={onToolCallApprove}
-                onReject={onToolCallReject}
-                onRetry={onToolCallRetry}
-              />
+              <ToolCallGroup toolCalls={groupToolCalls} {isStreaming} />
             {/if}
           {/if}
         {/each}

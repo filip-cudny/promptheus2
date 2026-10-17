@@ -97,7 +97,6 @@ pub async fn run_stream_loop(
                                 result: None,
                                 error: None,
                                 status: ToolCallStatus::InProgress,
-                                requires_confirmation: false,
                                 started_at: Some(chrono::Utc::now().to_rfc3339()),
                                 completed_at: None,
                             };

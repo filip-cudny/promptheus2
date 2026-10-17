@@ -3,10 +3,8 @@ use crate::services::clipboard::ClipboardError;
 use crate::services::config::ConfigError;
 use crate::services::database::DatabaseError;
 use crate::services::execution::ExecutionError;
-use crate::services::image_storage::ImageStorageError;
 use crate::services::mcp::McpError;
 use crate::services::notification::NotificationError;
-use crate::services::placeholder::PlaceholderError;
 use crate::services::skill::SkillError;
 use crate::services::speech::SpeechError;
 use crate::services::sqlite_history::HistoryError;
@@ -45,9 +43,6 @@ pub enum Error {
     Skill(#[from] SkillError),
 
     #[error(transparent)]
-    ImageStorage(#[from] ImageStorageError),
-
-    #[error(transparent)]
     History(#[from] HistoryError),
 
     #[error(transparent)]
@@ -58,9 +53,6 @@ pub enum Error {
 
     #[error(transparent)]
     Notification(#[from] NotificationError),
-
-    #[error(transparent)]
-    Placeholder(#[from] PlaceholderError),
 
     #[error(transparent)]
     Execution(#[from] ExecutionError),

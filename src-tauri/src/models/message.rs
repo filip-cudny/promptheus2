@@ -65,12 +65,6 @@ pub enum NodeUpdate {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolCallMessage {
-    pub tool_call_id: String,
-    pub content: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AppliedSkill {
     pub name: String,

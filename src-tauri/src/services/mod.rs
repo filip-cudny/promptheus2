@@ -16,11 +16,9 @@ pub mod context;
 pub mod database;
 pub mod dialog;
 pub mod dock;
-pub mod image_storage;
 pub mod menu_coordinator;
 pub mod monitor;
 pub mod notification;
-pub mod placeholder;
 pub mod placeholder_registry;
 pub mod hotkeys;
 #[cfg(target_os = "macos")]
@@ -36,7 +34,6 @@ pub mod history_events;
 pub mod history_search;
 pub mod sqlite_history;
 pub mod tokenizer;
-pub mod tool_confirmation;
 pub mod ui_state;
 #[cfg(target_os = "linux")]
 pub mod webkit_pressure;

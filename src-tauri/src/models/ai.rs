@@ -33,7 +33,6 @@ pub struct ToolCall {
     pub result: Option<String>,
     pub error: Option<String>,
     pub status: ToolCallStatus,
-    pub requires_confirmation: bool,
     pub started_at: Option<String>,
     pub completed_at: Option<String>,
 }
@@ -63,16 +62,9 @@ pub enum StreamEvent {
     ToolCallStart {
         tool_call: ToolCall,
     },
-    ToolCallProgress {
-        tool_call_id: String,
-        partial_result: String,
-    },
     ToolCallDone {
         tool_call_id: String,
         result: Option<String>,
         error: Option<String>,
-    },
-    ToolCallConfirmation {
-        tool_call_id: String,
     },
 }

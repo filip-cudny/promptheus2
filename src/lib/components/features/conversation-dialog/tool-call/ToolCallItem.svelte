@@ -3,20 +3,9 @@
   import ToolResultRenderer from "./ToolResultRenderer.svelte";
   import ToolCallHeader from "../components/ToolCallHeader.svelte";
   import ToolCallDetails from "../components/ToolCallDetails.svelte";
-  import ToolCallApprovalActions from "../components/ToolCallApprovalActions.svelte";
   import { useElapsedTimer } from "../drivers/useElapsedTimer.svelte";
 
-  let {
-    toolCall,
-    onApprove,
-    onReject,
-    onRetry,
-  }: {
-    toolCall: ToolCall;
-    onApprove?: (toolCallId: string) => void;
-    onReject?: (toolCallId: string) => void;
-    onRetry?: (toolCallId: string) => void;
-  } = $props();
+  let { toolCall }: { toolCall: ToolCall } = $props();
 
   let expanded = $state(false);
 
@@ -55,13 +44,6 @@
     onToggle={toggleExpanded}
   />
 
-  {#if isPending}
-    <ToolCallApprovalActions
-      onApprove={onApprove ? () => onApprove(toolCall.tool_call_id) : undefined}
-      onReject={onReject ? () => onReject(toolCall.tool_call_id) : undefined}
-    />
-  {/if}
-
   {#if isInProgress && toolCall.result}
     <div class="in-progress-detail">
       <ToolResultRenderer result={toolCall.result} isPartial={true} />
@@ -69,10 +51,7 @@
   {/if}
 
   {#if expanded && isClickable}
-    <ToolCallDetails
-      {toolCall}
-      onRetry={onRetry ? () => onRetry(toolCall.tool_call_id) : undefined}
-    />
+    <ToolCallDetails {toolCall} />
   {/if}
 </div>
 

@@ -157,26 +157,6 @@ Linux-only D-Bus client for the `com.promptheus.Shell` interface served by the G
 - `frontmost_app` on Wayland reads `GetFocusedWmClass`; it returns an empty string when the extension is unreachable.
 - Shortcuts run in `setup/shortcuts.rs` `run_shell_shortcuts`: `SetShortcuts` after every `Ready`; it falls back to the settings passed to `register` before `ConfigService` is managed.
 
-### ImageStorage specifics
-
-Manages temporary image files for conversation history. Saves base64-encoded image data to disk and loads it back.
-
-**Temp directory**: `{app_data_dir}/temp_images/`. Created on `initialize()`, which clears any existing files first (called on app startup).
-
-**Constructor**: `ImageStorage::new(app_data_dir)` — sets the temp directory path but does not create it. Call `initialize()` at startup.
-
-**Save flow**: `save_image(base64_data, media_type)` decodes base64, writes to `img_{timestamp_ms}_{hash_12chars}.{ext}`. Returns the full file path as a `String`.
-
-**Load flow**: `load_image(filepath)` reads the file, encodes to base64, infers media type from extension. Returns `(base64_data, media_type)`.
-
-**Supported formats**: PNG, JPEG, GIF, WebP, BMP. Unknown types default to PNG.
-
-**Cleanup**: `cleanup()` removes all files and recreates the empty directory. `initialize()` does the same on startup.
-
-**Coordination with SqliteHistoryService**: `ImageStorage` handles transient image files during execution. Persistent image storage is handled directly by `SqliteHistoryService` via the `conversation_images` table (base64 → BLOB on save, BLOB → base64 on restore).
-
-**Error variants**: `Io` (filesystem errors), `Base64Decode` (invalid base64 input).
-
 ### NotificationService specifics
 
 Holds an `AppHandle`.
@@ -200,26 +180,6 @@ Aggregates `MenuItemProvider` trait implementors (defined in `traits.rs`) into a
 `update_context_items` pushes context items to the `ContextMenuProvider`; `providers_mut` gives access to the registered providers.
 
 **Testing**: Unit tests cover section ordering, separator placement, empty-provider skipping, dynamic-provider exclusion, and settings section content. Tests use mock providers implementing `MenuItemProvider`.
-
-### PlaceholderService specifics
-
-Resolves `{{name}}` template variables in prompt messages before they are sent to the LLM API. Also injects context images into the last message when present.
-
-**Error variants**:
-- `ClipboardUnavailable` — clipboard is empty or override is whitespace (propagates to caller)
-- `ProcessorFailed` — non-clipboard processor error (logged, placeholder silently replaced with `""`)
-
-**Processor trait**: `PlaceholderProcessor` defines `name`, `description`, and `process(context_override, clipboard, context_mgr)`. Two built-in processors are registered by `new()`:
-- `ClipboardProcessor` — resolves `{{clipboard}}` from system clipboard or `context_override`
-- `ContextProcessor` — resolves `{{context}}` from `ContextManagerService`
-
-**Processing flow**:
-1. `process_messages()` iterates messages as `(role, content)` pairs.
-2. For each message, `process_content()` does single-pass string replacement for all registered `{{name}}` patterns.
-3. For the last message, if `context_mgr.has_images()`, content is converted to `MessageContent::Parts` with text + image data URIs (`data:{media_type};base64,{data}`). Empty text is omitted from parts.
-4. `ClipboardUnavailable` errors propagate immediately; other processor errors silently replace with `""`.
-
-**Testing**: Tests use mock processors (registered via the trait) to avoid system clipboard dependency. `ContextManagerService` is used directly since it's in-memory. `ClipboardService` is passed but unused by mock processors.
 
 ### AiService specifics
 

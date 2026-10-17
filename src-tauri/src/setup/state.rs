@@ -14,11 +14,9 @@ use crate::services::dock::DockManager;
 use crate::services::execution::PromptExecutionService;
 use crate::services::history_events::HistoryVersion;
 use crate::services::history_search::HistorySearch;
-use crate::services::image_storage::ImageStorage;
 use crate::services::mcp::McpRegistry;
 use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::notification::NotificationService;
-use crate::services::placeholder::PlaceholderService;
 use crate::services::recent_apps::RecentAppsState;
 use crate::services::settings_sync::SettingsSync;
 use crate::services::shell_env::get_shell_env;
@@ -26,7 +24,7 @@ use crate::services::skill::SkillService;
 use crate::services::speech::widget::RecordingWidget;
 use crate::services::speech::{AudioClipStore, SpeechService};
 use crate::services::sqlite_history::SqliteHistoryService;
-use crate::services::{self, conversation_context, tool_confirmation, ui_state};
+use crate::services::{self, conversation_context, ui_state};
 
 pub fn manage(
     app: &tauri::App,
@@ -66,7 +64,6 @@ pub fn manage(
 
     let ai_service = AiService::new(&config_service.settings().models);
     let context_service = ContextManagerService::new();
-    let placeholder_service = PlaceholderService::new();
     let app_data_dir = app.path().app_data_dir()?;
     let database =
         Database::open(&app_data_dir).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
@@ -92,12 +89,6 @@ pub fn manage(
         log::info!("audio clip startup sweep removed {} clips", swept);
     }
 
-    let image_storage = ImageStorage::new(&app_data_dir);
-    image_storage
-        .initialize()
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
-    log::info!("image storage initialized at {}", app_data_dir.display());
-
     let mcp_servers_config = config_service.settings().mcp_servers.clone();
     let mcp_registry = tauri::async_runtime::block_on(McpRegistry::start_all(&mcp_servers_config));
 
@@ -106,12 +97,10 @@ pub fn manage(
     app.manage(notification_service);
     app.manage(Arc::new(Mutex::new(menu_coordinator)));
     app.manage(Arc::new(Mutex::new(context_service)));
-    app.manage(Arc::new(Mutex::new(placeholder_service)));
     app.manage(Arc::new(Mutex::new(ai_service)));
     app.manage(Arc::new(Mutex::new(history_service)));
     app.manage(Arc::new(Mutex::new(HistorySearch::new())));
     app.manage(HistoryVersion::new());
-    app.manage(image_storage);
     app.manage(Arc::new(mcp_registry));
     app.manage(Arc::new(Mutex::new(PromptExecutionService::new())));
     app.manage(Arc::new(Mutex::new(skill_service)));
@@ -121,9 +110,6 @@ pub fn manage(
     app.manage(Arc::new(Mutex::new(ui_state_service)));
     app.manage(Arc::new(Mutex::new(
         conversation_context::ConversationContextCache::new(),
-    )));
-    app.manage(Arc::new(Mutex::new(
-        tool_confirmation::ToolConfirmationService::new(),
     )));
     app.manage(Arc::new(RecentAppsState::new()));
     app.manage(Arc::new(SettingsSync::new(

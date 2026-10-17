@@ -1,19 +1,10 @@
 <script lang="ts">
   import { slide } from "svelte/transition";
-  import { RefreshCw } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
   import type { ToolCall } from "$lib/types/ai";
   import ToolResultRenderer from "../tool-call/ToolResultRenderer.svelte";
 
-  let {
-    toolCall,
-    onRetry,
-  }: {
-    toolCall: ToolCall;
-    onRetry?: () => void;
-  } = $props();
+  let { toolCall }: { toolCall: ToolCall } = $props();
 
-  const isFailed = $derived(toolCall.status === "failed");
   const hasArguments = $derived(
     !!toolCall.arguments && Object.keys(toolCall.arguments).length > 0,
   );
@@ -51,12 +42,6 @@
       <span class="details-label">Error</span>
       <div class="details-content error-text">{toolCall.error}</div>
     </div>
-  {/if}
-  {#if isFailed && onRetry}
-    <button class="retry-btn" onclick={onRetry}>
-      <RefreshCw size={ICON_SIZE.sm} />
-      Retry
-    </button>
   {/if}
 </div>
 
@@ -105,26 +90,6 @@
   }
 
   .error-text {
-    color: var(--danger);
-  }
-
-  .retry-btn {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin: var(--space-2) var(--space-5) var(--space-4);
-    padding: var(--space-2) var(--space-4);
-    border: none;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-muted);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    cursor: pointer;
-  }
-
-  .retry-btn:hover {
-    background: var(--danger-bg-soft);
     color: var(--danger);
   }
 </style>
