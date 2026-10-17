@@ -22,7 +22,7 @@ Use for: unrecoverable failures, service initialization errors, operations needi
 Unexpected but the app continues.
 
 ```rust
-log::warn!("invalid shortcut {}: {}", shortcut_str, e);   // setup/shortcuts.rs
+log::warn!("invalid shortcut {}: {}", shortcut_str, e);   // services/hotkeys.rs
 log::warn!("unhandled menu item: {item_id}");            // commands/menu.rs
 ```
 
@@ -34,7 +34,7 @@ High-level events confirming the app works.
 
 ```rust
 log::info!("config loaded from {}", config_dir.display());   // setup/init.rs
-log::info!("registered shortcut: {} -> {}", shortcut_str, action);   // setup/shortcuts.rs
+log::info!(target: "app_lib::hotkey_handler", "reloaded {} global shortcuts", bindings.len());   // services/hotkeys.rs
 ```
 
 Use for: lifecycle events, config loaded/saved, user-triggered actions (log action, not content), counts and durations.

@@ -141,7 +141,7 @@ pub fn show_panel_without_activating(window: &tauri::WebviewWindow) -> Result<()
 }
 
 pub fn hide_panel(window: &tauri::WebviewWindow) -> Result<(), String> {
-    with_ns_window(window.ns_window(), |ns_window| unsafe {
+    with_ns_window(window.ns_window(), |ns_window| {
         ns_window.orderOut(None);
     })
 }
@@ -152,7 +152,7 @@ pub fn hide_panel(window: &tauri::WebviewWindow) -> Result<(), String> {
 // "+" (zoom) by default. Setting it explicitly restores the native default:
 // arrows on hover, "+" on Option+hover.
 pub fn enable_fullscreen_primary(window: &tauri::Window) -> Result<(), String> {
-    with_ns_window(window.ns_window(), |ns_window| unsafe {
+    with_ns_window(window.ns_window(), |ns_window| {
         let mut behavior = ns_window.collectionBehavior();
         behavior.remove(NSWindowCollectionBehavior::FullScreenNone);
         behavior.remove(NSWindowCollectionBehavior::FullScreenAuxiliary);
@@ -163,7 +163,7 @@ pub fn enable_fullscreen_primary(window: &tauri::Window) -> Result<(), String> {
 
 // Re-focus the (already visible) panel after a geometry change.
 pub fn make_key_without_activating(window: &tauri::WebviewWindow) -> Result<(), String> {
-    with_ns_window(window.ns_window(), |ns_window| unsafe {
+    with_ns_window(window.ns_window(), |ns_window| {
         ns_window.makeKeyAndOrderFront(None);
     })
 }
@@ -182,7 +182,7 @@ pub fn set_frame_physical(
     window
         .run_on_main_thread(move || {
             let height = size.1 / scale;
-            let moved = with_ns_window(target.ns_window(), |ns_window| unsafe {
+            let moved = with_ns_window(target.ns_window(), |ns_window| {
                 let mut frame = ns_window.frame();
                 frame.origin.x = origin.0 / scale;
                 frame.origin.y = primary_height_points - origin.1 / scale - height;
@@ -253,7 +253,7 @@ pub fn install_pointer_tracking(window: &tauri::WebviewWindow, app: AppHandle) -
     if POINTER_APP.set(app).is_err() {
         return Err("pointer tracking is already installed".into());
     }
-    let view = with_ns_window(window.ns_window(), |ns_window| unsafe { ns_window.contentView() })?
+    let view = with_ns_window(window.ns_window(), |ns_window| ns_window.contentView())?
         .ok_or("content view is missing")?;
 
     unsafe {
