@@ -157,6 +157,50 @@ pub struct SpeechService {
     retrying_entries: HashSet<String>,
 }
 
+trait RecorderStream {
+    fn play(&self) -> Result<(), cpal::PlayStreamError>;
+}
+
+impl RecorderStream for cpal::Stream {
+    fn play(&self) -> Result<(), cpal::PlayStreamError> {
+        StreamTrait::play(self)
+    }
+}
+
+/// The stream is built on the recorder thread because it is not `Send` on every
+/// platform; the thread reports its start once before this returns.
+fn spawn_recorder<S: RecorderStream>(
+    build: impl FnOnce() -> Result<S, cpal::BuildStreamError> + Send + 'static,
+    stop_rx: mpsc::Receiver<()>,
+) -> Result<(), SpeechError> {
+    let (started_tx, started_rx) = mpsc::sync_channel(1);
+
+    std::thread::spawn(move || {
+        let stream = match build() {
+            Ok(stream) => stream,
+            Err(e) => {
+                log::error!("Failed to build audio stream: {e}");
+                let _ = started_tx.send(Err(SpeechError::StreamBuild(e.to_string())));
+                return;
+            }
+        };
+        if let Err(e) = stream.play() {
+            log::error!("Failed to start audio stream: {e}");
+            let _ = started_tx.send(Err(SpeechError::RecordingFailed(e.to_string())));
+            return;
+        }
+        let _ = started_tx.send(Ok(()));
+        let _ = stop_rx.recv();
+    });
+
+    started_rx.recv().unwrap_or_else(|_| {
+        log::error!("Recorder thread ended before reporting its start");
+        Err(SpeechError::RecordingFailed(
+            "recorder thread ended before starting".into(),
+        ))
+    })
+}
+
 fn append_unless_paused(buffer: &Mutex<Vec<i16>>, paused: &AtomicBool, data: &[i16]) {
     if paused.load(Ordering::Relaxed) {
         return;
@@ -222,10 +266,8 @@ impl SpeechService {
         let paused = Arc::new(AtomicBool::new(false));
         let paused_clone = Arc::clone(&paused);
 
-        let (stop_tx, stop_rx) = mpsc::channel();
-
-        std::thread::spawn(move || {
-            let stream = device.build_input_stream(
+        self.start_with(action_id, sample_rate, buffer, paused, move || {
+            device.build_input_stream(
                 &config,
                 move |data: &[i16], _: &cpal::InputCallbackInfo| {
                     append_unless_paused(&buffer_clone, &paused_clone, data);
@@ -234,20 +276,20 @@ impl SpeechService {
                     log::error!("Audio stream error: {err}");
                 },
                 None,
-            );
+            )
+        })
+    }
 
-            match stream {
-                Ok(s) => {
-                    if s.play().is_ok() {
-                        let _ = stop_rx.recv();
-                    }
-                    drop(s);
-                }
-                Err(e) => {
-                    log::error!("Failed to build audio stream: {e}");
-                }
-            }
-        });
+    fn start_with<S: RecorderStream>(
+        &mut self,
+        action_id: Option<String>,
+        sample_rate: u32,
+        buffer: Arc<Mutex<Vec<i16>>>,
+        paused: Arc<AtomicBool>,
+        build: impl FnOnce() -> Result<S, cpal::BuildStreamError> + Send + 'static,
+    ) -> Result<u32, SpeechError> {
+        let (stop_tx, stop_rx) = mpsc::channel();
+        spawn_recorder(build, stop_rx)?;
 
         self.audio_buffer = buffer;
         self.paused = paused;
@@ -456,6 +498,71 @@ mod tests {
         let service = SpeechService::new();
         assert!(!service.is_recording());
         assert!(service.recording_action_id().is_none());
+    }
+
+    struct FakeStream {
+        play_result: fn() -> Result<(), cpal::PlayStreamError>,
+    }
+
+    impl RecorderStream for FakeStream {
+        fn play(&self) -> Result<(), cpal::PlayStreamError> {
+            (self.play_result)()
+        }
+    }
+
+    fn start_fake(
+        service: &mut SpeechService,
+        build: impl FnOnce() -> Result<FakeStream, cpal::BuildStreamError> + Send + 'static,
+    ) -> Result<u32, SpeechError> {
+        service.start_with(
+            None,
+            16000,
+            Arc::new(Mutex::new(Vec::new())),
+            Arc::new(AtomicBool::new(false)),
+            build,
+        )
+    }
+
+    #[test]
+    fn a_stream_build_error_fails_the_start_and_leaves_the_service_idle() {
+        let mut service = SpeechService::new();
+        let result = start_fake(&mut service, || Err(cpal::BuildStreamError::DeviceNotAvailable));
+        assert!(matches!(result, Err(SpeechError::StreamBuild(_))));
+        assert!(!service.is_recording());
+        assert!(service.stop_sender.is_none());
+    }
+
+    #[test]
+    fn a_play_error_fails_the_start_and_leaves_the_service_idle() {
+        let mut service = SpeechService::new();
+        let result = start_fake(&mut service, || {
+            Ok(FakeStream {
+                play_result: || Err(cpal::PlayStreamError::DeviceNotAvailable),
+            })
+        });
+        assert!(matches!(result, Err(SpeechError::RecordingFailed(_))));
+        assert!(!service.is_recording());
+    }
+
+    #[test]
+    fn a_panicking_recorder_thread_fails_the_start() {
+        let mut service = SpeechService::new();
+        let result = start_fake(&mut service, || panic!("builder panicked"));
+        assert!(matches!(result, Err(SpeechError::RecordingFailed(_))));
+        assert!(!service.is_recording());
+    }
+
+    #[test]
+    fn a_playing_stream_starts_the_recording() {
+        let mut service = SpeechService::new();
+        let result = start_fake(&mut service, || {
+            Ok(FakeStream {
+                play_result: || Ok(()),
+            })
+        });
+        assert_eq!(result.unwrap(), 16000);
+        assert!(service.is_recording());
+        assert!(service.stop_recording_raw().is_ok());
     }
 
     #[test]

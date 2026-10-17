@@ -6,7 +6,7 @@
   <span class="provider-menu-footer-hint-icon">
     <ExternalLink size={12} strokeWidth={2.25} />
   </span>
-  <span>Opens in a new window</span>
+  <span>Opens in a new tab</span>
 </div>
 
 <style>

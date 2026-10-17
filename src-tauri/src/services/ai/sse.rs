@@ -14,12 +14,14 @@ fn sse_stream(
     byte_stream: impl Stream<Item = Result<Vec<u8>, reqwest::Error>> + Send + 'static,
 ) -> Pin<Box<dyn Stream<Item = Result<String, reqwest::Error>> + Send>> {
     Box::pin(futures::stream::unfold(
-        (Box::pin(byte_stream) as Pin<Box<dyn Stream<Item = Result<Vec<u8>, reqwest::Error>> + Send>>, String::new()),
+        (Box::pin(byte_stream) as Pin<Box<dyn Stream<Item = Result<Vec<u8>, reqwest::Error>> + Send>>, Vec::<u8>::new()),
         |(mut byte_stream, mut buffer)| async move {
             loop {
-                if let Some(line_end) = buffer.find('\n') {
-                    let line = buffer[..line_end].trim_end_matches('\r').to_string();
-                    buffer = buffer[line_end + 1..].to_string();
+                if let Some(line_end) = buffer.iter().position(|&b| b == b'\n') {
+                    let line = String::from_utf8_lossy(&buffer[..line_end])
+                        .trim_end_matches('\r')
+                        .to_string();
+                    buffer.drain(..=line_end);
 
                     if line.is_empty() || line.starts_with(':') {
                         continue;
@@ -37,13 +39,13 @@ fn sse_stream(
 
                 match byte_stream.next().await {
                     Some(Ok(bytes)) => {
-                        buffer.push_str(&String::from_utf8_lossy(&bytes));
+                        buffer.extend_from_slice(&bytes);
                     }
                     Some(Err(e)) => {
                         return Some((Err(e), (byte_stream, buffer)));
                     }
                     None => {
-                        let trimmed = buffer.trim().to_string();
+                        let trimmed = String::from_utf8_lossy(&buffer).trim().to_string();
                         if let Some(data) = trimmed.strip_prefix("data: ") {
                             if data != "[DONE]" {
                                 let result = data.to_string();
@@ -64,16 +66,34 @@ mod tests {
     use super::*;
     use futures::stream;
 
-    fn test_sse_stream(
-        chunks: Vec<&str>,
+    fn test_sse_byte_stream(
+        chunks: Vec<Vec<u8>>,
     ) -> Pin<Box<dyn Stream<Item = Result<String, reqwest::Error>> + Send>> {
         let byte_stream = stream::iter(
             chunks
                 .into_iter()
-                .map(|s| Ok::<Vec<u8>, reqwest::Error>(s.as_bytes().to_vec()))
+                .map(Ok::<Vec<u8>, reqwest::Error>)
                 .collect::<Vec<_>>(),
         );
         Box::pin(sse_stream(byte_stream))
+    }
+
+    fn test_sse_stream(
+        chunks: Vec<&str>,
+    ) -> Pin<Box<dyn Stream<Item = Result<String, reqwest::Error>> + Send>> {
+        test_sse_byte_stream(chunks.into_iter().map(|s| s.as_bytes().to_vec()).collect())
+    }
+
+    #[tokio::test]
+    async fn test_multibyte_character_split_across_chunks() {
+        let results: Vec<_> = tokio_stream::StreamExt::collect(test_sse_byte_stream(vec![
+            [b"data: ".as_slice(), &[0xC5]].concat(),
+            vec![0x82, 0xE2, 0x82],
+            [&[0xAC][..], b"\n\n"].concat(),
+        ]))
+        .await;
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].as_ref().unwrap(), "ł€");
     }
 
     #[tokio::test]
