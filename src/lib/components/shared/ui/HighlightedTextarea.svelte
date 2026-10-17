@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { escapeHtml } from "$lib/utils/format";
+  import { escapeHtml as escapeAny } from "$lib/utils/format";
+
+  const escapeHtml = (s: string) => escapeAny(s, "&<>");
 
   let {
     value = $bindable<string>(""),

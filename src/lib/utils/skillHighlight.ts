@@ -11,7 +11,7 @@ export function highlightSkills(
   return text
     .split("\n")
     .map((line) =>
-      escapeHtml(line).replace(SKILL_TOKEN_RE, (_, pre, token, after) => {
+      escapeHtml(line, "&<>\"").replace(SKILL_TOKEN_RE, (_, pre, token, after) => {
         const finished = !!after;
         const cls = classify(token, finished);
         return cls

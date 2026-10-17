@@ -1,8 +1,7 @@
-export function escapeHtml(s: string): string {
-  return s.replace(
-    /[&<>"']/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" })[c]!,
-  );
+const HTML_ENTITIES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" };
+
+export function escapeHtml(s: string, chars = "&<>\"'"): string {
+  return s.replace(/[&<>"']/g, (c) => (chars.includes(c) ? HTML_ENTITIES[c] : c));
 }
 
 export function formatDuration(seconds: number): string {
