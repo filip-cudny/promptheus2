@@ -133,10 +133,6 @@ impl SkillService {
         self.skills.iter().find(|s| s.name == name)
     }
 
-    pub fn skills_dir(&self) -> &Path {
-        &self.skills_dir
-    }
-
     pub fn skill_dir(&self, slug: &str) -> PathBuf {
         self.skills_dir.join(slug)
     }
@@ -274,18 +270,6 @@ impl SkillService {
         params.push(&now);
         conn.execute(&sql, params.as_slice())?;
         Ok(())
-    }
-
-    pub fn lookup_version_body(
-        conn: &Connection,
-        skill_version_id: i64,
-    ) -> Result<Option<String>, rusqlite::Error> {
-        conn.query_row(
-            "SELECT body FROM skill_versions WHERE id = ?1",
-            [skill_version_id],
-            |row| row.get::<_, String>(0),
-        )
-        .optional()
     }
 }
 

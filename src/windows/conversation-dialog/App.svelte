@@ -157,7 +157,7 @@
 
   async function reloadActiveProvider() {
     try {
-      await reloadActiveInHost(HOST_LABEL);
+      await reloadActiveInHost();
     } catch (err) {
       console.error("reload_active_in_host failed", err);
     }

@@ -317,7 +317,6 @@ impl TabList {
             .collect()
     }
 
-    #[allow(dead_code)]
     pub fn live_provider_tabs(&self) -> Vec<String> {
         self.tabs
             .iter()

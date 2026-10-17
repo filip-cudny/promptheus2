@@ -29,9 +29,7 @@ impl MenuItemProvider for ContextMenuProvider {
             data: Some(serde_json::json!({ "items": self.items })),
             enabled: true,
             separator_after: false,
-            style: None,
             tooltip: None,
-            submenu_items: None,
             icon: None,
             section_id: None,
         }]
@@ -142,16 +140,12 @@ impl ContextManagerService {
         }
     }
 
+}
+
+#[cfg(test)]
+impl ContextManagerService {
     pub fn item_count(&self) -> usize {
         self.items.len()
-    }
-
-    pub fn has_text_or_images(&self) -> bool {
-        !self.items.is_empty()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.items.is_empty()
     }
 }
 
@@ -286,33 +280,21 @@ mod tests {
         svc.append_context_image("img".into(), "image/png".into());
         svc.clear();
 
-        assert!(svc.is_empty());
         assert_eq!(svc.item_count(), 0);
         assert!(!svc.has_context());
         assert!(!svc.has_images());
     }
 
     #[test]
-    fn item_count_and_is_empty() {
+    fn item_count_follows_appends() {
         let mut svc = service();
-        assert!(svc.is_empty());
         assert_eq!(svc.item_count(), 0);
 
         svc.append_context("text".into());
-        assert!(!svc.is_empty());
         assert_eq!(svc.item_count(), 1);
 
         svc.append_context_image("img".into(), "image/png".into());
         assert_eq!(svc.item_count(), 2);
-    }
-
-    #[test]
-    fn has_text_or_images() {
-        let mut svc = service();
-        assert!(!svc.has_text_or_images());
-
-        svc.append_context_image("img".into(), "image/png".into());
-        assert!(svc.has_text_or_images());
     }
 
     fn numbers(svc: &ContextManagerService) -> Vec<(&'static str, u32)> {

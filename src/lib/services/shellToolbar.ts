@@ -14,8 +14,8 @@ export async function openPalette(hostLabel: string): Promise<void> {
   await invoke("open_palette", { hostLabel });
 }
 
-export async function reloadActiveInHost(hostLabel: string): Promise<void> {
-  await invoke("reload_active_in_host", { hostLabel });
+export async function reloadActiveInHost(): Promise<void> {
+  await invoke("reload_active_in_host");
 }
 
 export async function closePalette(

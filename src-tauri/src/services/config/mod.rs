@@ -171,10 +171,6 @@ impl ConfigService {
         &self.settings
     }
 
-    pub fn settings_mut(&mut self) -> &mut Settings {
-        &mut self.settings
-    }
-
     pub fn update_setting(&mut self, key: &str, value: serde_json::Value) {
         match key {
             "show_tray_icon" => {
@@ -483,10 +479,6 @@ impl ConfigService {
             exists: true,
             term_count,
         })
-    }
-
-    pub fn config_dir(&self) -> &Path {
-        &self.config_dir
     }
 }
 

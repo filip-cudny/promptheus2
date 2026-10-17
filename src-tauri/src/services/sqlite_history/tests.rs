@@ -2,6 +2,33 @@ use super::*;
 use crate::models::history::{InvocationSource, OutputRoute};
 use crate::services::database::Database;
 
+impl SqliteHistoryService {
+    fn get_last_item_by_type(&self, entry_type: HistoryEntryType) -> Option<HistoryEntry> {
+        let type_str = match entry_type {
+            HistoryEntryType::Text => "text",
+            HistoryEntryType::Speech => "speech",
+        };
+        let sql = format!(
+            "SELECT {ENTRY_COLUMNS} FROM conversations WHERE entry_type = ?1
+             ORDER BY COALESCE(updated_at, created_at) DESC, rowid DESC LIMIT 1"
+        );
+        self.db.conn().query_row(&sql, [type_str], row_to_entry).ok()
+    }
+
+    fn clear(&self) {
+        let _ = self.db.conn().execute("DELETE FROM conversations", []);
+    }
+
+    fn entry_count(&self) -> usize {
+        self.db
+            .conn()
+            .query_row("SELECT COUNT(*) FROM conversations", [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .unwrap_or(0) as usize
+    }
+}
+
 fn make_db() -> Database {
     Database::open_in_memory().unwrap()
 }

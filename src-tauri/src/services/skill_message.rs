@@ -431,7 +431,7 @@ mod tests {
     #[test]
     fn compose_single_skill_message() {
         let skill = test_skill("translate-english", "Translate to English.");
-        let result = compose_skill_user_message(&skill, "Cześć!", &PlaceholderContext::empty());
+        let result = compose_skill_user_message(&skill, "Cześć!", &PlaceholderContext::default());
         assert!(result.contains("<skill name=\"translate-english\">"));
         assert!(result.contains("Translate to English."));
         assert!(result.contains("</skill>"));
@@ -501,7 +501,7 @@ mod tests {
             &skill,
             "input text",
             &context,
-            &PlaceholderContext::empty(),
+            &PlaceholderContext::default(),
         );
 
         assert_eq!(messages.len(), 2);
@@ -532,7 +532,7 @@ mod tests {
             &skill,
             "input",
             &context,
-            &PlaceholderContext::empty(),
+            &PlaceholderContext::default(),
         );
 
         if let MessageContent::Text(ref text) = messages[0].content {
@@ -560,7 +560,7 @@ mod tests {
             &skill,
             "input",
             &context,
-            &PlaceholderContext::empty(),
+            &PlaceholderContext::default(),
         );
 
         let MessageContent::Text(ref system) = messages[0].content else {
@@ -589,7 +589,7 @@ mod tests {
             &skill,
             "input",
             &context,
-            &PlaceholderContext::empty(),
+            &PlaceholderContext::default(),
         );
 
         assert_eq!(messages.len(), 2);

@@ -10,10 +10,6 @@ pub struct PlaceholderContext {
 }
 
 impl PlaceholderContext {
-    pub fn empty() -> Self {
-        Self::default()
-    }
-
     pub fn with_apps(active_app: impl Into<String>, recent_apps: impl Into<String>) -> Self {
         Self {
             active_app: active_app.into(),
@@ -27,7 +23,6 @@ pub struct Placeholder {
     pub label: &'static str,
     pub description: &'static str,
     resolve: fn(&PlaceholderContext) -> String,
-    preview: fn(&PlaceholderContext) -> String,
 }
 
 impl Placeholder {
@@ -37,10 +32,6 @@ impl Placeholder {
 
     pub fn resolve(&self, ctx: &PlaceholderContext) -> String {
         (self.resolve)(ctx)
-    }
-
-    pub fn preview(&self, ctx: &PlaceholderContext) -> String {
-        (self.preview)(ctx)
     }
 }
 
@@ -69,42 +60,36 @@ pub static REGISTRY: &[Placeholder] = &[
         label: "Date",
         description: "Local date in YYYY-MM-DD format.",
         resolve: resolve_date,
-        preview: resolve_date,
     },
     Placeholder {
         name: "time",
         label: "Time",
         description: "Local time in HH:MM (24h) format.",
         resolve: resolve_time,
-        preview: resolve_time,
     },
     Placeholder {
         name: "timezone",
         label: "Timezone",
         description: "System timezone abbreviation.",
         resolve: resolve_timezone,
-        preview: resolve_timezone,
     },
     Placeholder {
         name: "os",
         label: "OS",
         description: "Operating system identifier (linux, macos, windows).",
         resolve: resolve_os,
-        preview: resolve_os,
     },
     Placeholder {
         name: "active_app",
         label: "Active app",
         description: "Foreground application at the moment the conversation started.",
         resolve: resolve_active_app,
-        preview: resolve_active_app,
     },
     Placeholder {
         name: "recent_apps",
         label: "Recent apps",
         description: "Comma-separated list of recently focused applications.",
         resolve: resolve_recent_apps,
-        preview: resolve_recent_apps,
     },
 ];
 
@@ -143,7 +128,7 @@ pub fn list(ctx: &PlaceholderContext) -> Vec<PlaceholderInfo> {
             name: p.name.to_string(),
             label: p.label.to_string(),
             description: p.description.to_string(),
-            example: p.preview(ctx),
+            example: p.resolve(ctx),
         })
         .collect()
 }
@@ -161,20 +146,20 @@ mod tests {
 
     #[test]
     fn substitute_leaves_unknown_tokens_literal() {
-        let ctx = PlaceholderContext::empty();
+        let ctx = PlaceholderContext::default();
         let result = substitute("hello {{unknown_token}} world", &ctx);
         assert_eq!(result, "hello {{unknown_token}} world");
     }
 
     #[test]
     fn substitute_handles_empty_string() {
-        let ctx = PlaceholderContext::empty();
+        let ctx = PlaceholderContext::default();
         assert_eq!(substitute("", &ctx), "");
     }
 
     #[test]
     fn substitute_handles_text_without_tokens() {
-        let ctx = PlaceholderContext::empty();
+        let ctx = PlaceholderContext::default();
         assert_eq!(substitute("plain text", &ctx), "plain text");
     }
 
@@ -187,7 +172,7 @@ mod tests {
 
     #[test]
     fn list_includes_all_registered_tokens() {
-        let infos = list(&PlaceholderContext::empty());
+        let infos = list(&PlaceholderContext::default());
         let names: Vec<_> = infos.iter().map(|i| i.name.as_str()).collect();
         assert!(names.contains(&"date"));
         assert!(names.contains(&"time"));
@@ -200,7 +185,7 @@ mod tests {
 
     #[test]
     fn list_renders_token_with_braces() {
-        let infos = list(&PlaceholderContext::empty());
+        let infos = list(&PlaceholderContext::default());
         let date = infos.iter().find(|i| i.name == "date").unwrap();
         assert_eq!(date.token, "{{date}}");
     }

@@ -67,7 +67,7 @@ pub async fn add_conversation_entry(
     root_node_id: Option<String>,
     current_path: Vec<String>,
     tab_id: Option<String>,
-    #[allow(unused_variables)] images: Vec<ImagePayload>,
+    images: Vec<ImagePayload>,
     model_id: Option<String>,
     reasoning_effort: Option<String>,
     invocation_source: InvocationSource,
@@ -110,7 +110,7 @@ pub async fn update_conversation_entry(
     nodes: Vec<SerializedConversationNode>,
     root_node_id: Option<String>,
     current_path: Vec<String>,
-    #[allow(unused_variables)] images: Vec<ImagePayload>,
+    images: Vec<ImagePayload>,
     model_id: Option<String>,
     reasoning_effort: Option<String>,
 ) -> crate::Result<()> {

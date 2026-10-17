@@ -18,13 +18,9 @@ pub enum ClipStoreError {
 
 #[derive(Debug, Clone)]
 pub struct AudioClip {
-    pub id: String,
-    pub history_entry_id: Option<String>,
     pub path: PathBuf,
-    pub sample_rate: u32,
     pub duration_secs: f64,
     pub bytes: u64,
-    pub created_at: String,
     pub expires_at: String,
 }
 
@@ -107,7 +103,7 @@ impl AudioClipStore {
 
     pub fn find_by_entry(&self, conn: &Connection, entry_id: &str) -> Option<AudioClip> {
         conn.query_row(
-            "SELECT id, history_entry_id, path, sample_rate, duration_secs, bytes, created_at, expires_at
+            "SELECT path, duration_secs, bytes, expires_at
              FROM audio_clips WHERE history_entry_id = ?1
              ORDER BY created_at DESC LIMIT 1",
             [entry_id],
@@ -240,14 +236,10 @@ fn format_ts(value: chrono::DateTime<chrono::Local>) -> String {
 
 fn row_to_clip(row: &rusqlite::Row<'_>) -> rusqlite::Result<AudioClip> {
     Ok(AudioClip {
-        id: row.get(0)?,
-        history_entry_id: row.get(1)?,
-        path: PathBuf::from(row.get::<_, String>(2)?),
-        sample_rate: row.get(3)?,
-        duration_secs: row.get(4)?,
-        bytes: row.get::<_, i64>(5)? as u64,
-        created_at: row.get(6)?,
-        expires_at: row.get(7)?,
+        path: PathBuf::from(row.get::<_, String>(0)?),
+        duration_secs: row.get(1)?,
+        bytes: row.get::<_, i64>(2)? as u64,
+        expires_at: row.get(3)?,
     })
 }
 
@@ -272,16 +264,24 @@ mod tests {
         let clip = db
             .conn()
             .query_row(
-                "SELECT id, history_entry_id, path, sample_rate, duration_secs, bytes, created_at, expires_at FROM audio_clips WHERE id = ?1",
+                "SELECT path, duration_secs, bytes, expires_at FROM audio_clips WHERE id = ?1",
                 [&id],
                 row_to_clip,
             )
             .unwrap();
 
         assert_eq!(clip.bytes, 4);
-        assert_eq!(clip.sample_rate, 16000);
         assert!(clip.path.exists());
-        assert!(clip.history_entry_id.is_none());
+        let (sample_rate, history_entry_id): (u32, Option<String>) = db
+            .conn()
+            .query_row(
+                "SELECT sample_rate, history_entry_id FROM audio_clips WHERE id = ?1",
+                [&id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(sample_rate, 16000);
+        assert!(history_entry_id.is_none());
     }
 
     #[test]
@@ -297,7 +297,7 @@ mod tests {
         store.attach_to_entry(db.conn(), &id, "e1").unwrap();
 
         let found = store.find_by_entry(db.conn(), "e1").unwrap();
-        assert_eq!(found.id, id);
+        assert_eq!(found.path.file_stem().unwrap(), id.as_str());
         assert_eq!(store.read_bytes(&found).unwrap().len(), 8);
     }
 
@@ -370,7 +370,7 @@ mod tests {
         let clip = db
             .conn()
             .query_row(
-                "SELECT id, history_entry_id, path, sample_rate, duration_secs, bytes, created_at, expires_at FROM audio_clips WHERE id = ?1",
+                "SELECT path, duration_secs, bytes, expires_at FROM audio_clips WHERE id = ?1",
                 [&id],
                 row_to_clip,
             )

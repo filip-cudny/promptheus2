@@ -41,10 +41,6 @@ impl DockManager {
         }
     }
 
-    pub fn has_open_dialogs(&self) -> bool {
-        self.dialog_count.load(Ordering::SeqCst) > 0
-    }
-
     pub fn dialog_closed(&self, #[allow(unused)] app: &tauri::AppHandle) {
         let prev = self
             .dialog_count
@@ -53,10 +49,6 @@ impl DockManager {
             #[cfg(target_os = "macos")]
             apply_dock_visible(app, false);
         }
-    }
-
-    pub fn rollback_open(&self, app: &tauri::AppHandle) {
-        self.dialog_closed(app);
     }
 
     pub fn host_hidden(&self, app: &tauri::AppHandle) {

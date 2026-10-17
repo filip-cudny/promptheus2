@@ -35,9 +35,7 @@ impl MenuItemProvider for SkillMenuProvider {
                 })),
                 enabled: true,
                 separator_after: false,
-                style: None,
                 tooltip: skill.description.clone(),
-                submenu_items: None,
                 icon: None,
                 section_id: None,
             })

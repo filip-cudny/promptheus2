@@ -286,7 +286,7 @@ pub async fn open_or_focus(
     let window = match window_builder.build() {
         Ok(w) => w,
         Err(e) => {
-            dock.rollback_open(app);
+            dock.dialog_closed(app);
             return Err(e.to_string());
         }
     };

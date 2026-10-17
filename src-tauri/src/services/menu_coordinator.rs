@@ -46,7 +46,7 @@ impl MenuCoordinator {
                 "chat" => self.build_chat_items(),
                 "skills" | "prompts" => self.build_skill_items(),
                 "models" => self.build_models_items(config),
-                "settings" => self.build_settings_items(config),
+                "settings" => self.build_settings_items(),
                 _ => self.build_provider_items(section_id),
             };
 
@@ -106,9 +106,7 @@ impl MenuCoordinator {
             data: None,
             enabled: true,
             separator_after: false,
-            style: None,
             tooltip: None,
-            submenu_items: None,
             icon: None,
             section_id: None,
         }]
@@ -191,55 +189,21 @@ impl MenuCoordinator {
             })),
             enabled: true,
             separator_after: false,
-            style: None,
             tooltip: None,
-            submenu_items: None,
             icon: None,
             section_id: None,
         }]
     }
 
-    fn build_settings_items(&self, config: &ConfigService) -> Vec<MenuItem> {
-        let settings = config.settings();
-        let chat_default_id = settings.surfaces.chat.generation.model_id.clone();
-
-        let default_model_display = chat_default_id
-            .as_ref()
-            .and_then(|default_id| {
-                settings
-                    .models
-                    .iter()
-                    .find(|m| &m.id == default_id)
-                    .map(|m| m.display_name.clone())
-            })
-            .or_else(|| chat_default_id.clone())
-            .unwrap_or_default();
-
-        let model_options: Vec<serde_json::Value> = settings
-            .models
-            .iter()
-            .map(|m| {
-                serde_json::json!({
-                    "id": m.id,
-                    "display_name": m.display_name,
-                    "is_default": chat_default_id.as_ref() == Some(&m.id),
-                })
-            })
-            .collect();
-
+    fn build_settings_items(&self) -> Vec<MenuItem> {
         vec![MenuItem {
             id: "settings_section".to_string(),
             label: "Settings".to_string(),
             item_type: MenuItemType::SettingsSection,
-            data: Some(serde_json::json!({
-                "model_options": model_options,
-                "current_model": default_model_display,
-            })),
+            data: None,
             enabled: true,
             separator_after: false,
-            style: None,
             tooltip: None,
-            submenu_items: None,
             icon: None,
             section_id: None,
         }]
@@ -286,9 +250,7 @@ mod tests {
             data: None,
             enabled: true,
             separator_after: false,
-            style: None,
             tooltip: None,
-            submenu_items: None,
             icon: None,
             section_id: None,
         }
@@ -432,10 +394,6 @@ mod tests {
             .collect();
         assert_eq!(settings_items.len(), 1);
         assert_eq!(settings_items[0].item_type, MenuItemType::SettingsSection);
-
-        let data = settings_items[0].data.as_ref().unwrap();
-        assert!(data.get("model_options").is_some());
-        assert!(data.get("current_model").is_some());
     }
 
     #[test]

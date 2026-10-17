@@ -241,8 +241,6 @@ struct OutputItemEvent {
     #[serde(default)]
     id: Option<String>,
     #[serde(default)]
-    status: Option<String>,
-    #[serde(default)]
     action: Option<serde_json::Value>,
     #[serde(default)]
     call_id: Option<String>,

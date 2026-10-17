@@ -103,7 +103,7 @@ fn test_delete_model_clears_references() {
     let dir = setup_test_dir();
     let mut service = ConfigService::load(dir.path(), None).expect("load");
     service.add_model(test_stt_model("stt-to-delete", "${KEY}"));
-    service.settings_mut().surfaces.speech_to_text.model_id = Some("stt-to-delete".to_string());
+    service.settings.surfaces.speech_to_text.model_id = Some("stt-to-delete".to_string());
 
     service.delete_model("stt-to-delete");
     assert_eq!(service.settings().surfaces.speech_to_text.model_id, None);
@@ -570,7 +570,7 @@ fn test_stt_keyterms_reads_relative_file() {
     )
     .unwrap();
     let mut service = ConfigService::load(dir.path(), None).expect("load");
-    service.settings_mut().surfaces.speech_to_text.keyterms_file =
+    service.settings.surfaces.speech_to_text.keyterms_file =
         Some("keyterms.txt".to_string());
 
     let terms = service.stt_keyterms();
@@ -585,7 +585,7 @@ fn test_stt_keyterms_rejects_absolute_path() {
     fs::write(&outside_file, "Secret\n").unwrap();
 
     let mut service = ConfigService::load(dir.path(), None).expect("load");
-    service.settings_mut().surfaces.speech_to_text.keyterms_file =
+    service.settings.surfaces.speech_to_text.keyterms_file =
         Some(outside_file.to_string_lossy().into_owned());
 
     assert!(service.stt_keyterms().is_empty());
@@ -595,7 +595,7 @@ fn test_stt_keyterms_rejects_absolute_path() {
 fn test_stt_keyterms_rejects_parent_dir_traversal() {
     let dir = setup_test_dir();
     let mut service = ConfigService::load(dir.path(), None).expect("load");
-    service.settings_mut().surfaces.speech_to_text.keyterms_file =
+    service.settings.surfaces.speech_to_text.keyterms_file =
         Some("../escape.txt".to_string());
 
     assert!(service.stt_keyterms().is_empty());
@@ -607,7 +607,7 @@ fn test_stt_keyterms_resolves_config_dir_placeholder_to_relative() {
     fs::write(dir.path().join("keyterms.txt"), "Alpha\n").unwrap();
 
     let mut service = ConfigService::load(dir.path(), None).expect("load");
-    service.settings_mut().surfaces.speech_to_text.keyterms_file =
+    service.settings.surfaces.speech_to_text.keyterms_file =
         Some("${CONFIG_DIR}/keyterms.txt".to_string());
 
     assert!(

@@ -15,24 +15,6 @@ pub trait Shell {
 
     fn get_pointer(&self) -> zbus::Result<(i32, i32, i32, i32, i32, i32)>;
 
-    fn place_window(&self, title: &str, x: i32, y: i32, activate: bool) -> zbus::Result<bool>;
-
-    fn place_window_anchored(
-        &self,
-        title: &str,
-        right: i32,
-        bottom: i32,
-        activate: bool,
-    ) -> zbus::Result<bool>;
-
-    fn place_window_on_parent(
-        &self,
-        title: &str,
-        dx: i32,
-        dy: i32,
-        activate: bool,
-    ) -> zbus::Result<bool>;
-
     fn get_focused_wm_class(&self) -> zbus::Result<String>;
 
     fn show_toast(

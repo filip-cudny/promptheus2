@@ -378,7 +378,7 @@ pub enum ApiMode {
     Completions,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ModelParameters {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
@@ -400,20 +400,6 @@ pub struct ModelParameters {
 
     #[serde(flatten)]
     pub extra: BTreeMap<String, serde_json::Value>,
-}
-
-impl Default for ModelParameters {
-    fn default() -> Self {
-        Self {
-            temperature: None,
-            max_tokens: None,
-            top_p: None,
-            frequency_penalty: None,
-            presence_penalty: None,
-            reasoning_effort: None,
-            extra: BTreeMap::new(),
-        }
-    }
 }
 
 impl ModelParameters {

@@ -524,8 +524,6 @@ export function createConversationStore(
         contextText: tab.context_text || undefined,
         contextImages,
         tabId: tab.tab_id,
-        skillId,
-        skillName,
         modelId: tab.model_id || undefined,
         reasoningEffort: tab.reasoning_effort || undefined,
         toolsOverride: tab.selected_tools,

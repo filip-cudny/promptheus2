@@ -105,8 +105,6 @@ export async function executeConversationFromTree(
     contextText?: string;
     contextImages?: ImageData[];
     tabId: string;
-    skillId?: string;
-    skillName?: string;
     modelId?: string;
     reasoningEffort?: string;
     toolsOverride?: string[];
@@ -119,8 +117,6 @@ export async function executeConversationFromTree(
     contextText: options.contextText ?? null,
     contextImages: options.contextImages ?? [],
     tabId: options.tabId,
-    skillId: options.skillId ?? null,
-    skillName: options.skillName ?? null,
     modelId: options.modelId ?? null,
     reasoningEffort: options.reasoningEffort ?? null,
     toolsOverride: options.toolsOverride ?? null,

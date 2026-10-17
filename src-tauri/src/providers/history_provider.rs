@@ -22,9 +22,7 @@ impl MenuItemProvider for LastInteractionMenuProvider {
             data: None,
             enabled: true,
             separator_after: false,
-            style: None,
             tooltip: None,
-            submenu_items: None,
             icon: None,
             section_id: None,
         }]

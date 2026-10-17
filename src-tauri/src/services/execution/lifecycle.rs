@@ -38,8 +38,6 @@ pub struct LiveExecution {
 }
 
 pub struct PromptExecutionService {
-    skill_executing: bool,
-    skill_execution_id: Option<String>,
     executing_skill_id: Option<String>,
     cancel_sender: Option<watch::Sender<bool>>,
     live_cancel_sender: Option<watch::Sender<bool>>,
@@ -49,8 +47,6 @@ pub struct PromptExecutionService {
 impl PromptExecutionService {
     pub fn new() -> Self {
         Self {
-            skill_executing: false,
-            skill_execution_id: None,
             executing_skill_id: None,
             cancel_sender: None,
             live_cancel_sender: None,
@@ -59,7 +55,7 @@ impl PromptExecutionService {
     }
 
     pub fn is_busy(&self) -> bool {
-        self.skill_executing
+        self.executing_skill_id.is_some()
     }
 
     #[cfg(test)]
@@ -71,21 +67,17 @@ impl PromptExecutionService {
         &mut self,
         skill_id: String,
     ) -> Result<(String, watch::Receiver<bool>), ExecutionError> {
-        if self.skill_executing {
+        if self.is_busy() {
             return Err(ExecutionError::AlreadyExecuting);
         }
         let execution_id = Uuid::new_v4().to_string();
         let (tx, rx) = watch::channel(false);
-        self.skill_executing = true;
-        self.skill_execution_id = Some(execution_id.clone());
         self.executing_skill_id = Some(skill_id);
         self.cancel_sender = Some(tx);
         Ok((execution_id, rx))
     }
 
     pub fn finish_skill_execution(&mut self) {
-        self.skill_executing = false;
-        self.skill_execution_id = None;
         self.executing_skill_id = None;
         self.cancel_sender = None;
         self.live = None;

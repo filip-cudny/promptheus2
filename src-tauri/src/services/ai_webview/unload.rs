@@ -1,10 +1,14 @@
+#[cfg(target_os = "linux")]
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tauri::Manager;
+#[cfg(target_os = "linux")]
 use tokio::sync::Mutex;
 
+#[cfg(target_os = "linux")]
 use crate::services::config::ConfigService;
+#[cfg(target_os = "linux")]
 use crate::services::notification::{NotificationLevel, NotificationService};
 
 use super::provider_send::fallback;
@@ -12,6 +16,7 @@ use super::provider_swap::emit_tabs_changed;
 use super::AiWebviewState;
 
 pub const UNLOAD_POLL_INTERVAL: Duration = Duration::from_secs(60);
+#[cfg(target_os = "linux")]
 pub(super) const UNRESPONSIVE_GRACE_SECONDS: u32 = 20;
 
 pub(super) fn unload_tab(app: &tauri::AppHandle, tab_id: &str) {
@@ -80,6 +85,7 @@ pub fn run_unload_pass(app: tauri::AppHandle) {
     }
 }
 
+#[cfg(target_os = "linux")]
 pub(super) fn provider_display_name(app: &tauri::AppHandle, webview_label: &str) -> String {
     app.try_state::<AiWebviewState>()
         .and_then(|s| s.provider_for_label(webview_label))
@@ -87,6 +93,7 @@ pub(super) fn provider_display_name(app: &tauri::AppHandle, webview_label: &str)
         .unwrap_or_else(|| "Provider".to_string())
 }
 
+#[cfg(target_os = "linux")]
 pub(super) fn emit_provider_lifecycle_toast(
     app: &tauri::AppHandle,
     event_name: &'static str,

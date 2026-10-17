@@ -361,6 +361,7 @@ impl SpeechService {
         self.pending = None;
     }
 
+    #[cfg(test)]
     pub fn pending_prompt(&self) -> Option<&PendingPrompt> {
         self.pending.as_ref()
     }

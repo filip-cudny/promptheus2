@@ -31,6 +31,7 @@ impl Database {
         Ok(Self { conn })
     }
 
+    #[cfg(test)]
     pub fn open_in_memory() -> Result<Self, DatabaseError> {
         let conn = Connection::open_in_memory()?;
         conn.pragma_update(None, "foreign_keys", "ON")?;

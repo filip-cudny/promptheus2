@@ -45,9 +45,7 @@ impl MenuItemProvider for SpeechMenuProvider {
             data: Some(serde_json::json!({"type": "speech_to_text"})),
             enabled,
             separator_after: false,
-            style: None,
             tooltip: None,
-            submenu_items: None,
             icon: Some(icon.to_string()),
             section_id: None,
         }]

@@ -14,14 +14,6 @@ pub struct McpRegistry {
 }
 
 impl McpRegistry {
-    pub fn empty() -> Self {
-        Self {
-            servers: HashMap::new(),
-            qualified_index: HashMap::new(),
-            tools: Vec::new(),
-        }
-    }
-
     fn qualified_name(server: &str, tool: &str) -> String {
         format!("{}.{}", server, tool)
     }
@@ -135,9 +127,5 @@ impl McpRegistry {
             log::info!("Shutting down MCP server '{}'", name);
             client.shutdown().await;
         }
-    }
-
-    pub fn has_tools(&self) -> bool {
-        !self.tools.is_empty()
     }
 }

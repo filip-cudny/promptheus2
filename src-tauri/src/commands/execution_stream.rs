@@ -65,7 +65,6 @@ pub async fn execute_skill(
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn execute_conversation_from_tree(
-    _app: AppHandle,
     config: State<'_, Arc<Mutex<ConfigService>>>,
     ai: State<'_, Arc<Mutex<AiService>>>,
     history: State<'_, Arc<Mutex<SqliteHistoryService>>>,
@@ -77,8 +76,6 @@ pub async fn execute_conversation_from_tree(
     context_text: Option<String>,
     context_images: Vec<ImageData>,
     tab_id: String,
-    _skill_id: Option<String>,
-    _skill_name: Option<String>,
     model_id: Option<String>,
     reasoning_effort: Option<String>,
     tools_override: Option<Vec<String>>,

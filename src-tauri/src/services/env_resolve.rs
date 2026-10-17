@@ -19,6 +19,7 @@ pub fn resolve_env_refs(value: &str) -> String {
         .into_owned()
 }
 
+#[cfg(test)]
 pub fn has_env_refs(value: &str) -> bool {
     ENV_REF_PATTERN.is_match(value)
 }

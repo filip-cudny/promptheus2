@@ -20,6 +20,7 @@ use crate::services::ui_state::UiStateService;
 
 pub const WINDOW_LABEL: &str = "recording-widget";
 pub const WINDOW_POSITION_KEY: &str = "recording_widget.window_position";
+#[cfg(target_os = "linux")]
 pub const SHELL_POSITION_KEY: &str = "recording_widget.shell_position";
 
 const STATE_EVENT: &str = "recording-widget-state";
@@ -1052,6 +1053,7 @@ impl RecordingWidget {
         }
     }
 
+    #[cfg(target_os = "linux")]
     pub fn shell_moved(&self, app: &AppHandle, placement: Placement) {
         let app = app.clone();
         tauri::async_runtime::spawn(async move {

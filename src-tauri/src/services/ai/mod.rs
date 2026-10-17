@@ -212,23 +212,6 @@ impl AiService {
         entry.provider.complete_stream(request).await
     }
 
-    pub fn has_model(&self, model_id: &str) -> bool {
-        self.inner.providers.contains_key(model_id)
-    }
-
-    pub fn get_available_models(&self) -> Vec<String> {
-        self.inner.providers.keys().cloned().collect()
-    }
-
-    pub fn get_unavailable_models(&self) -> &HashMap<String, String> {
-        &self.inner.unavailable_models
-    }
-
-    pub fn model_capabilities(&self, model_id: &str) -> Result<ModelCapabilities, AiError> {
-        let entry = self.get_provider(model_id)?;
-        Ok(entry.capabilities.clone())
-    }
-
     fn get_provider(&self, model_id: &str) -> Result<&ProviderEntry, AiError> {
         if let Some(reason) = self.inner.unavailable_models.get(model_id) {
             return Err(AiError::ModelUnavailable(reason.clone()));

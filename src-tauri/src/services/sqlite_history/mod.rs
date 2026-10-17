@@ -336,18 +336,6 @@ impl SqliteHistoryService {
         Some(history_entry)
     }
 
-    pub fn get_last_item_by_type(&self, entry_type: HistoryEntryType) -> Option<HistoryEntry> {
-        let type_str = match entry_type {
-            HistoryEntryType::Text => "text",
-            HistoryEntryType::Speech => "speech",
-        };
-        let sql = format!(
-            "SELECT {ENTRY_COLUMNS} FROM conversations WHERE entry_type = ?1
-             ORDER BY COALESCE(updated_at, created_at) DESC, rowid DESC LIMIT 1"
-        );
-        self.db.conn().query_row(&sql, [type_str], row_to_entry).ok()
-    }
-
     pub fn get_last_quick_action(&self, entry_type: HistoryEntryType) -> Option<HistoryEntry> {
         let type_str = match entry_type {
             HistoryEntryType::Text => "text",
@@ -392,11 +380,6 @@ impl SqliteHistoryService {
             HistoryContentPart::Input => Some(input_preview),
             HistoryContentPart::Output => output_preview,
         })
-    }
-
-    pub fn get_conversation_data(&self, entry_id: &str) -> Option<ConversationHistoryData> {
-        self.get_entry_by_id(entry_id)
-            .and_then(|e| e.conversation_data)
     }
 
     pub fn update_entry_title(
@@ -457,21 +440,8 @@ impl SqliteHistoryService {
         Ok(())
     }
 
-    pub fn clear(&self) {
-        let _ = self.db.conn().execute("DELETE FROM conversations", []);
-    }
-
     pub fn conn(&self) -> &rusqlite::Connection {
         self.db.conn()
-    }
-
-    pub fn entry_count(&self) -> usize {
-        self.db
-            .conn()
-            .query_row("SELECT COUNT(*) FROM conversations", [], |row| {
-                row.get::<_, i64>(0)
-            })
-            .unwrap_or(0) as usize
     }
 
     pub fn search_fts(

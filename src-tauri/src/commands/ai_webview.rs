@@ -16,11 +16,8 @@ pub async fn get_webview_providers(
 }
 
 #[tauri::command(async)]
-pub fn reload_active_in_host(app: tauri::AppHandle, host_label: String) -> crate::Result<()> {
-    log::info!(
-        target: "app_lib::commands::ai_webview",
-        "reload_active_in_host host={host_label}",
-    );
+pub fn reload_active_in_host(app: tauri::AppHandle) -> crate::Result<()> {
+    log::info!(target: "app_lib::commands::ai_webview", "reload_active_in_host");
     ai_webview::reload_active_in_host(&app).map_err(Error::Other)
 }
 

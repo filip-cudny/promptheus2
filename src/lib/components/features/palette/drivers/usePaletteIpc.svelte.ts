@@ -45,7 +45,7 @@ export function usePaletteIpc(opts: {
   async function reloadActive() {
     if (!hostLabel) return;
     try {
-      await reloadActiveInHost(hostLabel);
+      await reloadActiveInHost();
     } catch (e) {
       console.error("reload_active_in_host failed", e);
     }
