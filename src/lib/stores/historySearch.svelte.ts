@@ -1,3 +1,4 @@
+import { untrack } from "svelte";
 import { invoke } from "@tauri-apps/api/core";
 import { error as logError } from "@tauri-apps/plugin-log";
 import { searchHistory } from "$lib/services/history";
@@ -32,7 +33,7 @@ export function createSearchRunner(opts: {
       if (!ac.signal.aborted) response = result;
     } catch (e) {
       if (!ac.signal.aborted) {
-        logError(`search_history (${opts.label}) failed: ${e}`);
+        logError(`history search (${opts.label}) failed: ${e}`);
       }
     } finally {
       if (inflight === ac) inflight = null;
@@ -42,7 +43,7 @@ export function createSearchRunner(opts: {
 
   function trigger() {
     if (debounceTimer) clearTimeout(debounceTimer);
-    const wait = opts.buildQuery().query === "" ? 0 : opts.debounceMs;
+    const wait = untrack(opts.buildQuery).query === "" ? 0 : opts.debounceMs;
     debounceTimer = setTimeout(run, wait);
   }
 
