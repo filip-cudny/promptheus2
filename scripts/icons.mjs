@@ -59,9 +59,36 @@ function flameSquareSvg(svg) {
   );
 }
 
+function monoSvg(svg) {
+  return svg.replace(/stop-color="(#[0-9a-f]{6})"/gi, (_, hex) => {
+    const gray = Math.round(Math.min(255, luma(hex) * 1.075 + 6.8));
+    return `stop-color="#${gray.toString(16).padStart(2, "0").repeat(3)}"`;
+  });
+}
+
+function symbolicSvg(svg) {
+  const lumas = [...svg.matchAll(/stop-color="(#[0-9a-f]{6})"/gi)].map((m) => luma(m[1]));
+  const [min, max] = [Math.min(...lumas), Math.max(...lumas)];
+  return svg
+    .replace(/stop-color="(#[0-9a-f]{6})"/gi, (_, hex) => {
+      const opacity = 0.35 + (0.65 * (luma(hex) - min)) / (max - min);
+      return `stop-color="#000000" stop-opacity="${opacity.toFixed(3)}"`;
+    })
+    .replace(/^<path [^\n]*\n/gm, "")
+    .replace(/^<polygon [^\n]*fill="none"[^\n]*\n/gm, "")
+    .replace(/(<polygon points="[^"]*" fill="url\(#g\d+\)")[^>]*\/>/g, "$1/>");
+}
+
+function luma(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
 try {
   const logo = readFileSync(join(iconsDir, "logo.svg"), "utf8");
-  const symbolic = readFileSync(join(iconsDir, "logo-symbolic.svg"), "utf8");
+  const symbolic = symbolicSvg(logo);
+  writeFileSync(join(iconsDir, "logo-mono.svg"), monoSvg(logo));
+  writeFileSync(join(iconsDir, "logo-symbolic.svg"), symbolic);
 
   const app = render(join(iconsDir, "logo.svg"), "app");
   for (const file of ["32x32.png", "128x128.png", "128x128@2x.png", "icon.icns", "icon.ico"]) {
