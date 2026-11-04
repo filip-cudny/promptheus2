@@ -196,6 +196,7 @@ function createTabState(
     active_tool_calls: [],
     selected_tools: defaults.selectedTools ? [...defaults.selectedTools] : [],
     abort_regenerate_node_id: null,
+    shown: false,
   };
 }
 
@@ -935,7 +936,7 @@ export function createConversationStore(
   }
 
   function addTab(): void {
-    const existing = tabs.find(t => isTabClean(t));
+    const existing = tabs.find(t => isTabClean(t) && !t.shown);
     if (existing) {
       existing.invocation_source = "chat";
       activeTabId = existing.tab_id;
@@ -944,6 +945,11 @@ export function createConversationStore(
     const newTab = createTabState(null, tabDefaults());
     tabs.push(newTab);
     activeTabId = newTab.tab_id;
+  }
+
+  function markActiveTabShown(): void {
+    const tab = getTab(activeTabId);
+    if (tab) tab.shown = true;
   }
 
   function stopTabExecution(tab: TabState): void {
@@ -1440,6 +1446,7 @@ export function createConversationStore(
     openForSkill,
     setPristineInput,
     addTab,
+    markActiveTabShown,
     closeTab,
     closeTabWithSuccessor,
     switchTab,

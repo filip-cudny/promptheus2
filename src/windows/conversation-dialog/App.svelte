@@ -15,7 +15,7 @@
   import TabSidebar from "$lib/components/features/conversation-dialog/TabSidebar.svelte";
   import { useConversationDialogIpc } from "$lib/components/features/conversation-dialog/drivers/useConversationDialogIpc.svelte";
   import { reloadActiveInHost } from "$lib/services/shellToolbar";
-  import { reportNativeTabs, type NativeTabReport } from "$lib/services/tabs";
+  import { getTabs, reportNativeTabs, type NativeTabReport } from "$lib/services/tabs";
   import { SHORTCUTS, createHostShortcutHandler, matches } from "$lib/shortcuts";
   import { focusConversationInput } from "$lib/utils/conversationFocus";
   import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
@@ -80,8 +80,7 @@
       tab_id: t.tab_id,
       title: t.tab_name ?? "New chat",
       streaming: t.is_executing,
-      listed:
-        !store.isTabClean(t) || (t.tab_id === store.activeTabId && nativeViewVisible),
+      listed: t.shown || !store.isTabClean(t),
     }));
     const activeTabId = store.activeTabId;
     const key = JSON.stringify([tabs, activeTabId]);
@@ -90,6 +89,10 @@
     reportNativeTabs(tabs, activeTabId).catch((err) => {
       console.error("report_native_tabs failed", err);
     });
+  });
+
+  $effect(() => {
+    if (reportingReady && nativeViewVisible) store.markActiveTabShown();
   });
 
   const handleHostShortcut = createHostShortcutHandler(HOST_LABEL);
@@ -265,6 +268,13 @@
 
     await ipc.init();
     await autoShowContextIfNeeded();
+    try {
+      const snapshot = await getTabs();
+      const active = snapshot.tabs.find((t) => t.id === snapshot.active_id);
+      nativeViewVisible = snapshot.active_id === null || active?.kind === "native";
+    } catch (err) {
+      console.error("get_tabs failed", err);
+    }
     reportingReady = true;
   });
 

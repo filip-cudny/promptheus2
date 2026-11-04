@@ -83,8 +83,6 @@ pub async fn open_conversation_dialog(
     let new_chat = new_chat.unwrap_or(false);
 
     if app.get_window(label).is_some() {
-        ai_webview::surface(&app, "open_conversation_dialog", SurfaceTarget::NativeView)
-            .await?;
         emit_reuse_event(
             &app,
             label,
@@ -99,6 +97,8 @@ pub async fn open_conversation_dialog(
             invocation_source,
             copy_token,
         )?;
+        ai_webview::surface(&app, "open_conversation_dialog", SurfaceTarget::NativeView)
+            .await?;
         return Ok(());
     }
 

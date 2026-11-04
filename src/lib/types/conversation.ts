@@ -65,6 +65,7 @@ export interface TabState {
   active_tool_calls: ToolCall[];
   selected_tools: string[];
   abort_regenerate_node_id: string | null;
+  shown: boolean;
 }
 
 export function hasUserContent(msg: {

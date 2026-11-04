@@ -80,7 +80,8 @@ Accepted limit: when the one global live-stream slot is set, a window created at
 
 Native chat tabs and provider tabs share the strip of `shell-toolbar`; the conversation store stays the owner of native tabs.
 
-- Native sync: `App.svelte` reports a snapshot (`report_native_tabs`: `tab_id`, title, `streaming`, `listed`) after every change of the store's tabs, after `shell:active-changed` and once after mount. `listed` = the tab is not clean, or it is the active tab while the native view is visible; clean unlisted tabs stay out of the strip.
+- Native sync: `App.svelte` reports a snapshot (`report_native_tabs`: `tab_id`, title, `streaming`, `listed`) after every change of the store's tabs, after `shell:active-changed` and once after mount. A tab carries `shown`, set when it is the active tab while the native view is visible and never reset; `listed` = `shown` or not clean. Clean tabs never shown (the store's first tab, the replacement after closing the last tab) stay out of the strip. `nativeViewVisible` is read from `get_tabs` after mount.
+- New native tab: `addTab()` reuses only a clean tab never shown. Rust emits the chat event of a new native chat (`new-conversation`, the reuse events of `open_conversation_dialog`) before showing the native view, so the new tab is created while the view is hidden.
 - Rust drives the store through events: `chat:activate-tab` (`{ tab_id }`) switches the store's tab, `chat:close-tab` (`{ tab_id, next_tab_id }`) removes it without picking a successor; `new-conversation` with `reason: "tab"` runs `addTab()`.
 - `TabSidebar` lists history only; clicking an entry restores it with `store.restoreFromHistory`, deleting an entry also closes its tab.
 - Closing a tab (strip, shortcut) never deletes its history entry; only the drawer's delete does.

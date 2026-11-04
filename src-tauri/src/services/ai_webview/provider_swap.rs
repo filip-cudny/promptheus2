@@ -441,8 +441,8 @@ pub fn close_tab(app: &tauri::AppHandle, tab_id: &str) -> Result<(), String> {
 
 pub async fn new_tab(app: &tauri::AppHandle, provider_id: &str) -> Result<(), String> {
     if provider_id == super::palette::PROMPTHEUS_PROVIDER_ID {
-        surface(app, "new_tab", SurfaceTarget::NativeView).await?;
         emit_to_chat(app, "new-conversation", NewConversationEvent { reason: "tab".into() });
+        surface(app, "new_tab", SurfaceTarget::NativeView).await?;
         return Ok(());
     }
     let provider = lookup_webview_provider(app, provider_id)
