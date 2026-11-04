@@ -1,4 +1,5 @@
 mod clip_store;
+pub mod claude_desktop;
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 mod pill_previews;
 mod recorder;

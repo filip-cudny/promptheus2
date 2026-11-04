@@ -7,7 +7,7 @@ use tokio::sync::{watch, Mutex};
 
 use crate::commands::clipboard::store_pending_copy;
 use crate::models::history::{HistoryEntryType, InvocationSource, OutputRoute};
-use crate::models::settings::ModelConfig;
+use crate::models::settings::{ClaudeTarget, ModelConfig};
 use crate::models::speech::{
     SpeechRecordingStartedEvent, SpeechRecordingStoppedEvent, SpeechTranscriptionError,
     SpeechTranscriptionRetry,
@@ -21,7 +21,7 @@ use crate::services::speech::widget::{
     configured_claude_target, configured_providers, pill_targets, RecordingWidget,
 };
 use crate::services::speech::{
-    self, webview_provider_of, AudioClipStore, PendingOrigin, PendingPrompt, SpeechError,
+    self, claude_desktop, webview_provider_of, AudioClipStore, PendingOrigin, PendingPrompt, SpeechError,
     SpeechService, SttOptions,
 };
 use crate::services::sqlite_history::SqliteHistoryService;
@@ -174,6 +174,7 @@ enum TranscriptPlan {
     Dictation,
     Chat(ChatRequest),
     Webview { provider_id: String },
+    ClaudeDesktop,
 }
 
 fn transcript_plan(
@@ -181,6 +182,7 @@ fn transcript_plan(
     stop_chat: bool,
     text: &str,
     skill_model: Option<String>,
+    claude_target: ClaudeTarget,
 ) -> TranscriptPlan {
     let chat = |skill_id: String, skill_model| {
         TranscriptPlan::Chat(ChatRequest {
@@ -194,6 +196,9 @@ fn transcript_plan(
     match pending {
         Some(p) if p.origin == PendingOrigin::ShiftClick => TranscriptPlan::AlternativeExecute,
         Some(_) if text.trim().is_empty() => TranscriptPlan::NoSpeech,
+        Some(p) if webview_provider_of(&p.id) == Some("claude") && claude_target == ClaudeTarget::Desktop => {
+            TranscriptPlan::ClaudeDesktop
+        }
         Some(p) if webview_provider_of(&p.id).is_some() => TranscriptPlan::Webview {
             provider_id: webview_provider_of(&p.id).unwrap_or_default().to_string(),
         },
@@ -550,7 +555,8 @@ pub async fn toggle_speech_recording(
                     _ => None,
                 };
 
-                match transcript_plan(pending.as_ref(), stop_chat, &text, skill_model) {
+                let claude_target = configured_claude_target(&app_clone).await;
+                match transcript_plan(pending.as_ref(), stop_chat, &text, skill_model, claude_target) {
                     TranscriptPlan::AlternativeExecute => {
                         let pending = pending.expect("plan implies a pending prompt");
                         widget_inner.close(&app_clone).await;
@@ -615,6 +621,11 @@ pub async fn toggle_speech_recording(
                             text.clone(),
                         )
                         .await;
+                    }
+                    TranscriptPlan::ClaudeDesktop => {
+                        created_entry_id = record_speech_entry(&app_clone, &history_inner, &text).await;
+                        widget_inner.close_if_current(&app_clone, generation).await;
+                        tauri::async_runtime::spawn(claude_desktop::deliver(app_clone.clone(), text.clone()));
                     }
                 }
 
@@ -1209,19 +1220,19 @@ mod tests {
 
     #[test]
     fn plan_skill_target_with_stop_chat_opens_chat_without_skill_run() {
-        let plan = transcript_plan(Some(&pill_target()), true, "hello", Some("m1".into()));
+        let plan = transcript_plan(Some(&pill_target()), true, "hello", Some("m1".into()), ClaudeTarget::Webview);
         assert_eq!(plan, pill_chat("summarize", Some("m1")));
     }
 
     #[test]
     fn plan_dictation_with_stop_chat_opens_chat_without_clipboard_write() {
-        assert_eq!(transcript_plan(None, true, "hello", None), pill_chat("", None));
+        assert_eq!(transcript_plan(None, true, "hello", None, ClaudeTarget::Webview), pill_chat("", None));
     }
 
     #[test]
     fn plan_skill_target_without_stop_chat_runs_skill() {
         assert_eq!(
-            transcript_plan(Some(&pill_target()), false, "hello", None),
+            transcript_plan(Some(&pill_target()), false, "hello", None, ClaudeTarget::Webview),
             TranscriptPlan::SkillRun { skill_id: "summarize".into() }
         );
     }
@@ -1229,7 +1240,7 @@ mod tests {
     #[test]
     fn plan_dictation_without_stop_chat_writes_clipboard_and_done() {
         assert_eq!(
-            transcript_plan(None, false, "hello", None),
+            transcript_plan(None, false, "hello", None, ClaudeTarget::Webview),
             TranscriptPlan::Dictation
         );
     }
@@ -1237,7 +1248,7 @@ mod tests {
     #[test]
     fn plan_empty_transcript_with_skill_and_stop_chat_opens_no_chat() {
         assert_eq!(
-            transcript_plan(Some(&pill_target()), true, "  ", None),
+            transcript_plan(Some(&pill_target()), true, "  ", None, ClaudeTarget::Webview),
             TranscriptPlan::NoSpeech
         );
     }
@@ -1250,7 +1261,7 @@ mod tests {
     fn plan_webview_target_routes_to_the_provider_with_and_without_stop_chat() {
         for stop_chat in [true, false] {
             assert_eq!(
-                transcript_plan(Some(&webview_target()), stop_chat, "hello", None),
+                transcript_plan(Some(&webview_target()), stop_chat, "hello", None, ClaudeTarget::Webview),
                 TranscriptPlan::Webview { provider_id: "claude".into() }
             );
         }
@@ -1260,17 +1271,48 @@ mod tests {
     fn plan_webview_target_with_an_empty_transcript_is_no_speech() {
         for text in ["", "  "] {
             assert_eq!(
-                transcript_plan(Some(&webview_target()), true, text, None),
+                transcript_plan(Some(&webview_target()), true, text, None, ClaudeTarget::Webview),
                 TranscriptPlan::NoSpeech
             );
         }
     }
 
     #[test]
+    fn plan_claude_desktop_webview_target_follows_the_claude_target_setting() {
+        for stop_chat in [true, false] {
+            assert_eq!(
+                transcript_plan(Some(&webview_target()), stop_chat, "hello", None, ClaudeTarget::Webview),
+                TranscriptPlan::Webview { provider_id: "claude".into() }
+            );
+            assert_eq!(
+                transcript_plan(Some(&webview_target()), stop_chat, "hello", None, ClaudeTarget::Desktop),
+                TranscriptPlan::ClaudeDesktop
+            );
+        }
+    }
+
+    #[test]
+    fn plan_claude_desktop_empty_transcript_is_no_speech() {
+        assert_eq!(
+            transcript_plan(Some(&webview_target()), true, "  ", None, ClaudeTarget::Desktop),
+            TranscriptPlan::NoSpeech
+        );
+    }
+
+    #[test]
+    fn plan_claude_desktop_setting_does_not_change_the_chatgpt_target() {
+        let pending = PendingPrompt { id: "webview:chatgpt".into(), name: "ChatGPT".into(), ..pill_target() };
+        assert_eq!(
+            transcript_plan(Some(&pending), true, "hello", None, ClaudeTarget::Desktop),
+            TranscriptPlan::Webview { provider_id: "chatgpt".into() }
+        );
+    }
+
+    #[test]
     fn plan_shift_click_emits_alternative_execute() {
         let pending = PendingPrompt { origin: PendingOrigin::ShiftClick, ..pill_target() };
         assert_eq!(
-            transcript_plan(Some(&pending), true, "hello", None),
+            transcript_plan(Some(&pending), true, "hello", None, ClaudeTarget::Webview),
             TranscriptPlan::AlternativeExecute
         );
     }

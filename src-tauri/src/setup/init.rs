@@ -49,6 +49,7 @@ pub fn run(app: &mut tauri::App) -> std::result::Result<(), Box<dyn std::error::
     setup::background::spawn_ai_webview_unload(app.handle().clone());
     setup::background::spawn_audio_clip_sweeper(app.handle().clone());
     setup::background::spawn_settings_sync(app.handle().clone());
+    setup::background::spawn_claude_desktop_cache_clear(app.handle().clone());
 
     Ok(())
 }

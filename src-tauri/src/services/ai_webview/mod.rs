@@ -19,6 +19,7 @@ use tabs::{TabKind, TabList};
 
 pub use lifecycle::cleanup_host_state;
 pub use palette::{swap_from_palette, swap_to_palette, PALETTE_BACKDROP_TITLE, PALETTE_TITLE};
+pub(crate) use provider_send::{fallback, read_context};
 pub use provider_send::send_to_provider_chat;
 pub use provider_swap::{
     activate_adjacent_tab, activate_tab, activate_tab_at, close_active_tab, close_tab, get_tabs,

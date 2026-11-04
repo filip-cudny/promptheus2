@@ -90,3 +90,9 @@ pub fn spawn_settings_sync(app_handle: tauri::AppHandle) {
         }
     });
 }
+
+pub fn spawn_claude_desktop_cache_clear(app_handle: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        services::speech::claude_desktop::clear_cache(&app_handle).await;
+    });
+}

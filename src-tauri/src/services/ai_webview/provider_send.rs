@@ -108,7 +108,7 @@ pub(super) async fn handle_send_outcome(
     fallback(app, &provider_id, &provider_name, Some(run), message.transcript, reason).await;
 }
 
-async fn read_context(app: &tauri::AppHandle) -> (Option<String>, Vec<(String, String)>) {
+pub(crate) async fn read_context(app: &tauri::AppHandle) -> (Option<String>, Vec<(String, String)>) {
     let context = app.state::<Arc<Mutex<ContextManagerService>>>();
     let context = context.lock().await;
     let images = context
@@ -143,7 +143,7 @@ fn spawn_deadline(app: tauri::AppHandle, provider: WebviewProvider, child_label:
     });
 }
 
-pub(super) async fn fallback(
+pub(crate) async fn fallback(
     app: &tauri::AppHandle,
     provider_id: &str,
     provider_name: &str,

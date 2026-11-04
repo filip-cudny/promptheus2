@@ -19,6 +19,8 @@ pub trait Shell {
 
     fn activate_window(&self, title: &str) -> zbus::Result<bool>;
 
+    fn paste_into_app(&self, wm_class: &str, uris: &[&str]) -> zbus::Result<String>;
+
     fn show_toast(
         &self,
         level: &str,
