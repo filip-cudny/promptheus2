@@ -77,6 +77,7 @@ Run from `promptheus-tauri/src-tauri/`:
 ### Workflow rules
 
 - `pnpm check` does **not** exist — use `npx svelte-check`.
+- Do not run `cargo fmt`: the crate is not rustfmt-clean, so it rewrites ~90 unrelated files. Format changed lines by hand.
 - `cargo` commands must run from `src-tauri/`, not the project root.
 - `pnpm` commands run from the project root (`promptheus-tauri/`).
 - Every HTML window must be listed in `vite.config.ts` → `rollupOptions.input` and added to `src-tauri/capabilities/default.json` → `"windows"` (child webviews such as `conversation-dialog` and `shell-toolbar` go in `"webviews"`). Missing the first → empty white window in production. Missing the second → all `invoke()` calls fail silently.
