@@ -152,6 +152,11 @@ const PASTE_FOCUS_TIMEOUT_MS = 2000;
 const PASTE_SETTLE_MS = 600;
 const PASTE_READ_TIMEOUT_MS = 3000;
 const PASTE_POLL_MS = 50;
+const PASTE_WINDOW_TIMEOUT_MS = 20000;
+const PASTE_WINDOW_POLL_MS = 100;
+const PASTE_COLD_SETTLE_MS = 4000;
+const PASTE_PASTE_ATTEMPTS = 2;
+const PASTE_RESTORE_DELAY_MS = 500;
 
 const FileListSource = GObject.registerClass(
 class FileListSource extends Meta.SelectionSource {
@@ -201,13 +206,37 @@ function sleep(ms) {
     }));
 }
 
-async function waitFor(condition, timeoutMs) {
-    for (let waited = 0; !condition(); waited += PASTE_POLL_MS) {
+async function waitFor(condition, timeoutMs, pollMs = PASTE_POLL_MS) {
+    for (let waited = 0; !condition(); waited += pollMs) {
         if (waited >= timeoutMs)
             return false;
-        await sleep(PASTE_POLL_MS);
+        await sleep(pollMs);
     }
     return true;
+}
+
+async function saveClipboard(clipboard) {
+    const selection = global.display.get_selection();
+    const saved = {};
+    for (const mimetype of selection.get_mimetypes(clipboard)) {
+        try {
+            const output = Gio.MemoryOutputStream.new_resizable();
+            await new Promise((resolve, reject) => selection.transfer_async(clipboard, mimetype, -1, output, null,
+                (_selection, result) => {
+                    try {
+                        selection.transfer_finish(result);
+                        resolve();
+                    } catch (e) {
+                        reject(e);
+                    }
+                }));
+            output.close(null);
+            saved[mimetype] = output.steal_as_bytes().toArray();
+        } catch (e) {
+            console.log('PasteIntoApp: a clipboard mimetype could not be saved');
+        }
+    }
+    return saved;
 }
 
 function sendKeys(device, keyvals) {
@@ -503,49 +532,61 @@ export default class PromptheusExtension extends Extension {
 
     async PasteIntoAppAsync(params, invocation) {
         const [wmClass, uris] = params;
+        const clipboard = Meta.SelectionType.SELECTION_CLIPBOARD;
+        const state = {cold: false, reads: 0, restored: 0};
         const finish = outcome => {
-            console.log(`PasteIntoApp: outcome ${outcome}`);
+            console.log(`PasteIntoApp: outcome ${outcome} (${state.cold ? 'cold' : 'warm'}, reads ${state.reads}, restored ${state.restored})`);
             invocation.return_value(new GLib.Variant('(s)', [outcome]));
         };
         const focused = () => global.display.focus_window?.get_wm_class() === wmClass;
+        const findWindow = () => global.get_window_actors()
+            .map(actor => actor.get_meta_window())
+            .find(candidate => candidate.get_wm_class() === wmClass);
         try {
-            const win = global.get_window_actors()
-                .map(actor => actor.get_meta_window())
-                .find(candidate => candidate.get_wm_class() === wmClass);
+            let win = findWindow();
+            if (!win) {
+                state.cold = true;
+                await waitFor(() => (win = findWindow()), PASTE_WINDOW_TIMEOUT_MS, PASTE_WINDOW_POLL_MS);
+            }
             if (!win)
                 return finish('no_window');
-            console.log('PasteIntoApp: window found');
             Main.activateWindow(win);
             if (!await waitFor(focused, PASTE_FOCUS_TIMEOUT_MS))
                 return finish('focus_lost');
-            console.log('PasteIntoApp: focused');
-            await sleep(PASTE_SETTLE_MS);
+            await sleep(state.cold ? PASTE_COLD_SETTLE_MS : PASTE_SETTLE_MS);
             const keyboard = Clutter.get_default_backend().get_default_seat()
                 .create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+            let saved = {};
             if (uris.length > 0) {
-                let reads = 0;
+                saved = await saveClipboard(clipboard);
                 let counting = false;
-                const source = new FileListSource(fileListContents(uris), mimetype => {
+                const source = new FileListSource(fileListContents(uris), () => {
                     if (counting)
-                        reads++;
-                    console.log(`PasteIntoApp: read ${mimetype} (${reads})`);
+                        state.reads++;
                 });
-                global.display.get_selection().set_owner(Meta.SelectionType.SELECTION_CLIPBOARD, source);
-                console.log('PasteIntoApp: owner set');
-                if (!focused())
-                    return finish('focus_lost');
+                global.display.get_selection().set_owner(clipboard, source);
                 counting = true;
-                const {PRESSED, RELEASED} = Clutter.KeyState;
-                sendKeys(keyboard, [
-                    [Clutter.KEY_Control_L, PRESSED], [Clutter.KEY_v, PRESSED],
-                    [Clutter.KEY_v, RELEASED], [Clutter.KEY_Control_L, RELEASED],
-                ]);
-                if (!await waitFor(() => reads > 0, PASTE_READ_TIMEOUT_MS))
-                    return finish('no_read');
+                for (let attempt = 0; state.reads === 0; attempt++) {
+                    if (attempt === PASTE_PASTE_ATTEMPTS)
+                        return finish('no_read');
+                    if (!focused())
+                        return finish('focus_lost');
+                    const {PRESSED, RELEASED} = Clutter.KeyState;
+                    sendKeys(keyboard, [
+                        [Clutter.KEY_Control_L, PRESSED], [Clutter.KEY_v, PRESSED],
+                        [Clutter.KEY_v, RELEASED], [Clutter.KEY_Control_L, RELEASED],
+                    ]);
+                    await waitFor(() => state.reads > 0, PASTE_READ_TIMEOUT_MS);
+                }
             }
             if (!focused())
                 return finish('focus_lost');
             sendKeys(keyboard, [[Clutter.KEY_Return, Clutter.KeyState.PRESSED], [Clutter.KEY_Return, Clutter.KeyState.RELEASED]]);
+            if (uris.length > 0 && Object.keys(saved).length > 0) {
+                await sleep(PASTE_RESTORE_DELAY_MS);
+                global.display.get_selection().set_owner(clipboard, new FileListSource(saved, () => {}));
+                state.restored = Object.keys(saved).length;
+            }
             finish('sent');
         } catch (e) {
             logError(e, 'Promptheus: PasteIntoApp failed');

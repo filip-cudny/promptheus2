@@ -126,6 +126,22 @@ Debugging:
 - `journalctl --user /usr/bin/gnome-shell` — extension errors.
 - `journalctl --user -f -o cat /usr/bin/gnome-shell | grep Promptheus` — host-relative placement: `Promptheus: place on parent "<title>" parent=X,Y frame=X,Y WxH`; anchored placement lines: `Promptheus: make_above "<title>"` on every anchor, then `Promptheus: anchor "<title>" right=R bottom=B moved=… frame=X,Y WxH`, then `re-anchor after placement` and `re-anchor on size-changed` with the same fields, and `anchor released "<title>"` on hide. A correct anchor has `X + W = R` and `Y + H = B`.
 
+## PasteIntoApp (Claude Desktop paste)
+
+`PasteIntoApp(s wm_class, as uris) → s outcome` focuses the first window of the WM class, pastes the file list with Ctrl+V and sends Return. Outcomes: `sent`, `no_window`, `focus_lost`, `no_read`.
+
+Steps:
+1. Poll every 100 ms up to 20 s for a window with the WM class; none → `no_window`. A window absent at the first poll marks the run cold.
+2. `Main.activateWindow`, wait up to 2 s for `global.display.focus_window` to have the WM class; else `focus_lost`.
+3. Settle 600 ms warm, 4000 ms cold.
+4. With `uris`: save the clipboard (`Meta.Selection.transfer_async` of every mimetype of the owner into a `Gio.MemoryOutputStream`; a failed read drops that mimetype), own the clipboard with a `Meta.SelectionSource` subclass offering only `text/uri-list` and `x-special/gnome-copied-files`, then (focus check before each) Ctrl+V and wait up to 3 s for a read, once more Ctrl+V and 3 s; none → `no_read`, the file list stays, no restore.
+5. Focus check, Return.
+6. With `uris` and `sent`: 500 ms after Return own the clipboard with the same source class serving the saved bytes (nothing saved → clipboard untouched).
+
+Why a `Meta.SelectionSource` subclass: on Wayland the unfocused Promptheus cannot own a selection (no focus, no serial), the shell can. The source's read is the paste confirmation: Claude Desktop reading the list means the paste happened. The restore serves every saved mimetype, so no format is lost. Clipboard managers read every new owner, so the source counts only reads after the key. The log carries the outcome, cold/warm, the read count and the restored count, never URIs or content.
+
+An extension without the method (not re-logged in after an update) answers `UnknownMethod`; Rust treats the error as `Failed` and falls back to the clipboard and a toast.
+
 ## When to load this file
 
 - Touching global shortcuts, window positioning or window focus on Linux.
