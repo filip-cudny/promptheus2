@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager};
 
 use crate::services::dialog::{window, SHELL_TOOLBAR_LABEL};
-use crate::Error;
 
 const MENU_LABEL: &str = "provider-menu";
 
@@ -72,7 +71,7 @@ pub async fn show_provider_menu(
     if crate::services::gnome_shell::is_gnome_wayland() {
         let host = app
             .get_window(&host_label)
-            .ok_or_else(|| Error::Other(format!("host window {host_label} not found")))?;
+            .ok_or_else(|| crate::Error::Other(format!("host window {host_label} not found")))?;
         app.emit_to(MENU_LABEL, "provider-menu:show", payload)?;
         store_menu_host(host_label);
         if let Err(e) = crate::services::gnome_shell::set_transient_parent(&win, &host).await {

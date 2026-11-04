@@ -505,6 +505,7 @@ pub fn focus_host_window(app: &tauri::AppHandle, label: &str) -> Result<(), Stri
 /// Brings an already mapped window to the front. On GNOME Wayland Mutter denies
 /// `set_focus()` for it, so the shell extension activates the window by `title`;
 /// the title is never logged (text previews carry user text).
+#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
 pub fn activate_window(win: &Window, title: String) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
