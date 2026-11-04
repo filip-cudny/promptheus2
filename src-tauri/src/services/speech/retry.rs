@@ -1,4 +1,7 @@
+use std::future::Future;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use tokio::sync::watch;
 
 use crate::models::settings::ModelConfig;
 
@@ -18,22 +21,57 @@ pub struct RetryNotice {
 
 /// Runs one transcription, re-sending the same audio while the failure looks
 /// transient. Shared by the post-recording path and manual retries so both
-/// honour identical backoff and error classification.
-pub async fn transcribe_with_retry<F>(
+/// honour identical backoff and error classification. `on_retry` is awaited
+/// after each retryable failure, before the backoff starts; a `true` on
+/// `abort` ends the run with `SpeechError::Cancelled`.
+pub async fn transcribe_with_retry<R, RF>(
     wav_bytes: Vec<u8>,
     config: &ModelConfig,
     options: &SttOptions,
     max_attempts: u32,
-    mut on_retry: F,
+    abort: Option<watch::Receiver<bool>>,
+    on_retry: R,
 ) -> Result<String, SpeechError>
 where
-    F: FnMut(RetryNotice, &SpeechError),
+    R: FnMut(RetryNotice, &SpeechError) -> RF,
+    RF: Future<Output = ()>,
+{
+    retry_loop(
+        || transcribe(wav_bytes.clone(), config, options),
+        max_attempts,
+        abort,
+        on_retry,
+    )
+    .await
+}
+
+async fn retry_loop<A, AF, R, RF>(
+    mut attempt_fn: A,
+    max_attempts: u32,
+    mut abort: Option<watch::Receiver<bool>>,
+    mut on_retry: R,
+) -> Result<String, SpeechError>
+where
+    A: FnMut() -> AF,
+    AF: Future<Output = Result<String, SpeechError>>,
+    R: FnMut(RetryNotice, &SpeechError) -> RF,
+    RF: Future<Output = ()>,
 {
     let total = max_attempts.max(1);
     let mut attempt = 1u32;
 
     loop {
-        match transcribe(wav_bytes.clone(), config, options).await {
+        if abort.as_ref().is_some_and(|rx| *rx.borrow()) {
+            return Err(cancelled(attempt));
+        }
+
+        let outcome = tokio::select! {
+            biased;
+            _ = abort_requested(&mut abort) => return Err(cancelled(attempt)),
+            outcome = attempt_fn() => outcome,
+        };
+
+        match outcome {
             Ok(text) => return Ok(text),
             Err(error) => {
                 if attempt >= total || !error.is_transient() {
@@ -54,13 +92,38 @@ where
                         delay_secs,
                     },
                     &error,
-                );
+                )
+                .await;
 
-                tokio::time::sleep(Duration::from_secs(delay_secs)).await;
+                tokio::select! {
+                    biased;
+                    _ = abort_requested(&mut abort) => return Err(cancelled(attempt)),
+                    _ = tokio::time::sleep(Duration::from_secs(delay_secs)) => {}
+                }
                 attempt += 1;
             }
         }
     }
+}
+
+/// Resolves only when `true` is seen; no signal, or a dropped sender, never resolves.
+async fn abort_requested(abort: &mut Option<watch::Receiver<bool>>) {
+    let Some(rx) = abort else {
+        return std::future::pending().await;
+    };
+    loop {
+        if *rx.borrow_and_update() {
+            return;
+        }
+        if rx.changed().await.is_err() {
+            return std::future::pending().await;
+        }
+    }
+}
+
+fn cancelled(attempt: u32) -> SpeechError {
+    log::info!("STT cancelled at attempt {attempt}");
+    SpeechError::Cancelled
 }
 
 fn next_delay_secs(attempt: u32, retry_after_secs: Option<u64>) -> u64 {
@@ -90,6 +153,9 @@ fn apply_jitter(base_secs: u64) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+    use std::sync::Arc;
+
     use super::*;
     use crate::models::settings::ModelType;
 
@@ -137,11 +203,189 @@ mod tests {
             &config(),
             &SttOptions::default(),
             5,
-            |_, _| notices += 1,
+            None,
+            |_, _| {
+                notices += 1;
+                async {}
+            },
         )
         .await;
 
         assert!(matches!(result, Err(SpeechError::ApiKeyMissing)));
         assert_eq!(notices, 0);
+    }
+
+    fn transient_failure() -> SpeechError {
+        SpeechError::transient_after("boom", Some(1))
+    }
+
+    #[tokio::test]
+    async fn retry_callback_completes_before_next_attempt() {
+        let flag = Arc::new(AtomicBool::new(false));
+        let calls = Arc::new(AtomicU32::new(0));
+
+        let attempt_flag = Arc::clone(&flag);
+        let attempt_calls = Arc::clone(&calls);
+        let result = retry_loop(
+            move || {
+                let n = attempt_calls.fetch_add(1, Ordering::SeqCst) + 1;
+                let flag = Arc::clone(&attempt_flag);
+                async move {
+                    if n == 1 {
+                        Err(transient_failure())
+                    } else {
+                        assert!(flag.load(Ordering::SeqCst));
+                        Ok("text".to_string())
+                    }
+                }
+            },
+            3,
+            None,
+            move |_, _| {
+                let flag = Arc::clone(&flag);
+                async move {
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    flag.store(true, Ordering::SeqCst);
+                }
+            },
+        )
+        .await;
+
+        assert_eq!(result.unwrap(), "text");
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn abort_during_backoff_cancels_without_next_attempt() {
+        let (tx, rx) = watch::channel(false);
+        let calls = Arc::new(AtomicU32::new(0));
+
+        let attempt_calls = Arc::clone(&calls);
+        let result = tokio::time::timeout(
+            Duration::from_millis(500),
+            retry_loop(
+                move || {
+                    attempt_calls.fetch_add(1, Ordering::SeqCst);
+                    async { Err(SpeechError::transient_after("boom", Some(60))) }
+                },
+                3,
+                Some(rx),
+                move |_, _| {
+                    tx.send(true).unwrap();
+                    async {}
+                },
+            ),
+        )
+        .await
+        .expect("abort must end the backoff");
+
+        assert!(matches!(result, Err(SpeechError::Cancelled)));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn abort_during_pending_attempt_cancels_without_waiting() {
+        let (tx, rx) = watch::channel(false);
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            tx.send(true).unwrap();
+        });
+
+        let result = tokio::time::timeout(
+            Duration::from_millis(500),
+            retry_loop(
+                || std::future::pending::<Result<String, SpeechError>>(),
+                3,
+                Some(rx),
+                |_, _| async {},
+            ),
+        )
+        .await
+        .expect("abort must end the attempt");
+
+        assert!(matches!(result, Err(SpeechError::Cancelled)));
+    }
+
+    #[tokio::test]
+    async fn dropped_sender_neither_aborts_nor_restarts_attempt() {
+        let (tx, rx) = watch::channel(false);
+        let calls = Arc::new(AtomicU32::new(0));
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            drop(tx);
+        });
+
+        let attempt_calls = Arc::clone(&calls);
+        let result = retry_loop(
+            move || {
+                attempt_calls.fetch_add(1, Ordering::SeqCst);
+                async {
+                    tokio::time::sleep(Duration::from_millis(200)).await;
+                    Ok("text".to_string())
+                }
+            },
+            3,
+            Some(rx),
+            |_, _| async {},
+        )
+        .await;
+
+        assert_eq!(result.unwrap(), "text");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn no_receiver_runs_unchanged() {
+        let calls = Arc::new(AtomicU32::new(0));
+        let mut notices = Vec::new();
+
+        let attempt_calls = Arc::clone(&calls);
+        let result = retry_loop(
+            move || {
+                let n = attempt_calls.fetch_add(1, Ordering::SeqCst) + 1;
+                async move {
+                    if n == 1 {
+                        Err(transient_failure())
+                    } else {
+                        Ok("text".to_string())
+                    }
+                }
+            },
+            3,
+            None,
+            |notice, _| {
+                notices.push(notice);
+                async {}
+            },
+        )
+        .await;
+
+        assert_eq!(result.unwrap(), "text");
+        assert_eq!(notices.len(), 1);
+        assert_eq!(notices[0].attempt, 1);
+        assert_eq!(notices[0].max_attempts, 3);
+        assert_eq!(notices[0].delay_secs, 1);
+    }
+
+    #[tokio::test]
+    async fn abort_sent_before_start_runs_no_attempt() {
+        let (tx, rx) = watch::channel(false);
+        tx.send(true).unwrap();
+        let calls = Arc::new(AtomicU32::new(0));
+
+        let attempt_calls = Arc::clone(&calls);
+        let result = retry_loop(
+            move || {
+                attempt_calls.fetch_add(1, Ordering::SeqCst);
+                async { Ok("text".to_string()) }
+            },
+            3,
+            Some(rx),
+            |_, _| async {},
+        )
+        .await;
+
+        assert!(matches!(result, Err(SpeechError::Cancelled)));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
     }
 }

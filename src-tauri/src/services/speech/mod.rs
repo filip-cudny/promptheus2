@@ -91,6 +91,8 @@ pub enum SpeechError {
     AudioUnavailable,
     #[error("Audio storage error: {0}")]
     ClipStore(#[from] ClipStoreError),
+    #[error("Cancelled")]
+    Cancelled,
 }
 
 impl SpeechError {

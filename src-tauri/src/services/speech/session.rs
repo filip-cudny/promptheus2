@@ -461,12 +461,14 @@ pub async fn toggle_speech_recording(
             &runtime.model,
             &runtime.options,
             runtime.auto_retry_attempts,
+            None,
             |notice, error| {
                 attempts_used = notice.attempt + 1;
                 if first_retry.is_none() {
                     first_retry = Some(notice);
                 }
                 emit_retry(&app_clone, None, notice, error.to_string());
+                async {}
             },
         )
         .await;
@@ -754,6 +756,7 @@ pub async fn retry_transcription(app: AppHandle, entry_id: String) -> crate::Res
             &runtime.model,
             &runtime.options,
             attempts,
+            None,
             |notice, error| {
                 emit_retry(
                     &app_clone,
@@ -761,6 +764,7 @@ pub async fn retry_transcription(app: AppHandle, entry_id: String) -> crate::Res
                     notice,
                     error.to_string(),
                 );
+                async {}
             },
         )
         .await;
