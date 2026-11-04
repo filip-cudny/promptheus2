@@ -79,6 +79,7 @@ enum WidgetState {
     Recording,
     Paused,
     Processing,
+    Retrying { attempt: u32, max_attempts: u32, delay_ms: u32 },
     Done,
 }
 
@@ -88,12 +89,24 @@ impl WidgetState {
             Self::Recording => "recording",
             Self::Paused => "paused",
             Self::Processing => "processing",
+            Self::Retrying { .. } => "retrying",
             Self::Done => "done",
         }
     }
 
     fn is_live(self) -> bool {
         matches!(self, Self::Recording | Self::Paused)
+    }
+}
+
+fn transition_allowed(from: WidgetState, to: WidgetState) -> bool {
+    match to {
+        WidgetState::Paused | WidgetState::Recording => from.is_live(),
+        WidgetState::Processing => from != WidgetState::Done,
+        WidgetState::Retrying { .. } => {
+            matches!(from, WidgetState::Processing | WidgetState::Retrying { .. })
+        }
+        WidgetState::Done => true,
     }
 }
 
@@ -104,6 +117,35 @@ struct WidgetPayload {
     level: f64,
     elapsed_ms: u32,
     monochromatic: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attempt: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_attempts: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    delay_ms: Option<u32>,
+}
+
+fn widget_payload(
+    state: WidgetState,
+    level: f64,
+    elapsed_ms: u32,
+    monochromatic: bool,
+) -> WidgetPayload {
+    let (attempt, max_attempts, delay_ms) = match state {
+        WidgetState::Retrying { attempt, max_attempts, delay_ms } => {
+            (Some(attempt), Some(max_attempts), Some(delay_ms))
+        }
+        _ => (None, None, None),
+    };
+    WidgetPayload {
+        state: state.as_str(),
+        level,
+        elapsed_ms,
+        monochromatic,
+        attempt,
+        max_attempts,
+        delay_ms,
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -695,6 +737,23 @@ impl RecordingWidget {
         self.transition(app, "processing", WidgetState::Processing).await;
     }
 
+    pub async fn retrying_if_current(
+        &self,
+        app: &AppHandle,
+        generation: u64,
+        attempt: u32,
+        max_attempts: u32,
+        delay_ms: u32,
+    ) -> bool {
+        let state = WidgetState::Retrying { attempt, max_attempts, delay_ms };
+        self.transition_if_current(app, "retrying", generation, state).await
+    }
+
+    pub async fn processing_if_current(&self, app: &AppHandle, generation: u64) {
+        self.transition_if_current(app, "processing", generation, WidgetState::Processing)
+            .await;
+    }
+
     pub async fn generation(&self) -> u64 {
         self.inner.lock().await.generation
     }
@@ -752,17 +811,22 @@ impl RecordingWidget {
         if inner.transport.is_none() {
             return;
         }
-        let allowed = match state {
-            WidgetState::Paused | WidgetState::Recording => inner.state.is_live(),
-            WidgetState::Processing => inner.state != WidgetState::Done,
-            WidgetState::Done => true,
-        };
-        if !allowed {
-            return;
+        apply_transition(app, &mut inner, name, state).await;
+    }
+
+    async fn transition_if_current(
+        &self,
+        app: &AppHandle,
+        name: &str,
+        generation: u64,
+        state: WidgetState,
+    ) -> bool {
+        let mut inner = self.inner.lock().await;
+        if !inner.is_current(generation) {
+            log::debug!("recording widget: {name} skipped, stale generation={generation}");
+            return false;
         }
-        log::debug!("recording widget: {name} session={}", inner.session);
-        inner.state = state;
-        push(app, &mut inner, 0.0).await;
+        apply_transition(app, &mut inner, name, state).await
     }
 
     async fn close_locked(&self, app: &AppHandle, inner: &mut Inner) {
@@ -1081,30 +1145,47 @@ fn reveal_window(app: &AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+async fn apply_transition(
+    app: &AppHandle,
+    inner: &mut Inner,
+    name: &str,
+    state: WidgetState,
+) -> bool {
+    if !transition_allowed(inner.state, state) {
+        log::debug!("recording widget: {name} refused session={}", inner.session);
+        return false;
+    }
+    log::debug!("recording widget: {name} session={}", inner.session);
+    inner.state = state;
+    push(app, inner, 0.0).await;
+    true
+}
+
 async fn push(app: &AppHandle, inner: &mut Inner, level: f64) {
     let Some(transport) = inner.transport else {
         return;
     };
-    let state = inner.state.as_str();
     let result = match transport {
         #[cfg(target_os = "linux")]
         Transport::Shell => match &inner.shell {
-            Some(proxy) => proxy
-                .update_recording_widget(state, level, inner.elapsed_ms)
-                .await
-                .map_err(|e| e.to_string()),
+            Some(proxy) => match inner.state {
+                WidgetState::Retrying { attempt, max_attempts, delay_ms } => {
+                    proxy.update_recording_widget_retry(attempt, max_attempts, delay_ms).await
+                }
+                state => {
+                    proxy
+                        .update_recording_widget(state.as_str(), level, inner.elapsed_ms)
+                        .await
+                }
+            }
+            .map_err(|e| e.to_string()),
             None => Ok(()),
         },
         Transport::Window => app
             .emit_to(
                 WINDOW_LABEL,
                 STATE_EVENT,
-                WidgetPayload {
-                    state,
-                    level,
-                    elapsed_ms: inner.elapsed_ms,
-                    monochromatic: inner.monochromatic,
-                },
+                widget_payload(inner.state, level, inner.elapsed_ms, inner.monochromatic),
             )
             .map_err(|e| e.to_string()),
     };
@@ -1287,6 +1368,41 @@ mod tests {
         assert!(newer.is_current(5));
         assert_eq!(newer.state, WidgetState::Recording);
         assert_eq!(newer.generation, 5);
+    }
+
+    #[test]
+    fn retrying_payload_carries_attempt_max_and_delay() {
+        let retrying = WidgetState::Retrying { attempt: 2, max_attempts: 3, delay_ms: 6000 };
+        let value = serde_json::to_value(widget_payload(retrying, 0.0, 0, true)).unwrap();
+        assert_eq!(value["state"], "retrying");
+        assert_eq!(value["attempt"], 2);
+        assert_eq!(value["maxAttempts"], 3);
+        assert_eq!(value["delayMs"], 6000);
+
+        let value =
+            serde_json::to_value(widget_payload(WidgetState::Processing, 0.0, 0, true)).unwrap();
+        for key in ["attempt", "maxAttempts", "delayMs"] {
+            assert!(value.get(key).is_none(), "{key}");
+        }
+    }
+
+    #[test]
+    fn retrying_transitions() {
+        let retrying = WidgetState::Retrying { attempt: 2, max_attempts: 3, delay_ms: 6000 };
+        assert!(transition_allowed(WidgetState::Processing, retrying));
+        assert!(transition_allowed(retrying, retrying));
+        assert!(transition_allowed(retrying, WidgetState::Processing));
+        assert!(transition_allowed(retrying, WidgetState::Done));
+        assert!(!transition_allowed(WidgetState::Recording, retrying));
+        assert!(!transition_allowed(WidgetState::Paused, retrying));
+        assert!(!transition_allowed(WidgetState::Done, retrying));
+    }
+
+    #[test]
+    fn a_stale_generation_does_not_reach_a_newer_pill_through_the_retrying_path() {
+        let newer = inner_with(Some(Transport::Window), 5, WidgetState::Processing);
+        assert!(!newer.is_current(4));
+        assert_eq!(newer.state, WidgetState::Processing);
     }
 
     #[test]

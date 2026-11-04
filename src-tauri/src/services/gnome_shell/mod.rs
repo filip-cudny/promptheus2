@@ -42,6 +42,13 @@ pub trait Shell {
         elapsed_ms: u32,
     ) -> zbus::Result<()>;
 
+    fn update_recording_widget_retry(
+        &self,
+        attempt: u32,
+        max_attempts: u32,
+        delay_ms: u32,
+    ) -> zbus::Result<()>;
+
     #[allow(clippy::too_many_arguments)]
     fn update_recording_widget_model(
         &self,
