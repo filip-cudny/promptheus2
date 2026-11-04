@@ -29,6 +29,7 @@ pub enum Outcome {
     NoWindow,
     FocusLost,
     NoRead,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     NoPermission,
     Failed(String),
 }
