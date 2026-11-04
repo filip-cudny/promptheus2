@@ -287,6 +287,17 @@ pub struct SpeechToTextConfig {
 
     #[serde(default)]
     pub recording_widget_anchor: PillAnchor,
+
+    #[serde(default)]
+    pub claude_target: ClaudeTarget,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ClaudeTarget {
+    #[default]
+    Webview,
+    Desktop,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -315,6 +326,7 @@ impl Default for SpeechToTextConfig {
             show_recording_widget: true,
             recording_widget_at_cursor: true,
             recording_widget_anchor: PillAnchor::default(),
+            claude_target: ClaudeTarget::default(),
         }
     }
 }
@@ -714,6 +726,19 @@ mod tests {
         let surfaces: Surfaces = serde_json::from_str("{}").unwrap();
         assert_eq!(surfaces.speech_to_text.recording_widget_anchor, PillAnchor::AboveRight);
         assert_eq!(SpeechToTextConfig::default().recording_widget_anchor, PillAnchor::AboveRight);
+    }
+
+    #[test]
+    fn claude_target_defaults_to_webview_and_reads_desktop() {
+        let config: SpeechToTextConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(config.claude_target, ClaudeTarget::Webview);
+        let config: SpeechToTextConfig = serde_json::from_str(r#"{"claude_target":"desktop"}"#).unwrap();
+        assert_eq!(config.claude_target, ClaudeTarget::Desktop);
+    }
+
+    #[test]
+    fn claude_target_serializes_as_snake_case() {
+        assert_eq!(serde_json::to_string(&ClaudeTarget::Desktop).unwrap(), "\"desktop\"");
     }
 
     #[test]

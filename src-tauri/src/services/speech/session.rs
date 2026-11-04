@@ -17,7 +17,9 @@ use crate::services::config::ConfigService;
 use crate::services::execution::skill_executor::run_skill_stream;
 use crate::services::notification::{NotificationLevel, NotificationService};
 use crate::services::skill::SkillService;
-use crate::services::speech::widget::{configured_providers, pill_targets, RecordingWidget};
+use crate::services::speech::widget::{
+    configured_claude_target, configured_providers, pill_targets, RecordingWidget,
+};
 use crate::services::speech::{
     self, webview_provider_of, AudioClipStore, PendingOrigin, PendingPrompt, SpeechError,
     SpeechService, SttOptions,
@@ -1092,8 +1094,9 @@ pub async fn select_recording_widget_target(app: AppHandle, id: String) -> crate
         return Ok(());
     }
     let providers = configured_providers(&app).await;
+    let claude_target = configured_claude_target(&app).await;
     let label = match app.try_state::<Arc<Mutex<SkillService>>>() {
-        Some(skills) => pill_targets(skills.lock().await.list_skills(), &providers)
+        Some(skills) => pill_targets(skills.lock().await.list_skills(), &providers, claude_target)
             .into_iter()
             .find(|(target_id, _)| *target_id == id)
             .map(|(_, label)| label),

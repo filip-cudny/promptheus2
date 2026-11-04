@@ -2,11 +2,17 @@
   import SettingsSection from "./SettingsSection.svelte";
   import FormRow from "$lib/components/shared/ui/FormRow.svelte";
   import NumberInput from "$lib/components/shared/ui/NumberInput.svelte";
+  import SelectDropdown from "$lib/components/shared/ui/SelectDropdown.svelte";
   import PillAnchorPicker from "./PillAnchorPicker.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { updateSpeechToTextConfig } from "$lib/services/settings";
   import { error as logError } from "@tauri-apps/plugin-log";
-  import type { SpeechToTextConfig } from "$lib/types";
+  import type { ClaudeTarget, SpeechToTextConfig } from "$lib/types";
+
+  const CLAUDE_TARGET_OPTIONS: ReadonlyArray<{ value: ClaudeTarget; label: string }> = [
+    { value: "webview", label: "Webview" },
+    { value: "desktop", label: "Claude Desktop" },
+  ];
 
   const MAX_ATTEMPTS = 10;
   const MAX_RETENTION_HOURS = 72;
@@ -83,6 +89,15 @@
           disabled={!config.recording_widget_at_cursor}
           onchange={(a) => save({ recording_widget_anchor: a })}
         />
+
+        <FormRow label="Claude target">
+          <SelectDropdown
+            value={config.claude_target}
+            options={CLAUDE_TARGET_OPTIONS}
+            ariaLabel="Claude target"
+            onchange={(claude_target) => save({ claude_target })}
+          />
+        </FormRow>
       </div>
 
       <div class="group">

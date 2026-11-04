@@ -82,7 +82,10 @@ export interface SpeechToTextConfig {
   show_recording_widget: boolean;
   recording_widget_at_cursor: boolean;
   recording_widget_anchor: PillAnchor;
+  claude_target: ClaudeTarget;
 }
+
+export type ClaudeTarget = "webview" | "desktop";
 
 export type PillAnchor =
   | "above_right"
