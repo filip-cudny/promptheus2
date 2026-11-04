@@ -3,7 +3,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, Manager};
-use tokio::sync::Mutex;
+use tokio::sync::{watch, Mutex};
 
 use crate::commands::clipboard::store_pending_copy;
 use crate::models::history::{HistoryEntryType, InvocationSource, OutputRoute};
@@ -86,6 +86,41 @@ fn failure_input_content(duration_secs: f64) -> String {
         "Voice note · {} — transcription failed",
         format_clip_duration(duration_secs)
     )
+}
+
+fn cancelled_input_content(duration_secs: f64) -> String {
+    format!(
+        "Voice note · {} — cancelled",
+        format_clip_duration(duration_secs)
+    )
+}
+
+fn add_failed_entry(
+    history: &SqliteHistoryService,
+    clips: &AudioClipStore,
+    clip_id: Option<&str>,
+    input: String,
+    error: String,
+) -> (Option<String>, bool) {
+    let entry_id = history.add_entry(
+        input,
+        HistoryEntryType::Speech,
+        None,
+        None,
+        false,
+        Some(error),
+        false,
+        None,
+        true,
+    );
+
+    if let (Some(clip_id), Some(entry_id)) = (clip_id, &entry_id) {
+        if let Err(e) = clips.attach_to_entry(history.conn(), clip_id, entry_id) {
+            log::warn!("failed to attach audio clip to history entry: {e}");
+        }
+    }
+    let has_audio = clip_id.is_some() && entry_id.is_some();
+    (entry_id, has_audio)
 }
 
 fn emit_retry(
@@ -453,7 +488,8 @@ pub async fn toggle_speech_recording(
         let widget_inner = app_clone.state::<RecordingWidget>();
         let start = std::time::Instant::now();
 
-        let mut first_retry: Option<speech::retry::RetryNotice> = None;
+        let (abort_tx, abort_rx) = watch::channel(false);
+        let mut abort_tx = Some(abort_tx);
         let mut attempts_used = 1u32;
 
         let result = speech::transcribe_with_retry(
@@ -461,25 +497,44 @@ pub async fn toggle_speech_recording(
             &runtime.model,
             &runtime.options,
             runtime.auto_retry_attempts,
-            None,
+            Some(abort_rx),
             |notice, error| {
                 attempts_used = notice.attempt + 1;
-                if first_retry.is_none() {
-                    first_retry = Some(notice);
-                }
                 emit_retry(&app_clone, None, notice, error.to_string());
-                async {}
+                let unarmed = abort_tx.take();
+                let app = app_clone.clone();
+                let speech = Arc::clone(&speech_inner);
+                async move {
+                    if let Some(tx) = unarmed {
+                        speech.lock().await.arm_retry_abort(tx);
+                    }
+                    let shown = app
+                        .state::<RecordingWidget>()
+                        .retrying_if_current(
+                            &app,
+                            generation,
+                            notice.attempt + 1,
+                            notice.max_attempts,
+                            (notice.delay_secs * 1000) as u32,
+                        )
+                        .await;
+                    if !shown {
+                        notify_retry_started(&app, notice).await;
+                    }
+                }
             },
         )
         .await;
 
-        if let Some(notice) = first_retry {
-            notify_retry_started(&app_clone, notice).await;
-        }
+        speech_inner.lock().await.disarm_retry_abort();
+        drop(abort_tx);
 
         match result {
             Ok(text) => {
                 let duration_secs = start.elapsed().as_secs_f64();
+                if attempts_used > 1 {
+                    widget_inner.processing_if_current(&app_clone, generation).await;
+                }
                 let (pending, stop_chat) = speech_inner.lock().await.take_pending_prompt();
                 widget_inner.refresh_model(&app_clone).await;
                 let mut created_entry_id = None;
@@ -523,7 +578,15 @@ pub async fn toggle_speech_recording(
                         if widget_inner.is_shown().await {
                             widget_inner.done(&app_clone).await;
                         } else {
-                            let duration_display = format!("Processed in {:.1}s", duration_secs);
+                            let duration_display = if attempts_used > 1 {
+                                format!(
+                                    "Processed in {:.1}s, attempt {attempts_used} of {}",
+                                    duration_secs,
+                                    runtime.auto_retry_attempts.max(1)
+                                )
+                            } else {
+                                format!("Processed in {:.1}s", duration_secs)
+                            };
                             NotificationService::notify_now(
                                 &app_clone,
                                 "speech_transcription_success",
@@ -611,36 +674,61 @@ pub async fn toggle_speech_recording(
 
                 s.set_transcribing(false);
             }
+            Err(SpeechError::Cancelled) => {
+                let (entry_id, has_audio) = add_failed_entry(
+                    &*history_inner.lock().await,
+                    &clip_inner,
+                    clip_id.as_deref(),
+                    cancelled_input_content(duration_secs),
+                    SpeechError::Cancelled.to_string(),
+                );
+                let _ = crate::services::history_events::emit_history_changed(
+                    &app_clone,
+                    entry_id.clone(),
+                    None,
+                );
+
+                widget_inner.close_if_current(&app_clone, generation).await;
+                speech_inner.lock().await.clear_pending_prompt();
+
+                let title = if has_audio {
+                    "Transcription stopped — audio kept, retry from the menu"
+                } else {
+                    "Transcription stopped"
+                };
+                NotificationService::notify_now(
+                    &app_clone,
+                    "speech_transcription_cancel",
+                    NotificationLevel::Info,
+                    title,
+                    None::<String>,
+                )
+                .await;
+
+                speech_inner.lock().await.set_transcribing(false);
+                let _ = app_clone.emit(
+                    "speech-transcription-error",
+                    SpeechTranscriptionError {
+                        message: SpeechError::Cancelled.to_string(),
+                        recoverable: has_audio,
+                        entry_id,
+                        has_audio,
+                        attempts: attempts_used,
+                    },
+                );
+            }
             Err(e) => {
                 widget_inner.close(&app_clone).await;
                 let message = e.to_string();
                 speech_inner.lock().await.clear_pending_prompt();
 
-                let entry_id = {
-                    let history = history_inner.lock().await;
-                    let entry_id = history.add_entry(
-                        failure_input_content(duration_secs),
-                        HistoryEntryType::Speech,
-                        None,
-                        None,
-                        false,
-                        Some(message.clone()),
-                        false,
-                        None,
-                        true,
-                    );
-
-                    if let (Some(clip_id), Some(entry_id)) = (&clip_id, &entry_id) {
-                        if let Err(e) =
-                            clip_inner.attach_to_entry(history.conn(), clip_id, entry_id)
-                        {
-                            log::warn!("failed to attach audio clip to history entry: {e}");
-                        }
-                    }
-                    entry_id
-                };
-
-                let has_audio = clip_id.is_some() && entry_id.is_some();
+                let (entry_id, has_audio) = add_failed_entry(
+                    &*history_inner.lock().await,
+                    &clip_inner,
+                    clip_id.as_deref(),
+                    failure_input_content(duration_secs),
+                    message.clone(),
+                );
                 let _ = crate::services::history_events::emit_history_changed(
                     &app_clone,
                     entry_id.clone(),
@@ -882,15 +970,20 @@ pub async fn resume_speech_recording(app: AppHandle) -> crate::Result<()> {
 
 pub async fn cancel_speech_recording(app: AppHandle) -> crate::Result<()> {
     let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
-    {
+    let (samples, sample_rate) = {
         let mut s = speech_state.lock().await;
+        if s.cancel_retry() {
+            log::info!("cancel_speech_recording: transcription retry cancelled");
+            return Ok(());
+        }
         if !s.is_recording() || s.is_transcribing() {
             log::debug!("cancel_speech_recording: ignored, not recording");
             return Ok(());
         }
-        s.cancel_recording()?;
+        let audio = s.cancel_recording()?;
         log::info!("cancel_speech_recording: session={}", s.session());
-    }
+        audio
+    };
 
     app.state::<RecordingWidget>().close(&app).await;
     let _ = app.emit(
@@ -898,7 +991,78 @@ pub async fn cancel_speech_recording(app: AppHandle) -> crate::Result<()> {
         SpeechRecordingStoppedEvent { had_audio: false },
     );
     emit_empty_transcription(&app, 0.0);
+    keep_cancelled_recording(&app, samples, sample_rate).await;
     Ok(())
+}
+
+async fn keep_cancelled_recording(app: &AppHandle, samples: Vec<i16>, sample_rate: u32) {
+    let retention_hours = app
+        .state::<Arc<Mutex<ConfigService>>>()
+        .lock()
+        .await
+        .settings()
+        .surfaces
+        .speech_to_text
+        .audio_retention_hours;
+    let duration_secs = samples.len() as f64 / sample_rate.max(1) as f64;
+    if retention_hours == 0 || duration_secs < MIN_RECORDING_SAMPLES_SECS {
+        log::debug!(
+            "cancel_speech_recording: audio discarded, retention_hours={retention_hours} duration_secs={duration_secs:.1}"
+        );
+        return;
+    }
+
+    let wav_bytes = match tokio::task::spawn_blocking(move || speech::encode_wav(&samples, sample_rate))
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|encoded| encoded.map_err(|e| e.to_string()))
+    {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            log::warn!("cancel_speech_recording: encoding the audio failed, nothing kept: {e}");
+            return;
+        }
+    };
+
+    let history_state = app.state::<Arc<Mutex<SqliteHistoryService>>>();
+    let clips = app.state::<Arc<AudioClipStore>>();
+    let history = history_state.lock().await;
+    let clip_id = match clips.store(
+        history.conn(),
+        &wav_bytes,
+        sample_rate,
+        duration_secs,
+        retention_hours,
+    ) {
+        Ok(id) => id,
+        Err(e) => {
+            log::warn!("cancel_speech_recording: storing the audio failed, nothing kept: {e}");
+            return;
+        }
+    };
+    let (entry_id, _) = add_failed_entry(
+        &history,
+        &clips,
+        Some(&clip_id),
+        cancelled_input_content(duration_secs),
+        SpeechError::Cancelled.to_string(),
+    );
+    if entry_id.is_none() {
+        log::warn!("cancel_speech_recording: history entry not created, dropping the clip");
+        let _ = clips.delete(history.conn(), &clip_id);
+        return;
+    }
+    drop(history);
+
+    let _ = crate::services::history_events::emit_history_changed(app, entry_id, None);
+    NotificationService::notify_now(
+        app,
+        "speech_recording_cancel",
+        NotificationLevel::Info,
+        "Recording cancelled — audio kept, transcribe from the menu",
+        None::<String>,
+    )
+    .await;
 }
 
 async fn recording_widget_shown(app: &AppHandle, intent: &str) -> bool {
@@ -1100,6 +1264,11 @@ mod tests {
         assert_eq!(format_clip_duration(0.0), "0:00");
         assert_eq!(format_clip_duration(9.4), "0:09");
         assert_eq!(format_clip_duration(125.0), "2:05");
+    }
+
+    #[test]
+    fn cancelled_entry_content_shows_duration() {
+        assert_eq!(cancelled_input_content(42.0), "Voice note · 0:42 — cancelled");
     }
 
     #[test]

@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, StreamTrait};
+use tokio::sync::watch;
 
 use recorder::{find_input_device, negotiate_sample_rate};
 
@@ -158,6 +159,7 @@ pub struct SpeechService {
     paused_at: Option<Instant>,
     paused_total: Duration,
     retrying_entries: HashSet<String>,
+    retry_abort: Option<watch::Sender<bool>>,
 }
 
 trait RecorderStream {
@@ -245,6 +247,7 @@ impl SpeechService {
             paused_at: None,
             paused_total: Duration::ZERO,
             retrying_entries: HashSet::new(),
+            retry_abort: None,
         }
     }
 
@@ -333,10 +336,28 @@ impl SpeechService {
         Ok((samples, sample_rate))
     }
 
-    pub fn cancel_recording(&mut self) -> Result<(), SpeechError> {
-        self.stop_recording_raw()?;
+    pub fn cancel_recording(&mut self) -> Result<(Vec<i16>, u32), SpeechError> {
+        let audio = self.stop_recording_raw()?;
         self.clear_pending_prompt();
-        Ok(())
+        Ok(audio)
+    }
+
+    pub fn arm_retry_abort(&mut self, tx: watch::Sender<bool>) {
+        self.retry_abort = Some(tx);
+    }
+
+    pub fn cancel_retry(&mut self) -> bool {
+        match &self.retry_abort {
+            Some(tx) => {
+                let _ = tx.send(true);
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn disarm_retry_abort(&mut self) {
+        self.retry_abort = None;
     }
 
     pub fn pause(&mut self) -> Result<(), SpeechError> {
@@ -640,16 +661,32 @@ mod tests {
     }
 
     #[test]
-    fn cancel_clears_recording_and_pending_prompt() {
+    fn cancel_recording_returns_the_recorded_samples() {
         let mut service = SpeechService::new();
-        service.is_recording = true;
-        service.started_at = Some(Instant::now());
+        start_fake(&mut service, || Ok(FakeStream { play_result: || Ok(()) })).unwrap();
+        service.audio_buffer().lock().unwrap().extend_from_slice(&[1, 2, 3]);
         service.set_pending_prompt("prompt-1".into(), "Prompt One".into(), PendingOrigin::ShiftClick);
 
-        assert!(service.cancel_recording().is_ok());
+        assert_eq!(service.cancel_recording().unwrap(), (vec![1, 2, 3], 16000));
         assert!(!service.is_recording());
         assert!(!service.is_transcribing());
         assert_eq!(service.take_pending_prompt().0, None);
+    }
+
+    #[test]
+    fn retry_abort_fires_only_while_armed() {
+        let mut service = SpeechService::new();
+        assert!(!service.cancel_retry());
+
+        let (tx, rx) = watch::channel(false);
+        service.arm_retry_abort(tx);
+        assert!(!rx.has_changed().unwrap());
+        assert!(service.cancel_retry());
+        assert!(rx.has_changed().unwrap());
+        assert!(*rx.borrow());
+
+        service.disarm_retry_abort();
+        assert!(!service.cancel_retry());
     }
 
     #[test]
