@@ -23,7 +23,6 @@ const CONTEXT_FILE: &str = "context.md";
 static NEXT_RUN: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, PartialEq)]
-#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub enum Outcome {
     Sent,
     NoWindow,
@@ -42,7 +41,7 @@ enum Action {
 }
 
 impl Outcome {
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    #[cfg(any(target_os = "linux", test))]
     pub fn from_reply(reply: Result<String, String>) -> Self {
         match reply.as_deref() {
             Ok("sent") => Outcome::Sent,
