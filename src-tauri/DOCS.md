@@ -177,7 +177,7 @@ The chat window is the single `conversation-dialog` host: native chat webview, s
 - A hidden provider tab is unloaded 30 min after it was last used (`services/ai_webview/unload.rs`, polled every 60 s). Unloading closes the child webview and keeps the tab with its URL and title; activating it loads it again.
 - Closing the window (OS close, strip close, send-and-copy) hides it instead of destroying it: geometry is saved, every provider tab is unloaded, `DockManager` counts the host once (`host_hidden` / `host_surfaced`). Settings, history and context-editor windows are destroyed on close.
 
-When showing a window from a background context (e.g., global hotkey), call `app.show()` on macOS before `win.show()` to activate the app and ensure the window appears in front.
+On macOS `app.show()` only unhides the app (`NSApplication unhide`) and does not activate it. A window shown from a background context (global hotkey, tray) is brought to the front with its `set_focus()` (`makeKeyAndOrderFront` plus app activation); `dialog::open_or_focus` does this for new windows on macOS.
 
 Because the app is tray-only with multiple short-lived windows, cross-window coordination via events is legitimate (`app.emit_to(label, …)` in `provider_menu.rs`, `conversation_dialog.rs`; the app-wide `app.emit("prompt-changed", …)` in `prompts.rs`). That is **not** the events-as-substitute-for-commands anti-pattern — there is no single window from which to drive a command. Within a single window, prefer `invoke`.
 

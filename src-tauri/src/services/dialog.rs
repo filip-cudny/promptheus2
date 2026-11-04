@@ -415,6 +415,15 @@ pub async fn open_or_focus(
         _ => {}
     });
 
+    #[cfg(target_os = "macos")]
+    if let Err(e) = window.set_focus() {
+        log::warn!(
+            target: "app_lib::services::dialog",
+            "set_focus failed for {}: {e}",
+            config.label,
+        );
+    }
+
     Ok((window, true))
 }
 
