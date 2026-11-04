@@ -688,22 +688,25 @@ pub async fn toggle_speech_recording(
                     None,
                 );
 
+                let pill_shown = widget_inner.is_shown().await;
                 widget_inner.close_if_current(&app_clone, generation).await;
                 speech_inner.lock().await.clear_pending_prompt();
 
-                let title = if has_audio {
-                    "Transcription stopped — audio kept, retry from the menu"
-                } else {
-                    "Transcription stopped"
-                };
-                NotificationService::notify_now(
-                    &app_clone,
-                    "speech_transcription_cancel",
-                    NotificationLevel::Info,
-                    title,
-                    None::<String>,
-                )
-                .await;
+                if !pill_shown {
+                    let title = if has_audio {
+                        "Transcription stopped — audio kept, retry from the menu"
+                    } else {
+                        "Transcription stopped"
+                    };
+                    NotificationService::notify_now(
+                        &app_clone,
+                        "speech_transcription_cancel",
+                        NotificationLevel::Info,
+                        title,
+                        None::<String>,
+                    )
+                    .await;
+                }
 
                 speech_inner.lock().await.set_transcribing(false);
                 let _ = app_clone.emit(
@@ -985,17 +988,24 @@ pub async fn cancel_speech_recording(app: AppHandle) -> crate::Result<()> {
         audio
     };
 
-    app.state::<RecordingWidget>().close(&app).await;
+    let widget = app.state::<RecordingWidget>();
+    let pill_shown = widget.is_shown().await;
+    widget.close(&app).await;
     let _ = app.emit(
         "speech-recording-stopped",
         SpeechRecordingStoppedEvent { had_audio: false },
     );
     emit_empty_transcription(&app, 0.0);
-    keep_cancelled_recording(&app, samples, sample_rate).await;
+    keep_cancelled_recording(&app, samples, sample_rate, pill_shown).await;
     Ok(())
 }
 
-async fn keep_cancelled_recording(app: &AppHandle, samples: Vec<i16>, sample_rate: u32) {
+async fn keep_cancelled_recording(
+    app: &AppHandle,
+    samples: Vec<i16>,
+    sample_rate: u32,
+    pill_shown: bool,
+) {
     let retention_hours = app
         .state::<Arc<Mutex<ConfigService>>>()
         .lock()
@@ -1055,6 +1065,9 @@ async fn keep_cancelled_recording(app: &AppHandle, samples: Vec<i16>, sample_rat
     drop(history);
 
     let _ = crate::services::history_events::emit_history_changed(app, entry_id, None);
+    if pill_shown {
+        return;
+    }
     NotificationService::notify_now(
         app,
         "speech_recording_cancel",
