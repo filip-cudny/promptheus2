@@ -69,6 +69,9 @@ const WIDGET_BAR_FACTORS = Array.from({length: WIDGET_BAR_COUNT},
 const WIDGET_WAVE_BAR_WIDTH = 2;
 const WIDGET_WAVE_BAR_COUNT = Math.floor(
     (WIDGET_WIDTH - 2 * WIDGET_PADDING_X + WIDGET_BAR_SPACING) / (WIDGET_WAVE_BAR_WIDTH + WIDGET_BAR_SPACING));
+const WIDGET_RETRY_WAVE_BAR_COUNT = Math.floor(
+    (WIDGET_WIDTH - 2 * WIDGET_PADDING_X - WIDGET_BUTTON_SIZE - WIDGET_ROW_SPACING + WIDGET_BAR_SPACING) /
+    (WIDGET_WAVE_BAR_WIDTH + WIDGET_BAR_SPACING));
 const WIDGET_WAVE_HEIGHT = 24;
 const WIDGET_WAVE_MIN_SCALE = WIDGET_BAR_MIN_HEIGHT / WIDGET_WAVE_HEIGHT;
 const WIDGET_WAVE_AMPLITUDE = WIDGET_WAVE_HEIGHT / 3;
@@ -77,7 +80,6 @@ const WIDGET_DONE_ENTER_MS = 180;
 const WIDGET_DONE_ENTER_SCALE = 0.85;
 const WIDGET_WAVE_PERIOD_US = 1200 * 1000;
 const WIDGET_WAVE_FRAME_MS = 33;
-const WIDGET_WAVE_STEP = 2 * Math.PI / WIDGET_WAVE_BAR_COUNT;
 const WIDGET_BUTTON_HOVER = '#3a3a3c';
 const WIDGET_TARGET_PADDING_X = 8;
 const WIDGET_DRAG_THRESHOLD_PX = 4;
@@ -135,6 +137,14 @@ function isAppWindow(win, title) {
 function formatElapsed(elapsedMs) {
     const seconds = Math.floor(elapsedMs / 1000);
     return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+function formatRetry(attempt, maxAttempts, remainingMs) {
+    return `Retry ${attempt}/${maxAttempts} in ${Math.ceil(remainingMs / 1000)} s`;
+}
+
+function msUntilRetryTextChange(remainingMs) {
+    return remainingMs - (Math.ceil(remainingMs / 1000) - 1) * 1000;
 }
 
 const INTERFACE_XML = `
@@ -202,6 +212,11 @@ const INTERFACE_XML = `
       <arg type="s" direction="in" name="state"/>
       <arg type="d" direction="in" name="level"/>
       <arg type="u" direction="in" name="elapsed_ms"/>
+    </method>
+    <method name="UpdateRecordingWidgetRetry">
+      <arg type="u" direction="in" name="attempt"/>
+      <arg type="u" direction="in" name="max_attempts"/>
+      <arg type="u" direction="in" name="delay_ms"/>
     </method>
     <method name="UpdateRecordingWidgetModel">
       <arg type="a(ss)" direction="in" name="targets"/>
@@ -573,6 +588,14 @@ export default class PromptheusExtension extends Extension {
             widget.timeLabel.text = widget.elapsed;
     }
 
+    UpdateRecordingWidgetRetry(attempt, maxAttempts, delayMs) {
+        const widget = this._widget;
+        if (!widget)
+            throw new Error('Recording widget is not shown');
+        widget.retry = {attempt, maxAttempts, endUs: GLib.get_monotonic_time() + delayMs * 1000};
+        this._setWidgetState(widget, 'retrying');
+    }
+
     UpdateRecordingWidgetModel(targets, selectedId, selectedLabel, locked, items, itemRows, version, x, y) {
         const widget = this._widget;
         if (!widget)
@@ -649,6 +672,9 @@ export default class PromptheusExtension extends Extension {
             waveBars: [],
             waveStart: 0,
             waveId: 0,
+            retry: null,
+            retryLabel: null,
+            retryId: 0,
             dragId: 0,
         };
         widget.itemsRow.visible = false;
@@ -726,8 +752,13 @@ export default class PromptheusExtension extends Extension {
     _clearWidgetContent(widget) {
         widget.bars.forEach(bar => bar.remove_all_transitions());
         this._stopWidgetWave(widget);
+        if (widget.retryId) {
+            GLib.Source.remove(widget.retryId);
+            widget.retryId = 0;
+        }
         widget.bars = [];
         widget.timeLabel = null;
+        widget.retryLabel = null;
         widget.row1.destroy_all_children();
     }
 
@@ -736,22 +767,28 @@ export default class PromptheusExtension extends Extension {
         widget.actor.set_size(WIDGET_WIDTH, height);
     }
 
-    _setWidgetState(widget, state) {
-        this._clearWidgetContent(widget);
-        widget.state = state;
-        const content = new St.BoxLayout({
+    _widgetContent() {
+        return new St.BoxLayout({
             x_expand: true,
             y_expand: true,
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
             style: `spacing: ${WIDGET_ROW_SPACING}px;`,
         });
+    }
+
+    _setWidgetState(widget, state) {
+        this._clearWidgetContent(widget);
+        widget.state = state;
+        const content = this._widgetContent();
         if (state === 'recording' || state === 'paused') {
             content.x_align = Clutter.ActorAlign.FILL;
             this._fillControls(widget, content, state);
         }
         else if (state === 'processing')
             this._fillWave(widget, content);
+        else if (state === 'retrying')
+            this._fillRetry(widget, content);
         else
             this._fillDone(widget, content);
         widget.row1.add_child(content);
@@ -819,10 +856,46 @@ export default class PromptheusExtension extends Extension {
         return bar;
     }
 
-    _fillWave(widget, content) {
+    _retryRemainingMs(widget) {
+        return (widget.retry.endUs - GLib.get_monotonic_time()) / 1000;
+    }
+
+    _fillRetry(widget, content) {
+        content.x_align = Clutter.ActorAlign.FILL;
+        if (this._retryRemainingMs(widget) > 0) {
+            widget.retryLabel = new St.Label({y_align: Clutter.ActorAlign.CENTER});
+            content.add_child(widget.retryLabel);
+            this._armWidgetRetry(widget);
+        }
+        else
+            this._fillWave(widget, content, WIDGET_RETRY_WAVE_BAR_COUNT);
+        content.add_child(this._widgetActions(this._widgetActionButton('cancel', 'cancel', 'cancel-hover')));
+    }
+
+    _armWidgetRetry(widget) {
+        const remainingMs = this._retryRemainingMs(widget);
+        widget.retryLabel.text = formatRetry(widget.retry.attempt, widget.retry.maxAttempts, remainingMs);
+        widget.retryId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, Math.ceil(msUntilRetryTextChange(remainingMs)), () => {
+            widget.retryId = 0;
+            if (this._retryRemainingMs(widget) > 0)
+                this._armWidgetRetry(widget);
+            else
+                this._showWidgetRetryWave(widget);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _showWidgetRetryWave(widget) {
+        this._clearWidgetContent(widget);
+        const content = this._widgetContent();
+        this._fillRetry(widget, content);
+        widget.row1.add_child(content);
+    }
+
+    _fillWave(widget, content, barCount = WIDGET_WAVE_BAR_COUNT) {
         const row = this._widgetBarRow(WIDGET_BAR_SPACING, WIDGET_WAVE_HEIGHT);
         row.opacity = WIDGET_WAVE_OPACITY;
-        widget.waveBars = Array.from({length: WIDGET_WAVE_BAR_COUNT},
+        widget.waveBars = Array.from({length: barCount},
             () => this._widgetBar(row, WIDGET_WAVE_MIN_SCALE, WIDGET_WAVE_BAR_WIDTH, WIDGET_WAVE_HEIGHT));
         content.add_child(row);
         widget.waveStart = GLib.get_monotonic_time();
@@ -837,7 +910,7 @@ export default class PromptheusExtension extends Extension {
         const elapsed = GLib.get_monotonic_time() - widget.waveStart;
         const phase = 2 * Math.PI * (elapsed % WIDGET_WAVE_PERIOD_US) / WIDGET_WAVE_PERIOD_US;
         widget.waveBars.forEach((bar, i) => {
-            const wave = 0.5 + 0.5 * Math.sin(phase - i * WIDGET_WAVE_STEP);
+            const wave = 0.5 + 0.5 * Math.sin(phase - i * 2 * Math.PI / widget.waveBars.length);
             bar.scale_y = (WIDGET_BAR_MIN_HEIGHT + WIDGET_WAVE_AMPLITUDE * wave) / WIDGET_WAVE_HEIGHT;
         });
     }

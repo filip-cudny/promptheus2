@@ -19,13 +19,16 @@
   import claudeIcon from "$lib/icons/providers/claude.svg?raw";
   import chatgptIcon from "$lib/icons/providers/chatgpt.svg?raw";
 
-  type WidgetState = "recording" | "paused" | "processing" | "done";
+  type WidgetState = "recording" | "paused" | "processing" | "retrying" | "done";
 
   interface WidgetPayload {
     state: WidgetState;
     level: number;
     elapsedMs: number;
     monochromatic: boolean;
+    attempt?: number;
+    maxAttempts?: number;
+    delayMs?: number;
   }
 
   interface PillTarget {
@@ -88,13 +91,22 @@
   const WAVE_BAR_WIDTH = 2;
   const WAVE_BAR_COUNT = Math.floor((PILL_WIDTH - 2 * PADDING_X + BAR_GAP) / (WAVE_BAR_WIDTH + BAR_GAP));
   const WAVE_PERIOD_MS = 1200;
-  const WAVE_BARS = Array.from({ length: WAVE_BAR_COUNT }, (_, i) => (i / WAVE_BAR_COUNT - 1) * WAVE_PERIOD_MS);
-
+  const RETRY_WAVE_BAR_COUNT = Math.floor(
+    (PILL_WIDTH - 2 * PADDING_X - BUTTON_SIZE - ROW_GAP + BAR_GAP) / (WAVE_BAR_WIDTH + BAR_GAP),
+  );
+  const waveDelays = (count: number) => Array.from({ length: count }, (_, i) => (i / count - 1) * WAVE_PERIOD_MS);
+  const WAVE_BARS = waveDelays(WAVE_BAR_COUNT);
+  const RETRY_WAVE_BARS = waveDelays(RETRY_WAVE_BAR_COUNT);
 
   let widgetState = $state<WidgetState>("recording");
   let level = $state(0);
   let elapsedMs = $state(0);
   let monochromatic = $state(true);
+  let retryAttempt = $state(0);
+  let retryMaxAttempts = $state(0);
+  let retryRemainingMs = $state(0);
+  let retryEndAt = 0;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let model = $state<PillModel>({
     targets: [],
     selectedId: "",
@@ -132,6 +144,18 @@
     if (rows <= 0) return 0;
     const clamped = Math.min(rows, MAX_ITEM_ROWS);
     return clamped * ITEM_ROW_HEIGHT + (clamped - 1) * ITEM_ROW_GAP + ITEMS_ROW_PADDING;
+  }
+
+  function tickRetryCountdown() {
+    retryRemainingMs = Math.max(0, retryEndAt - performance.now());
+    if (retryRemainingMs === 0) return;
+    const untilTextChange = retryRemainingMs - (Math.ceil(retryRemainingMs / 1000) - 1) * 1000;
+    retryTimer = setTimeout(tickRetryCountdown, untilTextChange);
+  }
+
+  function startRetryCountdown(delayMs: number) {
+    retryEndAt = performance.now() + delayMs;
+    tickRetryCountdown();
   }
 
   function barScale(factor: number): number {
@@ -262,10 +286,16 @@
     attachConsole();
     unlisteners = await Promise.all([
       listen<WidgetPayload>("recording-widget-state", (event) => {
+        clearTimeout(retryTimer);
         widgetState = event.payload.state;
         elapsedMs = event.payload.elapsedMs;
         monochromatic = event.payload.monochromatic;
         if (widgetState === "recording") level = event.payload.level;
+        if (widgetState === "retrying") {
+          retryAttempt = event.payload.attempt ?? 0;
+          retryMaxAttempts = event.payload.maxAttempts ?? 0;
+          startRetryCountdown(event.payload.delayMs ?? 0);
+        }
       }),
       listen<PillModel>("recording-widget-model", (event) => {
         model = event.payload;
@@ -279,7 +309,10 @@
     ]);
   });
 
-  onDestroy(() => unlisteners.forEach((unlisten) => unlisten()));
+  onDestroy(() => {
+    clearTimeout(retryTimer);
+    unlisteners.forEach((unlisten) => unlisten());
+  });
 </script>
 
 <div class="root" class:up={overlayUp} style:--radius="{RADIUS}px">
@@ -335,6 +368,23 @@
           {#each WAVE_BARS as delayMs}
             <span class="wave-bar" style:width="{WAVE_BAR_WIDTH}px" style:animation-delay="{delayMs}ms" data-tauri-drag-region></span>
           {/each}
+        </div>
+      {:else if widgetState === "retrying"}
+        {#if retryRemainingMs > 0}
+          <span class="time" data-tauri-drag-region>
+            Retry {retryAttempt}/{retryMaxAttempts} in {Math.ceil(retryRemainingMs / 1000)} s
+          </span>
+        {:else}
+          <div class="wave fixed" style:--wave-period="{WAVE_PERIOD_MS}ms" style:gap="{BAR_GAP}px" data-tauri-drag-region>
+            {#each RETRY_WAVE_BARS as delayMs}
+              <span class="wave-bar" style:width="{WAVE_BAR_WIDTH}px" style:animation-delay="{delayMs}ms" data-tauri-drag-region></span>
+            {/each}
+          </div>
+        {/if}
+        <div class="actions">
+          <button type="button" class="cancel" tabindex="-1" aria-label="Cancel" onclick={() => run("cancel_speech_recording")}>
+            <X size={16} />
+          </button>
         </div>
       {:else}
         <span class="status" data-tauri-drag-region>
@@ -670,6 +720,10 @@
     align-items: center;
     justify-content: center;
     height: 24px;
+  }
+
+  .wave.fixed {
+    flex: none;
   }
 
   .wave-bar {
