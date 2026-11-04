@@ -12,7 +12,9 @@ use objc2_app_kit::{
 use objc2_core_graphics::{
     CGEvent, CGEventFlags, CGEventSource, CGEventSourceStateID, CGEventTapLocation, CGKeyCode,
 };
-use objc2_foundation::{NSArray, NSData, NSObject, NSObjectProtocol, NSString, NSURL};
+use objc2_foundation::{
+    NSArray, NSData, NSDictionary, NSNumber, NSObject, NSObjectProtocol, NSString, NSURL,
+};
 use tauri::AppHandle;
 use tokio::sync::{mpsc, oneshot};
 
@@ -30,7 +32,8 @@ const KEY_RETURN: CGKeyCode = 36;
 
 #[link(name = "ApplicationServices", kind = "framework")]
 extern "C" {
-    fn AXIsProcessTrusted() -> bool;
+    static kAXTrustedCheckOptionPrompt: &'static NSString;
+    fn AXIsProcessTrustedWithOptions(options: *const NSDictionary<NSString, NSNumber>) -> bool;
 }
 
 type SavedItem = Vec<(String, Vec<u8>)>;
@@ -71,6 +74,12 @@ impl FileUrlProvider {
 
 thread_local! {
     static PROVIDERS: RefCell<Vec<Retained<FileUrlProvider>>> = const { RefCell::new(Vec::new()) };
+}
+
+pub fn accessibility_trusted_or_prompt() -> bool {
+    let prompt = unsafe { kAXTrustedCheckOptionPrompt };
+    let options = NSDictionary::from_slices(&[prompt], &[&*NSNumber::new_bool(true)]);
+    unsafe { AXIsProcessTrustedWithOptions(&*options) }
 }
 
 pub fn claude_running() -> bool {
@@ -226,9 +235,6 @@ async fn deliver_files(app: &AppHandle, files: &[PathBuf]) -> Result<Vec<SavedIt
 }
 
 pub async fn paste_into_claude(app: &AppHandle, files: &[PathBuf], warm: bool) -> Outcome {
-    if !unsafe { AXIsProcessTrusted() } {
-        return Outcome::NoPermission;
-    }
     let Some(found_after) = wait_for_claude().await else {
         return Outcome::NoWindow;
     };

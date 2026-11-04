@@ -28,7 +28,6 @@ pub enum Outcome {
     NoWindow,
     FocusLost,
     NoRead,
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     NoPermission,
     Failed(String),
 }
@@ -204,6 +203,17 @@ fn is_warm() -> Option<bool> {
     }
 }
 
+fn accessibility_trusted() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos::accessibility_trusted_or_prompt()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
 pub async fn deliver(app: AppHandle, transcript: String) {
     let run = NEXT_RUN.fetch_add(1, Ordering::Relaxed);
     let (context, images) = read_context(&app).await;
@@ -211,20 +221,24 @@ pub async fn deliver(app: AppHandle, transcript: String) {
     let Placement { q, context_file } = place(context.as_deref(), &transcript);
 
     let warm = is_warm();
-    let (outcome, file_count) = match prepare_files(&app, run, images, context_file).await {
-        Err(e) => {
-            log::warn!(target: LOG_TARGET, "run={run}: writing the run files failed: {e}");
-            (Outcome::Failed("writing files failed".into()), 0)
-        }
-        Ok(files) => {
-            let outcome = match app.opener().open_url(link(&q), None::<&str>) {
-                Err(e) => {
-                    log::warn!(target: LOG_TARGET, "run={run}: opening the link failed: {e}");
-                    Outcome::Failed("opening the link failed".into())
-                }
-                Ok(()) => paste(&app, &files, warm.unwrap_or(false)).await,
-            };
-            (outcome, files.len())
+    let (outcome, file_count) = if !accessibility_trusted() {
+        (Outcome::NoPermission, 0)
+    } else {
+        match prepare_files(&app, run, images, context_file).await {
+            Err(e) => {
+                log::warn!(target: LOG_TARGET, "run={run}: writing the run files failed: {e}");
+                (Outcome::Failed("writing files failed".into()), 0)
+            }
+            Ok(files) => {
+                let outcome = match app.opener().open_url(link(&q), None::<&str>) {
+                    Err(e) => {
+                        log::warn!(target: LOG_TARGET, "run={run}: opening the link failed: {e}");
+                        Outcome::Failed("opening the link failed".into())
+                    }
+                    Ok(()) => paste(&app, &files, warm.unwrap_or(false)).await,
+                };
+                (outcome, files.len())
+            }
         }
     };
 
@@ -250,13 +264,6 @@ async fn act(app: &AppHandle, run: u64, full: String, outcome: &Outcome) {
     match outcome.action() {
         Action::None => {}
         Action::Fallback(reason) => {
-            #[cfg(target_os = "macos")]
-            if *outcome == Outcome::NoPermission {
-                let url = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
-                if let Err(e) = app.opener().open_url(url, None::<&str>) {
-                    log::warn!(target: LOG_TARGET, "run={run}: opening the Accessibility settings failed: {e}");
-                }
-            }
             fallback(app, "claude", "Claude Desktop", Some(run), full, reason).await;
         }
         Action::PasteToast => {
