@@ -1,4 +1,5 @@
 import Gio from 'gi://Gio';
+import GObject from 'gi://GObject';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
@@ -147,6 +148,73 @@ function msUntilRetryTextChange(remainingMs) {
     return remainingMs - (Math.ceil(remainingMs / 1000) - 1) * 1000;
 }
 
+const PASTE_FOCUS_TIMEOUT_MS = 2000;
+const PASTE_SETTLE_MS = 600;
+const PASTE_READ_TIMEOUT_MS = 3000;
+const PASTE_POLL_MS = 50;
+
+const FileListSource = GObject.registerClass(
+class FileListSource extends Meta.SelectionSource {
+    _init(contents, onRead) {
+        super._init();
+        this._contents = contents;
+        this._onRead = onRead;
+        this._streams = new Map();
+    }
+
+    vfunc_get_mimetypes() {
+        return Object.keys(this._contents);
+    }
+
+    vfunc_read_async(mimetype, cancellable, callback) {
+        const task = Gio.Task.new(this, cancellable, callback);
+        const bytes = this._contents[mimetype];
+        if (bytes === undefined) {
+            task.return_error(new GLib.Error(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND, 'unknown mimetype'));
+            return;
+        }
+        this._streams.set(task, Gio.MemoryInputStream.new_from_bytes(new GLib.Bytes(bytes)));
+        this._onRead(mimetype);
+        task.return_boolean(true);
+    }
+
+    vfunc_read_finish(result) {
+        result.propagate_boolean();
+        const stream = this._streams.get(result);
+        this._streams.delete(result);
+        return stream;
+    }
+});
+
+function fileListContents(uris) {
+    const encoder = new TextEncoder();
+    return {
+        'text/uri-list': encoder.encode(uris.map(uri => `${uri}\r\n`).join('')),
+        'x-special/gnome-copied-files': encoder.encode(`copy\n${uris.join('\n')}`),
+    };
+}
+
+function sleep(ms) {
+    return new Promise(resolve => GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, () => {
+        resolve();
+        return GLib.SOURCE_REMOVE;
+    }));
+}
+
+async function waitFor(condition, timeoutMs) {
+    for (let waited = 0; !condition(); waited += PASTE_POLL_MS) {
+        if (waited >= timeoutMs)
+            return false;
+        await sleep(PASTE_POLL_MS);
+    }
+    return true;
+}
+
+function sendKeys(device, keyvals) {
+    for (const [keyval, state] of keyvals)
+        device.notify_keyval(GLib.get_monotonic_time(), keyval, state);
+}
+
 const INTERFACE_XML = `
 <node>
   <interface name="com.promptheus.Shell">
@@ -230,6 +298,11 @@ const INTERFACE_XML = `
       <arg type="i" direction="in" name="y"/>
     </method>
     <method name="HideRecordingWidget"/>
+    <method name="PasteIntoApp">
+      <arg type="s" direction="in" name="wm_class"/>
+      <arg type="as" direction="in" name="uris"/>
+      <arg type="s" direction="out" name="outcome"/>
+    </method>
     <signal name="ShortcutActivated">
       <arg type="s" name="action"/>
     </signal>
@@ -424,6 +497,58 @@ export default class PromptheusExtension extends Extension {
             this._waitForActivation(title, invocation);
         } catch (e) {
             logError(e, 'Promptheus: ActivateWindow failed');
+            invocation.return_dbus_error('com.promptheus.Shell.Error', String(e));
+        }
+    }
+
+    async PasteIntoAppAsync(params, invocation) {
+        const [wmClass, uris] = params;
+        const finish = outcome => {
+            console.log(`PasteIntoApp: outcome ${outcome}`);
+            invocation.return_value(new GLib.Variant('(s)', [outcome]));
+        };
+        const focused = () => global.display.focus_window?.get_wm_class() === wmClass;
+        try {
+            const win = global.get_window_actors()
+                .map(actor => actor.get_meta_window())
+                .find(candidate => candidate.get_wm_class() === wmClass);
+            if (!win)
+                return finish('no_window');
+            console.log('PasteIntoApp: window found');
+            Main.activateWindow(win);
+            if (!await waitFor(focused, PASTE_FOCUS_TIMEOUT_MS))
+                return finish('focus_lost');
+            console.log('PasteIntoApp: focused');
+            await sleep(PASTE_SETTLE_MS);
+            const keyboard = Clutter.get_default_backend().get_default_seat()
+                .create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
+            if (uris.length > 0) {
+                let reads = 0;
+                let counting = false;
+                const source = new FileListSource(fileListContents(uris), mimetype => {
+                    if (counting)
+                        reads++;
+                    console.log(`PasteIntoApp: read ${mimetype} (${reads})`);
+                });
+                global.display.get_selection().set_owner(Meta.SelectionType.SELECTION_CLIPBOARD, source);
+                console.log('PasteIntoApp: owner set');
+                if (!focused())
+                    return finish('focus_lost');
+                counting = true;
+                const {PRESSED, RELEASED} = Clutter.KeyState;
+                sendKeys(keyboard, [
+                    [Clutter.KEY_Control_L, PRESSED], [Clutter.KEY_v, PRESSED],
+                    [Clutter.KEY_v, RELEASED], [Clutter.KEY_Control_L, RELEASED],
+                ]);
+                if (!await waitFor(() => reads > 0, PASTE_READ_TIMEOUT_MS))
+                    return finish('no_read');
+            }
+            if (!focused())
+                return finish('focus_lost');
+            sendKeys(keyboard, [[Clutter.KEY_Return, Clutter.KeyState.PRESSED], [Clutter.KEY_Return, Clutter.KeyState.RELEASED]]);
+            finish('sent');
+        } catch (e) {
+            logError(e, 'Promptheus: PasteIntoApp failed');
             invocation.return_dbus_error('com.promptheus.Shell.Error', String(e));
         }
     }
