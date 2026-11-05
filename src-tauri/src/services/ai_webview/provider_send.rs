@@ -19,6 +19,38 @@ use super::{AiWebviewState, PendingMessage};
 
 const DELIVERY_DEADLINE: Duration = Duration::from_secs(80);
 
+pub(crate) const CONTEXT_FILE: &str = "context.md";
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ContextFile {
+    pub name: String,
+    pub media_type: String,
+    pub data: String,
+}
+
+fn image_extension(media_type: &str) -> &'static str {
+    match media_type {
+        "image/jpeg" => "jpeg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        _ => "png",
+    }
+}
+
+fn image_files(items: Vec<ContextItem>) -> Vec<ContextFile> {
+    items
+        .into_iter()
+        .filter_map(|item| match item {
+            ContextItem::Image { number, data, media_type } => Some(ContextFile {
+                name: format!("image-{number}.{}", image_extension(&media_type)),
+                media_type,
+                data,
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
 static NEXT_RUN: AtomicU64 = AtomicU64::new(1);
 
 pub async fn send_to_provider_chat(app: &tauri::AppHandle, provider_id: &str, transcript: String) {
@@ -108,18 +140,10 @@ pub(super) async fn handle_send_outcome(
     fallback(app, &provider_id, &provider_name, Some(run), message.transcript, reason).await;
 }
 
-pub(crate) async fn read_context(app: &tauri::AppHandle) -> (Option<String>, Vec<(String, String)>) {
+pub(crate) async fn read_context(app: &tauri::AppHandle) -> (Option<String>, Vec<ContextFile>) {
     let context = app.state::<Arc<Mutex<ContextManagerService>>>();
     let context = context.lock().await;
-    let images = context
-        .get_items()
-        .into_iter()
-        .filter_map(|item| match item {
-            ContextItem::Image { data, media_type, .. } => Some((media_type, data)),
-            _ => None,
-        })
-        .collect();
-    (context.labelled_context(), images)
+    (context.labelled_context(), image_files(context.get_items()))
 }
 
 fn spawn_deadline(app: tauri::AppHandle, provider: WebviewProvider, child_label: String, run: u64) {
@@ -178,4 +202,34 @@ pub(crate) async fn fallback(
         Some(format!("{reason} — {outcome}")),
         &settings,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn claude_desktop_image_extensions() {
+        assert_eq!(image_extension("image/png"), "png");
+        assert_eq!(image_extension("image/jpeg"), "jpeg");
+        assert_eq!(image_extension("image/gif"), "gif");
+        assert_eq!(image_extension("image/webp"), "webp");
+        assert_eq!(image_extension("image/bmp"), "png");
+    }
+
+    #[test]
+    fn image_files_are_named_by_pill_number() {
+        let items = vec![
+            ContextItem::Text { number: 1, content: "t".into() },
+            ContextItem::Image { number: 2, data: "QUJD".into(), media_type: "image/png".into() },
+            ContextItem::Image { number: 5, data: "REVG".into(), media_type: "image/jpeg".into() },
+        ];
+        assert_eq!(
+            image_files(items),
+            vec![
+                ContextFile { name: "image-2.png".into(), media_type: "image/png".into(), data: "QUJD".into() },
+                ContextFile { name: "image-5.jpeg".into(), media_type: "image/jpeg".into(), data: "REVG".into() },
+            ]
+        );
+    }
 }

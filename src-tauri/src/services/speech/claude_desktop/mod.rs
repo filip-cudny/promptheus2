@@ -11,14 +11,13 @@ use base64::Engine;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
 
-use crate::services::ai_webview::{fallback, read_context};
+use crate::services::ai_webview::{fallback, read_context, ContextFile, CONTEXT_FILE};
 use crate::services::notification::{NotificationLevel, NotificationService};
 
 const LOG_TARGET: &str = "app_lib::services::speech::claude_desktop";
 const LINK_TEXT_LIMIT: usize = 14_336;
 const RUN_DIR_TTL: Duration = Duration::from_secs(5 * 60);
 const CACHE_SUBDIR: &str = "claude-desktop";
-const CONTEXT_FILE: &str = "context.md";
 
 static NEXT_RUN: AtomicU64 = AtomicU64::new(1);
 
@@ -121,15 +120,6 @@ fn link(q: &str) -> String {
     format!("claude://claude.ai/new?surface=chat&q={}", percent_encode(q))
 }
 
-fn image_extension(media_type: &str) -> &'static str {
-    match media_type {
-        "image/jpeg" => "jpeg",
-        "image/gif" => "gif",
-        "image/webp" => "webp",
-        _ => "png",
-    }
-}
-
 fn cache_root(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_cache_dir()
@@ -139,16 +129,16 @@ fn cache_root(app: &AppHandle) -> Result<PathBuf, String> {
 
 fn write_files(
     dir: PathBuf,
-    images: Vec<(String, String)>,
+    images: Vec<ContextFile>,
     context_file: Option<String>,
 ) -> Result<Vec<PathBuf>, String> {
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let mut paths = Vec::new();
-    for (index, (media_type, data)) in images.iter().enumerate() {
+    for image in &images {
         let bytes = base64::engine::general_purpose::STANDARD
-            .decode(data)
+            .decode(&image.data)
             .map_err(|e| e.to_string())?;
-        let path = dir.join(format!("image-{}.{}", index + 1, image_extension(media_type)));
+        let path = dir.join(&image.name);
         std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
         paths.push(path);
     }
@@ -163,7 +153,7 @@ fn write_files(
 async fn prepare_files(
     app: &AppHandle,
     run: u64,
-    images: Vec<(String, String)>,
+    images: Vec<ContextFile>,
     context_file: Option<String>,
 ) -> Result<Vec<PathBuf>, String> {
     if images.is_empty() && context_file.is_none() {
@@ -343,15 +333,6 @@ mod tests {
     fn claude_desktop_placement_counts_utf16_units() {
         assert_eq!(place(None, &"😀".repeat(7_168)).context_file, None);
         assert!(place(None, &"😀".repeat(7_169)).context_file.is_some());
-    }
-
-    #[test]
-    fn claude_desktop_image_extensions() {
-        assert_eq!(image_extension("image/png"), "png");
-        assert_eq!(image_extension("image/jpeg"), "jpeg");
-        assert_eq!(image_extension("image/gif"), "gif");
-        assert_eq!(image_extension("image/webp"), "webp");
-        assert_eq!(image_extension("image/bmp"), "png");
     }
 
     #[test]

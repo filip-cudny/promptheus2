@@ -1,5 +1,8 @@
 use crate::models::settings::WebviewProvider;
 
+use base64::Engine;
+
+use super::provider_send::{ContextFile, CONTEXT_FILE};
 use super::provider_swap::ROUTER_SENTINEL;
 
 pub(super) fn initialization_script(provider: &WebviewProvider) -> String {
@@ -39,17 +42,22 @@ pub(super) fn delivery_script(
     run: u64,
     transcript: &str,
     context_text: Option<&str>,
-    images: &[(String, String)],
+    images: &[ContextFile],
 ) -> String {
-    let text = match context_text {
-        Some(context) => format!("{context}\n\n{transcript}"),
-        None => transcript.to_string(),
-    };
-    let images: Vec<_> = images
+    let mut files: Vec<_> = images
         .iter()
-        .map(|(media_type, data)| serde_json::json!({ "mediaType": media_type, "data": data }))
+        .map(|file| {
+            serde_json::json!({ "name": file.name, "mediaType": file.media_type, "data": file.data })
+        })
         .collect();
-    let payload = serde_json::json!({ "run": run, "text": text, "images": images });
+    if let Some(context) = context_text {
+        files.push(serde_json::json!({
+            "name": CONTEXT_FILE,
+            "mediaType": "text/markdown",
+            "data": base64::engine::general_purpose::STANDARD.encode(context),
+        }));
+    }
+    let payload = serde_json::json!({ "run": run, "text": transcript, "files": files });
     let payload = serde_json::to_string(&payload).unwrap_or_else(|_| "{}".to_string());
     format!(
         "window.__promptheus && window.__promptheus.__deliverMessage && window.__promptheus.__deliverMessage({payload});"
@@ -225,9 +233,9 @@ function dispatchSyntheticPaste(target, dt) {
     (target || document.activeElement || document.body).dispatchEvent(evt);
 }
 
-function injectImage(target, blob) {
+function injectImage(target, blob, name) {
     const dt = new DataTransfer();
-    dt.items.add(new File([blob], "pasted-image", { type: blob.type }));
+    dt.items.add(new File([blob], name || "pasted-image", { type: blob.type }));
     dispatchSyntheticPaste(target, dt);
 }
 
@@ -309,11 +317,11 @@ ensureClipboardPasteFallback();
 "##;
 
 const DELIVER_MESSAGE_JS: &str = r##"
-function decodeImage(image) {
-    const bin = atob(image.data);
+function decodeFile(file) {
+    const bin = atob(file.data);
     const bytes = new Uint8Array(bin.length);
     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return new Blob([bytes], { type: image.mediaType });
+    return new Blob([bytes], { type: file.mediaType });
 }
 
 function pressEnter(composer) {
@@ -404,7 +412,7 @@ g.__deliverMessage = function(payload) {
         }
         clearInterval(poll);
         composer.focus();
-        if (!payload.images.length) {
+        if (!payload.files.length) {
             injectText(composer, payload.text);
             sendUntilNavigated(composer, payload.run, 0, 0);
             return;
@@ -412,10 +420,10 @@ g.__deliverMessage = function(payload) {
         const counter = { images: 0, inFlight: 0, lastAt: Date.now() };
         const uploadStartedAt = Date.now();
         uploadCounter = counter;
-        payload.images.forEach(function(image) { injectImage(composer, decodeImage(image)); });
+        payload.files.forEach(function(file) { injectImage(composer, decodeFile(file), file.name); });
         const wait = setInterval(function() {
             const now = Date.now();
-            const done = counter.images >= payload.images.length
+            const done = counter.images >= payload.files.length
                 && counter.inFlight === 0 && now - counter.lastAt >= 1000;
             const timedOut = now - uploadStartedAt >= 20000;
             if (!done && !timedOut) return;
@@ -510,12 +518,26 @@ mod tests {
         assert!(js.contains("ensureClipboardPasteFallback"));
     }
 
+    fn payload(js: &str) -> serde_json::Value {
+        let start = js.find("__deliverMessage(").unwrap() + "__deliverMessage(".len();
+        serde_json::from_str(js[start..].strip_suffix(");").unwrap()).unwrap()
+    }
+
     #[test]
-    fn delivery_script_puts_context_before_transcript() {
-        let js = delivery_script(3, "say", Some("ctx"), &[]);
-        assert!(js.contains(&serde_json::to_string("ctx\n\nsay").unwrap()));
-        let js = delivery_script(3, "say", None, &[]);
-        assert!(js.contains(&serde_json::to_string("say").unwrap()));
+    fn delivery_script_sends_context_as_a_file() {
+        let payload = payload(&delivery_script(3, "say", Some("ctx"), &[]));
+        assert_eq!(payload["text"], "say");
+        assert_eq!(
+            payload["files"],
+            serde_json::json!([{ "name": "context.md", "mediaType": "text/markdown", "data": "Y3R4" }])
+        );
+    }
+
+    #[test]
+    fn delivery_script_without_context_has_no_files() {
+        let payload = payload(&delivery_script(3, "say", None, &[]));
+        assert_eq!(payload["text"], "say");
+        assert_eq!(payload["files"], serde_json::json!([]));
     }
 
     #[test]
@@ -526,10 +548,20 @@ mod tests {
     }
 
     #[test]
-    fn delivery_script_carries_images() {
-        let js = delivery_script(1, "t", None, &[("image/png".into(), "QUJD".into())]);
-        assert!(js.contains(r#""mediaType":"image/png""#));
-        assert!(js.contains(r#""data":"QUJD""#));
+    fn delivery_script_lists_images_then_context() {
+        let images = [
+            ContextFile { name: "image-2.png".into(), media_type: "image/png".into(), data: "QUJD".into() },
+            ContextFile { name: "image-5.jpeg".into(), media_type: "image/jpeg".into(), data: "REVG".into() },
+        ];
+        let payload = payload(&delivery_script(1, "t", Some("ctx"), &images));
+        assert_eq!(
+            payload["files"],
+            serde_json::json!([
+                { "name": "image-2.png", "mediaType": "image/png", "data": "QUJD" },
+                { "name": "image-5.jpeg", "mediaType": "image/jpeg", "data": "REVG" },
+                { "name": "context.md", "mediaType": "text/markdown", "data": "Y3R4" },
+            ])
+        );
     }
 
     #[test]
