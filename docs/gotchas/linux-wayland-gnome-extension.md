@@ -129,11 +129,11 @@ Debugging:
 
 ## PasteIntoApp (Claude Desktop paste)
 
-`PasteIntoApp(s wm_class, as uris) → s outcome` focuses the first window of the WM class, pastes the file list with Ctrl+V and sends Return. Outcomes: `sent`, `no_window`, `focus_lost` (never `no_read`, which only macOS produces).
+`PasteIntoApp(s wm_class, as uris) → s outcome` focuses the app's main window (the first window of the WM class with type `Meta.WindowType.NORMAL` and no transient parent, so never a dialog), pastes the file list with Ctrl+V and sends Return. Outcomes: `sent`, `no_window`, `focus_lost` (never `no_read`, which only macOS produces).
 
 Steps:
-1. Poll every 100 ms up to 20 s for a window with the WM class; none → `no_window`. A window absent at the first poll marks the run cold.
-2. `Main.activateWindow`, wait up to 2 s for `global.display.focus_window` to have the WM class; else `focus_lost`.
+1. Poll every 100 ms up to 20 s for that main window; none → `no_window`. A window absent at the first poll marks the run cold.
+2. `Main.activateWindow`, wait up to 2 s for `global.display.focus_window` to be exactly that window; else `focus_lost`. Every later focus check compares the same way, so a Claude dialog holding focus (e.g. its hardware acceleration notice after a cold start) gives `focus_lost`; a check by WM class let Ctrl+V go into the dialog, Return press its default button, and reported `sent`.
 3. Settle 600 ms warm, 4000 ms cold.
 4. With `uris`: save one clipboard type (`text/plain;charset=utf-8`, else the first `image/*`; `Meta.Selection.transfer_async` into a `Gio.MemoryOutputStream`; a failed read saves nothing), own the clipboard with a `Meta.SelectionSourceMemory` holding only `text/uri-list`, focus check, one Ctrl+V, a fixed 1000 ms wait.
 5. Focus check, Return.

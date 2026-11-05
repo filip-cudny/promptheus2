@@ -521,12 +521,14 @@ export default class PromptheusExtension extends Extension {
             console.log(`PasteIntoApp: outcome ${outcome} (${state.cold ? 'cold' : 'warm'}, restored ${state.restored})`);
             invocation.return_value(new GLib.Variant('(s)', [outcome]));
         };
-        const focused = () => global.display.focus_window?.get_wm_class() === wmClass;
         const findWindow = () => global.get_window_actors()
             .map(actor => actor.get_meta_window())
-            .find(candidate => candidate.get_wm_class() === wmClass);
+            .find(candidate => candidate.get_wm_class() === wmClass &&
+                candidate.get_window_type() === Meta.WindowType.NORMAL &&
+                !candidate.get_transient_for());
         try {
             let win = findWindow();
+            const focused = () => global.display.focus_window === win;
             if (!win) {
                 state.cold = true;
                 await waitFor(() => (win = findWindow()), PASTE_WINDOW_TIMEOUT_MS, PASTE_WINDOW_POLL_MS);
