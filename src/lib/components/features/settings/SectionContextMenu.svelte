@@ -68,16 +68,24 @@
   }
 
   let recentTimer: ReturnType<typeof setTimeout> | undefined;
-  onDestroy(() => clearTimeout(recentTimer));
+  let pendingRecent: number | null = null;
+
+  function flushRecentApps() {
+    clearTimeout(recentTimer);
+    if (pendingRecent === null) return;
+    const n = pendingRecent;
+    pendingRecent = null;
+    void run("update recent_apps_count", () => updateSetting("recent_apps_count", n));
+  }
+
+  onDestroy(flushRecentApps);
 
   function saveRecentApps(e: Event) {
     const n = Math.max(0, Math.floor(Number((e.currentTarget as HTMLInputElement).value)));
     if (!Number.isFinite(n)) return;
     clearTimeout(recentTimer);
-    recentTimer = setTimeout(
-      () => run("update recent_apps_count", () => updateSetting("recent_apps_count", n)),
-      store.settings?.autosave_debounce_ms ?? 1000,
-    );
+    pendingRecent = n;
+    recentTimer = setTimeout(flushRecentApps, store.settings?.autosave_debounce_ms ?? 1000);
   }
 
   let dragIndex = $state<number | null>(null);
