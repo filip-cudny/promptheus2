@@ -24,6 +24,7 @@ export interface Settings {
   surfaces: Surfaces;
   keymaps: KeymapGroup[];
   recent_apps_count: number;
+  menu_digit_select_delay_ms: number;
   skills_order: string[];
   webview_providers: WebviewProvider[];
 }

@@ -216,6 +216,9 @@ impl ConfigService {
             "recent_apps_count" => {
                 settings.recent_apps_count = value.as_u64().ok_or_else(wrong_type)? as usize
             }
+            "menu_digit_select_delay_ms" => {
+                settings.menu_digit_select_delay_ms = value.as_u64().ok_or_else(wrong_type)? as u32
+            }
             "preferred_name" => {
                 let trimmed = value.as_str().ok_or_else(wrong_type)?.trim();
                 settings.preferred_name = trimmed.chars().take(MAX_PREFERRED_NAME_LEN).collect();

@@ -1032,3 +1032,24 @@ fn update_setting_wrong_type_is_rejected_with_key() {
     assert_eq!(key.as_deref(), Some("recent_apps_count"));
     assert_eq!(fs::read(dir.path().join("settings.json")).unwrap(), bytes_before);
 }
+
+#[test]
+fn update_setting_menu_digit_select_delay_checks_range() {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+    let bytes_before = fs::read(dir.path().join("settings.json")).unwrap();
+
+    let err = service
+        .try_mutate(|c| c.update_setting("menu_digit_select_delay_ms", serde_json::json!(50)))
+        .unwrap_err();
+
+    let (key, _) = invalid_key_and_message(err);
+    assert_eq!(key.as_deref(), Some("menu_digit_select_delay_ms"));
+    assert_eq!(fs::read(dir.path().join("settings.json")).unwrap(), bytes_before);
+
+    service
+        .try_mutate(|c| c.update_setting("menu_digit_select_delay_ms", serde_json::json!(300)))
+        .expect("in range");
+    let written = fs::read_to_string(dir.path().join("settings.json")).unwrap();
+    assert!(written.contains("\"menu_digit_select_delay_ms\": 300"), "{written}");
+}

@@ -16,6 +16,8 @@ Maps in `Settings` serialize sorted by key (`serialize_sorted`, `BTreeMap` for `
 
 `Settings.appearance` (`AppearanceSettings`, `#[serde(default)]`) holds `logo` (default `color`) and `icons` (default `mono`), both `Skin` (`color` | `mono`, serialized lowercase). `appearance.icons` replaced `notifications.monochromatic_notification_icons` and `surfaces.speech_to_text.monochromatic_widget_icon`: `parse_and_migrate` (`services/config/migrator.rs`) runs `migrate_monochromatic_flags` on every load, not only for legacy files. When either old key is present it sets `appearance.icons` to `mono` if one of them is `true`, else `color`, keeps `appearance.logo` and deletes both keys, so the next save writes the file without them.
 
+`Settings.menu_digit_select_delay_ms` (`u32`, default 200, catalog range 100–1000, live) is how long the context menu waits for a second digit when a two-digit number is still possible.
+
 ### Removed settings keys
 
 `strip_removed_settings` (`services/config/migrator.rs`) runs in `parse_and_migrate` on every load, right after `migrate_monochromatic_flags` and before deserializing. It deletes the top-level keys `code_theme` and `debug_mode` (they would otherwise survive in `Settings.extra`) and every `keymaps` entry whose `context`, whitespace removed, is `os==windows`; it logs at `info` only when it removed something. Removed nested fields (`enabled_tools` of `quick_actions` and `title_generation`, `parameters` of `title_generation`) need no strip: `QuickActionsGeneration` and `TitleGeneration` do not declare them, so deserializing drops them and the next save writes the file without them.

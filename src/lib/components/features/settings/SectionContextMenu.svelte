@@ -80,6 +80,12 @@
 
   onDestroy(flushRecentApps);
 
+  function saveDigitDelay(e: Event) {
+    const n = Math.floor(Number((e.currentTarget as HTMLInputElement).value));
+    if (n < 100 || n > 1000) return;
+    void run("update menu_digit_select_delay_ms", () => updateSetting("menu_digit_select_delay_ms", n));
+  }
+
   function saveRecentApps(e: Event) {
     const n = Math.max(0, Math.floor(Number((e.currentTarget as HTMLInputElement).value)));
     if (!Number.isFinite(n)) return;
@@ -153,6 +159,16 @@
             step={1}
             value={store.settings?.recent_apps_count ?? 0}
             oninput={saveRecentApps}
+          />
+        </SettingField>
+
+        <SettingField key="menu_digit_select_delay_ms">
+          <NumberInput
+            min={100}
+            max={1000}
+            step={50}
+            value={store.settings?.menu_digit_select_delay_ms ?? 200}
+            oninput={saveDigitDelay}
           />
         </SettingField>
 

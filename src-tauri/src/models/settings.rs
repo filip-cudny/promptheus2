@@ -92,6 +92,9 @@ pub struct Settings {
     #[serde(default = "default_recent_apps_count")]
     pub recent_apps_count: usize,
 
+    #[serde(default = "default_menu_digit_select_delay_ms")]
+    pub menu_digit_select_delay_ms: u32,
+
     #[serde(default, serialize_with = "serialize_sorted")]
     pub mcp_servers: HashMap<String, McpServerConfig>,
 
@@ -622,6 +625,10 @@ fn default_recent_apps_count() -> usize {
     4
 }
 
+fn default_menu_digit_select_delay_ms() -> u32 {
+    200
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -639,6 +646,7 @@ impl Default for Settings {
             surfaces: Surfaces::default(),
             keymaps: Vec::new(),
             recent_apps_count: default_recent_apps_count(),
+            menu_digit_select_delay_ms: default_menu_digit_select_delay_ms(),
             mcp_servers: HashMap::new(),
             skills_order: Vec::new(),
             webview_providers: default_webview_providers(),

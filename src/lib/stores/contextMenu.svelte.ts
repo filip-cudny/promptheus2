@@ -6,6 +6,8 @@ import type { MenuItem } from "$lib/types/menu";
 import { startExecution, isExecuting, getExecutingSkillId, cancelExecution } from "$lib/stores/execution.svelte";
 import { onContextChanged, onHistoryChanged } from "$lib/services/events";
 import { openConversationDialog } from "$lib/services/conversationDialog";
+import { getSettings } from "$lib/services/settings";
+import { createDigitSelector } from "$lib/utils/digitSelect";
 import { fetchSkillMetadata, getSkillMeta } from "$lib/services/skillMetadata.svelte";
 
 interface WorkArea {
@@ -31,11 +33,18 @@ let _workArea: WorkArea | null = null;
 let _firstPlacementPending = false;
 
 const BLUR_GRACE_MS = 500;
-let numberBuffer = "";
-let numberTimer: ReturnType<typeof setTimeout> | null = null;
+const DEFAULT_DIGIT_DELAY_MS = 200;
+let digitDelayMs = DEFAULT_DIGIT_DELAY_MS;
+let digitIsAlternative = false;
 let unlistens: UnlistenFn[] = [];
 
-const NUMBER_DEBOUNCE_MS = 200;
+const digitSelector = createDigitSelector({
+  getItemCount: () => _allSkillItems.length,
+  getDelayMs: () => digitDelayMs,
+  run: runNumberedItem,
+  setTimer: (fn, ms) => setTimeout(fn, ms),
+  clearTimer: (t) => clearTimeout(t),
+});
 
 const _navigableItems = $derived(
   _items.filter((item) => item.enabled),
@@ -164,7 +173,8 @@ async function openMenu(workArea: WorkArea | null) {
     const fetched = await invoke<MenuItem[]>("get_context_menu_items");
     _items = applyItemStates(fetched);
     _selectedIndex = -1;
-    numberBuffer = "";
+    digitSelector.reset();
+    digitDelayMs = await readDigitDelayMs();
     _openedAt = Date.now();
     _visible = true;
     _openTrigger++;
@@ -178,7 +188,7 @@ async function closeMenu() {
   _visible = false;
   _items = [];
   _selectedIndex = -1;
-  numberBuffer = "";
+  digitSelector.reset();
 
   await invoke("hide_context_menu_panel");
 }
@@ -353,23 +363,27 @@ async function startAlternativeExecution(index: number) {
   await refreshItems();
 }
 
+async function readDigitDelayMs(): Promise<number> {
+  try {
+    return (await getSettings()).menu_digit_select_delay_ms ?? DEFAULT_DIGIT_DELAY_MS;
+  } catch {
+    return DEFAULT_DIGIT_DELAY_MS;
+  }
+}
+
+function runNumberedItem(num: number) {
+  if (num >= 1 && num <= _allSkillItems.length) {
+    const targetItem = _allSkillItems[num - 1];
+    if (!targetItem.enabled && !(_isRecording && _recordingSkillId === (targetItem.data as { skill_id: string } | null)?.skill_id)) return;
+    const targetIndex = _items.indexOf(targetItem);
+    _selectedIndex = targetIndex;
+    executeItem(targetIndex, digitIsAlternative);
+  }
+}
+
 function handleNumberInput(digit: string, isAlternative: boolean) {
-  if (numberTimer) clearTimeout(numberTimer);
-
-  numberBuffer += digit;
-
-  numberTimer = setTimeout(() => {
-    const num = parseInt(numberBuffer, 10);
-    numberBuffer = "";
-
-    if (num >= 1 && num <= _allSkillItems.length) {
-      const targetItem = _allSkillItems[num - 1];
-      if (!targetItem.enabled && !(_isRecording && _recordingSkillId === (targetItem.data as { skill_id: string } | null)?.skill_id)) return;
-      const targetIndex = _items.indexOf(targetItem);
-      _selectedIndex = targetIndex;
-      executeItem(targetIndex, isAlternative);
-    }
-  }, NUMBER_DEBOUNCE_MS);
+  digitIsAlternative = isAlternative;
+  digitSelector.push(digit);
 }
 
 function getAllSkillItems(): MenuItem[] {

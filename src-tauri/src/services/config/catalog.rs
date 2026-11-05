@@ -140,6 +140,7 @@ pub const ENTRIES: &[CatalogEntry] = &[
     live("surfaces.quick_actions.generation.parameters.reasoning_effort", ContextMenu, "Reasoning effort", "How much reasoning the quick actions model spends on a reply, where the model supports it.", TEXT),
     live("menu_section_order", ContextMenu, "Menu section order", "Order of the sections in the context menu.", Kind::List),
     live("recent_apps_count", ContextMenu, "Recent apps", "How many recently used apps the context menu remembers.", int(Some(0), None)),
+    live("menu_digit_select_delay_ms", ContextMenu, "Digit selection delay", "How long the menu waits for a second digit when a two-digit number is possible.", int(Some(100), Some(1000))),
     live("keymaps.open_context_menu", ContextMenu, "Open context menu", "Global shortcut that opens the context menu.", Kind::Shortcut),
     live("keymaps.execute_active_prompt", ContextMenu, "Run active prompt", "Global shortcut that runs the active prompt.", Kind::Shortcut),
     live("keymaps.set_context_value", ContextMenu, "Set context", "Global shortcut that sets the context value from the selection.", Kind::Shortcut),

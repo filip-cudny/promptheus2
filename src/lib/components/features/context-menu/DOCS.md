@@ -55,7 +55,7 @@ Built in `src-tauri/src/setup/windows.rs` with label `context-menu`. Key propert
 | Arrow Up/Down | Move selection highlight |
 | Enter | Execute selected item (Shift+Enter runs a skill in the dialog on the clipboard text) |
 | Escape | Close menu (closes any open floating panel first) |
-| 1-9 | Quick-select item by position (multi-digit debounced at `NUMBER_DEBOUNCE_MS` = 200) |
+| 1-9 | Quick-select item by position (runs at once when no longer number is possible (`digit × 10 > skill item count`), otherwise waits `menu_digit_select_delay_ms` (default 200, 100–1000, read from settings each time the menu opens) for a second digit; logic in `src/lib/utils/digitSelect.ts`) |
 | Shift+1-9 | Same as above; runs the numbered skill in the dialog on the clipboard text |
 
 All keyboard handling lives in `drivers/useMenuKeyboard.svelte.ts`.
