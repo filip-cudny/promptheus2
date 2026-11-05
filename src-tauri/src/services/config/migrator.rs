@@ -72,6 +72,7 @@ pub(super) fn parse_and_migrate(content: &str) -> Result<MigrationOutcome, Confi
     };
 
     migrate_monochromatic_flags(&mut migrated);
+    strip_removed_settings(&mut migrated);
 
     let settings: Settings = serde_json::from_value(migrated)?;
 
@@ -109,6 +110,32 @@ fn migrate_monochromatic_flags(raw: &mut Value) {
     if let Some(appearance) = appearance.as_object_mut() {
         appearance.insert("icons".to_string(), Value::from(icons));
         log::info!("migrated monochromatic icon flags to appearance.icons={icons}");
+    }
+}
+
+const REMOVED_TOP_LEVEL_KEYS: [&str; 2] = ["code_theme", "debug_mode"];
+
+fn strip_removed_settings(raw: &mut Value) {
+    let Some(obj) = raw.as_object_mut() else {
+        return;
+    };
+    let mut removed: Vec<String> = REMOVED_TOP_LEVEL_KEYS
+        .iter()
+        .filter(|key| obj.remove(**key).is_some())
+        .map(|key| key.to_string())
+        .collect();
+    if let Some(keymaps) = obj.get_mut("keymaps").and_then(|v| v.as_array_mut()) {
+        let before = keymaps.len();
+        keymaps.retain(|group| {
+            let context = group.get("context").and_then(|c| c.as_str()).unwrap_or("");
+            context.split_whitespace().collect::<String>() != "os==windows"
+        });
+        if keymaps.len() < before {
+            removed.push("keymaps for os == windows".to_string());
+        }
+    }
+    if !removed.is_empty() {
+        log::info!("removed unused settings: {}", removed.join(", "));
     }
 }
 

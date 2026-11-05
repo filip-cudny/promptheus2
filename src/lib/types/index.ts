@@ -61,12 +61,21 @@ export interface ChatConfig {
   generation: GenerationConfig;
 }
 
+export interface QuickActionsGeneration {
+  model_id: string | null;
+  parameters: ModelParameters;
+}
+
 export interface QuickActionsConfig {
-  generation: GenerationConfig;
+  generation: QuickActionsGeneration;
+}
+
+export interface TitleGeneration {
+  model_id: string | null;
 }
 
 export interface TitleGenConfig {
-  generation: GenerationConfig;
+  generation: TitleGeneration;
   prompt: string;
 }
 

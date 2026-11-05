@@ -31,7 +31,6 @@
       "max_interval_secs": 180
     }
   },
-  "number_input_debounce_ms": 200,
   "prompt_base": {
     "system": "prompts/base/system.md",
     "about_you": "prompts/base/about_you.md",
@@ -49,15 +48,12 @@
     "quick_actions": {
       "generation": {
         "model_id": "550e8400-e29b-41d4-a716-446655440000",
-        "parameters": {},
-        "enabled_tools": []
+        "parameters": {}
       }
     },
     "title_generation": {
       "generation": {
-        "model_id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
-        "parameters": {},
-        "enabled_tools": []
+        "model_id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e"
       },
       "prompt": "prompts/surfaces/title_generation.md"
     },
@@ -112,17 +108,6 @@
     },
     {
       "context": "os == linux",
-      "bindings": {
-        "ctrl+f1": "open_context_menu",
-        "ctrl+f2": "execute_active_prompt",
-        "ctrl+f3": "set_context_value",
-        "shift+f3": "append_context_value",
-        "shift+f4": "clear_context",
-        "shift+f1": "speech_to_text_toggle"
-      }
-    },
-    {
-      "context": "os == windows",
       "bindings": {
         "ctrl+f1": "open_context_menu",
         "ctrl+f2": "execute_active_prompt",

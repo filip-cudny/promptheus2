@@ -228,13 +228,28 @@ impl Default for PromptBase {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct QuickActionsConfig {
     #[serde(default)]
-    pub generation: GenerationConfig,
+    pub generation: QuickActionsGeneration,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QuickActionsGeneration {
+    #[serde(default)]
+    pub model_id: Option<String>,
+
+    #[serde(default)]
+    pub parameters: ModelParameters,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TitleGeneration {
+    #[serde(default)]
+    pub model_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TitleGenConfig {
     #[serde(default)]
-    pub generation: GenerationConfig,
+    pub generation: TitleGeneration,
 
     #[serde(default = "default_title_generation_path")]
     pub prompt: String,
@@ -243,7 +258,7 @@ pub struct TitleGenConfig {
 impl Default for TitleGenConfig {
     fn default() -> Self {
         Self {
-            generation: GenerationConfig::default(),
+            generation: TitleGeneration::default(),
             prompt: default_title_generation_path(),
         }
     }

@@ -1,5 +1,5 @@
 use super::*;
-use crate::models::settings::{ModelConfig, ModelType, Provider, Skin};
+use crate::models::settings::{KeymapGroup, ModelConfig, Settings, ModelType, Provider, Skin};
 use std::fs;
 use tempfile::TempDir;
 
@@ -847,4 +847,45 @@ fn update_setting_appearance_persists() {
     let reloaded = ConfigService::load(dir.path()).expect("reload");
     assert_eq!(reloaded.settings().appearance.logo, Skin::Mono);
     assert_eq!(reloaded.settings().appearance.icons, Skin::Color);
+}
+
+#[test]
+fn test_removed_settings_keys_leave_the_file_on_load() {
+    let dir = TempDir::new().unwrap();
+    let mut settings = Settings::default();
+    let mut model = test_model("m1", "${KEY}");
+    model.parameters = Some(Default::default());
+    settings.models = vec![model];
+    settings.surfaces.chat.generation.model_id = Some("m1".to_string());
+    settings.surfaces.quick_actions.generation.model_id = Some("m1".to_string());
+    settings.surfaces.title_generation.generation.model_id = Some("m1".to_string());
+    settings.keymaps = ["macos", "linux"]
+        .iter()
+        .map(|os| KeymapGroup {
+            context: format!("os == {os}"),
+            bindings: Default::default(),
+        })
+        .collect();
+    let clean = serde_json::to_value(&settings).unwrap();
+
+    let mut dirty = clean.clone();
+    dirty["code_theme"] = serde_json::json!("github");
+    dirty["debug_mode"] = serde_json::json!(true);
+    dirty["surfaces"]["quick_actions"]["generation"]["enabled_tools"] = serde_json::json!(["x"]);
+    dirty["surfaces"]["title_generation"]["generation"]["enabled_tools"] = serde_json::json!(["x"]);
+    dirty["surfaces"]["title_generation"]["generation"]["parameters"] =
+        serde_json::json!({"temperature": 0.5});
+    dirty["keymaps"].as_array_mut().unwrap().push(serde_json::json!({
+        "context": "os == windows",
+        "bindings": {"ctrl+f1": "open_context_menu"}
+    }));
+
+    let path = dir.path().join("settings.json");
+    fs::write(&path, serde_json::to_string_pretty(&dirty).unwrap()).unwrap();
+    ConfigService::load(dir.path()).expect("load");
+    let first = fs::read_to_string(&path).unwrap();
+    assert_eq!(serde_json::from_str::<serde_json::Value>(&first).unwrap(), clean);
+
+    ConfigService::load(dir.path()).expect("reload");
+    assert_eq!(fs::read_to_string(&path).unwrap(), first);
 }

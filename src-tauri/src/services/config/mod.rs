@@ -206,7 +206,8 @@ impl ConfigService {
                 &mut self.settings.surfaces.quick_actions.generation.parameters
             }
             SurfaceKind::TitleGeneration => {
-                &mut self.settings.surfaces.title_generation.generation.parameters
+                log::warn!("update_surface_parameter: title_generation has no parameters field");
+                return;
             }
             SurfaceKind::SpeechToText => {
                 log::warn!("update_surface_parameter: speech_to_text has no parameters field");
@@ -251,14 +252,8 @@ impl ConfigService {
     pub fn update_surface_enabled_tools(&mut self, surface: SurfaceKind, tools: Vec<String>) {
         match surface {
             SurfaceKind::Chat => self.settings.surfaces.chat.generation.enabled_tools = tools,
-            SurfaceKind::QuickActions => {
-                self.settings.surfaces.quick_actions.generation.enabled_tools = tools
-            }
-            SurfaceKind::TitleGeneration => {
-                self.settings.surfaces.title_generation.generation.enabled_tools = tools
-            }
-            SurfaceKind::SpeechToText => {
-                log::warn!("update_surface_enabled_tools: speech_to_text has no tools");
+            SurfaceKind::QuickActions | SurfaceKind::TitleGeneration | SurfaceKind::SpeechToText => {
+                log::warn!("update_surface_enabled_tools: {surface:?} has no tools");
             }
         }
     }
