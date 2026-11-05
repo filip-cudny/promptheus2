@@ -290,6 +290,9 @@ pub struct SpeechToTextConfig {
 
     #[serde(default)]
     pub claude_target: ClaudeTarget,
+
+    #[serde(default)]
+    pub stop_chat_target: StopChatTarget,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -298,6 +301,14 @@ pub enum ClaudeTarget {
     #[default]
     Webview,
     Desktop,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum StopChatTarget {
+    #[default]
+    Chat,
+    Claude,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -327,6 +338,7 @@ impl Default for SpeechToTextConfig {
             recording_widget_at_cursor: true,
             recording_widget_anchor: PillAnchor::default(),
             claude_target: ClaudeTarget::default(),
+            stop_chat_target: StopChatTarget::default(),
         }
     }
 }
@@ -739,6 +751,19 @@ mod tests {
     #[test]
     fn claude_target_serializes_as_snake_case() {
         assert_eq!(serde_json::to_string(&ClaudeTarget::Desktop).unwrap(), "\"desktop\"");
+    }
+
+    #[test]
+    fn stop_chat_target_defaults_to_chat_and_reads_claude() {
+        let config: SpeechToTextConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(config.stop_chat_target, StopChatTarget::Chat);
+        let config: SpeechToTextConfig = serde_json::from_str(r#"{"stop_chat_target":"claude"}"#).unwrap();
+        assert_eq!(config.stop_chat_target, StopChatTarget::Claude);
+    }
+
+    #[test]
+    fn stop_chat_target_serializes_as_snake_case() {
+        assert_eq!(serde_json::to_string(&StopChatTarget::Claude).unwrap(), "\"claude\"");
     }
 
     #[test]

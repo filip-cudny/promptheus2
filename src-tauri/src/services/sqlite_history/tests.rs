@@ -55,6 +55,7 @@ fn add_plain(svc: &SqliteHistoryService, text: &str) -> String {
         false,
         None,
         false,
+        None,
     )
     .unwrap()
 }
@@ -115,6 +116,7 @@ fn add_and_get_history() {
         false,
         None,
         false,
+        None,
     );
     let history = svc.get_history();
     assert_eq!(history.len(), 1);
@@ -203,6 +205,7 @@ fn resolve_full_content_falls_back_to_columns_for_simple_entries() {
             false,
             None,
             true,
+            None,
         )
         .unwrap();
 
@@ -345,6 +348,7 @@ fn get_entry_by_id_found_and_not_found() {
         false,
         None,
         false,
+        None,
     );
     let entry = svc.get_history().into_iter().next().unwrap();
     assert!(svc.get_entry_by_id(&entry.id).is_some());
@@ -354,9 +358,9 @@ fn get_entry_by_id_found_and_not_found() {
 #[test]
 fn get_last_item_by_type() {
     let svc = make_svc();
-    svc.add_entry("t1".into(), HistoryEntryType::Text, None, None, true, None, false, None, false);
-    svc.add_entry("s1".into(), HistoryEntryType::Speech, None, None, true, None, false, None, false);
-    svc.add_entry("t2".into(), HistoryEntryType::Text, None, None, true, None, false, None, false);
+    svc.add_entry("t1".into(), HistoryEntryType::Text, None, None, true, None, false, None, false, None);
+    svc.add_entry("s1".into(), HistoryEntryType::Speech, None, None, true, None, false, None, false, None);
+    svc.add_entry("t2".into(), HistoryEntryType::Text, None, None, true, None, false, None, false, None);
 
     let last_text = svc.get_last_item_by_type(HistoryEntryType::Text).unwrap();
     assert_eq!(last_text.input_preview, "t2");
@@ -368,7 +372,7 @@ fn get_last_item_by_type() {
 #[test]
 fn update_title() {
     let svc = make_svc();
-    svc.add_entry("test".into(), HistoryEntryType::Text, None, None, true, None, false, None, false);
+    svc.add_entry("test".into(), HistoryEntryType::Text, None, None, true, None, false, None, false, None);
     let entry = svc.get_history().into_iter().next().unwrap();
 
     svc.update_entry_title(&entry.id, "My Title".into()).unwrap();
@@ -379,7 +383,7 @@ fn update_title() {
 #[test]
 fn clear_removes_all() {
     let svc = make_svc();
-    svc.add_entry("test".into(), HistoryEntryType::Text, None, None, true, None, false, None, false);
+    svc.add_entry("test".into(), HistoryEntryType::Text, None, None, true, None, false, None, false, None);
     assert_eq!(svc.entry_count(), 1);
     svc.clear();
     assert_eq!(svc.entry_count(), 0);
@@ -521,8 +525,8 @@ fn image_cascade_delete() {
 #[test]
 fn quick_action_query() {
     let svc = make_svc();
-    svc.add_entry("normal".into(), HistoryEntryType::Text, None, None, true, None, false, None, false);
-    svc.add_entry("quick".into(), HistoryEntryType::Text, None, None, true, None, false, None, true);
+    svc.add_entry("normal".into(), HistoryEntryType::Text, None, None, true, None, false, None, false, None);
+    svc.add_entry("quick".into(), HistoryEntryType::Text, None, None, true, None, false, None, true, None);
 
     let last_quick = svc.get_last_quick_action(HistoryEntryType::Text).unwrap();
     assert_eq!(last_quick.input_preview, "quick");
@@ -588,6 +592,20 @@ fn read_source_columns(svc: &SqliteHistoryService, id: &str) -> (Option<String>,
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .unwrap()
+}
+
+#[test]
+fn add_entry_stores_the_given_output_route_and_null_without_one() {
+    let svc = make_svc();
+    let add = |route| {
+        svc.add_entry("s".into(), HistoryEntryType::Speech, None, None, true, None, false, None, true, route)
+            .unwrap()
+    };
+    let routed = add(Some("claude_desktop"));
+    let unrouted = add(None);
+
+    assert_eq!(read_source_columns(&svc, &routed), (None, Some("claude_desktop".into())));
+    assert_eq!(read_source_columns(&svc, &unrouted), (None, None));
 }
 
 #[test]

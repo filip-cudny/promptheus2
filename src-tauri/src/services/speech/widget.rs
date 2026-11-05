@@ -12,7 +12,7 @@ use super::{
 };
 use crate::commands::context::current_context_version;
 use crate::models::context::ContextItem;
-use crate::models::settings::{ClaudeTarget, PillAnchor, Skin, WebviewProvider};
+use crate::models::settings::{ClaudeTarget, PillAnchor, Skin, StopChatTarget, WebviewProvider};
 use crate::models::skill::{is_offered_in, OfferedIn, Skill};
 use crate::services::config::ConfigService;
 use crate::services::context::ContextManagerService;
@@ -428,6 +428,13 @@ pub async fn configured_claude_target(app: &AppHandle) -> ClaudeTarget {
     match app.try_state::<Arc<Mutex<ConfigService>>>() {
         Some(config) => config.lock().await.settings().surfaces.speech_to_text.claude_target,
         None => ClaudeTarget::default(),
+    }
+}
+
+pub async fn configured_stop_chat_target(app: &AppHandle) -> StopChatTarget {
+    match app.try_state::<Arc<Mutex<ConfigService>>>() {
+        Some(config) => config.lock().await.settings().surfaces.speech_to_text.stop_chat_target,
+        None => StopChatTarget::default(),
     }
 }
 

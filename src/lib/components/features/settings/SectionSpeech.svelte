@@ -7,11 +7,16 @@
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { updateSpeechToTextConfig } from "$lib/services/settings";
   import { error as logError } from "@tauri-apps/plugin-log";
-  import type { ClaudeTarget, SpeechToTextConfig } from "$lib/types";
+  import type { ClaudeTarget, SpeechToTextConfig, StopChatTarget } from "$lib/types";
 
   const CLAUDE_TARGET_OPTIONS: ReadonlyArray<{ value: ClaudeTarget; label: string }> = [
     { value: "webview", label: "Webview" },
     { value: "desktop", label: "Claude Desktop" },
+  ];
+
+  const STOP_CHAT_TARGET_OPTIONS: ReadonlyArray<{ value: StopChatTarget; label: string }> = [
+    { value: "chat", label: "Chat" },
+    { value: "claude", label: "Claude" },
   ];
 
   const MAX_ATTEMPTS = 10;
@@ -96,6 +101,15 @@
             options={CLAUDE_TARGET_OPTIONS}
             ariaLabel="Claude target"
             onchange={(claude_target) => save({ claude_target })}
+          />
+        </FormRow>
+
+        <FormRow label="Stop + chat target">
+          <SelectDropdown
+            value={config.stop_chat_target}
+            options={STOP_CHAT_TARGET_OPTIONS}
+            ariaLabel="Stop + chat target"
+            onchange={(stop_chat_target) => save({ stop_chat_target })}
           />
         </FormRow>
       </div>

@@ -14,6 +14,8 @@ The root is `src/windows/settings-dialog/App.svelte` (calls `store.init()` / `st
 
 `SectionAppearance.svelte` holds three rows: "Theme" (button toggling light/dark), "Logo" and "Icons" (each a `SelectDropdown` of Color / Mono). Logo and Icons save with `updateSetting("appearance", { ...current, <field>: value })`; a muted note under Icons says it applies to notification icons and the recording widget's check. The old notification-icon checkbox and widget-icon checkbox no longer exist.
 
+`SectionSpeech.svelte` holds two selects for the Claude pill delivery, "Claude target" (`claude_target`: webview or Claude Desktop) and "Stop + chat target" (`stop_chat_target`: Chat or Claude); each saves its own field with `updateSpeechToTextConfig`.
+
 ### Adding a new section
 
 1. Add the id to the `SettingsSection` union and `SIDEBAR_ITEMS` array in `SettingsSidebar.svelte`. Set `enabled: true` only when the section actually renders.

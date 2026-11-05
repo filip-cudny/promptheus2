@@ -22,6 +22,8 @@ Maps in `Settings` serialize sorted by key (`serialize_sorted`, `BTreeMap` for `
 
 `surfaces.speech_to_text.claude_target` (`#[serde(default)]`, `ClaudeTarget`: `webview` default | `desktop`) picks where the Claude pill target delivers; `desktop` labels the pill's Claude entry "Claude Desktop".
 
+`surfaces.speech_to_text.stop_chat_target` (`#[serde(default)]`, `StopChatTarget`: `chat` default | `claude`) picks where the pill's Stop + chat button sends the transcript; `claude` delivers as the `webview:claude` target, so `claude_target` picks Claude Desktop or the Claude webview.
+
 The settings JSON uses `snake_case` keys — no `rename_all` needed on settings structs (Rust fields already match).
 
 For fields with non-trivial defaults, use named default functions:

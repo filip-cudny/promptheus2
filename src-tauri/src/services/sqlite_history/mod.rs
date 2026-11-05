@@ -65,13 +65,14 @@ impl SqliteHistoryService {
         is_multi_turn: bool,
         skill_name: Option<String>,
         quick_action: bool,
+        output_route: Option<&str>,
     ) -> Option<String> {
         let id = Self::generate_id();
         let now = Self::now_timestamp();
 
         let result = self.db.conn().execute(
-            "INSERT INTO conversations (id, entry_type, input_content, output_content, skill_id, skill_name, success, error, is_multi_turn, quick_action, created_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+            "INSERT INTO conversations (id, entry_type, input_content, output_content, skill_id, skill_name, success, error, is_multi_turn, quick_action, created_at, output_route)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             rusqlite::params![
                 id,
                 entry_type_str(&entry_type),
@@ -84,6 +85,7 @@ impl SqliteHistoryService {
                 is_multi_turn,
                 quick_action,
                 now,
+                output_route,
             ],
         );
 

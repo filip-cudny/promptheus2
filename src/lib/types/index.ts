@@ -83,9 +83,12 @@ export interface SpeechToTextConfig {
   recording_widget_at_cursor: boolean;
   recording_widget_anchor: PillAnchor;
   claude_target: ClaudeTarget;
+  stop_chat_target: StopChatTarget;
 }
 
 export type ClaudeTarget = "webview" | "desktop";
+
+export type StopChatTarget = "chat" | "claude";
 
 export type PillAnchor =
   | "above_right"
