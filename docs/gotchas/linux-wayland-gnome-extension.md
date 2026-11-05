@@ -29,8 +29,9 @@ Interface `com.promptheus.Shell`, object `/com/promptheus/Shell`, served by `org
 | `UpdateRecordingWidgetRetry` | `(u attempt, u max_attempts, u delay_ms) → ()` | switch the pill to `retrying`: row 1 shows "Retry `attempt`/`max_attempts` in S s" counting down from `delay_ms`, then a wave; always rebuilds row 1 (a repeated call restarts the countdown); throws when no widget is shown |
 | `UpdateRecordingWidgetModel` | `(a(ss) targets, s selected_id, s selected_label, b target_locked, a(ussss) items, u item_rows, t context_version, i x, i y) → ()` | pill model from the backend: `targets` are `(id, label)`, `items` are `(index, kind "text"\|"image", label, preview, image_path)` (`preview`: text up to 300 chars + `…`, empty for images; `image_path`: absolute PNG thumbnail path, empty for text or when writing failed); the pill moves to `(x, y)` (already clamped by Rust, the extension never clamps) and resizes to 264 × 72 plus `widgetItemsHeight(item_rows)` (0 rows → 0, else rows × 22 + (rows − 1) × 4 + 10; `item_rows` 0..3); throws when no widget is shown |
 | `HideRecordingWidget` | `() → ()` | remove the widget |
+| `CaptureArea` | `(s path) → s` | hide the pill, let the user drag a screen rectangle, write it as PNG to `path`, show the pill again; `captured` or `cancelled` (see "CaptureArea" below) |
 | `ShortcutActivated` | signal `s action` | an accelerator fired |
-| `RecordingWidgetAction` | signal `s action` | widget button pressed: `pause`, `resume`, `stop`, `cancel`, `paste` or `stop_chat`; `cancel` also stops a running transcription retry |
+| `RecordingWidgetAction` | signal `s action` | widget button pressed: `pause`, `resume`, `stop`, `cancel`, `paste`, `screenshot` or `stop_chat`; `cancel` also stops a running transcription retry |
 | `RecordingWidgetTargetSelected` | signal `s id` | a dropdown row was clicked |
 | `RecordingWidgetItemRemoved` | signal `(u index, t context_version)` | the × of an item chip was clicked (only before the target lock); `context_version` is the one from the last model |
 | `RecordingWidgetMoved` | signal `(i x, i y, i work_x, i work_y, i work_width, i work_height)` | drag released after the pointer moved more than 4 px: pill origin and the work area of the monitor it was dropped on, logical stage pixels |
@@ -143,6 +144,18 @@ Why the shell owns the clipboard: on Wayland the unfocused Promptheus cannot own
 Why the built-in `Meta.SelectionSourceMemory` and not a `Meta.SelectionSource` subclass: GJS cannot override a vfunc that takes a callback. A class with `vfunc_read_async(mimetype, cancellable, callback)` throws `VFunc read_async accepts another callback as a parameter. This is not supported` at `GObject.registerClass`, i.e. at module load, so the whole extension fails and `/com/promptheus/Shell` is never exported (all shortcuts dead). The cost: no read signal, so no paste confirmation (a fixed delay; Claude Desktop reads `text/uri-list` at Ctrl+V and its message waits for the uploads), and one mimetype per source, so the restore puts back one type and the other saved formats are lost. The log carries the outcome, cold/warm and whether the clipboard was restored, never URIs or content.
 
 An extension without the method (not re-logged in after an update) answers `UnknownMethod`; Rust treats the error as `Failed` and falls back to the clipboard and a toast.
+
+## CaptureArea (pill screenshot)
+
+`CaptureArea(s path) → s outcome` (`captured`, `cancelled`; an exception is a D-Bus error `com.promptheus.Shell.Error`). The backend calls it for the `screenshot` action on a fresh proxy with no widget lock held, so the call lasts as long as the selection.
+
+Steps:
+1. Close the pill's dropdown, chip preview and tooltip, hide the pill actor.
+2. A reactive `St.Widget` over the whole stage (`global.stage` size, all monitors), `rgba(0, 0, 0, 0.4)`, crosshair cursor (`set_cursor_type(Clutter.CursorType.CROSSHAIR)`, gone with the actor), `Main.pushModal(overlay)` for pointer and keyboard. Press and drag draw a translucent outlined rectangle, release finishes. Esc or a right click cancels; a rectangle under 4 px on a side cancels. A selection may span monitors.
+3. `Main.popModal(grab)`, destroy the overlay, wait 100 ms (`CAPTURE_FRAME_WAIT_MS`, a fixed wait after the redraw the destroy queues, so the overlay is not in the image; stops being correct below 10 Hz refresh), then `Shell.Screenshot.screenshot_area(x, y, w, h, stream)` into `Gio.File.replace` of `path`, stream closed.
+4. In every outcome (captured, cancelled, error) show the current `this._widget?.actor`, never the actor taken at the start: `HideRecordingWidget` during the selection destroys it and a new `ShowRecordingWidget` may build another.
+
+The coordinates are stage coordinates in logical pixels, passed unscaled; `screenshot_area` takes `gint32`. Source checked: GNOME Shell 50.1 `ScreenshotAreaAsync` (`screenshot.js`) validates the area against `global.screen_width` x `global.screen_height`, which are stage-sized. The PNG resolution on a scaled monitor is chosen by Shell (not read from any source here; the live run on a scaled monitor decides it). The same `ScreenshotAreaAsync` multiplies the caller's area by `St.ThemeContext.get_for_stage(global.stage).scale_factor` before the check; if the live run on a scaled monitor shows a wrong area, apply that factor in `_writeAreaPng`. The log carries the outcome and the rectangle size only.
 
 ## When to load this file
 

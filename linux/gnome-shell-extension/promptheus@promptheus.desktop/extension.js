@@ -160,6 +160,10 @@ const PASTE_COLD_SETTLE_MS = 4000;
 const PASTE_READ_DELAY_MS = 1000;
 const PASTE_RESTORE_DELAY_MS = 500;
 const RESTORED_TEXT_MIMETYPE = 'text/plain;charset=utf-8';
+const CAPTURE_MIN_SIZE_PX = 4;
+const CAPTURE_FRAME_WAIT_MS = 100;
+
+Gio._promisify(Shell.Screenshot.prototype, 'screenshot_area');
 
 function fileListSource(uris) {
     const list = new TextEncoder().encode(uris.map(uri => `${uri}\r\n`).join(''));
@@ -305,6 +309,10 @@ const INTERFACE_XML = `
     <method name="PasteIntoApp">
       <arg type="s" direction="in" name="wm_class"/>
       <arg type="as" direction="in" name="uris"/>
+      <arg type="s" direction="out" name="outcome"/>
+    </method>
+    <method name="CaptureArea">
+      <arg type="s" direction="in" name="path"/>
       <arg type="s" direction="out" name="outcome"/>
     </method>
     <signal name="ShortcutActivated">
@@ -562,6 +570,108 @@ export default class PromptheusExtension extends Extension {
         } catch (e) {
             logError(e, 'Promptheus: PasteIntoApp failed');
             invocation.return_dbus_error('com.promptheus.Shell.Error', String(e));
+        }
+    }
+
+    async CaptureAreaAsync(params, invocation) {
+        const [path] = params;
+        const widget = this._widget;
+        if (widget) {
+            this._closeDropdown(widget);
+            this._closePreview(widget);
+            this._closeTooltip(widget);
+            widget.actor.hide();
+        }
+        let outcome = 'cancelled';
+        let failure = null;
+        try {
+            const area = await this._selectCaptureArea();
+            if (area) {
+                await sleep(CAPTURE_FRAME_WAIT_MS);
+                await this._writeAreaPng(area, path);
+                outcome = 'captured';
+            }
+            console.log(`CaptureArea: outcome ${outcome}` + (area ? ` (${area.width}x${area.height})` : ''));
+        } catch (e) {
+            failure = e;
+        }
+        this._widget?.actor.show();
+        if (failure) {
+            logError(failure, 'Promptheus: CaptureArea failed');
+            invocation.return_dbus_error('com.promptheus.Shell.Error', String(failure));
+        } else {
+            invocation.return_value(new GLib.Variant('(s)', [outcome]));
+        }
+    }
+
+    _selectCaptureArea() {
+        return new Promise(resolve => {
+            const [stageWidth, stageHeight] = global.stage.get_size();
+            const overlay = new St.Widget({
+                reactive: true,
+                width: stageWidth,
+                height: stageHeight,
+                style: 'background-color: rgba(0, 0, 0, 0.4);',
+            });
+            const frame = new St.Widget({
+                visible: false,
+                style: 'background-color: rgba(255, 255, 255, 0.15); border: 1px solid white;',
+            });
+            overlay.add_child(frame);
+            overlay.set_cursor_type(Clutter.CursorType.CROSSHAIR);
+            Main.layoutManager.uiGroup.add_child(overlay);
+            const grab = Main.pushModal(overlay);
+
+            let start = null;
+            const areaTo = ([x, y]) => ({
+                x: Math.round(Math.min(start[0], x)),
+                y: Math.round(Math.min(start[1], y)),
+                width: Math.round(Math.abs(x - start[0])),
+                height: Math.round(Math.abs(y - start[1])),
+            });
+            const finish = area => {
+                Main.popModal(grab);
+                overlay.destroy();
+                resolve(area);
+            };
+
+            overlay.connect('key-press-event', (_actor, event) => {
+                if (event.get_key_symbol() === Clutter.KEY_Escape)
+                    finish(null);
+                return Clutter.EVENT_STOP;
+            });
+            overlay.connect('button-press-event', (_actor, event) => {
+                if (event.get_button() === Clutter.BUTTON_PRIMARY)
+                    start = event.get_coords();
+                else if (event.get_button() === Clutter.BUTTON_SECONDARY)
+                    finish(null);
+                return Clutter.EVENT_STOP;
+            });
+            overlay.connect('motion-event', (_actor, event) => {
+                if (start) {
+                    const {x, y, width, height} = areaTo(event.get_coords());
+                    frame.set_position(x, y);
+                    frame.set_size(width, height);
+                    frame.show();
+                }
+                return Clutter.EVENT_STOP;
+            });
+            overlay.connect('button-release-event', (_actor, event) => {
+                if (start && event.get_button() === Clutter.BUTTON_PRIMARY) {
+                    const area = areaTo(event.get_coords());
+                    finish(area.width < CAPTURE_MIN_SIZE_PX || area.height < CAPTURE_MIN_SIZE_PX ? null : area);
+                }
+                return Clutter.EVENT_STOP;
+            });
+        });
+    }
+
+    async _writeAreaPng({x, y, width, height}, path) {
+        const stream = Gio.File.new_for_path(path).replace(null, false, Gio.FileCreateFlags.NONE, null);
+        try {
+            await new Shell.Screenshot().screenshot_area(x, y, width, height, stream);
+        } finally {
+            stream.close(null);
         }
     }
 
