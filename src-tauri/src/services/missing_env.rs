@@ -24,7 +24,7 @@ pub struct MissingEnvRef {
 pub struct MissingEnvToastState(pub Mutex<BTreeSet<String>>);
 
 pub fn env_is_set(name: &str) -> bool {
-    std::env::var(name).is_ok_and(|v| !v.is_empty())
+    crate::services::env_resolve::env_value(name).is_some_and(|v| !v.is_empty())
 }
 
 pub fn collect_missing(settings: &Settings, is_set: impl Fn(&str) -> bool) -> Vec<MissingEnvRef> {

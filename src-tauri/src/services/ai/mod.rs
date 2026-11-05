@@ -187,6 +187,10 @@ impl AiService {
         entry.provider.complete_stream(request).await
     }
 
+    pub fn has_model(&self, model_id: &str) -> bool {
+        self.get_provider(model_id).is_ok()
+    }
+
     fn get_provider(&self, model_id: &str) -> Result<&ProviderEntry, AiError> {
         if let Some(reason) = self.inner.unavailable_models.get(model_id) {
             return Err(AiError::ModelUnavailable(reason.clone()));

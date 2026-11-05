@@ -1,16 +1,52 @@
 use regex::Regex;
-use std::sync::LazyLock;
+use std::collections::HashMap;
+use std::sync::{LazyLock, RwLock};
 
 static ENV_REF_PATTERN: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\$\{([^}]+)\}").expect("invalid env ref regex"));
+
+static OVERRIDES: LazyLock<RwLock<HashMap<String, Option<String>>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
+pub fn set_override(name: &str, value: Option<String>) {
+    OVERRIDES
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .insert(name.to_string(), value);
+}
+
+pub fn override_for(name: &str) -> Option<Option<String>> {
+    OVERRIDES
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(name)
+        .cloned()
+}
+
+pub fn override_values() -> Vec<String> {
+    OVERRIDES
+        .read()
+        .unwrap_or_else(|e| e.into_inner())
+        .values()
+        .flatten()
+        .cloned()
+        .collect()
+}
+
+pub fn env_value(name: &str) -> Option<String> {
+    match override_for(name) {
+        Some(value) => value,
+        None => std::env::var(name).ok(),
+    }
+}
 
 pub fn resolve_env_refs(value: &str) -> String {
     ENV_REF_PATTERN
         .replace_all(value, |caps: &regex::Captures| {
             let var_name = &caps[1];
-            match std::env::var(var_name) {
-                Ok(val) => val,
-                Err(_) => {
+            match env_value(var_name) {
+                Some(val) => val,
+                None => {
                     log::warn!("env variable '{}' not found during resolution", var_name);
                     String::new()
                 }

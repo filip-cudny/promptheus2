@@ -6,6 +6,9 @@ pub mod change_log;
 pub mod clipboard;
 pub mod env_resolve;
 pub mod missing_env;
+pub mod secrets;
+#[cfg(test)]
+mod secrets_tests;
 pub mod frontmost_app;
 pub mod fs_util;
 #[cfg(target_os = "linux")]

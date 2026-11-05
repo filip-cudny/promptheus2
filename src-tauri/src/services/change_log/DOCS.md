@@ -4,7 +4,7 @@ One immutable JSON file per settings-agent operation (card, secret change or und
 
 ## Directory
 
-`change_log_dir(config_dir)`: `<parent of the canonical target of <config>/settings.json>/change-log` when `settings.json` is a symlink, else `<config>/change-log`. Created on the first write only. `secret_backup_dir(config_dir)` is `<config>/secret-backups` (never synced; written by the secret flow).
+`change_log_dir(config_dir)`: `<parent of the canonical target of <config>/settings.json>/change-log` when `settings.json` is a symlink, else `<config>/change-log`. Created on the first write only. `secret_backup_dir(config_dir)` is `<config>/secret-backups` (never synced; backup file `<entry id>.env`, written by the secret flow).
 
 ## File
 
@@ -35,6 +35,8 @@ Secret:
  "request": null, "reply": null, "operations": [], "undoes": null,
  "secret": {"name": "OPENAI_API_KEY", "backup": "20261106T101600Z-OPENAI_API_KEY.bak", "had_previous": true}}
 ```
+
+A secret entry holds the name and a backup reference only, never a value. `services/secrets.rs` writes it: `save_secret` writes `kind: secret` with `backup` = `<entry id>.env` when a previous value existed. `undo_secret` writes `kind: undo` with `undoes` = the secret entry id and `secret` set; its own backup holds the value it replaced or removed, so the undo can be undone. A host without the backup file skips the undo (`UndoOutcome::Skipped { held_by: <entry host> }`) and writes nothing. See "Secrets" in `services/DOCS.md`.
 
 Undo:
 

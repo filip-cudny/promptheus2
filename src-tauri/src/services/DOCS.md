@@ -9,6 +9,7 @@ One file or directory per service; the file name is the service name. Directorie
 - `ai/` — `provider.rs` (`AiProvider`, `CompletionRequest`, `StreamChunk`), `openai.rs` (Completions) and `openai_responses.rs` (Responses), `http.rs` (`OpenAiHttp`, the HTTP layer both OpenAI providers share), `encoder.rs` (per-API capability encoding functions), `sse.rs` (SSE line parser)
 - `execution/` — `lifecycle.rs` (`PromptExecutionService`, `ExecutionError`), `skill_executor.rs` and `conversation_executor.rs` (message preparation and result recording), `stream.rs` (stream and tool loop)
 - `change_log/` — see [change_log/DOCS.md](change_log/DOCS.md)
+- `secrets.rs` — see "Secrets" below
 - `settings_sync/` — `git.rs` (`GitRunner`), `detect.rs`, `reload.rs`
 - `speech/` — see [speech/DOCS.md](speech/DOCS.md); `mcp/` — see [mcp/DOCS.md](mcp/DOCS.md)
 
@@ -242,3 +243,15 @@ Holds the state of the running skill execution and the live (streaming chat) exe
 2. Add `pub mod <name>;` to `services/mod.rs`.
 3. Wire into Tauri managed state in `setup/state.rs`.
 4. Add tests using `tempfile` for any file I/O.
+
+## Secrets
+
+`secrets.rs` handles values referenced as `${VAR}` in settings (`env_resolve.rs`). A secret value never reaches the settings agent.
+
+- **Override map**: `env_resolve` keeps a process-wide `RwLock<HashMap<String, Option<String>>>` (`Some` = set, `None` = removed). `env_value(name)` reads it before `std::env::var`; `resolve_env_refs`, `env_is_set` (`missing_env.rs`) and `check_env_var` read through it. A save sets the override; there is no `std::env::set_var` after startup because it is undefined behaviour on glibc while other threads read the environment. `.env` is loaded into the process environment once at startup (`config/loader.rs`) and the override shadows that copy.
+- **`.env` format**: `save_secret` replaces the line of the variable (`NAME=…` or `export NAME=…`) or appends `NAME="<value>"`; `\`, `"`, `$` and newlines are escaped (`\`, `"`, `\$`, `
+`) so `dotenvy` reads the value back exactly. Other lines stay as they are; a new file gets mode `0o600`. `current_value(config_dir, name)`: override, else `<config>/.env`, else `std::env`.
+- **Backups**: before each write the previous value goes to `<config>/secret-backups/<entry id>.env` as `NAME="<previous>"` (dir `0o700`, file `0o600`, never synced). Order: backup, `.env`, override, change-log entry (`kind: secret`, `SecretChange { name, backup, had_previous }`, no value). Entry details: [change_log/DOCS.md](change_log/DOCS.md).
+- **Undo**: `undo_secret` restores the backed-up value or, for a first-time secret, removes the variable; both write a `kind: undo` entry with its own backup. A backup missing on this host (the entry came from another host) returns `UndoOutcome::Skipped { held_by }` and changes nothing.
+- **Redactor**: `Redactor::new(config_dir, settings)` collects every non-empty value in `<config>/.env`, every override value, the resolved value of every `${VAR}` in the settings (names from `missing_env::collect_missing`) and every literal model `api_key`. `redact` replaces each occurrence, longest value first, with `[redacted]`. `redact_settings` additionally replaces literal `api_key` fields; `${VAR}` references stay readable.
+- **Commands**: `save_secret(name, value)` and `get_secret_value(name)` in `commands/settings_dialog.rs` serve the settings GUI only; no agent tool calls them.
