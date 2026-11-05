@@ -1,4 +1,5 @@
 import { tick } from "svelte";
+import { warn } from "@tauri-apps/plugin-log";
 import type { SettingsSection } from "$lib/components/features/settings/SettingsSidebar.svelte";
 import { getSettingsCatalogStore } from "$lib/stores/settingsCatalog.svelte";
 import { catalogPath, listItemOf, type ListItemRef } from "$lib/utils/settingsSearch";
@@ -28,13 +29,19 @@ async function waitForElement(id: string): Promise<HTMLElement | null> {
 async function navigateTo(key: string) {
   const path = catalogPath(key);
   const entry = getSettingsCatalogStore().entry(path);
-  if (!entry) return;
+  if (!entry) {
+    warn(`settings navigation: no catalog entry for ${key}`);
+    return;
+  }
   activeSection = entry.section;
   const item = listItemOf(key);
   selectedItem = item ? { ...item } : null;
   const el = await waitForElement(`setting-${path}`);
   selectedItem = null;
-  if (!el) return;
+  if (!el) {
+    warn(`settings navigation: field setting-${path} did not render for ${key}`);
+    return;
+  }
   el.scrollIntoView({ block: "center", behavior: "smooth" });
   highlighted = key;
   clearTimeout(highlightTimer);
