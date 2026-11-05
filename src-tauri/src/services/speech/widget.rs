@@ -28,6 +28,7 @@ pub const SHELL_POSITION_KEY: &str = "recording_widget.shell_position";
 const STATE_EVENT: &str = "recording-widget-state";
 const MODEL_EVENT: &str = "recording-widget-model";
 const PREVIEW_FRAME_HEIGHT: f64 = 166.0;
+const TOOLTIP_FRAME_HEIGHT: f64 = 30.0;
 const DROPDOWN_CLOSED_EVENT: &str = "recording-widget-dropdown-closed";
 const TICK: Duration = Duration::from_millis(50);
 const DONE_VISIBLE: Duration = Duration::from_secs(1);
@@ -190,6 +191,7 @@ fn serialize_targets<S: serde::Serializer>(
 pub enum OverlayKind {
     Dropdown,
     Preview,
+    Tooltip,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1074,12 +1076,20 @@ impl RecordingWidget {
         self.open_overlay(app, OverlayKind::Preview, PREVIEW_FRAME_HEIGHT).await
     }
 
+    pub async fn open_tooltip(&self, app: &AppHandle) -> Result<bool, String> {
+        self.open_overlay(app, OverlayKind::Tooltip, TOOLTIP_FRAME_HEIGHT).await
+    }
+
     pub async fn close_dropdown(&self, app: &AppHandle) {
         self.close_overlay(app, OverlayKind::Dropdown).await;
     }
 
     pub async fn close_preview(&self, app: &AppHandle) {
         self.close_overlay(app, OverlayKind::Preview).await;
+    }
+
+    pub async fn close_tooltip(&self, app: &AppHandle) {
+        self.close_overlay(app, OverlayKind::Tooltip).await;
     }
 
     async fn open_overlay(
@@ -1615,6 +1625,55 @@ mod tests {
         let current = Some(overlay(OverlayKind::Dropdown));
         assert_eq!(
             next_overlay(current, OverlayRequest::Close(OverlayKind::Preview)),
+            (current, None)
+        );
+    }
+
+    #[test]
+    fn opening_a_tooltip_replaces_the_preview_and_reports_it_closed() {
+        let current = Some(overlay(OverlayKind::Preview));
+        let request = OverlayRequest::Open(overlay(OverlayKind::Tooltip));
+        assert_eq!(
+            next_overlay(current, request),
+            (Some(overlay(OverlayKind::Tooltip)), Some(OverlayKind::Preview))
+        );
+    }
+
+    #[test]
+    fn opening_a_preview_replaces_the_tooltip_and_reports_it_closed() {
+        let current = Some(overlay(OverlayKind::Tooltip));
+        let request = OverlayRequest::Open(overlay(OverlayKind::Preview));
+        assert_eq!(
+            next_overlay(current, request),
+            (Some(overlay(OverlayKind::Preview)), Some(OverlayKind::Tooltip))
+        );
+    }
+
+    #[test]
+    fn opening_a_tooltip_replaces_the_dropdown_and_reports_it_closed() {
+        let current = Some(overlay(OverlayKind::Dropdown));
+        let request = OverlayRequest::Open(overlay(OverlayKind::Tooltip));
+        assert_eq!(
+            next_overlay(current, request),
+            (Some(overlay(OverlayKind::Tooltip)), Some(OverlayKind::Dropdown))
+        );
+    }
+
+    #[test]
+    fn opening_a_dropdown_replaces_the_tooltip_and_reports_it_closed() {
+        let current = Some(overlay(OverlayKind::Tooltip));
+        let request = OverlayRequest::Open(overlay(OverlayKind::Dropdown));
+        assert_eq!(
+            next_overlay(current, request),
+            (Some(overlay(OverlayKind::Dropdown)), Some(OverlayKind::Tooltip))
+        );
+    }
+
+    #[test]
+    fn closing_a_tooltip_leaves_an_open_preview_unchanged() {
+        let current = Some(overlay(OverlayKind::Preview));
+        assert_eq!(
+            next_overlay(current, OverlayRequest::Close(OverlayKind::Tooltip)),
             (current, None)
         );
     }

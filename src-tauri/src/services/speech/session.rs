@@ -1155,6 +1155,17 @@ pub async fn set_recording_widget_preview(app: AppHandle, open: bool) -> crate::
     Ok(if up { "up" } else { "down" })
 }
 
+pub async fn set_recording_widget_tooltip(app: AppHandle, open: bool) -> crate::Result<&'static str> {
+    log::debug!("recording widget intent: tooltip open={open}");
+    let widget = app.state::<RecordingWidget>();
+    if !open {
+        widget.close_tooltip(&app).await;
+        return Ok("down");
+    }
+    let up = widget.open_tooltip(&app).await?;
+    Ok(if up { "up" } else { "down" })
+}
+
 pub async fn remove_recording_widget_item(
     app: AppHandle,
     index: u32,

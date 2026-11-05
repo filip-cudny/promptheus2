@@ -60,6 +60,11 @@ pub async fn set_recording_widget_preview(app: AppHandle, open: bool) -> crate::
 }
 
 #[tauri::command]
+pub async fn set_recording_widget_tooltip(app: AppHandle, open: bool) -> crate::Result<&'static str> {
+    session::set_recording_widget_tooltip(app, open).await
+}
+
+#[tauri::command]
 pub async fn remove_recording_widget_item(
     app: AppHandle,
     index: u32,
