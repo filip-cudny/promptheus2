@@ -145,6 +145,8 @@ macro_rules! handlers {
             // === settings_dialog ===
             $crate::commands::settings_dialog::open_settings_window,
             $crate::commands::settings_dialog::check_env_var,
+            $crate::commands::settings_dialog::save_secret,
+            $crate::commands::settings_dialog::get_secret_value,
             // === skills ===
             $crate::commands::skills::list_skills,
             $crate::commands::skills::list_skills_full,
