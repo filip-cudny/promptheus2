@@ -20,6 +20,8 @@ The root is `src/windows/settings-dialog/App.svelte` (calls `store.init()` / `st
 
 `SIDEBAR_GROUPS` in `SettingsSidebar.svelte` lists three groups, each an ordered array of items: "App" (General, Notifications, History, Sync), "AI" (Models, Prompt Base, Skills), "Features" (Speech, Surface Prompts). There is no disabled item; a section appears in the sidebar only once it renders.
 
+Active item is marked with a 2px left border in `--accent`, never a filled background, so the accent only signals "you are here" (the same single-accent rule as the conversation window: blue ≡ user/marker, never decoration).
+
 1. Add the id to the `SettingsSection` union and an item to a group's array in `SettingsSidebar.svelte`.
 2. Create `Section<Name>.svelte` here and branch on it in `SettingsContent.svelte`'s `{#if activeSection === ...}`.
 3. Read state from `getSettingsStore()` — never `invoke("get_settings")` from a component.
@@ -28,8 +30,6 @@ The root is `src/windows/settings-dialog/App.svelte` (calls `store.init()` / `st
 ### SettingField
 
 Every control bound to a settings key is wrapped in `<SettingField key="<catalog path>">` (`itemId` for list items). It takes label and description from the catalog entry (`getSettingsCatalogStore()` in `$lib/stores/settingsCatalog.svelte.ts`, loaded once per window), marks `after_restart` entries, renders the backend field error whose concrete key maps to `key`, and sets `id="setting-<key>"`. A new key needs a catalog entry in `services/config/catalog.rs`; without one the field shows the key as its label and logs a warning. Label and help text are never written in the component.
-
-Active item is marked with a 2px left border in `--accent`, never a filled background, so the accent only signals "you are here" (the same single-accent rule as the conversation window: blue ≡ user/marker, never decoration).
 
 ### Persistence — auto-save with debounce
 

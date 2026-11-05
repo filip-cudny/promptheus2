@@ -7,7 +7,7 @@
   import SelectDropdown from "$lib/components/shared/ui/SelectDropdown.svelte";
   import SettingsSection from "./SettingsSection.svelte";
   import SettingField from "./SettingField.svelte";
-  import type { AppearanceSettings, Settings, Skin } from "$lib/types";
+  import type { AppearanceSettings, Skin } from "$lib/types";
 
   const SKIN_OPTIONS: ReadonlyArray<{ value: Skin; label: string }> = [
     { value: "color", label: "Color" },
@@ -16,9 +16,7 @@
 
   const store = getSettingsStore();
   const appearance = $derived(store.settings?.appearance ?? null);
-  const settings = $derived(
-    store.settings as (Settings & { launch_at_startup: boolean }) | null,
-  );
+  const settings = $derived(store.settings);
 
   async function save(patch: Partial<AppearanceSettings>) {
     if (!appearance) return;

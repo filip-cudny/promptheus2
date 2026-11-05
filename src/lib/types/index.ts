@@ -11,6 +11,7 @@ export type SurfaceKind = "chat" | "quick_actions" | "title_generation" | "speec
 
 export interface Settings {
   show_tray_icon: boolean;
+  launch_at_startup: boolean;
   theme: string;
   menu_section_order: string[];
   appearance: AppearanceSettings;
