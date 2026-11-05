@@ -23,7 +23,7 @@ use crate::services::skill::SkillService;
 use crate::services::speech::widget::RecordingWidget;
 use crate::services::speech::{AudioClipStore, SpeechService};
 use crate::services::sqlite_history::SqliteHistoryService;
-use crate::services::{self, conversation_context, ui_state};
+use crate::services::{self, change_log, conversation_context, ui_state};
 
 pub fn manage(
     app: &tauri::App,
@@ -67,6 +67,19 @@ pub fn manage(
         log::info!(
             "history retention: pruned {} entries older than {} days",
             pruned,
+            retention_days
+        );
+    }
+    let change_log_pruned = change_log::prune(
+        &change_log::change_log_dir(config_dir),
+        &change_log::secret_backup_dir(config_dir),
+        retention_days,
+        chrono::Utc::now(),
+    );
+    if change_log_pruned > 0 {
+        log::info!(
+            "change log retention: pruned {} entries older than {} days",
+            change_log_pruned,
             retention_days
         );
     }

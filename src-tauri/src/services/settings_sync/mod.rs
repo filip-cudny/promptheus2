@@ -17,6 +17,7 @@ use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 
 use crate::commands::settings::apply_settings_reload;
 use crate::commands::skills::emit_changed as emit_skills_changed;
+use crate::services::change_log::change_log_dir;
 use crate::services::config::ConfigService;
 use crate::services::notification::{NotificationLevel, NotificationService};
 use crate::services::skill::SkillService;
@@ -386,6 +387,14 @@ impl SettingsSync {
             .collect())
     }
 
+    pub async fn host(&self) -> String {
+        let provider = self.env_provider.clone();
+        let env = tokio::task::spawn_blocking(move || provider())
+            .await
+            .unwrap_or_default();
+        self.host_name(&GitRunner::new(env, self.timeout)).await
+    }
+
     async fn host_name(&self, runner: &GitRunner) -> String {
         if let Some(host) = &self.configured_host {
             return host.clone();
@@ -459,6 +468,7 @@ impl SyncHooks for AppHooks {
             changed,
             &config_dir.join("settings.json"),
             &config_dir.join("skills"),
+            &change_log_dir(&config_dir),
             &mut guard.config,
             &mut guard.skills,
             history.conn(),
@@ -492,6 +502,11 @@ pub async fn run_sync(app: &AppHandle, trigger: Trigger) -> SyncResult {
 }
 
 async fn apply_reloaded(app: &AppHandle, reloaded: Reloaded) {
+    if reloaded.change_log {
+        if let Err(e) = app.emit("change-log-changed", ()) {
+            log::warn!("settings sync: failed to emit change-log-changed: {e}");
+        }
+    }
     if reloaded.settings {
         if let Err(e) = apply_settings_reload(app, "sync").await {
             log::warn!("settings sync: failed to apply reloaded settings: {e}");

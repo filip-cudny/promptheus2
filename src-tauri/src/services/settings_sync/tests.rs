@@ -10,6 +10,7 @@ use tempfile::TempDir;
 use tokio::sync::Notify;
 
 use super::*;
+use crate::services::change_log::change_log_dir;
 use crate::services::config::ConfigService;
 use crate::services::database::Database;
 use crate::services::skill::SkillService;
@@ -362,6 +363,23 @@ async fn detects_repo_from_symlinks() {
 }
 
 #[tokio::test]
+async fn change_log_dir_is_staged_only_when_it_exists() {
+    let f = Fixture::new();
+    let config_dir = f.config_dir_for(&f.a(), "config-a");
+
+    let Detection::Repo(without) = detect(&f.runner(), &config_dir).await else {
+        panic!("expected a repo");
+    };
+    assert!(!without.stage_paths.contains(&PathBuf::from("tauri-app/change-log")));
+
+    write(&f.a().join("tauri-app/change-log/e.json"), "{}");
+    let Detection::Repo(with) = detect(&f.runner(), &config_dir).await else {
+        panic!("expected a repo");
+    };
+    assert!(with.stage_paths.contains(&PathBuf::from("tauri-app/change-log")));
+}
+
+#[tokio::test]
 async fn regular_files_are_off() {
     let f = Fixture::new();
     let config_dir = f.tmp.path().join("plain-config");
@@ -487,6 +505,7 @@ impl SyncHooks for ReloadingHooks {
             changed,
             &self.config_dir.join("settings.json"),
             &self.config_dir.join("skills"),
+            &change_log_dir(&self.config_dir),
             &mut self.config.lock().unwrap(),
             &mut self.skills.lock().unwrap(),
             self.database.lock().unwrap().conn(),
@@ -507,7 +526,7 @@ async fn pulled_settings_change_reloads_settings_and_skills() {
     let reloaded = f.sync_a().await;
 
     assert_eq!(f.config.lock().unwrap().settings().theme, "second");
-    assert_eq!(reloaded, Reloaded { settings: true, skills: true });
+    assert_eq!(reloaded, Reloaded { settings: true, skills: true, change_log: false });
 }
 
 #[tokio::test]
@@ -522,7 +541,7 @@ async fn pulled_skill_dir_reloads_skills_only() {
     let reloaded = f.sync_a().await;
 
     assert!(f.skills.lock().unwrap().get_skill("fresh").is_some());
-    assert_eq!(reloaded, Reloaded { settings: false, skills: true });
+    assert_eq!(reloaded, Reloaded { settings: false, skills: true, change_log: false });
 }
 
 #[tokio::test]
@@ -581,4 +600,16 @@ async fn external_reset_is_reloaded_while_paused() {
 
     assert_eq!(f.config.lock().unwrap().settings().theme, "second");
     assert!(hooks.reloaded.lock().unwrap().settings);
+}
+
+#[tokio::test]
+async fn pulled_change_log_entry_sets_change_log_only() {
+    let f = ReloadFixture::new();
+    f.push_from_b("change-log/first.json", "{}");
+    f.fixture.git(&f.fixture.a(), &["pull"]);
+
+    f.push_from_b("change-log/second.json", "{}");
+    let reloaded = f.sync_a().await;
+
+    assert_eq!(reloaded, Reloaded { settings: false, skills: false, change_log: true });
 }

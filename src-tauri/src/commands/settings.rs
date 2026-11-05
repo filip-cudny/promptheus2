@@ -10,6 +10,7 @@ use crate::models::settings::{
 };
 use crate::commands::skills::{emit_changed as emit_skills_changed, rescan_and_prune};
 use crate::services::ai::AiService;
+use crate::services::change_log;
 use crate::services::config::catalog::{CatalogEntry, ENTRIES};
 use crate::services::config::{ConfigError, ConfigService, SurfaceKind};
 use crate::services::history_events::emit_history_changed;
@@ -298,10 +299,36 @@ pub async fn update_history_retention(
         pruned
     );
 
+    prune_change_log(&app, days);
+
     if pruned > 0 {
         emit_history_changed(&app, None, None)?;
     }
     Ok(())
+}
+
+fn prune_change_log(app: &AppHandle, days: u32) {
+    let config_dir = match app.path().app_config_dir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            log::warn!("change log retention: config dir unavailable: {e}");
+            return;
+        }
+    };
+    let pruned = tokio::task::block_in_place(|| {
+        change_log::prune(
+            &change_log::change_log_dir(&config_dir),
+            &change_log::secret_backup_dir(&config_dir),
+            days,
+            chrono::Utc::now(),
+        )
+    });
+    if pruned > 0 {
+        log::info!("change log retention: pruned {} entries older than {} days", pruned, days);
+        if let Err(e) = app.emit("change-log-changed", ()) {
+            log::warn!("change log retention: failed to emit change-log-changed: {e}");
+        }
+    }
 }
 
 #[cfg(test)]

@@ -9,6 +9,7 @@ Top-level index of the documentation files in the project. Updated incrementally
 - [src-tauri/DOCS.md](src-tauri/DOCS.md) — Rust backend: layout and conventions
 - [src-tauri/src/models/DOCS.md](src-tauri/src/models/DOCS.md) — Data structures: derive standard, stable `settings.json`, serde defaults, IPC model structs, adding settings fields, skill `offered_in`
 - [src-tauri/src/services/DOCS.md](src-tauri/src/services/DOCS.md) — Service layer: service file layout and conventions
+- [src-tauri/src/services/change_log/DOCS.md](src-tauri/src/services/change_log/DOCS.md) — Change log: one immutable JSON file per settings-agent operation, entry format, pruning, sync staging
 - [src-tauri/src/services/mcp/DOCS.md](src-tauri/src/services/mcp/DOCS.md) — MCP client: rmcp wrapper, McpClient, McpRegistry, McpError
 - [src-tauri/src/services/speech/DOCS.md](src-tauri/src/services/speech/DOCS.md) — Speech: failure model, audio clips, retry concurrency, commands, events, recording widget
 - [src/lib/components/shared/ui/DOCS.md](src/lib/components/shared/ui/DOCS.md) — Presentational UI primitives and their conventions

@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use super::git::GitRunner;
+use crate::services::change_log::CHANGE_LOG_DIR_NAME;
 
 const ENTRIES: [&str; 3] = ["settings.json", "prompts", "skills"];
 
@@ -20,9 +21,15 @@ pub enum Detection {
 
 pub async fn detect(runner: &GitRunner, config_dir: &Path) -> Detection {
     let mut found: Vec<(PathBuf, PathBuf)> = Vec::new();
+    let mut settings_target: Option<PathBuf> = None;
     for entry in ENTRIES {
         match locate(runner, &config_dir.join(entry)).await {
-            Ok(Some(located)) => found.push(located),
+            Ok(Some(located)) => {
+                if entry == "settings.json" {
+                    settings_target = Some(located.1.clone());
+                }
+                found.push(located);
+            }
             Ok(None) => {}
             Err(message) => return Detection::Error(message),
         }
@@ -37,10 +44,15 @@ pub async fn detect(runner: &GitRunner, config_dir: &Path) -> Detection {
         );
     }
 
+    let change_log_dir = settings_target
+        .and_then(|target| target.parent().map(|parent| parent.join(CHANGE_LOG_DIR_NAME)))
+        .filter(|dir| dir.is_dir());
     let stage_paths = found
         .iter()
-        .map(|(top, target)| {
-            let relative = target.strip_prefix(top).unwrap_or(target);
+        .map(|(_, target)| target)
+        .chain(change_log_dir.as_ref())
+        .map(|target| {
+            let relative = target.strip_prefix(&top_level).unwrap_or(target);
             if relative.as_os_str().is_empty() {
                 PathBuf::from(".")
             } else {

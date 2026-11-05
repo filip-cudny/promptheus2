@@ -2,6 +2,7 @@ pub mod ai;
 pub mod ai_webview;
 pub mod autostart;
 pub mod capability_audit;
+pub mod change_log;
 pub mod clipboard;
 pub mod env_resolve;
 pub mod missing_env;
