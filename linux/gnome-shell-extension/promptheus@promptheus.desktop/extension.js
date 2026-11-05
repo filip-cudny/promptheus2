@@ -42,6 +42,10 @@ const WIDGET_PREVIEW_MAX_HEIGHT = 160;
 const WIDGET_PREVIEW_GAP = 6;
 const WIDGET_PREVIEW_DELAY_MS = 300;
 const WIDGET_PREVIEW_PADDING = 8;
+const WIDGET_TOOLTIP_DELAY_MS = 700;
+const WIDGET_TOOLTIP_CHAIN_MS = 500;
+const WIDGET_TOOLTIP_HEIGHT = 24;
+const WIDGET_TOOLTIP_PADDING_X = 8;
 const WIDGET_DROPDOWN_ROW_HEIGHT = 28;
 const WIDGET_DROPDOWN_PADDING = 4;
 const WIDGET_DEFAULT_TARGET_LABEL = 'Dictation';
@@ -755,6 +759,7 @@ export default class PromptheusExtension extends Extension {
         this._endWidgetDrag(widget);
         this._closeDropdown(widget);
         this._closePreview(widget);
+        this._closeTooltip(widget);
         this._clearWidgetContent(widget);
         widget.actor.remove_all_transitions();
         Main.layoutManager.removeChrome(widget.actor);
@@ -795,6 +800,9 @@ export default class PromptheusExtension extends Extension {
             itemsRow: this._widgetRow(0),
             preview: null,
             previewId: 0,
+            tooltip: null,
+            tooltipId: 0,
+            tooltipHiddenAt: -Infinity,
             row1: this._widgetRow(WIDGET_ROW_HEIGHT),
             row2: this._widgetRow(WIDGET_ROW_HEIGHT),
             dropdown: null,
@@ -848,6 +856,7 @@ export default class PromptheusExtension extends Extension {
                 if (!dragging) {
                     this._closeDropdown(widget);
                     this._closePreview(widget);
+                    this._closeTooltip(widget);
                 }
                 dragging = true;
                 widget.actor.set_position(Math.round(x - offsetX), Math.round(y - offsetY));
@@ -1105,6 +1114,7 @@ export default class PromptheusExtension extends Extension {
     }
 
     _fillRow2(widget) {
+        this._closeTooltip(widget);
         widget.row2.destroy_all_children();
         const {selectedLabel, locked} = widget.model;
         const interactive = !locked && widget.state !== 'done';
@@ -1130,8 +1140,12 @@ export default class PromptheusExtension extends Extension {
             `height: 28px; border-radius: 14px; padding: 0 ${WIDGET_TARGET_PADDING_X}px;`);
         widget.row2.add_child(target);
         widget.row2.add_child(this._widgetActions(
-            this._widgetActionButton('paste', 'paste'),
-            this._widgetActionButton('chat', 'stop_chat')));
+            this._tooltipButton(widget, this._widgetActionButton('screenshot', 'screenshot'),
+                'Add screen area to context'),
+            this._tooltipButton(widget, this._widgetActionButton('paste', 'paste'),
+                'Add clipboard to context'),
+            this._tooltipButton(widget, this._widgetActionButton('chat', 'stop_chat'),
+                'Stop and open chat')));
     }
 
     _fillItems(widget) {
@@ -1249,6 +1263,67 @@ export default class PromptheusExtension extends Extension {
         }
     }
 
+    _tooltipButton(widget, button, text) {
+        button.connect('notify::hover', () => {
+            if (button.hover)
+                this._scheduleTooltip(widget, button, text);
+            else
+                this._closeTooltip(widget);
+        });
+        button.connect('clicked', () => this._closeTooltip(widget));
+        return button;
+    }
+
+    _scheduleTooltip(widget, button, text) {
+        this._closeTooltip(widget);
+        if (widget.dropdown)
+            return;
+        const chained = GLib.get_monotonic_time() / 1000 - widget.tooltipHiddenAt <= WIDGET_TOOLTIP_CHAIN_MS;
+        if (chained) {
+            this._showTooltip(widget, button, text);
+            return;
+        }
+        widget.tooltipId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, WIDGET_TOOLTIP_DELAY_MS, () => {
+            widget.tooltipId = 0;
+            this._showTooltip(widget, button, text);
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _showTooltip(widget, button, text) {
+        const tooltip = new St.Bin({
+            reactive: false,
+            style: 'background-color: #252629; border: 1px solid rgba(255,255,255,0.12); border-radius: 6px; ' +
+                'color: #e5e5e7; font-family: "Noto Sans", sans-serif; font-size: 12px; ' +
+                `padding: 0 ${WIDGET_TOOLTIP_PADDING_X}px;`,
+            child: new St.Label({text, y_align: Clutter.ActorAlign.CENTER}),
+        });
+        tooltip.set_height(WIDGET_TOOLTIP_HEIGHT);
+        Main.layoutManager.uiGroup.add_child(tooltip);
+        const {actor} = widget;
+        const [buttonX] = button.get_transformed_position();
+        const [, width] = tooltip.get_preferred_width(-1);
+        const centred = Math.round(buttonX + button.width / 2 - width / 2);
+        const x = Math.max(actor.x, Math.min(centred, actor.x + WIDGET_WIDTH - width));
+        const y = this._dropdownAbove(widget)
+            ? actor.y - WIDGET_TOOLTIP_HEIGHT - WIDGET_PREVIEW_GAP
+            : actor.y + actor.height + WIDGET_PREVIEW_GAP;
+        tooltip.set_position(x, y);
+        widget.tooltip = tooltip;
+    }
+
+    _closeTooltip(widget) {
+        if (widget.tooltipId) {
+            GLib.Source.remove(widget.tooltipId);
+            widget.tooltipId = 0;
+        }
+        if (widget.tooltip) {
+            widget.tooltip.destroy();
+            widget.tooltip = null;
+            widget.tooltipHiddenAt = GLib.get_monotonic_time() / 1000;
+        }
+    }
+
     _dropdownAbove(widget) {
         const {actor} = widget;
         const centreY = actor.y + actor.height / 2;
@@ -1266,6 +1341,7 @@ export default class PromptheusExtension extends Extension {
     _openDropdown(widget) {
         this._closeDropdown(widget);
         this._closePreview(widget);
+        this._closeTooltip(widget);
         const {targets, selectedId} = widget.model;
         if (targets.length === 0)
             return;

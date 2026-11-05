@@ -15,6 +15,7 @@
     Type,
     X,
   } from "lucide-svelte";
+  import { ScanSquare } from "lucide-static";
   import { isMac } from "$lib/utils/platform";
   import claudeIcon from "$lib/icons/providers/claude.svg?raw";
   import chatgptIcon from "$lib/icons/providers/chatgpt.svg?raw";
@@ -43,6 +44,8 @@
     preview: string;
   }
 
+  type PopupKind = keyof typeof POPUP_COMMANDS;
+
   type PreviewContent = { kind: "text"; text: string } | { kind: "image"; src: string };
 
   interface PillModel {
@@ -64,6 +67,12 @@
   const PREVIEW_MAX_HEIGHT = 160;
   const PREVIEW_GAP = 6;
   const PREVIEW_DELAY_MS = 300;
+  const TOOLTIP_DELAY_MS = 700;
+  const TOOLTIP_CHAIN_MS = 500;
+  const TOOLTIP_HEIGHT = 24;
+  const TOOLTIP_PADDING_X = 8;
+  const ACTION_ICON_SIZE = 16;
+  const POPUP_COMMANDS = { preview: "set_recording_widget_preview", tooltip: "set_recording_widget_tooltip" } as const;
   const ROW_HEIGHT = PILL_HEIGHT / 2;
   const RADIUS = 16;
   const PADDING_X = 14;
@@ -119,12 +128,18 @@
   let dropdownOpen = $state(false);
   let overlayUp = $state(false);
   let previewContent = $state<PreviewContent | null>(null);
+  let tooltip = $state<{ text: string; centerX: number } | null>(null);
   let hoveredIndex: number | null = null;
   let hoveredButton: HTMLButtonElement | null = null;
   let hoverTimer: ReturnType<typeof setTimeout> | undefined;
   let previewToken = 0;
   let previewRequested = false;
-  let previewOpenInBackend = false;
+  let backendOverlay: PopupKind | null = null;
+  let tooltipTarget: HTMLElement | null = null;
+  let tooltipTimer: ReturnType<typeof setTimeout> | undefined;
+  let tooltipToken = 0;
+  let tooltipRequested = false;
+  let tooltipHiddenAt = -Infinity;
   let previewQueue: Promise<void> = Promise.resolve();
   let contextItems: ContextItem[] | null = null;
   let unlisteners: UnlistenFn[] = [];
@@ -170,8 +185,34 @@
     }
   }
 
+  function runAction(command: string) {
+    hideTooltip();
+    return run(command);
+  }
+
   function enqueuePreviewCall(task: () => Promise<void>) {
     previewQueue = previewQueue.then(task);
+  }
+
+  async function openPopup(kind: PopupKind): Promise<boolean> {
+    if (backendOverlay === kind) return true;
+    try {
+      const direction = await invoke<string>(POPUP_COMMANDS[kind], { open: true });
+      backendOverlay = kind;
+      overlayUp = direction === "up";
+      return true;
+    } catch (e) {
+      logError(`${POPUP_COMMANDS[kind]} failed: ${e}`);
+      return false;
+    }
+  }
+
+  function closePopup(kind: PopupKind) {
+    enqueuePreviewCall(async () => {
+      if (backendOverlay !== kind) return;
+      await run(POPUP_COMMANDS[kind], { open: false });
+      backendOverlay = null;
+    });
   }
 
   function resetPreviewState() {
@@ -180,7 +221,12 @@
     previewToken++;
     previewContent = null;
     previewRequested = false;
-    previewOpenInBackend = false;
+    clearTimeout(tooltipTimer);
+    tooltipTarget = null;
+    tooltipToken++;
+    tooltip = null;
+    tooltipRequested = false;
+    backendOverlay = null;
   }
 
   function hidePreview() {
@@ -190,10 +236,48 @@
     previewContent = null;
     if (!previewRequested) return;
     previewRequested = false;
+    closePopup("preview");
+  }
+
+  function hideTooltip() {
+    clearTimeout(tooltipTimer);
+    tooltipToken++;
+    tooltip = null;
+    if (!tooltipRequested) return;
+    tooltipRequested = false;
+    tooltipHiddenAt = performance.now();
+    closePopup("tooltip");
+  }
+
+  function showTooltip(target: HTMLElement) {
+    if (dropdownOpen) return;
+    const token = ++tooltipToken;
+    const text = target.dataset.tooltip ?? "";
+    const rect = target.getBoundingClientRect();
+    tooltipRequested = true;
     enqueuePreviewCall(async () => {
-      await run("set_recording_widget_preview", { open: false });
-      previewOpenInBackend = false;
+      if (token !== tooltipToken) return;
+      if (!(await openPopup("tooltip"))) {
+        tooltipRequested = false;
+        return;
+      }
+      if (token !== tooltipToken) return;
+      previewContent = null;
+      tooltip = { text, centerX: rect.left + rect.width / 2 };
     });
+  }
+
+  function followTooltipTarget(target: HTMLElement | null) {
+    if (target === tooltipTarget) return;
+    tooltipTarget = target;
+    hideTooltip();
+    if (!target) return;
+    const chained = performance.now() - tooltipHiddenAt <= TOOLTIP_CHAIN_MS;
+    tooltipTimer = setTimeout(() => showTooltip(target), chained ? 0 : TOOLTIP_DELAY_MS);
+  }
+
+  function placeTooltip(node: HTMLElement, centerX: number) {
+    node.style.left = `${Math.max(0, Math.min(centerX - node.offsetWidth / 2, PILL_WIDTH - node.offsetWidth))}px`;
   }
 
   async function loadPreviewContent(item: PillItem): Promise<PreviewContent | null> {
@@ -218,18 +302,13 @@
     previewRequested = true;
     enqueuePreviewCall(async () => {
       if (token !== previewToken) return;
-      if (!previewOpenInBackend) {
-        try {
-          const direction = await invoke<string>("set_recording_widget_preview", { open: true });
-          previewOpenInBackend = true;
-          overlayUp = direction === "up";
-        } catch (e) {
-          logError(`set_recording_widget_preview failed: ${e}`);
-          previewRequested = false;
-          return;
-        }
+      if (!(await openPopup("preview"))) {
+        previewRequested = false;
+        return;
       }
-      if (token === previewToken) previewContent = content;
+      if (token !== previewToken) return;
+      tooltip = null;
+      previewContent = content;
     });
   }
 
@@ -241,6 +320,7 @@
       button?.classList.add("hover");
       hoveredButton = button;
     }
+    followTooltipTarget(dropdownOpen ? null : (element?.closest<HTMLElement>("[data-tooltip]") ?? null));
     const chip = element?.closest<HTMLElement>("[data-item-index]");
     if (!chip) {
       hidePreview();
@@ -256,6 +336,7 @@
   async function openDropdown() {
     if (model.targets.length === 0) return;
     hidePreview();
+    hideTooltip();
     try {
       const direction = await invoke<string>("set_recording_widget_dropdown", {
         open: true,
@@ -280,6 +361,12 @@
 
   $effect(() => {
     if (!interactive && dropdownOpen) closeDropdown();
+  });
+
+  $effect(() => {
+    if (interactive) return;
+    tooltipTarget = null;
+    hideTooltip();
   });
 
   onMount(async () => {
@@ -406,10 +493,33 @@
           <ChevronsUpDown size={14} />
         </button>
         <div class="actions">
-          <button type="button" tabindex="-1" aria-label="Paste" onclick={() => run("paste_into_recording_widget")}>
+          {#if isMac}
+            <button
+              type="button"
+              tabindex="-1"
+              aria-label="Screenshot"
+              data-tooltip="Add screen area to context"
+              onclick={() => runAction("capture_screenshot_into_recording_widget")}
+            >
+              <span class="option-icon" style:--icon-size="{ACTION_ICON_SIZE}px" aria-hidden="true">{@html ScanSquare}</span>
+            </button>
+          {/if}
+          <button
+            type="button"
+            tabindex="-1"
+            aria-label="Paste"
+            data-tooltip="Add clipboard to context"
+            onclick={() => runAction("paste_into_recording_widget")}
+          >
             <ClipboardPaste size={16} />
           </button>
-          <button type="button" tabindex="-1" aria-label="Stop and chat" onclick={() => run("stop_chat_speech_recording")}>
+          <button
+            type="button"
+            tabindex="-1"
+            aria-label="Stop and chat"
+            data-tooltip="Stop and open chat"
+            onclick={() => runAction("stop_chat_speech_recording")}
+          >
             <MessageSquareShare size={16} />
           </button>
         </div>
@@ -458,6 +568,18 @@
       {:else}
         {previewContent.text}
       {/if}
+    </div>
+  {/if}
+  {#if tooltip}
+    <div
+      class="tooltip"
+      use:placeTooltip={tooltip.centerX}
+      style:height="{TOOLTIP_HEIGHT}px"
+      style:padding="0 {TOOLTIP_PADDING_X}px"
+      style:margin-top={overlayUp ? undefined : `${PREVIEW_GAP}px`}
+      style:margin-bottom={overlayUp ? `${PREVIEW_GAP}px` : undefined}
+    >
+      {tooltip.text}
     </div>
   {/if}
 </div>
@@ -530,17 +652,30 @@
     display: none;
   }
 
-  .preview {
+  .preview,
+  .tooltip {
     box-sizing: border-box;
     flex: none;
-    overflow: hidden;
-    padding: 8px;
     border: 1px solid var(--surface-floating-popover-border);
     border-radius: var(--surface-floating-popover-radius);
     background: var(--surface-floating-popover);
     color: #e5e5e7;
     font-size: 12px;
+  }
+
+  .preview {
+    overflow: hidden;
+    padding: 8px;
     white-space: pre-wrap;
+  }
+
+  .tooltip {
+    position: relative;
+    align-self: flex-start;
+    display: flex;
+    align-items: center;
+    width: max-content;
+    white-space: nowrap;
   }
 
   .preview.image {
