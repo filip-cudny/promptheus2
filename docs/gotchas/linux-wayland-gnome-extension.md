@@ -128,17 +128,19 @@ Debugging:
 
 ## PasteIntoApp (Claude Desktop paste)
 
-`PasteIntoApp(s wm_class, as uris) → s outcome` focuses the first window of the WM class, pastes the file list with Ctrl+V and sends Return. Outcomes: `sent`, `no_window`, `focus_lost`, `no_read`.
+`PasteIntoApp(s wm_class, as uris) → s outcome` focuses the first window of the WM class, pastes the file list with Ctrl+V and sends Return. Outcomes: `sent`, `no_window`, `focus_lost` (never `no_read`, which only macOS produces).
 
 Steps:
 1. Poll every 100 ms up to 20 s for a window with the WM class; none → `no_window`. A window absent at the first poll marks the run cold.
 2. `Main.activateWindow`, wait up to 2 s for `global.display.focus_window` to have the WM class; else `focus_lost`.
 3. Settle 600 ms warm, 4000 ms cold.
-4. With `uris`: save the clipboard (`Meta.Selection.transfer_async` of every mimetype of the owner into a `Gio.MemoryOutputStream`; a failed read drops that mimetype), own the clipboard with a `Meta.SelectionSource` subclass offering only `text/uri-list` and `x-special/gnome-copied-files`, then (focus check before each) Ctrl+V and wait up to 3 s for a read, once more Ctrl+V and 3 s; none → `no_read`, the file list stays, no restore.
+4. With `uris`: save one clipboard type (`text/plain;charset=utf-8`, else the first `image/*`; `Meta.Selection.transfer_async` into a `Gio.MemoryOutputStream`; a failed read saves nothing), own the clipboard with a `Meta.SelectionSourceMemory` holding only `text/uri-list`, focus check, one Ctrl+V, a fixed 1000 ms wait.
 5. Focus check, Return.
-6. With `uris` and `sent`: 500 ms after Return own the clipboard with the same source class serving the saved bytes (nothing saved → clipboard untouched).
+6. With a saved type and `sent`: 500 ms after Return own the clipboard with a `Meta.SelectionSourceMemory` of the saved bytes (nothing saved → the file list stays). `focus_lost` after the clipboard was taken leaves the file list, no restore.
 
-Why a `Meta.SelectionSource` subclass: on Wayland the unfocused Promptheus cannot own a selection (no focus, no serial), the shell can. The source's read is the paste confirmation: Claude Desktop reading the list means the paste happened. The restore serves every saved mimetype, so no format is lost. Clipboard managers read every new owner, so the source counts only reads after the key. The log carries the outcome, cold/warm, the read count and the restored count, never URIs or content.
+Why the shell owns the clipboard: on Wayland the unfocused Promptheus cannot own a selection (no focus, no serial), the shell can.
+
+Why the built-in `Meta.SelectionSourceMemory` and not a `Meta.SelectionSource` subclass: GJS cannot override a vfunc that takes a callback. A class with `vfunc_read_async(mimetype, cancellable, callback)` throws `VFunc read_async accepts another callback as a parameter. This is not supported` at `GObject.registerClass`, i.e. at module load, so the whole extension fails and `/com/promptheus/Shell` is never exported (all shortcuts dead). The cost: no read signal, so no paste confirmation (a fixed delay; Claude Desktop reads `text/uri-list` at Ctrl+V and its message waits for the uploads), and one mimetype per source, so the restore puts back one type and the other saved formats are lost. The log carries the outcome, cold/warm and whether the clipboard was restored, never URIs or content.
 
 An extension without the method (not re-logged in after an update) answers `UnknownMethod`; Rust treats the error as `Failed` and falls back to the clipboard and a toast.
 

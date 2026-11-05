@@ -1,5 +1,4 @@
 import Gio from 'gi://Gio';
-import GObject from 'gi://GObject';
 import GLib from 'gi://GLib';
 import Meta from 'gi://Meta';
 import Shell from 'gi://Shell';
@@ -150,53 +149,17 @@ function msUntilRetryTextChange(remainingMs) {
 
 const PASTE_FOCUS_TIMEOUT_MS = 2000;
 const PASTE_SETTLE_MS = 600;
-const PASTE_READ_TIMEOUT_MS = 3000;
 const PASTE_POLL_MS = 50;
 const PASTE_WINDOW_TIMEOUT_MS = 20000;
 const PASTE_WINDOW_POLL_MS = 100;
 const PASTE_COLD_SETTLE_MS = 4000;
-const PASTE_PASTE_ATTEMPTS = 2;
+const PASTE_READ_DELAY_MS = 1000;
 const PASTE_RESTORE_DELAY_MS = 500;
+const RESTORED_TEXT_MIMETYPE = 'text/plain;charset=utf-8';
 
-const FileListSource = GObject.registerClass(
-class FileListSource extends Meta.SelectionSource {
-    _init(contents, onRead) {
-        super._init();
-        this._contents = contents;
-        this._onRead = onRead;
-        this._streams = new Map();
-    }
-
-    vfunc_get_mimetypes() {
-        return Object.keys(this._contents);
-    }
-
-    vfunc_read_async(mimetype, cancellable, callback) {
-        const task = Gio.Task.new(this, cancellable, callback);
-        const bytes = this._contents[mimetype];
-        if (bytes === undefined) {
-            task.return_error(new GLib.Error(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND, 'unknown mimetype'));
-            return;
-        }
-        this._streams.set(task, Gio.MemoryInputStream.new_from_bytes(new GLib.Bytes(bytes)));
-        this._onRead(mimetype);
-        task.return_boolean(true);
-    }
-
-    vfunc_read_finish(result) {
-        result.propagate_boolean();
-        const stream = this._streams.get(result);
-        this._streams.delete(result);
-        return stream;
-    }
-});
-
-function fileListContents(uris) {
-    const encoder = new TextEncoder();
-    return {
-        'text/uri-list': encoder.encode(uris.map(uri => `${uri}\r\n`).join('')),
-        'x-special/gnome-copied-files': encoder.encode(`copy\n${uris.join('\n')}`),
-    };
+function fileListSource(uris) {
+    const list = new TextEncoder().encode(uris.map(uri => `${uri}\r\n`).join(''));
+    return Meta.SelectionSourceMemory.new('text/uri-list', new GLib.Bytes(list));
 }
 
 function sleep(ms) {
@@ -215,28 +178,36 @@ async function waitFor(condition, timeoutMs, pollMs = PASTE_POLL_MS) {
     return true;
 }
 
+// Restores one type (text, else an image); the other saved formats are lost, since
+// Meta.SelectionSourceMemory holds one mimetype and GJS cannot override Meta.SelectionSource
+// vfuncs that take a callback (read_async). Upgrade path: a Meta.SelectionSource subclass serving
+// every saved type once GJS supports such vfuncs. Stops being enough when users lose rich text,
+// a file list or both text and an image copied before a dictation.
 async function saveClipboard(clipboard) {
     const selection = global.display.get_selection();
-    const saved = {};
-    for (const mimetype of selection.get_mimetypes(clipboard)) {
-        try {
-            const output = Gio.MemoryOutputStream.new_resizable();
-            await new Promise((resolve, reject) => selection.transfer_async(clipboard, mimetype, -1, output, null,
-                (_selection, result) => {
-                    try {
-                        selection.transfer_finish(result);
-                        resolve();
-                    } catch (e) {
-                        reject(e);
-                    }
-                }));
-            output.close(null);
-            saved[mimetype] = output.steal_as_bytes().toArray();
-        } catch (e) {
-            console.log('PasteIntoApp: a clipboard mimetype could not be saved');
-        }
+    const mimetypes = selection.get_mimetypes(clipboard);
+    const mimetype = mimetypes.includes(RESTORED_TEXT_MIMETYPE)
+        ? RESTORED_TEXT_MIMETYPE
+        : mimetypes.find(type => type.startsWith('image/'));
+    if (!mimetype)
+        return null;
+    try {
+        const output = Gio.MemoryOutputStream.new_resizable();
+        await new Promise((resolve, reject) => selection.transfer_async(clipboard, mimetype, -1, output, null,
+            (_selection, result) => {
+                try {
+                    selection.transfer_finish(result);
+                    resolve();
+                } catch (e) {
+                    reject(e);
+                }
+            }));
+        output.close(null);
+        return Meta.SelectionSourceMemory.new(mimetype, output.steal_as_bytes());
+    } catch (e) {
+        console.log('PasteIntoApp: the clipboard could not be saved');
+        return null;
     }
-    return saved;
 }
 
 function sendKeys(device, keyvals) {
@@ -533,9 +504,9 @@ export default class PromptheusExtension extends Extension {
     async PasteIntoAppAsync(params, invocation) {
         const [wmClass, uris] = params;
         const clipboard = Meta.SelectionType.SELECTION_CLIPBOARD;
-        const state = {cold: false, reads: 0, restored: 0};
+        const state = {cold: false, restored: false};
         const finish = outcome => {
-            console.log(`PasteIntoApp: outcome ${outcome} (${state.cold ? 'cold' : 'warm'}, reads ${state.reads}, restored ${state.restored})`);
+            console.log(`PasteIntoApp: outcome ${outcome} (${state.cold ? 'cold' : 'warm'}, restored ${state.restored})`);
             invocation.return_value(new GLib.Variant('(s)', [outcome]));
         };
         const focused = () => global.display.focus_window?.get_wm_class() === wmClass;
@@ -556,36 +527,32 @@ export default class PromptheusExtension extends Extension {
             await sleep(state.cold ? PASTE_COLD_SETTLE_MS : PASTE_SETTLE_MS);
             const keyboard = Clutter.get_default_backend().get_default_seat()
                 .create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
-            let saved = {};
+            let saved = null;
             if (uris.length > 0) {
                 saved = await saveClipboard(clipboard);
-                let counting = false;
-                const source = new FileListSource(fileListContents(uris), () => {
-                    if (counting)
-                        state.reads++;
-                });
-                global.display.get_selection().set_owner(clipboard, source);
-                counting = true;
-                for (let attempt = 0; state.reads === 0; attempt++) {
-                    if (attempt === PASTE_PASTE_ATTEMPTS)
-                        return finish('no_read');
-                    if (!focused())
-                        return finish('focus_lost');
-                    const {PRESSED, RELEASED} = Clutter.KeyState;
-                    sendKeys(keyboard, [
-                        [Clutter.KEY_Control_L, PRESSED], [Clutter.KEY_v, PRESSED],
-                        [Clutter.KEY_v, RELEASED], [Clutter.KEY_Control_L, RELEASED],
-                    ]);
-                    await waitFor(() => state.reads > 0, PASTE_READ_TIMEOUT_MS);
-                }
+                global.display.get_selection().set_owner(clipboard, fileListSource(uris));
+                if (!focused())
+                    return finish('focus_lost');
+                const {PRESSED, RELEASED} = Clutter.KeyState;
+                sendKeys(keyboard, [
+                    [Clutter.KEY_Control_L, PRESSED], [Clutter.KEY_v, PRESSED],
+                    [Clutter.KEY_v, RELEASED], [Clutter.KEY_Control_L, RELEASED],
+                ]);
+                // Fixed delay instead of a read confirmation: Meta.SelectionSourceMemory reports no
+                // read. Claude Desktop reads text/uri-list at Ctrl+V and its message waits for the
+                // uploads (Enter 1.08 s after pasting 4 x 25.5 MB images sent all of them). Upgrade
+                // path: count reads in a Meta.SelectionSource subclass once GJS supports overriding
+                // read_async. Stops being correct when Claude Desktop has not taken the paste within
+                // the delay (busy machine): Enter then sends the text without the files.
+                await sleep(PASTE_READ_DELAY_MS);
             }
             if (!focused())
                 return finish('focus_lost');
             sendKeys(keyboard, [[Clutter.KEY_Return, Clutter.KeyState.PRESSED], [Clutter.KEY_Return, Clutter.KeyState.RELEASED]]);
-            if (uris.length > 0 && Object.keys(saved).length > 0) {
+            if (saved) {
                 await sleep(PASTE_RESTORE_DELAY_MS);
-                global.display.get_selection().set_owner(clipboard, new FileListSource(saved, () => {}));
-                state.restored = Object.keys(saved).length;
+                global.display.get_selection().set_owner(clipboard, saved);
+                state.restored = true;
             }
             finish('sent');
         } catch (e) {
