@@ -10,7 +10,7 @@
     "tauri": "tauri",
     "icons": "node scripts/icons.mjs",
     "bundle:linux": "tauri build --bundles deb",
-    "bundle:mac": "tauri build --bundles app"
+    "bundle:mac": "PATH=\"$PWD/scripts/bin:$PATH\" tauri build --bundles app"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

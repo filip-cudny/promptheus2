@@ -1,0 +1,6 @@
+#!/bin/sh
+# Kills every ibtoold, also a healthy one an open Xcode is using (Xcode starts a new one on demand).
+# Upgrade path: kill only an ibtoold whose fd 0 is not a file, pipe or tty (`lsof -a -p <pid> -d 0`).
+# Stops being correct when Xcode loses state on an ibtoold restart, or when the bundler gives actool its own stdin and this file can go.
+pkill -x ibtoold
+exec /usr/bin/actool "$@" </dev/null
