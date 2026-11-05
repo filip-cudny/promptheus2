@@ -149,7 +149,7 @@ fn test_mutation_methods() {
     service.delete_model("upsert-model");
     assert!(service.settings().models.iter().all(|m| m.id != "upsert-model"));
 
-    service.update_setting("theme", serde_json::json!("light"));
+    service.update_setting("theme", serde_json::json!("light")).unwrap();
     assert_eq!(service.settings().theme, "light");
 }
 
@@ -522,11 +522,12 @@ fn test_update_setting_preferred_name_trims_and_clamps() {
     service.update_setting(
         "preferred_name",
         serde_json::Value::String("  Filip  ".to_string()),
-    );
+    )
+    .unwrap();
     assert_eq!(service.preferred_name(), "Filip");
 
     let long = "x".repeat(200);
-    service.update_setting("preferred_name", serde_json::Value::String(long));
+    service.update_setting("preferred_name", serde_json::Value::String(long)).unwrap();
     assert_eq!(service.preferred_name().chars().count(), 60);
 }
 
@@ -704,7 +705,7 @@ fn mutate_reloads_external_change_before_saving() {
 
     fs::write(&path, models_json(&["x", "z"], "New")).unwrap();
     let outcome = service
-        .mutate(|c| c.update_setting("theme", serde_json::json!("dark")))
+        .try_mutate(|c| c.update_setting("theme", serde_json::json!("dark")))
         .expect("mutate");
 
     assert!(outcome.reloaded);
@@ -726,7 +727,7 @@ fn mutate_without_external_change_does_not_reload() {
     let mut service = ConfigService::load(dir.path()).expect("load");
 
     let first = service
-        .mutate(|c| c.update_setting("theme", serde_json::json!("dark")))
+        .try_mutate(|c| c.update_setting("theme", serde_json::json!("dark")))
         .expect("mutate");
     assert!(!first.reloaded);
     assert_eq!(read_json(&path)["theme"], "dark");
@@ -737,7 +738,7 @@ fn mutate_without_external_change_does_not_reload() {
     service.reload().expect("reload");
 
     let second = service
-        .mutate(|c| c.update_setting("autosave_debounce_ms", serde_json::json!(2000)))
+        .try_mutate(|c| c.update_setting("autosave_debounce_ms", serde_json::json!(2000)))
         .expect("mutate");
     assert!(!second.reloaded);
     let saved = read_json(&path);
@@ -754,7 +755,7 @@ fn mutate_with_invalid_file_fails_without_writing() {
     let theme_before = service.settings().theme.clone();
 
     fs::write(&path, "{ not json").unwrap();
-    let result = service.mutate(|c| c.update_setting("theme", serde_json::json!("dark")));
+    let result = service.try_mutate(|c| c.update_setting("theme", serde_json::json!("dark")));
 
     assert!(result.is_err());
     assert_eq!(fs::read(&path).unwrap(), b"{ not json");
@@ -772,7 +773,7 @@ fn mutate_keeps_settings_symlink() {
     let mut service = ConfigService::load(dir.path()).expect("load");
 
     service
-        .mutate(|c| c.update_setting("theme", serde_json::json!("dark")))
+        .try_mutate(|c| c.update_setting("theme", serde_json::json!("dark")))
         .expect("mutate");
 
     assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
@@ -841,7 +842,7 @@ fn update_setting_appearance_persists() {
     let dir = setup_test_dir();
     let mut service = ConfigService::load(dir.path()).expect("load");
     service
-        .mutate(|c| c.update_setting("appearance", serde_json::json!({"logo": "mono", "icons": "color"})))
+        .try_mutate(|c| c.update_setting("appearance", serde_json::json!({"logo": "mono", "icons": "color"})))
         .expect("mutate");
 
     let reloaded = ConfigService::load(dir.path()).expect("reload");
@@ -937,7 +938,7 @@ fn try_mutate_error_leaves_file_and_settings_unchanged() {
     let settings_before = serde_json::to_value(service.settings()).unwrap();
 
     let result: Result<Mutated<()>, ConfigError> = service.try_mutate(|s| {
-        s.update_setting("theme", serde_json::json!("light"));
+        s.update_setting("theme", serde_json::json!("light")).unwrap();
         Err(ConfigError::invalid("nope"))
     });
 
@@ -960,4 +961,74 @@ fn check_changed_rejects_out_of_range_retention() {
         }
         other => panic!("unexpected error: {other}"),
     }
+}
+
+fn service_with_linux_ctrl_f1() -> (TempDir, ConfigService) {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+    service
+        .try_mutate(|c| c.set_shortcut_for_os("linux", "open_context_menu", Some("ctrl+f1")))
+        .expect("bind");
+    (dir, service)
+}
+
+fn invalid_key_and_message(err: ConfigError) -> (Option<String>, String) {
+    match err {
+        ConfigError::InvalidSettings { key, message } => (key, message),
+        other => panic!("unexpected error {other:?}"),
+    }
+}
+
+#[test]
+fn update_setting_launch_at_startup_writes_file() {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+
+    service
+        .try_mutate(|c| c.update_setting("launch_at_startup", serde_json::json!(true)))
+        .expect("write");
+
+    let file = read_json(&dir.path().join("settings.json"));
+    assert_eq!(file["launch_at_startup"], serde_json::json!(true));
+}
+
+#[test]
+fn set_shortcut_rejects_collision_in_same_os_set_ignoring_case() {
+    for shortcut in ["ctrl+f1", "CTRL+F1"] {
+        let (dir, mut service) = service_with_linux_ctrl_f1();
+        let bytes_before = fs::read(dir.path().join("settings.json")).unwrap();
+
+        let err = service
+            .try_mutate(|c| c.set_shortcut_for_os("linux", "clear_context", Some(shortcut)))
+            .unwrap_err();
+
+        let (key, message) = invalid_key_and_message(err);
+        assert_eq!(key.as_deref(), Some("keymaps.clear_context"));
+        assert!(message.contains("open_context_menu"), "{message}");
+        assert_eq!(fs::read(dir.path().join("settings.json")).unwrap(), bytes_before);
+    }
+}
+
+#[test]
+fn set_shortcut_accepts_same_shortcut_in_other_os_set() {
+    let (_dir, mut service) = service_with_linux_ctrl_f1();
+
+    service
+        .try_mutate(|c| c.set_shortcut_for_os("macos", "clear_context", Some("ctrl+f1")))
+        .expect("other os set");
+}
+
+#[test]
+fn update_setting_wrong_type_is_rejected_with_key() {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+    let bytes_before = fs::read(dir.path().join("settings.json")).unwrap();
+
+    let err = service
+        .try_mutate(|c| c.update_setting("recent_apps_count", serde_json::json!("x")))
+        .unwrap_err();
+
+    let (key, _) = invalid_key_and_message(err);
+    assert_eq!(key.as_deref(), Some("recent_apps_count"));
+    assert_eq!(fs::read(dir.path().join("settings.json")).unwrap(), bytes_before);
 }

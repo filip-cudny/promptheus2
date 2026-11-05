@@ -127,6 +127,7 @@ macro_rules! handlers {
             $crate::commands::settings::get_settings,
             $crate::commands::settings::get_settings_catalog,
             $crate::commands::settings::update_setting,
+            $crate::commands::settings::set_shortcut,
             $crate::commands::settings::update_surface_model,
             $crate::commands::settings::update_surface_parameter,
             $crate::commands::settings::update_surface_enabled_tools,

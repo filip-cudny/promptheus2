@@ -12,8 +12,9 @@ pub use prompts::{PromptKind, PromptStore};
 use std::path::{Path, PathBuf};
 
 use crate::models::settings::{
-    ModelConfig, NotificationSettings, Settings, SpeechToTextConfig,
+    KeymapGroup, ModelConfig, NotificationSettings, Settings, SpeechToTextConfig,
 };
+use crate::services::hotkeys::{matches_current_os, translate_shortcut};
 
 use path::resolve_config_relative;
 
@@ -27,6 +28,15 @@ use migrator::{
 };
 
 pub use loader::load_env;
+
+const SHORTCUT_ACTIONS: [&str; 6] = [
+    "open_context_menu",
+    "speech_to_text_toggle",
+    "execute_active_prompt",
+    "set_context_value",
+    "append_context_value",
+    "clear_context",
+];
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
@@ -182,41 +192,94 @@ impl ConfigService {
         &self.settings
     }
 
-    pub fn update_setting(&mut self, key: &str, value: serde_json::Value) {
+    pub fn update_setting(
+        &mut self,
+        key: &str,
+        value: serde_json::Value,
+    ) -> Result<(), ConfigError> {
+        let wrong_type = || ConfigError::invalid_at(key, "value has the wrong type");
+        let invalid = |e: serde_json::Error| ConfigError::invalid_at(key, e.to_string());
+        let settings = &mut self.settings;
         match key {
-            "show_tray_icon" => {
-                if let Some(v) = value.as_bool() {
-                    self.settings.show_tray_icon = v;
-                }
+            "show_tray_icon" => settings.show_tray_icon = value.as_bool().ok_or_else(wrong_type)?,
+            "launch_at_startup" => {
+                settings.launch_at_startup = value.as_bool().ok_or_else(wrong_type)?
             }
-            "theme" => {
-                if let Some(v) = value.as_str() {
-                    self.settings.theme = v.to_string();
-                }
-            }
+            "theme" => settings.theme = value.as_str().ok_or_else(wrong_type)?.to_string(),
             "autosave_debounce_ms" => {
-                if let Some(v) = value.as_u64() {
-                    self.settings.autosave_debounce_ms = v as u32;
-                }
+                settings.autosave_debounce_ms = value.as_u64().ok_or_else(wrong_type)? as u32
             }
             "history_retention_days" => {
-                if let Some(v) = value.as_u64() {
-                    self.settings.history_retention_days = v.min(3650) as u32;
-                }
+                settings.history_retention_days =
+                    value.as_u64().ok_or_else(wrong_type)?.min(3650) as u32
+            }
+            "recent_apps_count" => {
+                settings.recent_apps_count = value.as_u64().ok_or_else(wrong_type)? as usize
             }
             "preferred_name" => {
-                if let Some(v) = value.as_str() {
-                    let trimmed = v.trim();
-                    let clamped: String = trimmed.chars().take(MAX_PREFERRED_NAME_LEN).collect();
-                    self.settings.preferred_name = clamped;
-                }
+                let trimmed = value.as_str().ok_or_else(wrong_type)?.trim();
+                settings.preferred_name = trimmed.chars().take(MAX_PREFERRED_NAME_LEN).collect();
             }
-            "appearance" => match serde_json::from_value(value) {
-                Ok(appearance) => self.settings.appearance = appearance,
-                Err(e) => log::warn!("ignoring invalid appearance setting: {e}"),
-            },
-            _ => {}
+            "appearance" => settings.appearance = serde_json::from_value(value).map_err(invalid)?,
+            "menu_section_order" => {
+                settings.menu_section_order = serde_json::from_value(value).map_err(invalid)?
+            }
+            "webview_providers" => {
+                settings.webview_providers = serde_json::from_value(value).map_err(invalid)?
+            }
+            _ => return Err(ConfigError::invalid_at(key, "unknown setting")),
         }
+        Ok(())
+    }
+
+    pub fn set_shortcut(&mut self, action: &str, shortcut: Option<&str>) -> Result<(), ConfigError> {
+        self.set_shortcut_for_os(std::env::consts::OS, action, shortcut)
+    }
+
+    pub fn set_shortcut_for_os(
+        &mut self,
+        os: &str,
+        action: &str,
+        shortcut: Option<&str>,
+    ) -> Result<(), ConfigError> {
+        let key = format!("keymaps.{action}");
+        if !SHORTCUT_ACTIONS.contains(&action) {
+            return Err(ConfigError::invalid_at(key, "unknown shortcut action"));
+        }
+        let keymaps = &mut self.settings.keymaps;
+        let index = match keymaps.iter().position(|g| matches_current_os(&g.context, os)) {
+            Some(index) => index,
+            None => {
+                keymaps.push(KeymapGroup {
+                    context: format!("os == {os}"),
+                    bindings: Default::default(),
+                });
+                keymaps.len() - 1
+            }
+        };
+        let bindings = &mut keymaps[index].bindings;
+        if let Some(shortcut) = shortcut {
+            if translate_shortcut(shortcut, os).is_none() {
+                return Err(ConfigError::invalid_at(key, format!("{shortcut} is not a valid shortcut")));
+            }
+            let other = bindings
+                .iter()
+                .find(|(bound, bound_action)| {
+                    bound.eq_ignore_ascii_case(shortcut) && bound_action.as_str() != action
+                })
+                .map(|(_, bound_action)| bound_action);
+            if let Some(other) = other {
+                return Err(ConfigError::invalid_at(
+                    key,
+                    format!("{shortcut} is already used by {other}"),
+                ));
+            }
+        }
+        bindings.retain(|_, bound_action| bound_action.as_str() != action);
+        if let Some(shortcut) = shortcut {
+            bindings.insert(shortcut.to_string(), action.to_string());
+        }
+        Ok(())
     }
 
     pub fn update_surface_model(&mut self, surface: SurfaceKind, model_id: Option<String>) {

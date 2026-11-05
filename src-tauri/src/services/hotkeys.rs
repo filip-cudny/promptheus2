@@ -63,7 +63,7 @@ fn translate_key_part(part: &str, os: &str) -> String {
     }
 }
 
-fn matches_current_os(context: &str, os: &str) -> bool {
+pub(crate) fn matches_current_os(context: &str, os: &str) -> bool {
     let trimmed = context.trim();
     if let Some(rest) = trimmed.strip_prefix("os ==") {
         rest.trim() == os

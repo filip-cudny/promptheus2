@@ -52,6 +52,13 @@ export async function updateSetting(
   return invokeWrite("update_setting", { key, value });
 }
 
+export async function setShortcut(
+  action: string,
+  shortcut: string | null,
+): Promise<void> {
+  return invokeWrite("set_shortcut", { action, shortcut });
+}
+
 export async function updateSurfaceModel(
   surface: SurfaceKind,
   modelId: string | null,

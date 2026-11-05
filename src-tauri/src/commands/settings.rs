@@ -11,7 +11,7 @@ use crate::models::settings::{
 use crate::commands::skills::{emit_changed as emit_skills_changed, rescan_and_prune};
 use crate::services::ai::AiService;
 use crate::services::config::catalog::{CatalogEntry, ENTRIES};
-use crate::services::config::{ConfigService, SurfaceKind};
+use crate::services::config::{ConfigError, ConfigService, SurfaceKind};
 use crate::services::history_events::emit_history_changed;
 use crate::services::skill::SkillService;
 use crate::services::sqlite_history::SqliteHistoryService;
@@ -72,6 +72,45 @@ async fn finish_mutation(app: &AppHandle, reloaded: bool) -> crate::Result<()> {
     }
 }
 
+pub(crate) enum SettingWrite<'a> {
+    Setting(&'a str),
+    Shortcut,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Reapply {
+    pub shortcuts: bool,
+    pub autostart: bool,
+}
+
+pub(crate) fn reapply_for(write: SettingWrite) -> Reapply {
+    Reapply {
+        shortcuts: matches!(write, SettingWrite::Shortcut),
+        autostart: matches!(write, SettingWrite::Setting("launch_at_startup")),
+    }
+}
+
+async fn try_mutate_settings(
+    app: &AppHandle,
+    config: &Mutex<ConfigService>,
+    write: SettingWrite<'_>,
+    f: impl FnOnce(&mut ConfigService) -> Result<(), ConfigError>,
+) -> crate::Result<()> {
+    let (reloaded, settings) = {
+        let mut guard = config.lock().await;
+        let reloaded = guard.try_mutate(f)?.reloaded;
+        (reloaded, guard.settings().clone())
+    };
+    let reapply = reapply_for(write);
+    if reapply.autostart {
+        crate::services::autostart::reconcile(app, &settings, false);
+    }
+    if reapply.shortcuts {
+        crate::reload_shortcuts(app, &settings);
+    }
+    finish_mutation(app, reloaded).await
+}
+
 async fn mutate_settings(
     app: &AppHandle,
     config: &Mutex<ConfigService>,
@@ -100,7 +139,23 @@ pub async fn update_setting(
     key: String,
     value: serde_json::Value,
 ) -> crate::Result<()> {
-    mutate_settings(&app, &config, |c| c.update_setting(&key, value)).await
+    try_mutate_settings(&app, &config, SettingWrite::Setting(&key), |c| {
+        c.update_setting(&key, value)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn set_shortcut(
+    app: AppHandle,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+    action: String,
+    shortcut: Option<String>,
+) -> crate::Result<()> {
+    try_mutate_settings(&app, &config, SettingWrite::Shortcut, |c| {
+        c.set_shortcut(&action, shortcut.as_deref())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -235,4 +290,20 @@ pub async fn update_history_retention(
         emit_history_changed(&app, None, None)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn launch_at_startup_reapplies_autostart_only() {
+        let reapply = reapply_for(SettingWrite::Setting("launch_at_startup"));
+        assert_eq!(reapply, Reapply { shortcuts: false, autostart: true });
+    }
+
+    #[test]
+    fn shortcut_write_reapplies_shortcuts() {
+        assert!(reapply_for(SettingWrite::Shortcut).shortcuts);
+    }
 }
