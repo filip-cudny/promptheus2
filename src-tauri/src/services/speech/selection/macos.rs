@@ -354,12 +354,12 @@ async fn read_after_trigger(
     app: &AppHandle,
     generation: u64,
     run: u64,
-    baseline: Option<&AxSelection<Cf>>,
+    baseline: &mut Option<AxSelection<Cf>>,
 ) -> Option<String> {
     tokio::time::sleep(SETTLE_DELAY).await;
     let read = tauri::async_runtime::spawn_blocking(read_ax_selection).await.ok()?;
     if let Some(read) = read.filter(|read| !read.text.is_empty()) {
-        if equals_baseline(baseline, &read) {
+        if equals_baseline(baseline.as_ref(), &read) {
             log::debug!("selection capture: AX selection equals the baseline, waiting");
             return None;
         }
@@ -377,7 +377,7 @@ pub async fn capture(app: &AppHandle, generation: u64, run: u64) -> Option<Strin
         warn_permission_missing(app).await;
         return None;
     }
-    let baseline = tauri::async_runtime::spawn_blocking(read_ax_selection).await.ok()?;
+    let mut baseline = tauri::async_runtime::spawn_blocking(read_ax_selection).await.ok()?;
     let started = Instant::now();
     let mut detector = TriggerDetector::default();
     loop {
@@ -389,7 +389,7 @@ pub async fn capture(app: &AppHandle, generation: u64, run: u64) -> Option<Strin
             detector.pill = pill_frame(app);
             if let Some(trigger) = detector.feed(&sample) {
                 log::debug!("selection capture: trigger {}", trigger.name());
-                if let Some(text) = read_after_trigger(app, generation, run, baseline.as_ref()).await {
+                if let Some(text) = read_after_trigger(app, generation, run, &mut baseline).await {
                     return Some(text);
                 }
             }
