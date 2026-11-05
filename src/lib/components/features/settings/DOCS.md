@@ -186,9 +186,9 @@ Save flow goes through `$lib/services/prompts.ts` → backend `save_prompt` Taur
 
 ### Chat and Speech sections
 
-`SectionChat` shows the default chat model, reasoning effort (levels of the chosen model's capabilities plus "Default" = `null`), MCP tools as checkboxes of qualified `server.tool` names (from `list_mcp_tools`; empty state when none), the title generation model and prompt (`PromptEditor` kind `title_generation`), and `WebviewProvidersEditor`.
+`SectionChat` shows the default chat model, reasoning effort (as the model editor's effort select: "None" first, all levels when the model does not advertise effort, a saved value the model does not accept shown as "not accepted by this model"; plus "Default" = `null`), MCP tools as checkboxes of qualified `server.tool` names (from `list_mcp_tools`; empty state when none), the title generation model and prompt (`PromptEditor` kind `title_generation`), and `WebviewProvidersEditor`.
 
-`SectionSpeech` shows STT model, language (empty = `null`), `no_verbatim`, the `speech_to_text_toggle` shortcut, the STT prompt (`PromptEditor` kind `speech_to_text`) and keyterms (`SttKeytermsEditor`), then the recording and failure-handling cards.
+`SectionSpeech` shows STT model, language (empty = `null`), `no_verbatim`, the STT prompt (`PromptEditor` kind `speech_to_text`), keyterms (`SttKeytermsEditor`) and the `speech_to_text_toggle` shortcut, then the recording and failure-handling cards.
 
 `ShortcutField` (prop `action`) reads the binding of `action` in the keymap group of the current OS (`os==macos` when `isMac`, else `os==linux`). "Change" enters capture: the next keydown with at least one modifier and one key becomes the string `cmd|super`, `ctrl`, `alt`, `shift` (in that order, `cmd` for Meta on macOS, `super` elsewhere) plus the key (`a`, `1`, `f1`…`f24`, `space`, `tab`, `enter`, `backspace`, `delete`, `up`, `down`, `left`, `right`, `home`, `end`, `page_up`, `page_down`), joined by `+`; Escape cancels; "Clear" sends `null`. The capture handler calls `stopPropagation()`. It saves with `setShortcut`; the field sits in `SettingField key="keymaps.<action>"`, so a collision error from the backend shows at the field.
 

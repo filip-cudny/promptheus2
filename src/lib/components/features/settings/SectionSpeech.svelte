@@ -106,8 +106,6 @@
               save({ no_verbatim: (e.target as HTMLInputElement).checked })}
           />
         </SettingField>
-
-        <ShortcutField action="speech_to_text_toggle" />
       </div>
 
       <div class="editors">
@@ -122,6 +120,10 @@
             description="Domain words to bias transcription — names, jargon, brands, acronyms. One term per line."
           />
         </div>
+      </div>
+
+      <div class="group">
+        <ShortcutField action="speech_to_text_toggle" />
       </div>
 
       <div class="group">

@@ -10,7 +10,7 @@
     updateSurfaceModel,
     updateSurfaceReasoningEffort,
   } from "$lib/services/settings";
-  import { REASONING_LEVEL_LABELS, type ReasoningLevel } from "$lib/constants/models";
+  import { REASONING_LEVELS, REASONING_LEVEL_LABELS, type ReasoningLevel } from "$lib/constants/models";
   import SettingsSection from "./SettingsSection.svelte";
   import SettingField from "./SettingField.svelte";
   import PromptEditor from "./PromptEditor.svelte";
@@ -32,12 +32,23 @@
 
   const effortOptions = $derived.by(() => {
     const reasoning = getCachedCapabilities(chat?.model_id ?? null)?.reasoning;
-    const allowed = reasoning?.kind === "effort" ? reasoning.allowed : [];
-    return [
+    const allowed: string[] =
+      reasoning?.kind === "effort" ? reasoning.allowed : [...REASONING_LEVELS];
+    const levels = allowed.includes("none") ? allowed : ["none", ...allowed];
+    const saved = chat?.parameters.reasoning_effort;
+    const options = [
       { value: "", label: "Default" },
-      ...allowed.map((v) => ({ value: v, label: REASONING_LEVEL_LABELS[v as ReasoningLevel] ?? v })),
+      ...levels.map((v) => ({ value: v, label: effortLabel(v) })),
     ];
+    if (saved && !levels.includes(saved)) {
+      options.push({ value: saved, label: `${effortLabel(saved)} — not accepted by this model` });
+    }
+    return options;
   });
+
+  function effortLabel(v: string): string {
+    return REASONING_LEVEL_LABELS[v as ReasoningLevel] ?? v;
+  }
 
   let tools = $state<string[]>([]);
 
