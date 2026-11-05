@@ -1,11 +1,14 @@
 <script lang="ts">
   import SettingsSection from "./SettingsSection.svelte";
-  import FormRow from "$lib/components/shared/ui/FormRow.svelte";
   import NumberInput from "$lib/components/shared/ui/NumberInput.svelte";
   import SelectDropdown from "$lib/components/shared/ui/SelectDropdown.svelte";
   import PillAnchorPicker from "./PillAnchorPicker.svelte";
+  import SettingField from "./SettingField.svelte";
+  import PromptEditor from "./PromptEditor.svelte";
+  import SttKeytermsEditor from "./SttKeytermsEditor.svelte";
+  import ShortcutField from "./ShortcutField.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
-  import { updateSpeechToTextConfig } from "$lib/services/settings";
+  import { setSpeechToTextModel, updateSpeechToTextConfig } from "$lib/services/settings";
   import { error as logError } from "@tauri-apps/plugin-log";
   import type { ClaudeTarget, SpeechToTextConfig, StopChatTarget } from "$lib/types";
 
@@ -24,6 +27,20 @@
 
   const store = getSettingsStore();
   const config = $derived(store.settings?.surfaces?.speech_to_text ?? null);
+  const sttModelOptions = $derived([
+    { value: "", label: "Not set" },
+    ...store.models
+      .filter((m) => m.type === "stt")
+      .map((m) => ({ value: m.id, label: m.display_name || m.model })),
+  ]);
+
+  async function saveModel(id: string) {
+    try {
+      await setSpeechToTextModel(id || null);
+    } catch (e) {
+      logError(`set_speech_to_text_model failed: ${e}`);
+    }
+  }
 
   async function save(patch: Partial<SpeechToTextConfig>) {
     if (!config) return;
@@ -54,70 +71,109 @@
 
 <SettingsSection
   title="Speech to text"
-  hint="What happens when a transcription fails, and how long the recording survives so you can try again."
+  hint="Transcription model and prompts, what happens when a transcription fails, and how long the recording survives so you can try again."
 >
   {#snippet body()}
     {#if !config}
       <p class="muted">Settings unavailable.</p>
     {:else}
       <div class="group">
+        <SettingField key="surfaces.speech_to_text.model_id">
+          <SelectDropdown
+            value={config.model_id ?? ""}
+            options={sttModelOptions}
+            ariaLabel="Speech model"
+            onchange={saveModel}
+          />
+        </SettingField>
+
+        <SettingField key="surfaces.speech_to_text.language">
+          <input
+            class="text"
+            type="text"
+            aria-label="Language"
+            value={config.language ?? ""}
+            onchange={(e: Event) =>
+              save({ language: (e.target as HTMLInputElement).value.trim() || null })}
+          />
+        </SettingField>
+
+        <SettingField key="surfaces.speech_to_text.no_verbatim">
+          <input
+            type="checkbox"
+            checked={config.no_verbatim === true}
+            onchange={(e: Event) =>
+              save({ no_verbatim: (e.target as HTMLInputElement).checked })}
+          />
+        </SettingField>
+
+        <ShortcutField action="speech_to_text_toggle" />
+      </div>
+
+      <div class="editors">
+        <div class="editor">
+          <PromptEditor
+            kind="speech_to_text"
+            description="Optional bias prompt for the speech-to-text model. Leave empty to disable."
+          />
+        </div>
+        <div class="editor">
+          <SttKeytermsEditor
+            description="Domain words to bias transcription — names, jargon, brands, acronyms. One term per line."
+          />
+        </div>
+      </div>
+
+      <div class="group">
         <h3>Recording</h3>
 
-        <label class="check">
+        <SettingField key="surfaces.speech_to_text.show_recording_widget">
           <input
             type="checkbox"
             checked={config.show_recording_widget}
             onchange={(e: Event) =>
               save({ show_recording_widget: (e.target as HTMLInputElement).checked })}
           />
-          <span>Show recording widget</span>
-        </label>
-        <p class="muted">
-          A small floating widget shows the recording level and lets you pause, stop or cancel.
-          Off shows notifications instead.
-        </p>
-        <label class="check">
+        </SettingField>
+        <SettingField key="surfaces.speech_to_text.recording_widget_at_cursor">
           <input
             type="checkbox"
             checked={config.recording_widget_at_cursor}
             onchange={(e: Event) =>
               save({ recording_widget_at_cursor: (e.target as HTMLInputElement).checked })}
           />
-          <span>Open recording widget at the cursor</span>
-        </label>
-        <p class="muted">
-          The widget opens on the picked side of the cursor and grows away from it when context is added.
-          Off opens it where you last left it.
-        </p>
-        <PillAnchorPicker
-          value={config.recording_widget_anchor}
-          disabled={!config.recording_widget_at_cursor}
-          onchange={(a) => save({ recording_widget_anchor: a })}
-        />
+        </SettingField>
+        <SettingField key="surfaces.speech_to_text.recording_widget_anchor">
+          <PillAnchorPicker
+            value={config.recording_widget_anchor}
+            disabled={!config.recording_widget_at_cursor}
+            onchange={(a) => save({ recording_widget_anchor: a })}
+          />
+        </SettingField>
 
-        <FormRow label="Claude target">
+        <SettingField key="surfaces.speech_to_text.claude_target">
           <SelectDropdown
             value={config.claude_target}
             options={CLAUDE_TARGET_OPTIONS}
             ariaLabel="Claude target"
             onchange={(claude_target) => save({ claude_target })}
           />
-        </FormRow>
+        </SettingField>
 
-        <FormRow label="Stop + chat target">
+        <SettingField key="surfaces.speech_to_text.stop_chat_target">
           <SelectDropdown
             value={config.stop_chat_target}
             options={STOP_CHAT_TARGET_OPTIONS}
             ariaLabel="Stop + chat target"
             onchange={(stop_chat_target) => save({ stop_chat_target })}
           />
-        </FormRow>
+        </SettingField>
       </div>
 
       <div class="group">
         <h3>Failure handling</h3>
 
-        <FormRow label="Transcription attempts" hint={attemptsHint}>
+        <SettingField key="surfaces.speech_to_text.auto_retry_attempts">
           <NumberInput
             min={1}
             max={MAX_ATTEMPTS}
@@ -126,9 +182,10 @@
             onchange={(e: Event) =>
               save({ auto_retry_attempts: clampedNumber(e, 1, MAX_ATTEMPTS) })}
           />
-        </FormRow>
+        </SettingField>
+        <p class="muted">{attemptsHint}</p>
 
-        <FormRow label="Keep audio for (hours)" hint={retentionHint}>
+        <SettingField key="surfaces.speech_to_text.audio_retention_hours">
           <NumberInput
             min={0}
             max={MAX_RETENTION_HOURS}
@@ -137,21 +194,17 @@
             onchange={(e: Event) =>
               save({ audio_retention_hours: clampedNumber(e, 0, MAX_RETENTION_HOURS) })}
           />
-        </FormRow>
+        </SettingField>
+        <p class="muted">{retentionHint}</p>
 
-        <label class="check">
+        <SettingField key="surfaces.speech_to_text.keep_audio_on_success">
           <input
             type="checkbox"
             checked={config.keep_audio_on_success}
             onchange={(e: Event) =>
               save({ keep_audio_on_success: (e.target as HTMLInputElement).checked })}
           />
-          <span>Keep audio after a successful transcription</span>
-        </label>
-        <p class="muted">
-          Off by default — a successful transcription deletes its recording immediately.
-          Turn on only if you want to export the audio of notes that transcribed fine.
-        </p>
+        </SettingField>
       </div>
     {/if}
   {/snippet}
@@ -180,16 +233,31 @@
     color: var(--text-muted);
   }
 
-  .check {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
+  .text {
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    font: inherit;
     font-size: var(--font-size-md);
     color: var(--text-primary);
-    cursor: pointer;
   }
 
-  .check input {
+  .editors {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8);
+    max-width: 760px;
+  }
+
+  .editor {
+    display: flex;
+    flex-direction: column;
+    height: 320px;
+  }
+
+  input[type="checkbox"] {
     cursor: pointer;
   }
 </style>

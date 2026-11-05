@@ -30,7 +30,7 @@ Pure TS modules (no Svelte runes, no `$lib` imports other than `import type`) li
 
 ### Sidebar groups and adding a section
 
-`SIDEBAR_GROUPS` in `SettingsSidebar.svelte` lists three groups, each an ordered array of items: "App" (General, Notifications, History, Sync), "AI" (Models, Prompt Base, Skills), "Features" (Speech, Surface Prompts). There is no disabled item; a section appears in the sidebar only once it renders.
+`SIDEBAR_GROUPS` in `SettingsSidebar.svelte` lists three groups, each an ordered array of items: "App" (General, Notifications, History, Sync), "AI" (Models, Prompt Base, Skills), "Features" (Chat, Speech). There is no disabled item; a section appears in the sidebar only once it renders.
 
 Active item is marked with a 2px left border in `--accent`, never a filled background, so the accent only signals "you are here" (the same single-accent rule as the conversation window: blue ≡ user/marker, never decoration).
 
@@ -76,7 +76,7 @@ Saves are **queued, never dropped**. A save arriving while another is in flight 
 
 Discrete actions that aren't auto-saves (delete, duplicate) should go through `tracker.runAction(fn)`, not `flush(fn)` (`SkillEditor` does; `ModelEditor` still passes its delete and duplicate to `flush`): it persists pending edits first, then runs the action, and its `true`/`false` reflects the action itself. `flush(fn)` only queues `fn` as the next autosave — a concurrent edit can replace it, so an action passed to `flush` may never run while still returning `true`. Callers branch on the boolean to decide whether to advance UI (e.g., switching selection after a successful delete).
 
-The indicator is mounted at the section/editor header — one indicator per save target. Tabbed prompt sections (`SectionPromptBase`, `SectionSurfacePrompts`) keep per-editor dots so the tab the user is on tracks its own document; promoting them to section-level would lie about which document is dirty.
+The indicator is mounted at the section/editor header — one indicator per save target. The tabbed prompt section (`SectionPromptBase`) keeps per-editor dots so the tab the user is on tracks its own document; promoting them to section-level would lie about which document is dirty.
 
 ### Draft state, not direct mutation
 
@@ -174,15 +174,25 @@ Only `kind: "environment"` shows the placeholders affordance: a `{ }` icon butto
 
 ### Section shells & tabbed prompts
 
-`SettingsSection.svelte` is a shared scaffold every section can use: optional title + hint header (with a thin `--border-faint` divider) and a scrollable padded body. Use it for sections that have a "page" feel (`SectionPromptBase`, `SectionSurfacePrompts`); the models section keeps its own list+editor split layout but should still match `SettingsSection`'s padding rhythm where possible.
+`SettingsSection.svelte` is a shared scaffold every section can use: optional title + hint header (with a thin `--border-faint` divider) and a scrollable padded body. Use it for sections that have a "page" feel (`SectionPromptBase`, `SectionChat`, `SectionSpeech`); the models section keeps its own list+editor split layout but should still match `SettingsSection`'s padding rhythm where possible.
 
-`SectionPromptBase` and `SectionSurfacePrompts` use a tab strip in the section header — only one `PromptEditor` is mounted at a time and fills the available height. This replaces the old "stacked card-soup" layout where every prompt rendered a full-bordered card stacked vertically. Tabs are uppercase-tracked labels, active tab uses a 2px bottom border in `--accent` (mirrors the sidebar's left-border marker, single-accent rule).
+`SectionPromptBase` uses a tab strip in the section header — only one `PromptEditor` is mounted at a time and fills the available height. This replaces the old "stacked card-soup" layout where every prompt rendered a full-bordered card stacked vertically. Tabs are uppercase-tracked labels, active tab uses a 2px bottom border in `--accent` (mirrors the sidebar's left-border marker, single-accent rule).
 
 `SectionPromptBase` additionally renders a "Preferred name" identity card above the tabs — a single-field `TextInput` capped at 60 chars (live counter on the right edge, turns `--danger` if `maxlength` is somehow exceeded). It autosaves through `useSaveTracker` + `updateSetting("preferred_name", …)`. The counter and the section's own `SaveStatusIndicator` both belong to this card; the per-editor save dots in the tabs below remain independent.
 
 Editor body width is capped (760px for prose-style prompts, 960px for environment with its placeholders popover; hardcoded in the section styles) to keep long prompts readable; don't let the textarea fill arbitrary window sizes.
 
 Save flow goes through `$lib/services/prompts.ts` → backend `save_prompt` Tauri command → `ConfigService::write_prompt` → `PromptStore` (atomic tempfile + rename). Backend emits `prompt-changed` Tauri event after each save.
+
+### Chat and Speech sections
+
+`SectionChat` shows the default chat model, reasoning effort (levels of the chosen model's capabilities plus "Default" = `null`), MCP tools as checkboxes of qualified `server.tool` names (from `list_mcp_tools`; empty state when none), the title generation model and prompt (`PromptEditor` kind `title_generation`), and `WebviewProvidersEditor`.
+
+`SectionSpeech` shows STT model, language (empty = `null`), `no_verbatim`, the `speech_to_text_toggle` shortcut, the STT prompt (`PromptEditor` kind `speech_to_text`) and keyterms (`SttKeytermsEditor`), then the recording and failure-handling cards.
+
+`ShortcutField` (prop `action`) reads the binding of `action` in the keymap group of the current OS (`os==macos` when `isMac`, else `os==linux`). "Change" enters capture: the next keydown with at least one modifier and one key becomes the string `cmd|super`, `ctrl`, `alt`, `shift` (in that order, `cmd` for Meta on macOS, `super` elsewhere) plus the key (`a`, `1`, `f1`…`f24`, `space`, `tab`, `enter`, `backspace`, `delete`, `up`, `down`, `left`, `right`, `home`, `end`, `page_up`, `page_down`), joined by `+`; Escape cancels; "Clear" sends `null`. The capture handler calls `stopPropagation()`. It saves with `setShortcut`; the field sits in `SettingField key="keymaps.<action>"`, so a collision error from the backend shows at the field.
+
+`WebviewProvidersEditor` edits the whole `webview_providers` list (name and URL rows, add, remove) and saves it with `updateSetting` — text debounced, remove immediate. Existing ids are kept; a new row gets its id on first save: the name lowercased with characters outside `[a-z0-9_-]` replaced by `-`, suffixed `-2`, `-3`… when taken. Rows without a name are not saved. The list is seeded from the store on mount and not re-synced from later external changes.
 
 ### Window registration reminders
 

@@ -4,7 +4,7 @@
   import SectionModels from "./SectionModels.svelte";
   import SectionGeneral from "./SectionGeneral.svelte";
   import SectionPromptBase from "./SectionPromptBase.svelte";
-  import SectionSurfacePrompts from "./SectionSurfacePrompts.svelte";
+  import SectionChat from "./SectionChat.svelte";
   import SectionSkills from "./SectionSkills.svelte";
   import SectionNotifications from "./SectionNotifications.svelte";
   import SectionHistory from "./SectionHistory.svelte";
@@ -27,8 +27,8 @@
     <SectionModels />
   {:else if activeSection === "prompt_base"}
     <SectionPromptBase />
-  {:else if activeSection === "surface_prompts"}
-    <SectionSurfacePrompts />
+  {:else if activeSection === "chat"}
+    <SectionChat />
   {:else if activeSection === "notifications"}
     <SectionNotifications />
   {:else if activeSection === "general"}

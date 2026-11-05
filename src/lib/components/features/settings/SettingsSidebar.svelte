@@ -7,7 +7,7 @@
     | "models"
     | "prompt_base"
     | "skills"
-    | "surface_prompts"
+    | "chat"
     | "speech";
 
   export interface SidebarItem {
@@ -41,8 +41,8 @@
     {
       label: "Features",
       items: [
+        { id: "chat", label: "Chat" },
         { id: "speech", label: "Speech" },
-        { id: "surface_prompts", label: "Surface Prompts" },
       ],
     },
   ];
