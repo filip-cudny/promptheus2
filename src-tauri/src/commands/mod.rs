@@ -165,6 +165,7 @@ macro_rules! handlers {
             $crate::commands::speech::set_recording_widget_tooltip,
             $crate::commands::speech::remove_recording_widget_item,
             $crate::commands::speech::paste_into_recording_widget,
+            $crate::commands::speech::capture_screenshot_into_recording_widget,
             $crate::commands::speech::stop_chat_speech_recording,
             $crate::commands::speech::get_recording_state,
             $crate::commands::speech::retry_transcription,

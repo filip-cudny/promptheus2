@@ -12,16 +12,17 @@ use crate::models::speech::{
     SpeechRecordingStartedEvent, SpeechRecordingStoppedEvent, SpeechTranscriptionError,
     SpeechTranscriptionRetry,
 };
-use crate::services::clipboard::{ClipboardFingerprint, ClipboardService};
+use crate::services::clipboard::{ClipboardFingerprint, ClipboardService, PastedItem};
+use crate::services::context::ContextManagerService;
 use crate::services::config::ConfigService;
 use crate::services::execution::skill_executor::run_skill_stream;
 use crate::services::notification::{NotificationLevel, NotificationService};
 use crate::services::skill::SkillService;
 use crate::services::speech::widget::{
-    configured_claude_target, configured_providers, pill_targets, RecordingWidget,
+    configured_claude_target, configured_providers, pill_targets, RecordingWidget, Transport,
 };
 use crate::services::speech::{
-    self, claude_desktop, webview_provider_of, AudioClipStore, PendingOrigin, PendingPrompt, SpeechError,
+    self, claude_desktop, screenshot, webview_provider_of, AudioClipStore, PendingOrigin, PendingPrompt, SpeechError,
     SpeechService, SttOptions,
 };
 use crate::services::sqlite_history::SqliteHistoryService;
@@ -1205,6 +1206,63 @@ pub async fn paste_into_recording_widget(app: AppHandle) -> crate::Result<()> {
         return Ok(());
     }
     crate::commands::context::paste_item_for_pill(&app).await
+}
+
+pub async fn capture_screenshot_into_recording_widget(app: AppHandle) -> crate::Result<()> {
+    use base64::Engine;
+
+    log::debug!("recording widget intent: screenshot");
+    let widget = app.state::<RecordingWidget>();
+    let Some((transport, generation)) = widget.shown_generation().await else {
+        log::debug!("recording widget intent screenshot ignored: widget not shown");
+        return Ok(());
+    };
+    if !screenshot::keep_capture(generation, Some(generation), target_locked(&app).await) {
+        log::debug!("recording widget intent screenshot ignored: target locked");
+        return Ok(());
+    }
+
+    let dir = app.path().app_cache_dir()?.join(screenshot::DIR_NAME);
+    let path = dir.join(format!("{}.png", uuid::Uuid::new_v4()));
+    tauri::async_runtime::spawn_blocking(move || std::fs::create_dir_all(dir)).await??;
+    log::debug!("screenshot file: {}", path.display());
+
+    let captured = match transport {
+        #[cfg(target_os = "linux")]
+        Transport::Shell => {
+            let path = path
+                .to_str()
+                .ok_or_else(|| Error::Other("screenshot path is not valid UTF-8".into()))?;
+            screenshot::capture_gnome(path).await
+        }
+        #[cfg(target_os = "macos")]
+        Transport::Window => screenshot::capture_macos(&app, generation, &path).await,
+        #[cfg(not(target_os = "macos"))]
+        Transport::Window => {
+            log::debug!("screenshot unsupported on this session");
+            return Ok(());
+        }
+    };
+
+    let bytes = tauri::async_runtime::spawn_blocking(move || screenshot::read_and_delete(&path, captured)).await?;
+    let current_generation = widget.shown_generation().await.map(|(_, generation)| generation);
+    if !screenshot::keep_capture(generation, current_generation, target_locked(&app).await) {
+        log::debug!("screenshot dropped: pill changed");
+        return Ok(());
+    }
+    let Some(bytes) = bytes else {
+        return Ok(());
+    };
+    let data = base64::engine::general_purpose::STANDARD.encode(bytes);
+    app.state::<Arc<Mutex<ContextManagerService>>>()
+        .lock()
+        .await
+        .append_item(PastedItem::Image(data, "image/png".into()));
+    crate::commands::context::emit_context_changed(&app)
+}
+
+async fn target_locked(app: &AppHandle) -> bool {
+    app.state::<Arc<Mutex<SpeechService>>>().lock().await.target_locked()
 }
 
 #[cfg(test)]

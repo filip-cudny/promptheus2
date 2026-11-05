@@ -5,6 +5,7 @@ mod pill_previews;
 mod recorder;
 pub mod reminder;
 pub mod retry;
+mod screenshot;
 pub mod session;
 mod transcriber;
 pub mod widget;

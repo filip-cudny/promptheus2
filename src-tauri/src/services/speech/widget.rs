@@ -774,6 +774,11 @@ impl RecordingWidget {
             .await;
     }
 
+    pub async fn shown_generation(&self) -> Option<(Transport, u64)> {
+        let inner = self.inner.lock().await;
+        inner.transport.map(|transport| (transport, inner.generation))
+    }
+
     pub async fn generation(&self) -> u64 {
         self.inner.lock().await.generation
     }
@@ -1124,6 +1129,10 @@ impl RecordingWidget {
             return;
         }
         inner.overlay = overlay;
+        self.restore_pill_frame(app, &mut inner, kind);
+    }
+
+    fn restore_pill_frame(&self, app: &AppHandle, inner: &mut Inner, kind: OverlayKind) {
         let scale = inner.scale;
         let size = physical_size(pill_size(inner.item_rows), scale);
         let size = (size.0 as f64, size.1 as f64);
@@ -1132,6 +1141,38 @@ impl RecordingWidget {
             placement.origin = (origin.0.round(), origin.1.round());
             log::debug!("recording widget: {kind:?} close origin={:?} size={size:?}", placement.origin);
             self.apply_frame(app, placement.origin, size, scale);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    pub async fn hide_for_capture(&self, app: &AppHandle, generation: u64) -> bool {
+        let mut inner = self.inner.lock().await;
+        if !inner.is_current(generation) || inner.transport != Some(Transport::Window) {
+            return false;
+        }
+        if let Some(overlay) = inner.overlay.take() {
+            let _ = app.emit_to(WINDOW_LABEL, DROPDOWN_CLOSED_EVENT, ());
+            self.restore_pill_frame(app, &mut inner, overlay.kind);
+        }
+        match app.get_webview_window(WINDOW_LABEL).map(|window| window.hide()) {
+            Some(Ok(())) => true,
+            Some(Err(e)) => {
+                log::warn!("hiding the recording widget for a capture failed: {e}");
+                false
+            }
+            None => false,
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    pub async fn restore_after_capture(&self, app: &AppHandle, generation: u64) {
+        let inner = self.inner.lock().await;
+        if !inner.is_current(generation) || inner.transport != Some(Transport::Window) {
+            log::debug!("recording widget: restore after capture skipped, stale generation={generation}");
+            return;
+        }
+        if let Err(e) = reveal_window(app) {
+            log::warn!("showing the recording widget after a capture failed: {e}");
         }
     }
 

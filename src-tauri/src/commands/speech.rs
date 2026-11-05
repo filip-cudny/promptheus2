@@ -83,6 +83,11 @@ pub async fn paste_into_recording_widget(app: AppHandle) -> crate::Result<()> {
     session::paste_into_recording_widget(app).await
 }
 
+#[tauri::command]
+pub async fn capture_screenshot_into_recording_widget(app: AppHandle) -> crate::Result<()> {
+    session::capture_screenshot_into_recording_widget(app).await
+}
+
 #[derive(Serialize)]
 pub struct RecordingState {
     is_recording: bool,

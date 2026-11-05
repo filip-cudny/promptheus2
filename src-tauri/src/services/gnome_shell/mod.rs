@@ -21,6 +21,8 @@ pub trait Shell {
 
     fn paste_into_app(&self, wm_class: &str, uris: &[&str]) -> zbus::Result<String>;
 
+    fn capture_area(&self, path: &str) -> zbus::Result<String>;
+
     fn show_toast(
         &self,
         level: &str,
