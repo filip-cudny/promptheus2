@@ -86,6 +86,9 @@ const WIDGET_DONE_ENTER_SCALE = 0.85;
 const WIDGET_WAVE_PERIOD_US = 1200 * 1000;
 const WIDGET_WAVE_FRAME_MS = 33;
 const WIDGET_BUTTON_HOVER = '#3a3a3c';
+const SELECTION_POLL_MS = 30;
+const SELECTION_SETTLE_MS = 150;
+const SELECTION_TEXT_MIMETYPES = ['text/plain;charset=utf-8', 'text/plain', 'UTF8_STRING', 'STRING', 'TEXT'];
 const WIDGET_TARGET_PADDING_X = 8;
 const WIDGET_DRAG_THRESHOLD_PX = 4;
 const WIDGET_TARGET_ICONS = {'webview:claude': 'provider-claude', 'webview:chatgpt': 'provider-chatgpt'};
@@ -317,6 +320,10 @@ const INTERFACE_XML = `
     <method name="CaptureArea">
       <arg type="s" direction="in" name="path"/>
       <arg type="s" direction="out" name="outcome"/>
+    </method>
+    <method name="CaptureSelection">
+      <arg type="s" direction="out" name="outcome"/>
+      <arg type="s" direction="out" name="text"/>
     </method>
     <signal name="ShortcutActivated">
       <arg type="s" name="action"/>
@@ -609,6 +616,72 @@ export default class PromptheusExtension extends Extension {
         }
     }
 
+    CaptureSelectionAsync(_params, invocation) {
+        const widget = this._widget;
+        if (!widget) {
+            invocation.return_value(new GLib.Variant('(ss)', ['cancelled', '']));
+            return;
+        }
+        widget.selection?.finish('cancelled');
+        const primary = Meta.SelectionType.SELECTION_PRIMARY;
+        const display = global.display.get_selection();
+        const held = Clutter.ModifierType.BUTTON1_MASK | Clutter.ModifierType.SHIFT_MASK;
+        let done = false;
+        let busy = false;
+        let timerId = 0;
+        const read = () => St.Clipboard.get_default().get_text(St.ClipboardType.PRIMARY, (_clipboard, text) => {
+            if (done)
+                return;
+            if (text)
+                selection.finish('captured', text);
+            else
+                busy = false;
+        });
+        const awaitRelease = () => {
+            timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SELECTION_POLL_MS, () => {
+                const [, , modifiers] = global.get_pointer();
+                if (modifiers & held)
+                    return GLib.SOURCE_CONTINUE;
+                timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SELECTION_SETTLE_MS, () => {
+                    timerId = 0;
+                    read();
+                    return GLib.SOURCE_REMOVE;
+                });
+                return GLib.SOURCE_REMOVE;
+            });
+        };
+        const ownerId = display.connect('owner-changed', (_display, type, source) => {
+            if (type !== primary || busy || !source ||
+                !source.get_mimetypes().some(mimetype => SELECTION_TEXT_MIMETYPES.includes(mimetype)))
+                return;
+            busy = true;
+            awaitRelease();
+        });
+        const selection = {
+            finish: (outcome, text = '') => {
+                if (done)
+                    return;
+                done = true;
+                display.disconnect(ownerId);
+                if (timerId)
+                    GLib.source_remove(timerId);
+                if (widget.selection === selection)
+                    widget.selection = null;
+                console.log(`CaptureSelection: outcome ${outcome} (${text.length} chars)`);
+                invocation.return_value(new GLib.Variant('(ss)', [outcome, text]));
+                if (outcome === 'captured' && this._widget === widget)
+                    this._fillRow2(widget);
+            },
+        };
+        widget.selection = selection;
+        this._fillRow2(widget);
+    }
+
+    _cancelSelectionWaiting(widget) {
+        widget.selection.finish('cancelled');
+        this._fillRow2(widget);
+    }
+
     _selectCaptureArea() {
         return new Promise(resolve => {
             const [stageWidth, stageHeight] = global.stage.get_size();
@@ -807,6 +880,7 @@ export default class PromptheusExtension extends Extension {
         }
         const widget = this._widget;
         widget.monochromatic = monochromatic;
+        widget.selection?.finish('cancelled');
         widget.scales.fill(WIDGET_BAR_MIN_SCALE);
         widget.elapsed = formatElapsed(0);
         widget.model = emptyWidgetModel();
@@ -870,6 +944,7 @@ export default class PromptheusExtension extends Extension {
         if (!widget)
             return;
         this._widget = null;
+        widget.selection?.finish('cancelled');
         global.compositor.enable_unredirect();
         this._endWidgetDrag(widget);
         this._closeDropdown(widget);
@@ -932,6 +1007,7 @@ export default class PromptheusExtension extends Extension {
             retryLabel: null,
             retryId: 0,
             dragId: 0,
+            selection: null,
         };
         widget.itemsRow.visible = false;
         widget.row2.style += ' spacing: 6px;';
@@ -1201,7 +1277,8 @@ export default class PromptheusExtension extends Extension {
     }
 
     _widgetButton(child, onClick,
-        baseStyle = `width: ${WIDGET_BUTTON_SIZE}px; height: ${WIDGET_BUTTON_SIZE}px; border-radius: ${WIDGET_BUTTON_SIZE / 2}px;`) {
+        baseStyle = `width: ${WIDGET_BUTTON_SIZE}px; height: ${WIDGET_BUTTON_SIZE}px; border-radius: ${WIDGET_BUTTON_SIZE / 2}px;`,
+        isHeld = () => false) {
         const button = new St.Button({
             can_focus: false,
             reactive: true,
@@ -1210,11 +1287,23 @@ export default class PromptheusExtension extends Extension {
             style: baseStyle,
             child,
         });
-        button.connect('notify::hover', () => {
-            button.style = `${baseStyle} background-color: ${button.hover ? WIDGET_BUTTON_HOVER : 'transparent'};`;
-        });
+        const paint = () => {
+            button.style = `${baseStyle} background-color: ${button.hover || isHeld() ? WIDGET_BUTTON_HOVER : 'transparent'};`;
+        };
+        button.connect('notify::hover', paint);
+        if (isHeld())
+            paint();
         button.connect('clicked', onClick);
         return button;
+    }
+
+    _selectTextButton(widget) {
+        return this._widgetButton(this._widgetIcon('select-text'), () => {
+            if (widget.selection)
+                this._cancelSelectionWaiting(widget);
+            else
+                this._emitRecordingWidgetAction('select_text');
+        }, undefined, () => !!widget.selection);
     }
 
     _widgetActionButton(iconName, action, hoverIconName = iconName) {
@@ -1234,6 +1323,7 @@ export default class PromptheusExtension extends Extension {
         const {selectedLabel, locked, stopChatDestination} = widget.model;
         const interactive = !locked && widget.state !== 'done';
         if (!interactive) {
+            widget.selection?.finish('cancelled');
             this._closeDropdown(widget);
             widget.row2.style = `height: ${WIDGET_ROW_HEIGHT}px; padding: 0 ${WIDGET_PADDING_X}px;`;
             widget.row2.add_child(new St.Label({
@@ -1249,14 +1339,18 @@ export default class PromptheusExtension extends Extension {
             `padding: 0 ${WIDGET_PADDING_X}px 0 ${WIDGET_PADDING_X - WIDGET_TARGET_PADDING_X}px;`;
         const content = new St.BoxLayout({style: 'spacing: 4px;'});
         content.opacity = WIDGET_WAVE_OPACITY;
-        content.add_child(new St.Label({text: selectedLabel, y_align: Clutter.ActorAlign.CENTER}));
-        content.add_child(this._widgetIcon('chevrons-up-down', 14));
-        const target = this._widgetButton(content, () => this._toggleDropdown(widget),
+        const waiting = !!widget.selection;
+        content.add_child(new St.Label({text: waiting ? 'Select text…' : selectedLabel, y_align: Clutter.ActorAlign.CENTER}));
+        if (!waiting)
+            content.add_child(this._widgetIcon('chevrons-up-down', 14));
+        const target = this._widgetButton(content,
+            () => waiting ? this._cancelSelectionWaiting(widget) : this._toggleDropdown(widget),
             `height: 28px; border-radius: 14px; padding: 0 ${WIDGET_TARGET_PADDING_X}px;`);
         widget.row2.add_child(target);
         widget.row2.add_child(this._widgetActions(
             this._tooltipButton(widget, this._widgetActionButton('screenshot', 'screenshot'),
                 'Add screen area to context'),
+            this._tooltipButton(widget, this._selectTextButton(widget), 'Add selected text to context'),
             this._tooltipButton(widget, this._widgetActionButton('paste', 'paste'),
                 'Add clipboard to context'),
             this._tooltipButton(widget,

@@ -89,6 +89,16 @@ pub async fn capture_screenshot_into_recording_widget(app: AppHandle) -> crate::
     session::capture_screenshot_into_recording_widget(app).await
 }
 
+#[tauri::command]
+pub async fn capture_selection_into_recording_widget(app: AppHandle) -> crate::Result<()> {
+    session::capture_selection_into_recording_widget(app).await
+}
+
+#[tauri::command]
+pub fn cancel_recording_widget_selection() {
+    session::cancel_recording_widget_selection();
+}
+
 #[derive(Serialize)]
 pub struct RecordingState {
     is_recording: bool,

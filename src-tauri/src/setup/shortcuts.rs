@@ -227,6 +227,7 @@ async fn run_widget_action(app: tauri::AppHandle, action: &str) {
         "cancel" => speech::cancel_speech_recording(app).await,
         "paste" => speech::paste_into_recording_widget(app).await,
         "screenshot" => speech::capture_screenshot_into_recording_widget(app).await,
+        "select_text" => speech::capture_selection_into_recording_widget(app).await,
         other => {
             log::warn!("unknown recording widget action: {other}");
             return;

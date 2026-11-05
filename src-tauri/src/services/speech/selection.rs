@@ -6,6 +6,22 @@ mod macos;
 #[cfg(target_os = "macos")]
 pub use macos::capture as capture_macos;
 
+#[cfg(target_os = "linux")]
+pub async fn capture_gnome() -> Option<String> {
+    let reply = async { crate::services::gnome_shell::proxy().await?.capture_selection().await }.await;
+    match reply {
+        Ok((outcome, text)) if outcome == "captured" => Some(text),
+        Ok((outcome, _)) => {
+            log::debug!("selection not captured: {outcome}");
+            None
+        }
+        Err(e) => {
+            log::warn!("CaptureSelection failed: {e}");
+            None
+        }
+    }
+}
+
 pub const POLL_INTERVAL_MS: u64 = 30;
 pub const MIN_DRAG_PX: f64 = 3.0;
 pub const DOUBLE_CLICK_MS: u64 = 500;

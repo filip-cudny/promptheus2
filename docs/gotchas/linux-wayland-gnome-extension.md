@@ -30,8 +30,9 @@ Interface `com.promptheus.Shell`, object `/com/promptheus/Shell`, served by `org
 | `UpdateRecordingWidgetModel` | `(a(ss) targets, s selected_id, s selected_label, b target_locked, a(ussss) items, u item_rows, t context_version, i x, i y, s stop_chat_destination) → ()` | pill model from the backend: `stop_chat_destination` is empty for the in-app chat, else `Claude Desktop` or `Claude` (stop + chat shows the Claude icon and "Stop and send to …"); `targets` are `(id, label)`, `items` are `(index, kind "text"\|"image", label, preview, image_path)` (`preview`: text up to 300 chars + `…`, empty for images; `image_path`: absolute PNG thumbnail path, empty for text or when writing failed); the pill moves to `(x, y)` (already clamped by Rust, the extension never clamps) and resizes to 264 × 72 plus `widgetItemsHeight(item_rows)` (0 rows → 0, else rows × 22 + (rows − 1) × 4 + 10; `item_rows` 0..3); throws when no widget is shown |
 | `HideRecordingWidget` | `() → ()` | remove the widget |
 | `CaptureArea` | `(s path) → s` | hide the pill, let the user drag a screen rectangle, write it as PNG to `path`, show the pill again; `captured` or `cancelled` (see "CaptureArea" below) |
+| `CaptureSelection` | `() → (s outcome, s text)` | wait for text the user selects in another app after the call (`captured` with the text, `cancelled`; see "CaptureSelection" below) |
 | `ShortcutActivated` | signal `s action` | an accelerator fired |
-| `RecordingWidgetAction` | signal `s action` | widget button pressed: `pause`, `resume`, `stop`, `cancel`, `paste`, `screenshot` or `stop_chat`; `cancel` also stops a running transcription retry |
+| `RecordingWidgetAction` | signal `s action` | widget button pressed: `pause`, `resume`, `stop`, `cancel`, `paste`, `screenshot`, `select_text` or `stop_chat`; `cancel` also stops a running transcription retry |
 | `RecordingWidgetTargetSelected` | signal `s id` | a dropdown row was clicked |
 | `RecordingWidgetItemRemoved` | signal `(u index, t context_version)` | the × of an item chip was clicked (only before the target lock); `context_version` is the one from the last model |
 | `RecordingWidgetMoved` | signal `(i x, i y, i work_x, i work_y, i work_width, i work_height)` | drag released after the pointer moved more than 4 px: pill origin and the work area of the monitor it was dropped on, logical stage pixels |
@@ -156,6 +157,20 @@ Steps:
 4. In every outcome (captured, cancelled, error) show the current `this._widget?.actor`, never the actor taken at the start: `HideRecordingWidget` during the selection destroys it and a new `ShowRecordingWidget` may build another.
 
 The coordinates are stage coordinates in logical pixels, passed unscaled; `screenshot_area` takes `gint32`. Source checked: GNOME Shell 50.1 `ScreenshotAreaAsync` (`screenshot.js`) validates the area against `global.screen_width` x `global.screen_height`, which are stage-sized. The PNG resolution on a scaled monitor is chosen by Shell (not read from any source here; the live run on a scaled monitor decides it). The same `ScreenshotAreaAsync` multiplies the caller's area by `St.ThemeContext.get_for_stage(global.stage).scale_factor` before the check; if the live run on a scaled monitor shows a wrong area, apply that factor in `_writeAreaPng`. The log carries the outcome and the rectangle size only.
+
+## CaptureSelection (pill select text)
+
+`CaptureSelection() → (s outcome, s text)` (`captured`, `cancelled`). The backend calls it for the `select_text` action on a fresh proxy with no widget lock held, so the call lasts until a selection arrives or a cancel path resolves it. The extension receives no input events of other apps' surfaces (Mutter stops them before the stage), so it watches the PRIMARY selection instead.
+
+Steps:
+1. `widget.selection = {finish}` holds the pending call; a second call resolves the first as `cancelled`. Row 2 is rebuilt: label `Select text…`, no chevron, the select-text button keeps the hover background.
+2. `global.display.get_selection()` `owner-changed` with `Meta.SelectionType.SELECTION_PRIMARY` and a source whose `get_mimetypes()` contains `text/plain;charset=utf-8`, `text/plain`, `UTF8_STRING`, `STRING` or `TEXT`.
+3. Poll `global.get_pointer()` every 30 ms (`SELECTION_POLL_MS`) until `BUTTON1_MASK` and `SHIFT_MASK` are both up (the selection is final after the drag or Shift+arrow ends), wait 150 ms (`SELECTION_SETTLE_MS`), read `St.Clipboard.get_default().get_text(St.ClipboardType.PRIMARY, …)`.
+4. Null or empty text keeps waiting for the next `owner-changed`; otherwise `finish('captured', text)`.
+
+Cancel paths, each resolving `cancelled` exactly once (`finish` is idempotent, disconnects the `owner-changed` handler and removes the poll or settle timeout): a click on the select-text button while waiting (resolved locally, no action emitted), a click on the target label while waiting (opens no dropdown), `ShowRecordingWidget` (reuses the widget), `_removeRecordingWidget` (also from `disable()`), and `_fillRow2` building a non-interactive row (target lock through `UpdateRecordingWidgetModel`, state `done`). zbus sets no method timeout, so an unresolved call would leave the Rust task pending forever. There is no Esc and no timeout. The log carries the outcome and the text length only.
+
+Accepted limits: a GTK entry claims PRIMARY again on focus-in (Alt+Tab after the click), which counts as a selection when its text is non-empty; apps that never set PRIMARY (canvas apps) cannot be captured. Inferred from Mutter and GTK source; the live run confirms it.
 
 ## When to load this file
 

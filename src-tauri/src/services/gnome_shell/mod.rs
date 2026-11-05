@@ -23,6 +23,8 @@ pub trait Shell {
 
     fn capture_area(&self, path: &str) -> zbus::Result<String>;
 
+    fn capture_selection(&self) -> zbus::Result<(String, String)>;
+
     fn show_toast(
         &self,
         level: &str,

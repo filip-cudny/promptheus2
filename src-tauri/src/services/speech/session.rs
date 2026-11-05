@@ -22,7 +22,7 @@ use crate::services::speech::widget::{
     configured_claude_target, configured_providers, configured_stop_chat_target, pill_targets, RecordingWidget, Transport,
 };
 use crate::services::speech::{
-    self, claude_desktop, screenshot, webview_provider_of, AudioClipStore, PendingOrigin, PendingPrompt, SpeechError,
+    self, claude_desktop, screenshot, selection, webview_provider_of, AudioClipStore, PendingOrigin, PendingPrompt, SpeechError,
     SpeechService, SttOptions,
 };
 use crate::services::sqlite_history::SqliteHistoryService;
@@ -1288,6 +1288,51 @@ pub async fn capture_screenshot_into_recording_widget(app: AppHandle) -> crate::
         .await
         .append_item(PastedItem::Image(data, "image/png".into()));
     crate::commands::context::emit_context_changed(&app)
+}
+
+pub async fn capture_selection_into_recording_widget(app: AppHandle) -> crate::Result<()> {
+    log::debug!("recording widget intent: select text");
+    let widget = app.state::<RecordingWidget>();
+    let Some((transport, generation)) = widget.shown_generation().await else {
+        log::debug!("recording widget intent select text ignored: widget not shown");
+        return Ok(());
+    };
+    if !screenshot::keep_capture(generation, Some(generation), target_locked(&app).await) {
+        log::debug!("recording widget intent select text ignored: target locked");
+        return Ok(());
+    }
+
+    let text = match transport {
+        #[cfg(target_os = "linux")]
+        Transport::Shell => selection::capture_gnome().await,
+        #[cfg(target_os = "macos")]
+        Transport::Window => selection::capture_macos(&app, generation, selection::begin()).await,
+        #[cfg(not(target_os = "macos"))]
+        Transport::Window => {
+            log::debug!("select text unsupported on this session");
+            return Ok(());
+        }
+    };
+
+    let current_generation = widget.shown_generation().await.map(|(_, generation)| generation);
+    if !screenshot::keep_capture(generation, current_generation, target_locked(&app).await) {
+        log::debug!("selection dropped: pill changed");
+        return Ok(());
+    }
+    let Some(text) = text.filter(|text| !text.is_empty()) else {
+        return Ok(());
+    };
+    log::debug!("selection captured: {} chars", text.chars().count());
+    app.state::<Arc<Mutex<ContextManagerService>>>()
+        .lock()
+        .await
+        .append_item(PastedItem::Text(text));
+    crate::commands::context::emit_context_changed(&app)
+}
+
+pub fn cancel_recording_widget_selection() {
+    log::debug!("recording widget intent: cancel select text");
+    selection::cancel();
 }
 
 async fn target_locked(app: &AppHandle) -> bool {

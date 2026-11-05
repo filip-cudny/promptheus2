@@ -15,7 +15,7 @@
     Type,
     X,
   } from "lucide-svelte";
-  import { ScanSquare } from "lucide-static";
+  import { ScanSquare, TextSelect } from "lucide-static";
   import { isMac } from "$lib/utils/platform";
   import claudeIcon from "$lib/icons/providers/claude.svg?raw";
   import chatgptIcon from "$lib/icons/providers/chatgpt.svg?raw";
@@ -203,6 +203,18 @@
   function runAction(command: string) {
     hideTooltip();
     return run(command);
+  }
+
+  let selecting = $state(false);
+
+  async function toggleSelecting() {
+    if (selecting) {
+      await run("cancel_recording_widget_selection");
+      return;
+    }
+    selecting = true;
+    await runAction("capture_selection_into_recording_widget");
+    selecting = false;
   }
 
   function enqueuePreviewCall(task: () => Promise<void>) {
@@ -503,10 +515,12 @@
           class="target"
           tabindex="-1"
           aria-label="Target"
-          onclick={() => (dropdownOpen ? closeDropdown() : openDropdown())}
+          onclick={() => (selecting ? run("cancel_recording_widget_selection") : dropdownOpen ? closeDropdown() : openDropdown())}
         >
-          <span class="label">{model.selectedLabel}</span>
-          <ChevronsUpDown size={14} />
+          <span class="label">{selecting ? "Select text…" : model.selectedLabel}</span>
+          {#if !selecting}
+            <ChevronsUpDown size={14} />
+          {/if}
         </button>
         <div class="actions">
           {#if isMac}
@@ -518,6 +532,16 @@
               onclick={() => runAction("capture_screenshot_into_recording_widget")}
             >
               <span class="option-icon" style:--icon-size="{ACTION_ICON_SIZE}px" aria-hidden="true">{@html ScanSquare}</span>
+            </button>
+            <button
+              type="button"
+              class:selecting
+              tabindex="-1"
+              aria-label="Select text"
+              data-tooltip="Add selected text to context"
+              onclick={toggleSelecting}
+            >
+              <span class="option-icon" style:--icon-size="{ACTION_ICON_SIZE}px" aria-hidden="true">{@html TextSelect}</span>
             </button>
           {/if}
           <button
@@ -848,6 +872,7 @@
   }
 
   button:hover,
+  button.selecting,
   button:global(.hover) {
     background: #3a3a3c;
   }
