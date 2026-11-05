@@ -67,31 +67,40 @@
     }
   }
 
-  let recentTimer: ReturnType<typeof setTimeout> | undefined;
-  let pendingRecent: number | null = null;
+  type DebouncedKey = "recent_apps_count" | "menu_digit_select_delay_ms";
 
-  function flushRecentApps() {
-    clearTimeout(recentTimer);
-    if (pendingRecent === null) return;
-    const n = pendingRecent;
-    pendingRecent = null;
-    void run("update recent_apps_count", () => updateSetting("recent_apps_count", n));
+  const timers: Partial<Record<DebouncedKey, ReturnType<typeof setTimeout>>> = {};
+  const pending: Partial<Record<DebouncedKey, number>> = {};
+
+  function flush(key: DebouncedKey) {
+    clearTimeout(timers[key]);
+    const n = pending[key];
+    if (n === undefined) return;
+    delete pending[key];
+    void run(`update ${key}`, () => updateSetting(key, n));
   }
 
-  onDestroy(flushRecentApps);
+  function debounceSave(key: DebouncedKey, n: number) {
+    clearTimeout(timers[key]);
+    pending[key] = n;
+    timers[key] = setTimeout(() => flush(key), store.settings?.autosave_debounce_ms ?? 1000);
+  }
+
+  onDestroy(() => {
+    flush("recent_apps_count");
+    flush("menu_digit_select_delay_ms");
+  });
 
   function saveDigitDelay(e: Event) {
     const n = Math.floor(Number((e.currentTarget as HTMLInputElement).value));
     if (n < 100 || n > 1000) return;
-    void run("update menu_digit_select_delay_ms", () => updateSetting("menu_digit_select_delay_ms", n));
+    debounceSave("menu_digit_select_delay_ms", n);
   }
 
   function saveRecentApps(e: Event) {
     const n = Math.max(0, Math.floor(Number((e.currentTarget as HTMLInputElement).value)));
     if (!Number.isFinite(n)) return;
-    clearTimeout(recentTimer);
-    pendingRecent = n;
-    recentTimer = setTimeout(flushRecentApps, store.settings?.autosave_debounce_ms ?? 1000);
+    debounceSave("recent_apps_count", n);
   }
 
   let dragIndex = $state<number | null>(null);

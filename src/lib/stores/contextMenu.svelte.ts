@@ -366,7 +366,8 @@ async function startAlternativeExecution(index: number) {
 async function readDigitDelayMs(): Promise<number> {
   try {
     return (await getSettings()).menu_digit_select_delay_ms ?? DEFAULT_DIGIT_DELAY_MS;
-  } catch {
+  } catch (e) {
+    warn("Failed to read menu_digit_select_delay_ms, using default: " + e);
     return DEFAULT_DIGIT_DELAY_MS;
   }
 }
