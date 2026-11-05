@@ -123,7 +123,7 @@ pub const ENTRIES: &[CatalogEntry] = &[
     restart("mcp_servers.*.command", McpServers, "Command", "Executable that starts the MCP server.", TEXT),
     restart("mcp_servers.*.args", McpServers, "Arguments", "Command-line arguments passed to the server.", Kind::List),
     restart("mcp_servers.*.env", McpServers, "Environment", "Environment variables set for the server process.", Kind::Map),
-    restart("mcp_servers.*.timeout_secs", McpServers, "Timeout (seconds)", "Default time a tool call may take before it is abandoned.", int(Some(0), None)),
+    restart("mcp_servers.*.timeout_secs", McpServers, "Timeout (seconds)", "Default time a tool call may take before it is abandoned.", int(None, None)),
     restart("mcp_servers.*.tool_timeouts", McpServers, "Tool timeouts", "Per-tool timeouts in seconds that override the server default.", Kind::Map),
     live("surfaces.chat.generation.model_id", Chat, "Chat model", "Model used for chat conversations.", TEXT_MODEL),
     live("surfaces.chat.generation.parameters.reasoning_effort", Chat, "Reasoning effort", "How much reasoning the chat model spends on a reply, where the model supports it.", TEXT),
@@ -154,13 +154,6 @@ pub const ENTRIES: &[CatalogEntry] = &[
     live("keymaps.speech_to_text_toggle", Speech, "Toggle speech to text", "Global shortcut that starts and stops a recording.", Kind::Shortcut),
 ];
 
-const GENERATION_PARAMETERS: [&str; 2] = [
-    "surfaces.chat.generation.parameters",
-    "surfaces.quick_actions.generation.parameters",
-];
-const FILE_ONLY_PARAMETERS: [&str; 5] =
-    ["temperature", "max_tokens", "top_p", "frequency_penalty", "presence_penalty"];
-
 pub const FILE_ONLY: &[&str] = &[
     "autosave_debounce_ms",
     "prompt_base.system",
@@ -174,6 +167,16 @@ pub const FILE_ONLY: &[&str] = &[
     "keymaps[].context",
     "models[].id",
     "webview_providers[].id",
+    "surfaces.chat.generation.parameters.temperature",
+    "surfaces.chat.generation.parameters.max_tokens",
+    "surfaces.chat.generation.parameters.top_p",
+    "surfaces.chat.generation.parameters.frequency_penalty",
+    "surfaces.chat.generation.parameters.presence_penalty",
+    "surfaces.quick_actions.generation.parameters.temperature",
+    "surfaces.quick_actions.generation.parameters.max_tokens",
+    "surfaces.quick_actions.generation.parameters.top_p",
+    "surfaces.quick_actions.generation.parameters.frequency_penalty",
+    "surfaces.quick_actions.generation.parameters.presence_penalty",
 ];
 
 const OPAQUE: &[&str] = &[
@@ -216,15 +219,6 @@ pub fn catalog_path(concrete: &str) -> String {
     }
 }
 
-fn is_file_only(leaf: &str) -> bool {
-    FILE_ONLY.contains(&leaf)
-        || GENERATION_PARAMETERS.iter().any(|base| {
-            leaf.strip_prefix(base)
-                .and_then(|rest| rest.strip_prefix('.'))
-                .is_some_and(|name| FILE_ONLY_PARAMETERS.contains(&name))
-        })
-}
-
 fn has_entry(key: &str) -> bool {
     ENTRIES.iter().any(|e| e.key == key)
 }
@@ -233,7 +227,7 @@ fn is_covered(leaf: &str) -> bool {
     if leaf == "keymaps[].bindings" {
         return KEYMAP_ACTIONS.iter().all(|a| has_entry(&format!("keymaps.{a}")));
     }
-    has_entry(leaf) || is_file_only(leaf)
+    has_entry(leaf) || FILE_ONLY.contains(&leaf)
 }
 
 fn collect_leaves(value: &Value, path: &str, out: &mut Vec<String>) {
@@ -368,7 +362,7 @@ mod tests {
         let mut seen = std::collections::HashSet::new();
         for entry in ENTRIES {
             assert!(seen.insert(entry.key), "duplicate entry {}", entry.key);
-            assert!(!is_file_only(entry.key), "{} is also file-only", entry.key);
+            assert!(!FILE_ONLY.contains(&entry.key), "{} is also file-only", entry.key);
         }
     }
 
