@@ -1,11 +1,13 @@
 import { onSettingsChanged } from "$lib/services/events";
-import { getSettings } from "$lib/services/settings";
+import { getSettings, parseSettingError } from "$lib/services/settings";
 import { SURFACE_ORDER } from "$lib/constants/surfaces";
 import type { Settings, ModelConfig, SurfaceKind } from "$lib/types";
 
 let settings = $state.raw<Settings | null>(null);
 let loading = $state(false);
 let error = $state<string | null>(null);
+let fieldErrors = $state<Record<string, string>>({});
+let toastError = $state<string | null>(null);
 let unlisten: (() => void) | null = null;
 let refreshInFlight: Promise<void> | null = null;
 
@@ -74,6 +76,27 @@ function destroy() {
   }
 }
 
+function fieldError(key: string): string | undefined {
+  return fieldErrors[key];
+}
+
+function reportWriteError(e: unknown) {
+  const { key, message } = parseSettingError(e);
+  if (key) {
+    fieldErrors = { ...fieldErrors, [key]: message };
+  } else {
+    toastError = message;
+  }
+}
+
+function clearFieldErrors() {
+  fieldErrors = {};
+}
+
+function dismissToast() {
+  toastError = null;
+}
+
 function getModel(id: string | null): ModelConfig | null {
   if (!id) return null;
   return models.find((m) => m.id === id) ?? null;
@@ -103,6 +126,16 @@ export function getSettingsStore() {
     get surfacesByModel() {
       return surfacesByModel;
     },
+    get fieldErrors() {
+      return fieldErrors;
+    },
+    get toastError() {
+      return toastError;
+    },
+    fieldError,
+    reportWriteError,
+    clearFieldErrors,
+    dismissToast,
     init,
     refresh,
     destroy,

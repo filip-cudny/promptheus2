@@ -26,6 +26,7 @@
     prefetchCapabilities,
     getCachedCapabilities,
   } from "$lib/stores/capabilities.svelte";
+  import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { checkEnvVar } from "$lib/services/settingsDialog";
   import { generateId } from "$lib/utils/id";
   import {
@@ -53,6 +54,15 @@
     onDeleted: () => void;
     onDuplicated: (id: string) => void;
   } = $props();
+
+  const settingsStore = getSettingsStore();
+
+  function errorFor(field: string): string | undefined {
+    return (
+      validationErrors[field] ??
+      settingsStore.fieldError(`models[${model.id}].${field}`)
+    );
+  }
 
   const surfacesLabel = $derived(formatSurfaceList(surfaces));
 
@@ -298,11 +308,11 @@
   <section class="card">
     <h3>Basic</h3>
 
-    <FormRow label="Display name" error={validationErrors.display_name}>
+    <FormRow label="Display name" error={errorFor("display_name")}>
       <input
         id="display_name"
         type="text"
-        class:error={validationErrors.display_name}
+        class:error={errorFor("display_name")}
         value={draft.display_name}
         oninput={(e) => {
           draft.display_name = (e.target as HTMLInputElement).value;
@@ -311,12 +321,12 @@
       />
     </FormRow>
 
-    <FormRow label="Model" error={validationErrors.model}>
+    <FormRow label="Model" error={errorFor("model")}>
       <input
         id="model_id"
         type="text"
         placeholder="gpt-4.1-mini"
-        class:error={validationErrors.model}
+        class:error={errorFor("model")}
         value={draft.model}
         oninput={(e) => {
           draft.model = (e.target as HTMLInputElement).value;
@@ -407,13 +417,17 @@
       {#if envVarName}
         <EnvRefChip varName={envVarName} resolved={envResolved} />
       {/if}
+      {#if errorFor("api_key")}
+        <p class="field-error">{errorFor("api_key")}</p>
+      {/if}
     </div>
 
-    <FormRow label="Base URL">
+    <FormRow label="Base URL" error={errorFor("base_url")}>
       <input
         id="base_url"
         type="text"
         placeholder={baseUrlPlaceholder}
+        class:error={errorFor("base_url")}
         value={draft.base_url ?? ""}
         oninput={(e) => {
           const v = (e.target as HTMLInputElement).value;
@@ -618,6 +632,12 @@
 
   select {
     padding-right: var(--space-8);
+  }
+
+  .field-error {
+    font-size: var(--font-size-sm);
+    color: var(--danger);
+    margin: var(--space-0);
   }
 
   input.error {

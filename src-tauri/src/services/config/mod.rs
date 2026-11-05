@@ -32,12 +32,22 @@ pub use loader::load_env;
 pub enum ConfigError {
     #[error("Settings file not found: {0}")]
     FileNotFound(String),
-    #[error("Invalid settings: {0}")]
-    InvalidSettings(String),
+    #[error("{message}{}", key.as_ref().map(|k| format!(" (setting: {k})")).unwrap_or_default())]
+    InvalidSettings { key: Option<String>, message: String },
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
     #[error("JSON parse error: {0}")]
     JsonParse(#[from] serde_json::Error),
+}
+
+impl ConfigError {
+    pub fn invalid(message: impl Into<String>) -> Self {
+        Self::InvalidSettings { key: None, message: message.into() }
+    }
+
+    pub fn invalid_at(key: impl Into<String>, message: impl Into<String>) -> Self {
+        Self::InvalidSettings { key: Some(key.into()), message: message.into() }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, serde::Serialize)]
@@ -117,10 +127,33 @@ impl ConfigService {
         &mut self,
         f: impl FnOnce(&mut Self) -> R,
     ) -> Result<Mutated<R>, ConfigError> {
+        self.try_mutate(|service| Ok(f(service)))
+    }
+
+    pub fn try_mutate<R>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<R, ConfigError>,
+    ) -> Result<Mutated<R>, ConfigError> {
         let reloaded = self.reload_if_changed()?;
-        let value = f(self);
-        self.write()?;
-        Ok(Mutated { value, reloaded })
+        let before = self.settings.clone();
+        let outcome = f(self).and_then(|value| {
+            validate(&self.settings)?;
+            catalog::check_changed(&before, &self.settings)?;
+            Ok(value)
+        });
+        match outcome {
+            Ok(value) => {
+                self.write()?;
+                Ok(Mutated { value, reloaded })
+            }
+            Err(e) => {
+                self.settings = before;
+                if let ConfigError::InvalidSettings { key, .. } = &e {
+                    log::debug!("settings write rejected (setting: {key:?})");
+                }
+                Err(e)
+            }
+        }
     }
 
     pub fn reload(&mut self) -> Result<(), ConfigError> {
@@ -345,7 +378,7 @@ impl ConfigService {
 
     pub fn write_prompt(&self, kind: PromptKind, content: &str) -> Result<(), ConfigError> {
         let Some(path) = self.prompt_path(kind) else {
-            return Err(ConfigError::InvalidSettings(format!(
+            return Err(ConfigError::invalid(format!(
                 "no path configured for prompt kind {:?}",
                 kind
             )));

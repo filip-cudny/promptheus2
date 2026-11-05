@@ -46,86 +46,88 @@ pub(super) fn ensure_parameters(
     entry.as_object_mut().expect("parameters must be object")
 }
 
-pub(super) fn validate(settings: &Settings) -> Result<(), ConfigError> {
+pub(crate) fn validate(settings: &Settings) -> Result<(), ConfigError> {
     if settings.models.is_empty() {
-        return Err(ConfigError::InvalidSettings(
-            "At least one model must be configured".to_string(),
-        ));
+        return Err(ConfigError::invalid("At least one model must be configured"));
     }
 
     let mut seen_ids = std::collections::HashSet::new();
     for model in &settings.models {
         if model.id.is_empty() {
-            return Err(ConfigError::InvalidSettings(
-                "Each model must have an 'id' field".to_string(),
-            ));
+            return Err(ConfigError::invalid("Each model must have an 'id' field"));
         }
 
         if !seen_ids.insert(&model.id) {
-            return Err(ConfigError::InvalidSettings(format!(
+            return Err(ConfigError::invalid(format!(
                 "Duplicate model ID: '{}'",
                 model.id
             )));
         }
 
         let display = &model.display_name;
+        let key = |field: &str| format!("models[{}].{field}", model.id);
 
         if model.model.is_empty() {
-            return Err(ConfigError::InvalidSettings(format!(
-                "Model '{}' field 'model' cannot be empty",
-                display
-            )));
+            return Err(ConfigError::invalid_at(
+                key("model"),
+                format!("Model '{display}' field 'model' cannot be empty"),
+            ));
         }
 
         if model.display_name.is_empty() {
-            return Err(ConfigError::InvalidSettings(format!(
-                "Model '{}' missing required field: display_name",
-                model.id
-            )));
+            return Err(ConfigError::invalid_at(
+                key("display_name"),
+                format!("Model '{}' missing required field: display_name", model.id),
+            ));
         }
 
         if model.api_key.as_deref().unwrap_or("").is_empty() {
-            return Err(ConfigError::InvalidSettings(format!(
-                "Model '{}' requires 'api_key' (use \"${{ENV_VAR}}\" for env-based keys)",
-                display
-            )));
+            return Err(ConfigError::invalid_at(
+                key("api_key"),
+                format!(
+                    "Model '{display}' requires 'api_key' (use \"${{ENV_VAR}}\" for env-based keys)"
+                ),
+            ));
         }
 
         if let Some(ref url) = model.base_url {
             if !url.is_empty() && !url.starts_with("http://") && !url.starts_with("https://") {
-                return Err(ConfigError::InvalidSettings(format!(
-                    "Model '{}' base_url must start with http:// or https://",
-                    display
-                )));
+                return Err(ConfigError::invalid_at(
+                    key("base_url"),
+                    format!("Model '{display}' base_url must start with http:// or https://"),
+                ));
             }
         }
     }
 
     if settings.autosave_debounce_ms > 10000 {
-        return Err(ConfigError::InvalidSettings(
-            "autosave_debounce_ms must be between 0 and 10000 milliseconds".to_string(),
+        return Err(ConfigError::invalid_at(
+            "autosave_debounce_ms",
+            "autosave_debounce_ms must be between 0 and 10000 milliseconds",
         ));
     }
 
     if settings.history_retention_days > 3650 {
-        return Err(ConfigError::InvalidSettings(
-            "history_retention_days must be between 0 and 3650 days (0 = keep forever)".to_string(),
+        return Err(ConfigError::invalid_at(
+            "history_retention_days",
+            "history_retention_days must be between 0 and 3650 days (0 = keep forever)",
         ));
     }
 
     if let Some(ref stt_id) = settings.surfaces.speech_to_text.model_id {
+        let key = "surfaces.speech_to_text.model_id";
         match settings.models.iter().find(|m| &m.id == stt_id) {
             None => {
-                return Err(ConfigError::InvalidSettings(format!(
-                    "speech_to_text.model_id references unknown model id: '{}'",
-                    stt_id
-                )));
+                return Err(ConfigError::invalid_at(
+                    key,
+                    format!("speech_to_text.model_id references unknown model id: '{stt_id}'"),
+                ));
             }
             Some(m) if !m.is_stt() => {
-                return Err(ConfigError::InvalidSettings(format!(
-                    "speech_to_text.model_id '{}' must have type='stt'",
-                    stt_id
-                )));
+                return Err(ConfigError::invalid_at(
+                    key,
+                    format!("speech_to_text.model_id '{stt_id}' must have type='stt'"),
+                ));
             }
             _ => {}
         }
@@ -140,47 +142,47 @@ fn validate_webview_providers(settings: &Settings) -> Result<(), ConfigError> {
     let mut seen = std::collections::HashSet::new();
     for provider in &settings.webview_providers {
         if provider.id.is_empty() {
-            return Err(ConfigError::InvalidSettings(
-                "webview_providers entry missing 'id'".to_string(),
-            ));
+            return Err(ConfigError::invalid("webview_providers entry missing 'id'"));
         }
+        let key = |field: &str| format!("webview_providers[{}].{field}", provider.id);
         if !provider
             .id
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
         {
-            return Err(ConfigError::InvalidSettings(format!(
+            return Err(ConfigError::invalid(format!(
                 "webview_providers id '{}' must match [a-zA-Z0-9_-]+",
                 provider.id
             )));
         }
         if !seen.insert(provider.id.clone()) {
-            return Err(ConfigError::InvalidSettings(format!(
+            return Err(ConfigError::invalid(format!(
                 "Duplicate webview_providers id: '{}'",
                 provider.id
             )));
         }
         if provider.name.is_empty() {
-            return Err(ConfigError::InvalidSettings(format!(
-                "webview_providers '{}' has empty 'name'",
-                provider.id
-            )));
+            return Err(ConfigError::invalid_at(
+                key("name"),
+                format!("webview_providers '{}' has empty 'name'", provider.id),
+            ));
         }
         match tauri::Url::parse(&provider.url) {
-            Ok(parsed) => {
-                let scheme = parsed.scheme();
-                if scheme != "http" && scheme != "https" {
-                    return Err(ConfigError::InvalidSettings(format!(
+            Ok(parsed) if matches!(parsed.scheme(), "http" | "https") => {}
+            Ok(_) => {
+                return Err(ConfigError::invalid_at(
+                    key("url"),
+                    format!(
                         "webview_providers '{}' url must use http or https scheme",
                         provider.id
-                    )));
-                }
+                    ),
+                ));
             }
             Err(e) => {
-                return Err(ConfigError::InvalidSettings(format!(
-                    "webview_providers '{}' has invalid url: {}",
-                    provider.id, e
-                )));
+                return Err(ConfigError::invalid_at(
+                    key("url"),
+                    format!("webview_providers '{}' has invalid url: {e}", provider.id),
+                ));
             }
         }
     }

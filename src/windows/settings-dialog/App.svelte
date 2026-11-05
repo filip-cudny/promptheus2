@@ -6,6 +6,7 @@
     type SettingsSection,
   } from "$lib/components/features/settings/SettingsSidebar.svelte";
   import SettingsContent from "$lib/components/features/settings/SettingsContent.svelte";
+  import SettingsErrorToast from "$lib/components/features/settings/SettingsErrorToast.svelte";
 
   const store = getSettingsStore();
 
@@ -28,6 +29,7 @@
 <div class="dialog-shell">
   <SettingsSidebar bind:active={activeSection} />
   <SettingsContent {activeSection} />
+  <SettingsErrorToast />
 </div>
 
 <style>

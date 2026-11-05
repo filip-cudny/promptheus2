@@ -889,3 +889,75 @@ fn test_removed_settings_keys_leave_the_file_on_load() {
     ConfigService::load(dir.path()).expect("reload");
     assert_eq!(fs::read_to_string(&path).unwrap(), first);
 }
+
+fn first_model_id(service: &ConfigService) -> String {
+    service.settings().models[0].id.clone()
+}
+
+#[test]
+fn mutate_rejects_empty_model_without_writing() {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+    let id = first_model_id(&service);
+    let bytes_before = fs::read(dir.path().join("settings.json")).unwrap();
+    let settings_before = serde_json::to_value(service.settings()).unwrap();
+
+    let err = service
+        .mutate(|s| s.settings.models[0].model = String::new())
+        .unwrap_err();
+
+    match err {
+        ConfigError::InvalidSettings { key, .. } => {
+            assert_eq!(key, Some(format!("models[{id}].model")));
+        }
+        other => panic!("unexpected error: {other}"),
+    }
+    assert_eq!(fs::read(dir.path().join("settings.json")).unwrap(), bytes_before);
+    assert_eq!(serde_json::to_value(service.settings()).unwrap(), settings_before);
+}
+
+#[test]
+fn mutate_writes_valid_added_model() {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+
+    service
+        .mutate(|s| s.add_model(test_model("second", "${KEY}")))
+        .expect("mutate");
+
+    let ids = model_ids(&read_json(&dir.path().join("settings.json")));
+    assert!(ids.contains(&"second".to_string()), "{ids:?}");
+}
+
+#[test]
+fn try_mutate_error_leaves_file_and_settings_unchanged() {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+    let bytes_before = fs::read(dir.path().join("settings.json")).unwrap();
+    let settings_before = serde_json::to_value(service.settings()).unwrap();
+
+    let result: Result<Mutated<()>, ConfigError> = service.try_mutate(|s| {
+        s.update_setting("theme", serde_json::json!("light"));
+        Err(ConfigError::invalid("nope"))
+    });
+
+    assert!(result.is_err());
+    assert_eq!(fs::read(dir.path().join("settings.json")).unwrap(), bytes_before);
+    assert_eq!(serde_json::to_value(service.settings()).unwrap(), settings_before);
+}
+
+#[test]
+fn check_changed_rejects_out_of_range_retention() {
+    let before = Settings::default();
+    let mut after = before.clone();
+    after.history_retention_days = 4000;
+
+    let err = catalog::check_changed(&before, &after).unwrap_err();
+
+    match err {
+        ConfigError::InvalidSettings { key, .. } => {
+            assert_eq!(key.as_deref(), Some("history_retention_days"));
+        }
+        other => panic!("unexpected error: {other}"),
+    }
+}

@@ -108,9 +108,10 @@ impl<'a> PromptStore<'a> {
 
     pub fn resolve(&self, raw_path: &str) -> Result<PathBuf, ConfigError> {
         let path = resolve_config_relative(raw_path, self.config_dir).map_err(|e| match e {
-            ConfigError::InvalidSettings(msg) => {
-                ConfigError::InvalidSettings(format!("prompt {msg}"))
-            }
+            ConfigError::InvalidSettings { key, message } => ConfigError::InvalidSettings {
+                key,
+                message: format!("prompt {message}"),
+            },
             other => other,
         })?;
 
@@ -120,7 +121,7 @@ impl<'a> PromptStore<'a> {
             .map(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("markdown"))
             .unwrap_or(false);
         if !ext_ok {
-            return Err(ConfigError::InvalidSettings(format!(
+            return Err(ConfigError::invalid(format!(
                 "prompt path must end with .md or .markdown: '{}'",
                 path.display()
             )));

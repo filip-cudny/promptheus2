@@ -8,6 +8,34 @@ import type {
   CatalogEntry,
 } from "$lib/types";
 import { invalidateCapabilities } from "$lib/stores/capabilities.svelte";
+import { getSettingsStore } from "$lib/stores/settings.svelte";
+
+const SETTING_SUFFIX = /^([\s\S]*) \(setting: (.+)\)$/;
+
+export function parseSettingError(e: unknown): {
+  key: string | null;
+  message: string;
+} {
+  const text = e instanceof Error ? e.message : String(e);
+  const match = SETTING_SUFFIX.exec(text);
+  return match
+    ? { key: match[2], message: match[1] }
+    : { key: null, message: text };
+}
+
+async function invokeWrite(
+  command: string,
+  args: Record<string, unknown>,
+): Promise<void> {
+  const store = getSettingsStore();
+  try {
+    await invoke(command, args);
+  } catch (e) {
+    store.reportWriteError(e);
+    throw e;
+  }
+  store.clearFieldErrors();
+}
 
 export async function getSettings(): Promise<Settings> {
   return invoke("get_settings");
@@ -21,14 +49,14 @@ export async function updateSetting(
   key: string,
   value: unknown,
 ): Promise<void> {
-  return invoke("update_setting", { key, value });
+  return invokeWrite("update_setting", { key, value });
 }
 
 export async function updateSurfaceModel(
   surface: SurfaceKind,
   modelId: string | null,
 ): Promise<void> {
-  return invoke("update_surface_model", { surface, modelId });
+  return invokeWrite("update_surface_model", { surface, modelId });
 }
 
 export async function updateSurfaceParameter(
@@ -36,7 +64,7 @@ export async function updateSurfaceParameter(
   key: string,
   value: unknown,
 ): Promise<void> {
-  return invoke("update_surface_parameter", { surface, key, value });
+  return invokeWrite("update_surface_parameter", { surface, key, value });
 }
 
 export async function updateSurfaceReasoningEffort(
@@ -50,13 +78,13 @@ export async function updateSurfaceEnabledTools(
   surface: SurfaceKind,
   tools: string[],
 ): Promise<void> {
-  return invoke("update_surface_enabled_tools", { surface, tools });
+  return invokeWrite("update_surface_enabled_tools", { surface, tools });
 }
 
 export async function updateSpeechToTextConfig(
   config: SpeechToTextConfig,
 ): Promise<void> {
-  return invoke("update_speech_to_text_config", { config });
+  return invokeWrite("update_speech_to_text_config", { config });
 }
 
 export async function setSpeechToTextModel(
@@ -66,28 +94,28 @@ export async function setSpeechToTextModel(
 }
 
 export async function addModel(config: ModelConfig): Promise<void> {
-  return invoke("add_model", { config });
+  return invokeWrite("add_model", { config });
 }
 
 export async function updateModel(
   modelId: string,
   config: ModelConfig,
 ): Promise<void> {
-  await invoke("update_model", { modelId, config });
+  await invokeWrite("update_model", { modelId, config });
   invalidateCapabilities(modelId);
 }
 
 export async function deleteModel(modelId: string): Promise<void> {
-  await invoke("delete_model", { modelId });
+  await invokeWrite("delete_model", { modelId });
   invalidateCapabilities(modelId);
 }
 
 export async function updateNotifications(
   config: NotificationSettings,
 ): Promise<void> {
-  return invoke("update_notifications", { config });
+  return invokeWrite("update_notifications", { config });
 }
 
 export async function updateHistoryRetention(days: number): Promise<void> {
-  return invoke("update_history_retention", { days });
+  return invokeWrite("update_history_retention", { days });
 }

@@ -1,5 +1,10 @@
+use std::collections::HashMap;
+
 use serde::Serialize;
 use serde_json::Value;
+
+use super::ConfigError;
+use crate::models::settings::Settings;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -268,6 +273,76 @@ pub fn uncovered_leaves(value: &Value) -> Vec<String> {
     leaves.sort();
     leaves.dedup();
     leaves
+}
+
+fn concrete_leaves<'a>(value: &'a Value, path: &str, out: &mut HashMap<String, &'a Value>) {
+    let join = |segment: &str| {
+        if path.is_empty() { segment.to_string() } else { format!("{path}.{segment}") }
+    };
+    match value {
+        Value::Object(_) if OPAQUE.contains(&catalog_path(path).as_str()) => {
+            out.insert(path.to_string(), value);
+        }
+        Value::Object(map) => {
+            for (name, item) in map {
+                concrete_leaves(item, &join(name), out);
+            }
+        }
+        Value::Array(items) if items.iter().any(Value::is_object) => {
+            for (index, item) in items.iter().enumerate() {
+                let name = ["id", "context"]
+                    .iter()
+                    .find_map(|field| item.get(field).and_then(Value::as_str))
+                    .map_or_else(|| index.to_string(), str::to_string);
+                concrete_leaves(item, &format!("{path}[{name}]"), out);
+            }
+        }
+        _ => {
+            out.insert(path.to_string(), value);
+        }
+    }
+}
+
+fn check_value(key: &str, kind: Kind, value: &Value) -> Result<(), ConfigError> {
+    let violation = match kind {
+        Kind::Integer { min, max } => value.as_i64().and_then(|n| match (min, max) {
+            (Some(lo), _) if n < lo => Some(format!("must be at least {lo}")),
+            (_, Some(hi)) if n > hi => Some(format!("must be at most {hi}")),
+            _ => None,
+        }),
+        Kind::Text { max_len: Some(limit) } => value
+            .as_str()
+            .filter(|text| text.chars().count() > limit)
+            .map(|_| format!("must be at most {limit} characters")),
+        Kind::Choice { values } => value
+            .as_str()
+            .filter(|text| !values.contains(text))
+            .map(|_| format!("must be one of: {}", values.join(", "))),
+        _ => None,
+    };
+    match violation {
+        Some(reason) => Err(ConfigError::invalid_at(key, format!("{key} {reason}"))),
+        None => Ok(()),
+    }
+}
+
+pub fn check_changed(before: &Settings, after: &Settings) -> Result<(), ConfigError> {
+    let (before, after) = (serde_json::to_value(before)?, serde_json::to_value(after)?);
+    let (mut old_leaves, mut new_leaves) = (HashMap::new(), HashMap::new());
+    concrete_leaves(&before, "", &mut old_leaves);
+    concrete_leaves(&after, "", &mut new_leaves);
+    let mut changed: Vec<_> = new_leaves
+        .into_iter()
+        .filter(|(key, value)| old_leaves.get(key) != Some(value))
+        .collect();
+    changed.sort_by(|a, b| a.0.cmp(&b.0));
+    for (key, value) in changed {
+        let path = catalog_path(&key);
+        if let Some(entry) = ENTRIES.iter().find(|e| e.key == path) {
+            check_value(&key, entry.kind, value)?;
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -70,7 +70,9 @@ The indicator is mounted at the section/editor header — one indicator per save
 
 ### Validation
 
-Inline only. `ModelEditor.validate()` populates `validationErrors: Record<string, string>` and inputs get `class:error={validationErrors.<field>}`. `persist()` early-returns on invalid state — the user sees the red border and field error, no toast, no modal.
+Client-side: `ModelEditor.validate()` populates `validationErrors: Record<string, string>`; `persist()` early-returns on invalid state, with a red border and field error.
+
+Backend: `ConfigService` rejects an invalid write with `<message> (setting: <concrete key>)`. Every write in `services/settings.ts` goes through `invokeWrite`, which parses the error (`parseSettingError`) and calls `store.reportWriteError`: a key lands in `store.fieldErrors` (read with `store.fieldError(key)`), an error without a key becomes `store.toastError`, shown by `SettingsErrorToast` (auto-dismiss after 6 s). A successful write clears `fieldErrors`. `ModelEditor.errorFor(field)` shows `validationErrors[field]` or the backend error at `models[<id>].<field>`; a new field editor that wants backend errors reads `store.fieldError(<concrete key>)` the same way.
 
 Custom param errors live in `customErrors` keyed by `entry.id` (the parse function in `ParametersCustom.svelte`'s module script returns `{ extra, errors }`).
 

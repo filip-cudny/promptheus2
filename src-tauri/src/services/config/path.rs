@@ -13,12 +13,12 @@ pub fn resolve_config_relative(raw_path: &str, config_dir: &Path) -> Result<Path
     let resolved = resolve_env_refs(raw_path);
     let trimmed = resolved.trim();
     if trimmed.is_empty() {
-        return Err(ConfigError::InvalidSettings("path is empty".to_string()));
+        return Err(ConfigError::invalid("path is empty".to_string()));
     }
 
     let candidate = PathBuf::from(trimmed);
     if candidate.is_absolute() {
-        return Err(ConfigError::InvalidSettings(format!(
+        return Err(ConfigError::invalid(format!(
             "path must be relative to config dir: '{trimmed}'"
         )));
     }
@@ -26,7 +26,7 @@ pub fn resolve_config_relative(raw_path: &str, config_dir: &Path) -> Result<Path
         .components()
         .any(|c| matches!(c, Component::ParentDir))
     {
-        return Err(ConfigError::InvalidSettings(format!(
+        return Err(ConfigError::invalid(format!(
             "path must not contain '..': '{trimmed}'"
         )));
     }
