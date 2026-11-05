@@ -235,47 +235,7 @@ fn is_covered(leaf: &str) -> bool {
     has_entry(leaf) || FILE_ONLY.contains(&leaf)
 }
 
-fn collect_leaves(value: &Value, path: &str, out: &mut Vec<String>) {
-    let join = |segment: &str| {
-        if path.is_empty() {
-            segment.to_string()
-        } else if segment == "[]" {
-            format!("{path}[]")
-        } else {
-            format!("{path}.{segment}")
-        }
-    };
-    match value {
-        Value::Object(_) if OPAQUE.contains(&path) => out.push(path.to_string()),
-        Value::Object(map) if path == "mcp_servers" => {
-            for item in map.values() {
-                collect_leaves(item, &join("*"), out);
-            }
-        }
-        Value::Object(map) => {
-            for (name, item) in map {
-                collect_leaves(item, &join(name), out);
-            }
-        }
-        Value::Array(items) if items.iter().any(Value::is_object) => {
-            for item in items {
-                collect_leaves(item, &join("[]"), out);
-            }
-        }
-        _ => out.push(path.to_string()),
-    }
-}
-
-pub fn uncovered_leaves(value: &Value) -> Vec<String> {
-    let mut leaves = Vec::new();
-    collect_leaves(value, "", &mut leaves);
-    leaves.retain(|leaf| !is_covered(leaf));
-    leaves.sort();
-    leaves.dedup();
-    leaves
-}
-
-fn concrete_leaves<'a>(value: &'a Value, path: &str, out: &mut HashMap<String, &'a Value>) {
+fn collect_leaves<'a>(value: &'a Value, path: &str, out: &mut HashMap<String, &'a Value>) {
     let join = |segment: &str| {
         if path.is_empty() { segment.to_string() } else { format!("{path}.{segment}") }
     };
@@ -285,7 +245,7 @@ fn concrete_leaves<'a>(value: &'a Value, path: &str, out: &mut HashMap<String, &
         }
         Value::Object(map) => {
             for (name, item) in map {
-                concrete_leaves(item, &join(name), out);
+                collect_leaves(item, &join(name), out);
             }
         }
         Value::Array(items) if items.iter().any(Value::is_object) => {
@@ -294,13 +254,26 @@ fn concrete_leaves<'a>(value: &'a Value, path: &str, out: &mut HashMap<String, &
                     .iter()
                     .find_map(|field| item.get(field).and_then(Value::as_str))
                     .map_or_else(|| index.to_string(), str::to_string);
-                concrete_leaves(item, &format!("{path}[{name}]"), out);
+                collect_leaves(item, &format!("{path}[{name}]"), out);
             }
         }
         _ => {
             out.insert(path.to_string(), value);
         }
     }
+}
+
+pub fn uncovered_leaves(value: &Value) -> Vec<String> {
+    let mut leaves = HashMap::new();
+    collect_leaves(value, "", &mut leaves);
+    let mut uncovered: Vec<String> = leaves
+        .keys()
+        .map(|key| catalog_path(key))
+        .filter(|leaf| !is_covered(leaf))
+        .collect();
+    uncovered.sort();
+    uncovered.dedup();
+    uncovered
 }
 
 fn check_value(key: &str, kind: Kind, value: &Value) -> Result<(), ConfigError> {
@@ -329,8 +302,8 @@ fn check_value(key: &str, kind: Kind, value: &Value) -> Result<(), ConfigError> 
 pub fn check_changed(before: &Settings, after: &Settings) -> Result<(), ConfigError> {
     let (before, after) = (serde_json::to_value(before)?, serde_json::to_value(after)?);
     let (mut old_leaves, mut new_leaves) = (HashMap::new(), HashMap::new());
-    concrete_leaves(&before, "", &mut old_leaves);
-    concrete_leaves(&after, "", &mut new_leaves);
+    collect_leaves(&before, "", &mut old_leaves);
+    collect_leaves(&after, "", &mut new_leaves);
     let mut changed: Vec<_> = new_leaves
         .into_iter()
         .filter(|(key, value)| old_leaves.get(key) != Some(value))

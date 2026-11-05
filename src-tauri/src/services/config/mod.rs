@@ -134,6 +134,7 @@ impl ConfigService {
         &mut self,
         f: impl FnOnce(&mut Self) -> Result<R, ConfigError>,
     ) -> Result<Mutated<R>, ConfigError> {
+        let stale_baseline = self.baseline.clone();
         let reloaded = self.reload_if_changed()?;
         let before = self.settings.clone();
         let outcome = f(self).and_then(|value| {
@@ -148,6 +149,9 @@ impl ConfigService {
             }
             Err(e) => {
                 self.settings = before;
+                if reloaded {
+                    self.baseline = stale_baseline;
+                }
                 if let ConfigError::InvalidSettings { key, .. } = &e {
                     log::debug!("settings write rejected (setting: {key:?})");
                 }
