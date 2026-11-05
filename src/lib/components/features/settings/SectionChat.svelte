@@ -10,7 +10,7 @@
     updateSurfaceModel,
     updateSurfaceReasoningEffort,
   } from "$lib/services/settings";
-  import { REASONING_LEVELS, REASONING_LEVEL_LABELS, type ReasoningLevel } from "$lib/constants/models";
+  import { effortOptions } from "$lib/utils/effortOptions";
   import SettingsSection from "./SettingsSection.svelte";
   import SettingField from "./SettingField.svelte";
   import PromptEditor from "./PromptEditor.svelte";
@@ -30,25 +30,12 @@
   const chatModelOptions = $derived([{ value: "", label: "Not set" }, ...textModels]);
   const titleModelOptions = $derived([{ value: "", label: "Chat model" }, ...textModels]);
 
-  const effortOptions = $derived.by(() => {
-    const reasoning = getCachedCapabilities(chat?.model_id ?? null)?.reasoning;
-    const allowed: string[] =
-      reasoning?.kind === "effort" ? reasoning.allowed : [...REASONING_LEVELS];
-    const levels = allowed.includes("none") ? allowed : ["none", ...allowed];
-    const saved = chat?.parameters.reasoning_effort;
-    const options = [
-      { value: "", label: "Default" },
-      ...levels.map((v) => ({ value: v, label: effortLabel(v) })),
-    ];
-    if (saved && !levels.includes(saved)) {
-      options.push({ value: saved, label: `${effortLabel(saved)} — not accepted by this model` });
-    }
-    return options;
-  });
-
-  function effortLabel(v: string): string {
-    return REASONING_LEVEL_LABELS[v as ReasoningLevel] ?? v;
-  }
+  const chatEffortOptions = $derived(
+    effortOptions(
+      getCachedCapabilities(chat?.model_id ?? null)?.reasoning,
+      chat?.parameters.reasoning_effort,
+    ),
+  );
 
   let tools = $state<string[]>([]);
 
@@ -94,7 +81,7 @@
         <SettingField key="surfaces.chat.generation.parameters.reasoning_effort">
           <SelectDropdown
             value={chat.parameters.reasoning_effort ?? ""}
-            options={effortOptions}
+            options={chatEffortOptions}
             ariaLabel="Reasoning effort"
             onchange={(v) =>
               run("update reasoning_effort chat", () =>

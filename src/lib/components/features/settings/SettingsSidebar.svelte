@@ -8,6 +8,7 @@
     | "prompt_base"
     | "skills"
     | "chat"
+    | "context_menu"
     | "speech";
 
   export interface SidebarItem {
@@ -42,6 +43,7 @@
       label: "Features",
       items: [
         { id: "chat", label: "Chat" },
+        { id: "context_menu", label: "Context menu" },
         { id: "speech", label: "Speech" },
       ],
     },

@@ -5,6 +5,7 @@
   import SectionGeneral from "./SectionGeneral.svelte";
   import SectionPromptBase from "./SectionPromptBase.svelte";
   import SectionChat from "./SectionChat.svelte";
+  import SectionContextMenu from "./SectionContextMenu.svelte";
   import SectionSkills from "./SectionSkills.svelte";
   import SectionNotifications from "./SectionNotifications.svelte";
   import SectionHistory from "./SectionHistory.svelte";
@@ -29,6 +30,8 @@
     <SectionPromptBase />
   {:else if activeSection === "chat"}
     <SectionChat />
+  {:else if activeSection === "context_menu"}
+    <SectionContextMenu />
   {:else if activeSection === "notifications"}
     <SectionNotifications />
   {:else if activeSection === "general"}
