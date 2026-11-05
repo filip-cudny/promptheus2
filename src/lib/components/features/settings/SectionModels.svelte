@@ -1,11 +1,14 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
+  import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
   import ModelList from "./ModelList.svelte";
   import ModelEditor from "./ModelEditor.svelte";
   import CreateModelDialog from "./CreateModelDialog.svelte";
   import type { ModelType } from "$lib/types";
 
   const store = getSettingsStore();
+  const navigation = getSettingsNavigation();
 
   let selectedId = $state<string | null>(null);
 
@@ -16,6 +19,12 @@
     } else if (!selectedId && ids.length > 0) {
       selectedId = ids[0];
     }
+  });
+
+  $effect(() => {
+    const item = navigation.selectedItem;
+    if (item?.list !== "models") return;
+    if (untrack(() => store.models.some((m) => m.id === item.id))) selectedId = item.id;
   });
 
   const selectedModel = $derived(

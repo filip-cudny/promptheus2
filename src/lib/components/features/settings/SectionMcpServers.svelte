@@ -10,6 +10,7 @@
   import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
+  import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
   import { updateSetting } from "$lib/services/settings";
   import { checkEnvVar } from "$lib/services/settingsDialog";
   import { listMcpServers, type McpServerConfig, type McpServerState } from "$lib/services/mcp";
@@ -29,6 +30,7 @@
   };
 
   const store = getSettingsStore();
+  const navigation = getSettingsNavigation();
   const tracker = useSaveTracker({
     debounceMs: store.settings?.autosave_debounce_ms ?? 1000,
   });
@@ -92,6 +94,13 @@
         checkEnvVar(name).then((ok) => (envResolved[name] = ok));
       }
     }
+  });
+
+  $effect(() => {
+    const item = navigation.selectedItem;
+    if (item?.list !== "mcp_servers") return;
+    const row = untrack(() => rows.find((r) => r.name === item.id));
+    if (row) select(row.key);
   });
 
   function chip(row: Row): string {

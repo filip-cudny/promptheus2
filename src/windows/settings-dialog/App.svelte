@@ -2,21 +2,20 @@
   import { onDestroy, onMount } from "svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { syncTheme } from "$lib/stores/theme.svelte";
-  import SettingsSidebar, {
-    type SettingsSection,
-  } from "$lib/components/features/settings/SettingsSidebar.svelte";
+  import SettingsSidebar from "$lib/components/features/settings/SettingsSidebar.svelte";
+  import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
   import SettingsContent from "$lib/components/features/settings/SettingsContent.svelte";
   import MissingEnvList from "$lib/components/features/settings/MissingEnvList.svelte";
   import SettingsErrorToast from "$lib/components/features/settings/SettingsErrorToast.svelte";
 
   const store = getSettingsStore();
 
-  let activeSection = $state<SettingsSection>("models");
+  const navigation = getSettingsNavigation();
 
   onMount(async () => {
     const initial = (window as unknown as { __settingsInitialSection?: string })
       .__settingsInitialSection;
-    if (initial === "models") activeSection = "models";
+    if (initial === "models") navigation.activeSection = "models";
     await store.init();
   });
 
@@ -30,8 +29,8 @@
 <div class="dialog-shell">
   <MissingEnvList />
   <div class="dialog-body">
-    <SettingsSidebar bind:active={activeSection} />
-    <SettingsContent {activeSection} />
+    <SettingsSidebar />
+    <SettingsContent />
   </div>
   <SettingsErrorToast />
 </div>

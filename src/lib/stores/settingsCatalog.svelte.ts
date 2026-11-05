@@ -20,14 +20,6 @@ function start() {
     });
 }
 
-export function catalogPath(concrete: string): string {
-  const path = concrete.replace(/\[[^\]]*\]/g, "[]");
-  const tail = path.startsWith("mcp_servers.") ? path.slice("mcp_servers.".length) : null;
-  if (tail === null) return path;
-  const dot = tail.indexOf(".");
-  return dot < 0 ? "mcp_servers.*" : `mcp_servers.*.${tail.slice(dot + 1)}`;
-}
-
 export function getSettingsCatalogStore() {
   start();
   return {

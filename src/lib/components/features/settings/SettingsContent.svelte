@@ -1,6 +1,6 @@
 <script lang="ts">
   import { getSettingsStore } from "$lib/stores/settings.svelte";
-  import type { SettingsSection } from "./SettingsSidebar.svelte";
+  import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
   import SectionModels from "./SectionModels.svelte";
   import SectionGeneral from "./SectionGeneral.svelte";
   import SectionPromptBase from "./SectionPromptBase.svelte";
@@ -13,9 +13,9 @@
   import SectionSync from "./SectionSync.svelte";
   import SectionMcpServers from "./SectionMcpServers.svelte";
 
-  let { activeSection }: { activeSection: SettingsSection } = $props();
-
   const store = getSettingsStore();
+  const navigation = getSettingsNavigation();
+  const activeSection = $derived(navigation.activeSection);
 </script>
 
 <main class="content">

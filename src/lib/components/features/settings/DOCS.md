@@ -204,6 +204,12 @@ Save flow goes through `$lib/services/prompts.ts` → backend `save_prompt` Taur
 
 `SectionMcpServers` edits the whole `mcp_servers` map: list on the left with a state chip per server (`running`, `error`, `starts after restart` for a configured server the registry did not try, `removed after restart` for one it ran that is no longer configured; states from `listMcpServers()` in `$lib/services/mcp.ts`, read once on mount), editor on the right (name, command, args one per line, env rows with `EnvRefChip` for `${VAR}` values, timeout, tool timeout rows). A failed server shows its start error in full, a running one its tools. Rows are a local draft seeded on mount; every edit saves the whole map through `updateSetting("mcp_servers", map)` (text debounced via `useSaveTracker`, delete immediate after an inline two-step confirm). Duplicate names are not saved and show an error at the name. Backend errors show at `mcp_servers.<name>` (name) and in `SettingField` for the catalog keys; `SettingField` gets no `itemId` there because its `itemId` match expects `[id]` keys and these are dotted. Changes apply after restart.
 
+### Search and navigation
+
+`SettingsSearch` (top of the sidebar) matches the query words as prefixes of words of an entry's catalog label or description (`searchCatalog` in `$lib/utils/settingsSearch.ts`; label matches first, max 20). Arrow keys move, Enter or click navigates and clears the query, Escape clears; its keydown handler stops propagation.
+
+`navigateTo(key)` of `getSettingsNavigation()` (`$lib/stores/settingsNavigation.svelte.ts`) is the single entry point for jumps, also for the settings agent's links. `key` is a catalog or concrete path (`models[<id>].api_key`, `mcp_servers.<name>.env`). It switches `activeSection` (owned by that store), sets `selectedItem` when the concrete path names a list item (`SectionModels` and `SectionMcpServers` select it), scrolls `setting-<catalog path>` into view and sets `highlighted` for 2000 ms; `SettingField` draws an accent outline while its catalog path matches.
+
 ### Window registration reminders
 
 The settings dialog is a separate Tauri window. When adding new windows nearby (e.g., a sub-dialog), register the HTML entry in `vite.config.ts` `rollupOptions.input` AND the label in `src-tauri/capabilities/default.json`: `"windows"` for windows, `"webviews"` for child webviews (`conversation-dialog`, `shell-toolbar`). See [project root CLAUDE.md](../../../../../CLAUDE.md). Prefer not to spawn child dialogs from settings — inline confirms cover all current cases.

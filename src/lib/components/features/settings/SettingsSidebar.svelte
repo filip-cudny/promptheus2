@@ -54,13 +54,22 @@
 
 <script lang="ts">
   import Sidebar from "$lib/components/shared/ui/Sidebar.svelte";
+  import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
+  import SettingsSearch from "./SettingsSearch.svelte";
 
-  let { active = $bindable<SettingsSection>("models") }: { active: SettingsSection } = $props();
+  const navigation = getSettingsNavigation();
+
+  function sectionLabel(section: SettingsSection): string {
+    return (
+      SIDEBAR_GROUPS.flatMap((g) => g.items).find((i) => i.id === section)?.label ?? section
+    );
+  }
 </script>
 
 <Sidebar>
   <div class="sidebar-inner">
     <h1 class="sidebar-title">Settings</h1>
+    <SettingsSearch {sectionLabel} />
 
     {#each SIDEBAR_GROUPS as group (group.label)}
       <div class="group-label">{group.label}</div>
@@ -68,8 +77,8 @@
         {#each group.items as item (item.id)}
           <button
             class="sidebar-item"
-            class:active={active === item.id}
-            onclick={() => (active = item.id)}
+            class:active={navigation.activeSection === item.id}
+            onclick={() => (navigation.activeSection = item.id)}
           >
             {item.label}
           </button>
