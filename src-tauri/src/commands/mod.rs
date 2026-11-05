@@ -125,6 +125,7 @@ macro_rules! handlers {
             $crate::commands::provider_menu::provider_menu_select,
             // === settings ===
             $crate::commands::settings::get_settings,
+            $crate::commands::settings::get_settings_catalog,
             $crate::commands::settings::update_setting,
             $crate::commands::settings::update_surface_model,
             $crate::commands::settings::update_surface_parameter,

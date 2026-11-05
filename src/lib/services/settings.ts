@@ -5,11 +5,16 @@ import type {
   NotificationSettings,
   SurfaceKind,
   SpeechToTextConfig,
+  CatalogEntry,
 } from "$lib/types";
 import { invalidateCapabilities } from "$lib/stores/capabilities.svelte";
 
 export async function getSettings(): Promise<Settings> {
   return invoke("get_settings");
+}
+
+export async function getSettingsCatalog(): Promise<CatalogEntry[]> {
+  return invoke("get_settings_catalog");
 }
 
 export async function updateSetting(

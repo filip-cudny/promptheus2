@@ -10,6 +10,7 @@ use crate::models::settings::{
 };
 use crate::commands::skills::{emit_changed as emit_skills_changed, rescan_and_prune};
 use crate::services::ai::AiService;
+use crate::services::config::catalog::{CatalogEntry, ENTRIES};
 use crate::services::config::{ConfigService, SurfaceKind};
 use crate::services::history_events::emit_history_changed;
 use crate::services::skill::SkillService;
@@ -85,6 +86,11 @@ pub async fn get_settings(
     config: State<'_, Arc<Mutex<ConfigService>>>,
 ) -> crate::Result<Settings> {
     Ok(config.lock().await.settings().clone())
+}
+
+#[tauri::command]
+pub async fn get_settings_catalog() -> crate::Result<&'static [CatalogEntry]> {
+    Ok(ENTRIES)
 }
 
 #[tauri::command]

@@ -5,6 +5,7 @@ export * from "./menu";
 export * from "./context";
 export * from "./history";
 export * from "./conversation";
+export * from "./settingsCatalog";
 
 export type SurfaceKind = "chat" | "quick_actions" | "title_generation" | "speech_to_text";
 

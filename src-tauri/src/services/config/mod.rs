@@ -1,3 +1,4 @@
+pub mod catalog;
 mod defaults;
 mod loader;
 mod migrator;

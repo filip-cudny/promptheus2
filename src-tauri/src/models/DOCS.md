@@ -52,7 +52,10 @@ Non-settings model files define types that cross the Rust↔TypeScript IPC bound
 
 1. Add the field to the appropriate struct with `#[serde(default)]` (or a named default fn).
 2. Update the `Default` impl if the struct has one.
-3. Run `cargo test --lib` — the round-trip test will catch serialization issues.
+3. Add a catalog entry in `services/config/catalog.rs`, or list the path in `FILE_ONLY`; the coverage test (`uncovered_leaves`) fails otherwise.
+4. Run `cargo test --lib` — the round-trip test will catch serialization issues.
+
+Catalog paths are field names joined by `.`; a list item is `[]` (`models[].api_key`), an entry of the map `mcp_servers` is `*` (`mcp_servers.*.command`). Concrete paths used by errors and links: a list item of `models` or `webview_providers` is `[<id>]` (`models[abc].model`), any other list item `[<index>]`, a map entry its key (`mcp_servers.my-tools.command`); `catalog_path` turns a concrete path into its catalog path.
 
 ### Skill `offered_in`
 
