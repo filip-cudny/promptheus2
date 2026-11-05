@@ -94,6 +94,7 @@
     submitting = true;
     try {
       await addModel(buildNewModel(draft, id));
+      await store.refresh();
       onCreated(id);
       onClose();
     } catch {
