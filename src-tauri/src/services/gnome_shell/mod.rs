@@ -65,6 +65,7 @@ pub trait Shell {
         context_version: u64,
         x: i32,
         y: i32,
+        stop_chat_destination: &str,
     ) -> zbus::Result<()>;
 
     fn hide_recording_widget(&self) -> zbus::Result<()>;

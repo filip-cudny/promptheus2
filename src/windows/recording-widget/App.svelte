@@ -56,6 +56,7 @@
     items: PillItem[];
     itemRows: number;
     contextVersion: number;
+    stopChatDestination: string;
   }
 
   const PILL_WIDTH = 264;
@@ -125,6 +126,7 @@
     items: [],
     itemRows: 0,
     contextVersion: 0,
+    stopChatDestination: "",
   });
   let dropdownOpen = $state(false);
   let overlayUp = $state(false);
@@ -156,6 +158,9 @@
   const pillHeight = $derived(PILL_HEIGHT + itemsHeight(model.itemRows));
   const separatorIndex = $derived(dropdownSeparatorIndex(model.targets));
   const hasSeparator = $derived(separatorIndex >= 0);
+  const stopChatTooltip = $derived(
+    model.stopChatDestination ? `Stop and send to ${model.stopChatDestination}` : "Stop and open chat",
+  );
   const dropdownHeight = $derived(
     model.targets.length * DROPDOWN_ROW_HEIGHT + 2 * DROPDOWN_PADDING + (hasSeparator ? DROPDOWN_SEPARATOR_HEIGHT : 0),
   );
@@ -527,11 +532,15 @@
           <button
             type="button"
             tabindex="-1"
-            aria-label="Stop and chat"
-            data-tooltip="Stop and open chat"
+            aria-label={stopChatTooltip}
+            data-tooltip={stopChatTooltip}
             onclick={() => runAction("stop_chat_speech_recording")}
           >
-            <MessageSquareShare size={16} />
+            {#if model.stopChatDestination}
+              <span class="option-icon" style:--icon-size="{ACTION_ICON_SIZE}px" aria-hidden="true">{@html claudeIcon}</span>
+            {:else}
+              <MessageSquareShare size={16} />
+            {/if}
           </button>
         </div>
       {:else}

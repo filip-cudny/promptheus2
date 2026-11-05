@@ -169,6 +169,7 @@ pub struct PillModel {
     pub items: Vec<PillItem>,
     pub item_rows: u32,
     pub context_version: u64,
+    pub stop_chat_destination: String,
     #[serde(skip)]
     pub x: i32,
     #[serde(skip)]
@@ -440,6 +441,14 @@ pub async fn configured_stop_chat_target(app: &AppHandle) -> StopChatTarget {
     }
 }
 
+pub fn stop_chat_destination(stop_chat_target: StopChatTarget, claude_target: ClaudeTarget) -> &'static str {
+    match (stop_chat_target, claude_target) {
+        (StopChatTarget::Chat, _) => "",
+        (StopChatTarget::Claude, ClaudeTarget::Desktop) => "Claude Desktop",
+        (StopChatTarget::Claude, ClaudeTarget::Webview) => "Claude",
+    }
+}
+
 pub fn pill_items(items: &[ContextItem]) -> Vec<PillItem> {
     items
         .iter()
@@ -465,6 +474,7 @@ pub fn build_model(
     context_items: &[ContextItem],
     context_version: u64,
     origin: (i32, i32),
+    stop_chat_destination: &str,
 ) -> PillModel {
     let (selected_id, selected_label) = match pending {
         Some(pending) => (pending.id.clone(), pending.name.clone()),
@@ -479,6 +489,7 @@ pub fn build_model(
         item_rows: item_rows(items.len()),
         items,
         context_version,
+        stop_chat_destination: stop_chat_destination.to_string(),
         x: origin.0,
         y: origin.1,
     }
@@ -503,7 +514,8 @@ async fn gather_model(app: &AppHandle, origin: (i32, i32)) -> (PillModel, Vec<Co
         }
         None => (None, false),
     };
-    let model = build_model(targets, pending.as_ref(), locked, &items, current_context_version(), origin);
+    let destination = stop_chat_destination(configured_stop_chat_target(app).await, claude_target);
+    let model = build_model(targets, pending.as_ref(), locked, &items, current_context_version(), origin, destination);
     (model, items)
 }
 
@@ -1371,6 +1383,7 @@ async fn push_model(app: &AppHandle, inner: &mut Inner, mut model: PillModel, co
                         model.context_version,
                         model.x,
                         model.y,
+                        &model.stop_chat_destination,
                     )
                     .await
                     .map_err(|e| e.to_string())
@@ -1831,14 +1844,28 @@ mod tests {
             name: "Summarize".into(),
             origin: crate::services::speech::PendingOrigin::ShiftClick,
         };
-        let model = build_model(pill_targets(&[], &[], ClaudeTarget::Webview), Some(&pending), false, &[], 1, (0, 0));
+        let model = build_model(pill_targets(&[], &[], ClaudeTarget::Webview), Some(&pending), false, &[], 1, (0, 0), "");
         assert_eq!(model.selected_label, "Summarize");
         assert!(!model.targets.iter().any(|(id, _)| id == &model.selected_id));
     }
 
     #[test]
+    fn build_model_copies_the_stop_chat_destination() {
+        let model = build_model(vec![], None, false, &[], 0, (0, 0), "Claude Desktop");
+        assert_eq!(model.stop_chat_destination, "Claude Desktop");
+    }
+
+    #[test]
+    fn stop_chat_destination_follows_the_stop_chat_and_claude_targets() {
+        assert_eq!(stop_chat_destination(StopChatTarget::Chat, ClaudeTarget::Desktop), "");
+        assert_eq!(stop_chat_destination(StopChatTarget::Chat, ClaudeTarget::Webview), "");
+        assert_eq!(stop_chat_destination(StopChatTarget::Claude, ClaudeTarget::Desktop), "Claude Desktop");
+        assert_eq!(stop_chat_destination(StopChatTarget::Claude, ClaudeTarget::Webview), "Claude");
+    }
+
+    #[test]
     fn no_pending_selects_plain_dictation() {
-        let model = build_model(pill_targets(&[], &[], ClaudeTarget::Webview), None, false, &[text()], 7, (3, 4));
+        let model = build_model(pill_targets(&[], &[], ClaudeTarget::Webview), None, false, &[text()], 7, (3, 4), "");
         assert_eq!((model.selected_id.as_str(), model.selected_label.as_str()), ("__dictation__", "Dictation"));
         assert_eq!((model.context_version, model.x, model.y), (7, 3, 4));
         assert_eq!(model.items.len(), 1);
@@ -1848,7 +1875,7 @@ mod tests {
     fn the_model_is_locked_only_after_the_take() {
         let mut speech = SpeechService::new();
         let model = |speech: &SpeechService| {
-            build_model(vec![], speech.shown_target(), speech.target_locked(), &[], 0, (0, 0))
+            build_model(vec![], speech.shown_target(), speech.target_locked(), &[], 0, (0, 0), "")
         };
         assert!(!model(&speech).target_locked);
         speech.take_pending_prompt();
@@ -1860,7 +1887,7 @@ mod tests {
         let mut speech = SpeechService::new();
         speech.select_target("assistant", "Assistant").unwrap();
         speech.take_pending_prompt();
-        let model = build_model(vec![], speech.shown_target(), speech.target_locked(), &[], 0, (0, 0));
+        let model = build_model(vec![], speech.shown_target(), speech.target_locked(), &[], 0, (0, 0), "");
         assert_eq!((model.selected_id.as_str(), model.selected_label.as_str()), ("assistant", "Assistant"));
         assert!(model.target_locked);
         speech.set_pending_prompt("fix".into(), "Fix".into(), crate::services::speech::PendingOrigin::ShiftClick);
@@ -1990,6 +2017,7 @@ mod tests {
             }],
             item_rows: 1,
             context_version: 7,
+            stop_chat_destination: "Claude".into(),
             x: 3,
             y: 4,
         };
@@ -2003,6 +2031,7 @@ mod tests {
                 "items": [{ "index": 0, "kind": "text", "label": "Text #1", "preview": "hello" }],
                 "itemRows": 1,
                 "contextVersion": 7,
+                "stopChatDestination": "Claude",
             })
         );
     }

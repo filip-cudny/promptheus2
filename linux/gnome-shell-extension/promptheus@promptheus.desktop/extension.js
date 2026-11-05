@@ -120,6 +120,7 @@ function emptyWidgetModel() {
         items: [],
         itemRows: 0,
         version: 0,
+        stopChatDestination: '',
     };
 }
 
@@ -305,6 +306,7 @@ const INTERFACE_XML = `
       <arg type="t" direction="in" name="context_version"/>
       <arg type="i" direction="in" name="x"/>
       <arg type="i" direction="in" name="y"/>
+      <arg type="s" direction="in" name="stop_chat_destination"/>
     </method>
     <method name="HideRecordingWidget"/>
     <method name="PasteIntoApp">
@@ -846,11 +848,11 @@ export default class PromptheusExtension extends Extension {
         this._setWidgetState(widget, 'retrying');
     }
 
-    UpdateRecordingWidgetModel(targets, selectedId, selectedLabel, locked, items, itemRows, version, x, y) {
+    UpdateRecordingWidgetModel(targets, selectedId, selectedLabel, locked, items, itemRows, version, x, y, stopChatDestination) {
         const widget = this._widget;
         if (!widget)
             throw new Error('Recording widget is not shown');
-        widget.model = {targets, selectedId, selectedLabel, locked, items, itemRows, version};
+        widget.model = {targets, selectedId, selectedLabel, locked, items, itemRows, version, stopChatDestination};
         widget.actor.set_position(x, y);
         this._fillRow2(widget);
         this._fillItems(widget);
@@ -1229,7 +1231,7 @@ export default class PromptheusExtension extends Extension {
     _fillRow2(widget) {
         this._closeTooltip(widget);
         widget.row2.destroy_all_children();
-        const {selectedLabel, locked} = widget.model;
+        const {selectedLabel, locked, stopChatDestination} = widget.model;
         const interactive = !locked && widget.state !== 'done';
         if (!interactive) {
             this._closeDropdown(widget);
@@ -1257,8 +1259,9 @@ export default class PromptheusExtension extends Extension {
                 'Add screen area to context'),
             this._tooltipButton(widget, this._widgetActionButton('paste', 'paste'),
                 'Add clipboard to context'),
-            this._tooltipButton(widget, this._widgetActionButton('chat', 'stop_chat'),
-                'Stop and open chat')));
+            this._tooltipButton(widget,
+                this._widgetActionButton(stopChatDestination ? 'provider-claude' : 'chat', 'stop_chat'),
+                stopChatDestination ? `Stop and send to ${stopChatDestination}` : 'Stop and open chat')));
     }
 
     _fillItems(widget) {
