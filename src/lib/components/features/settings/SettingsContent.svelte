@@ -2,7 +2,7 @@
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import type { SettingsSection } from "./SettingsSidebar.svelte";
   import SectionModels from "./SectionModels.svelte";
-  import SectionAppearance from "./SectionAppearance.svelte";
+  import SectionGeneral from "./SectionGeneral.svelte";
   import SectionPromptBase from "./SectionPromptBase.svelte";
   import SectionSurfacePrompts from "./SectionSurfacePrompts.svelte";
   import SectionSkills from "./SectionSkills.svelte";
@@ -31,8 +31,8 @@
     <SectionSurfacePrompts />
   {:else if activeSection === "notifications"}
     <SectionNotifications />
-  {:else if activeSection === "appearance"}
-    <SectionAppearance />
+  {:else if activeSection === "general"}
+    <SectionGeneral />
   {:else if activeSection === "skills"}
     <SectionSkills />
   {:else if activeSection === "history"}
@@ -41,8 +41,6 @@
     <SectionSpeech />
   {:else if activeSection === "sync"}
     <SectionSync />
-  {:else}
-    <div class="placeholder">This section is not yet implemented.</div>
   {/if}
 </main>
 
@@ -56,8 +54,7 @@
   }
 
   .loading,
-  .error,
-  .placeholder {
+  .error {
     margin: auto;
     color: var(--text-muted);
     font-size: var(--font-size-base);

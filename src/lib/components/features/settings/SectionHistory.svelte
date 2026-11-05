@@ -3,6 +3,7 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import SettingsSection from "./SettingsSection.svelte";
   import FormRow from "$lib/components/shared/ui/FormRow.svelte";
+  import SettingField from "./SettingField.svelte";
   import NumberInput from "$lib/components/shared/ui/NumberInput.svelte";
   import SelectDropdown from "$lib/components/shared/ui/SelectDropdown.svelte";
   import Button from "$lib/components/shared/ui/Button.svelte";
@@ -140,19 +141,14 @@
 >
   {#snippet body()}
     <div class="group">
-      <FormRow
-        label="Retention"
-        hint={savedDays === 0
-          ? "History grows without limit. Conversations with images are the bulk of the database size."
-          : `Conversations untouched for more than ${savedDays} ${savedDays === 1 ? "day" : "days"} are removed. Opening or editing a conversation resets its clock.`}
-      >
+      <SettingField key="history_retention_days">
         <SelectDropdown
           value={selected}
           options={PRESETS}
           ariaLabel="History retention"
           onchange={handlePreset}
         />
-      </FormRow>
+      </SettingField>
 
       {#if selected === CUSTOM}
         <FormRow

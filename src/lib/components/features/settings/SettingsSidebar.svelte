@@ -1,41 +1,50 @@
 <script lang="ts" module>
   export type SettingsSection =
     | "general"
+    | "notifications"
+    | "history"
+    | "sync"
     | "models"
     | "prompt_base"
-    | "surface_prompts"
-    | "surfaces"
-    | "notifications"
-    | "appearance"
-    | "history"
-    | "speech"
-    | "shortcuts"
     | "skills"
-    | "mcp_servers"
-    | "sync"
-    | "advanced";
+    | "surface_prompts"
+    | "speech";
 
   export interface SidebarItem {
     id: SettingsSection;
     label: string;
-    enabled: boolean;
   }
 
-  export const SIDEBAR_ITEMS: SidebarItem[] = [
-    { id: "general", label: "General", enabled: false },
-    { id: "models", label: "Models", enabled: true },
-    { id: "prompt_base", label: "Prompt Base", enabled: true },
-    { id: "surface_prompts", label: "Surface Prompts", enabled: true },
-    { id: "surfaces", label: "Surfaces", enabled: false },
-    { id: "notifications", label: "Notifications", enabled: true },
-    { id: "appearance", label: "Appearance", enabled: true },
-    { id: "history", label: "History", enabled: true },
-    { id: "speech", label: "Speech", enabled: true },
-    { id: "shortcuts", label: "Shortcuts", enabled: false },
-    { id: "skills", label: "Skills", enabled: true },
-    { id: "mcp_servers", label: "MCP Servers", enabled: false },
-    { id: "sync", label: "Sync", enabled: true },
-    { id: "advanced", label: "Advanced", enabled: false },
+  export interface SidebarGroup {
+    label: string;
+    items: SidebarItem[];
+  }
+
+  export const SIDEBAR_GROUPS: SidebarGroup[] = [
+    {
+      label: "App",
+      items: [
+        { id: "general", label: "General" },
+        { id: "notifications", label: "Notifications" },
+        { id: "history", label: "History" },
+        { id: "sync", label: "Sync" },
+      ],
+    },
+    {
+      label: "AI",
+      items: [
+        { id: "models", label: "Models" },
+        { id: "prompt_base", label: "Prompt Base" },
+        { id: "skills", label: "Skills" },
+      ],
+    },
+    {
+      label: "Features",
+      items: [
+        { id: "speech", label: "Speech" },
+        { id: "surface_prompts", label: "Surface Prompts" },
+      ],
+    },
   ];
 </script>
 
@@ -43,47 +52,26 @@
   import Sidebar from "$lib/components/shared/ui/Sidebar.svelte";
 
   let { active = $bindable<SettingsSection>("models") }: { active: SettingsSection } = $props();
-
-  const enabledItems = SIDEBAR_ITEMS.filter((i) => i.enabled);
-  const comingSoonItems = SIDEBAR_ITEMS.filter((i) => !i.enabled);
-
-  function select(item: SidebarItem) {
-    if (!item.enabled) return;
-    active = item.id;
-  }
 </script>
 
 <Sidebar>
   <div class="sidebar-inner">
     <h1 class="sidebar-title">Settings</h1>
 
-    <nav>
-      {#each enabledItems as item (item.id)}
-        <button
-          class="sidebar-item"
-          class:active={active === item.id}
-          onclick={() => select(item)}
-        >
-          {item.label}
-        </button>
-      {/each}
-    </nav>
-
-    {#if comingSoonItems.length > 0}
-      <div class="group-label">Coming soon</div>
-      <nav class="coming-soon">
-        {#each comingSoonItems as item (item.id)}
+    {#each SIDEBAR_GROUPS as group (group.label)}
+      <div class="group-label">{group.label}</div>
+      <nav>
+        {#each group.items as item (item.id)}
           <button
-            class="sidebar-item disabled"
-            title="Coming soon"
-            disabled
-            onclick={() => select(item)}
+            class="sidebar-item"
+            class:active={active === item.id}
+            onclick={() => (active = item.id)}
           >
-            <span class="label">{item.label}</span>
+            {item.label}
           </button>
         {/each}
       </nav>
-    {/if}
+    {/each}
   </div>
 </Sidebar>
 
@@ -128,7 +116,7 @@
       border-color var(--motion-fast) var(--ease-default);
   }
 
-  .sidebar-item:hover:not(.disabled):not(.active) {
+  .sidebar-item:hover:not(.active) {
     background: var(--surface-overlay-faint);
     color: var(--text-primary);
   }
@@ -139,12 +127,6 @@
     border-left-color: var(--accent);
   }
 
-  .sidebar-item.disabled {
-    color: var(--text-faint);
-    cursor: default;
-    padding-block: 5px;
-  }
-
   .group-label {
     margin: var(--space-4) var(--space-8) var(--space-2);
     font-size: var(--font-size-xs);
@@ -152,9 +134,5 @@
     text-transform: uppercase;
     letter-spacing: var(--tracking-label);
     color: var(--text-faint);
-  }
-
-  .coming-soon .sidebar-item {
-    font-size: var(--font-size-sm);
   }
 </style>

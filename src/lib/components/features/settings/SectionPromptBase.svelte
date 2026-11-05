@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, untrack } from "svelte";
   import SettingsSection from "./SettingsSection.svelte";
+  import SettingField from "./SettingField.svelte";
   import PromptEditor from "./PromptEditor.svelte";
   import PromptTabs from "./PromptTabs.svelte";
   import TextInput from "$lib/components/shared/ui/TextInput.svelte";
@@ -111,24 +112,20 @@
   {#snippet body()}
     <div class="prompt-base-body">
       <section class="identity-card">
-        <header class="identity-head">
-          <div class="identity-text">
-            <h3>Preferred name</h3>
-            <p class="helper">The name the AI will use to address you. Leave empty to skip.</p>
+        <div class="identity-status"><SaveStatusIndicator {tracker} /></div>
+        <SettingField key="preferred_name">
+          <div class="identity-input">
+            <TextInput
+              bind:value={preferredName}
+              placeholder=""
+              error={overLimit}
+              maxlength={PREFERRED_NAME_MAX}
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <span class="counter" class:over={overLimit}>{remaining}</span>
           </div>
-          <SaveStatusIndicator {tracker} />
-        </header>
-        <div class="identity-input">
-          <TextInput
-            bind:value={preferredName}
-            placeholder=""
-            error={overLimit}
-            maxlength={PREFERRED_NAME_MAX}
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <span class="counter" class:over={overLimit}>{remaining}</span>
-        </div>
+        </SettingField>
       </section>
 
       <PromptTabs tabs={TABS.map((t) => ({ id: t.id, label: t.label }))} bind:active />
@@ -162,33 +159,9 @@
     max-width: 760px;
   }
 
-  .identity-head {
+  .identity-status {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-3);
-  }
-
-  .identity-text {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-width: 0;
-  }
-
-  .identity-text h3 {
-    margin: 0;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    color: var(--text-muted);
-  }
-
-  .helper {
-    margin: 0;
-    font-size: var(--font-size-sm);
-    color: var(--text-muted);
+    justify-content: flex-end;
   }
 
   .identity-input {

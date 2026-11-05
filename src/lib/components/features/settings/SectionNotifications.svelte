@@ -1,22 +1,22 @@
 <script lang="ts">
   import SettingsSection from "./SettingsSection.svelte";
-  import FormRow from "$lib/components/shared/ui/FormRow.svelte";
+  import SettingField from "./SettingField.svelte";
   import NumberInput from "$lib/components/shared/ui/NumberInput.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { updateNotifications } from "$lib/services/settings";
   import { error as logError } from "@tauri-apps/plugin-log";
   import type { NotificationEvents, NotificationSettings } from "$lib/types";
 
-  const EVENT_LABELS: ReadonlyArray<{ key: keyof NotificationEvents; label: string }> = [
-    { key: "prompt_execution_success", label: "Prompt finished" },
-    { key: "prompt_execution_cancel", label: "Prompt cancelled" },
-    { key: "speech_recording_start", label: "Recording started" },
-    { key: "speech_recording_stop", label: "Recording stopped" },
-    { key: "speech_transcription_success", label: "Transcription finished" },
-    { key: "speech_transcription_retry", label: "Transcription retrying" },
-    { key: "context_set", label: "Context set" },
-    { key: "context_append", label: "Context appended" },
-    { key: "context_cleared", label: "Context cleared" },
+  const EVENT_KEYS: ReadonlyArray<keyof NotificationEvents> = [
+    "prompt_execution_success",
+    "prompt_execution_cancel",
+    "speech_recording_start",
+    "speech_recording_stop",
+    "speech_transcription_success",
+    "speech_transcription_retry",
+    "context_set",
+    "context_append",
+    "context_cleared",
   ];
 
   const store = getSettingsStore();
@@ -63,20 +63,18 @@
           by accident or left running after you stopped dictating.
         </p>
 
-        <label class="check">
-          <input
-            type="checkbox"
-            checked={reminder.enabled}
-            onchange={(e: Event) => saveReminder({ enabled: (e.target as HTMLInputElement).checked })}
-          />
-          <span>Remind me while a recording is running</span>
-        </label>
+        <SettingField key="notifications.recording_reminder.enabled">
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={reminder.enabled}
+              onchange={(e: Event) => saveReminder({ enabled: (e.target as HTMLInputElement).checked })}
+            />
+          </label>
+        </SettingField>
 
         <div class="fields" class:disabled={!reminder.enabled}>
-          <FormRow
-            label="Silence trigger after (seconds)"
-            hint="Minimum recording length before a silence-based reminder can fire."
-          >
+          <SettingField key="notifications.recording_reminder.silence_after_secs">
             <NumberInput
               min={5}
               step={5}
@@ -84,12 +82,9 @@
               disabled={!reminder.enabled}
               onchange={(e: Event) => saveReminder({ silence_after_secs: seconds(e) })}
             />
-          </FormRow>
+          </SettingField>
 
-          <FormRow
-            label="Silence length (seconds)"
-            hint="How long the microphone must stay quiet to count as 'stopped dictating'."
-          >
+          <SettingField key="notifications.recording_reminder.silence_window_secs">
             <NumberInput
               min={2}
               step={1}
@@ -97,12 +92,9 @@
               disabled={!reminder.enabled}
               onchange={(e: Event) => saveReminder({ silence_window_secs: seconds(e) })}
             />
-          </FormRow>
+          </SettingField>
 
-          <FormRow
-            label="Maximum interval (seconds)"
-            hint="Reminder fires regardless of silence once this much time passes since the recording started or since the last reminder."
-          >
+          <SettingField key="notifications.recording_reminder.max_interval_secs">
             <NumberInput
               min={10}
               step={10}
@@ -110,22 +102,23 @@
               disabled={!reminder.enabled}
               onchange={(e: Event) => saveReminder({ max_interval_secs: seconds(e) })}
             />
-          </FormRow>
+          </SettingField>
         </div>
       </div>
 
       <div class="group">
         <h3>Events</h3>
         <div class="checks">
-          {#each EVENT_LABELS as event (event.key)}
-            <label class="check">
-              <input
-                type="checkbox"
-                checked={notifications.events[event.key]}
-                onchange={(e) => saveEvent(event.key, (e.target as HTMLInputElement).checked)}
-              />
-              <span>{event.label}</span>
-            </label>
+          {#each EVENT_KEYS as eventKey (eventKey)}
+            <SettingField key={`notifications.events.${eventKey}`}>
+              <label class="check">
+                <input
+                  type="checkbox"
+                  checked={notifications.events[eventKey]}
+                  onchange={(e) => saveEvent(eventKey, (e.target as HTMLInputElement).checked)}
+                />
+              </label>
+            </SettingField>
           {/each}
         </div>
       </div>

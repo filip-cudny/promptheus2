@@ -4,10 +4,10 @@
   import { updateSetting } from "$lib/services/settings";
   import { error as logError } from "@tauri-apps/plugin-log";
   import Button from "$lib/components/shared/ui/Button.svelte";
-  import FormRow from "$lib/components/shared/ui/FormRow.svelte";
   import SelectDropdown from "$lib/components/shared/ui/SelectDropdown.svelte";
   import SettingsSection from "./SettingsSection.svelte";
-  import type { AppearanceSettings, Skin } from "$lib/types";
+  import SettingField from "./SettingField.svelte";
+  import type { AppearanceSettings, Settings, Skin } from "$lib/types";
 
   const SKIN_OPTIONS: ReadonlyArray<{ value: Skin; label: string }> = [
     { value: "color", label: "Color" },
@@ -16,6 +16,9 @@
 
   const store = getSettingsStore();
   const appearance = $derived(store.settings?.appearance ?? null);
+  const settings = $derived(
+    store.settings as (Settings & { launch_at_startup: boolean }) | null,
+  );
 
   async function save(patch: Partial<AppearanceSettings>) {
     if (!appearance) return;
@@ -25,34 +28,61 @@
       logError(`update_setting appearance failed: ${e}`);
     }
   }
+
+  async function saveToggle(key: "launch_at_startup" | "show_tray_icon", value: boolean) {
+    try {
+      await updateSetting(key, value);
+    } catch (e) {
+      logError(`update_setting ${key} failed: ${e}`);
+    }
+  }
 </script>
 
-<SettingsSection title="Appearance">
+<SettingsSection title="General">
   {#snippet body()}
     <div class="group">
-      <FormRow label="Theme">
+      <SettingField key="theme">
         <Button onclick={() => setTheme(getTheme() === "dark" ? "light" : "dark")}>
           {getTheme() === "dark" ? "Light mode" : "Dark mode"}
         </Button>
-      </FormRow>
+      </SettingField>
       {#if appearance}
-        <FormRow label="Logo">
+        <SettingField key="appearance.logo">
           <SelectDropdown
             value={appearance.logo}
             options={SKIN_OPTIONS}
             ariaLabel="Logo"
             onchange={(logo) => save({ logo })}
           />
-        </FormRow>
-        <FormRow label="Icons">
+        </SettingField>
+        <SettingField key="appearance.icons">
           <SelectDropdown
             value={appearance.icons}
             options={SKIN_OPTIONS}
             ariaLabel="Icons"
             onchange={(icons) => save({ icons })}
           />
-        </FormRow>
-        <p class="muted">Applies to notification icons and the check in the recording widget.</p>
+        </SettingField>
+      {/if}
+      {#if settings}
+        <SettingField key="launch_at_startup">
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={settings.launch_at_startup}
+              onchange={(e) => saveToggle("launch_at_startup", e.currentTarget.checked)}
+            />
+          </label>
+        </SettingField>
+        <SettingField key="show_tray_icon">
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={settings.show_tray_icon}
+              onchange={(e) => saveToggle("show_tray_icon", e.currentTarget.checked)}
+            />
+          </label>
+        </SettingField>
       {/if}
     </div>
   {/snippet}
@@ -66,9 +96,7 @@
     max-width: 560px;
   }
 
-  .muted {
-    margin: 0;
-    font-size: var(--font-size-sm);
-    color: var(--text-muted);
+  .check input {
+    cursor: pointer;
   }
 </style>

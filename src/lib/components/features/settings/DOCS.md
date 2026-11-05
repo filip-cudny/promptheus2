@@ -4,26 +4,32 @@ Settings dialog window — sidebar navigation + per-section content. Lives in it
 
 This doc captures the patterns applied here so new sections stay consistent.
 
-Files whose role does not follow from the name: `SettingsSidebar.svelte` exports the `SettingsSection` union and `SIDEBAR_ITEMS`; `SettingsContent.svelte` routes `activeSection` to a `Section*` component; `SettingsSection.svelte` is the shared section shell, not a section.
+Files whose role does not follow from the name: `SettingsSidebar.svelte` exports the `SettingsSection` union and `SIDEBAR_GROUPS`; `SettingsContent.svelte` routes `activeSection` to a `Section*` component; `SettingsSection.svelte` is the shared section shell, not a section; `SettingField.svelte` is the label + description + error wrapper for every catalog-bound control.
 
 The root is `src/windows/settings-dialog/App.svelte` (calls `store.init()` / `store.destroy()`); state lives in the single rune store `getSettingsStore()` (`$lib/stores/settings.svelte.ts`), which subscribes to the backend `settings-changed` event.
 
 ## Conventions
 
-### Appearance card
+### General section
 
-`SectionAppearance.svelte` holds three rows: "Theme" (button toggling light/dark), "Logo" and "Icons" (each a `SelectDropdown` of Color / Mono). Logo and Icons save with `updateSetting("appearance", { ...current, <field>: value })`; a muted note under Icons says it applies to notification icons and the recording widget's check. The old notification-icon checkbox and widget-icon checkbox no longer exist.
+`SectionGeneral.svelte` holds five fields, each through `SettingField`: "Theme" (button toggling light/dark), "Logo" and "Icons" (each a `SelectDropdown` of Color / Mono, saved with `updateSetting("appearance", { ...current, <field>: value })`), "Launch at startup" and "Show tray icon" (checkboxes saved with `updateSetting(<key>, value)`). The tray icon applies after restart; `SettingField` shows that from its catalog entry.
 
 `SectionSpeech.svelte` holds two selects for the Claude pill delivery, "Claude target" (`claude_target`: webview or Claude Desktop) and "Stop + chat target" (`stop_chat_target`: Chat or Claude); each saves its own field with `updateSpeechToTextConfig`.
 
-### Adding a new section
+### Sidebar groups and adding a section
 
-1. Add the id to the `SettingsSection` union and `SIDEBAR_ITEMS` array in `SettingsSidebar.svelte`. Set `enabled: true` only when the section actually renders.
+`SIDEBAR_GROUPS` in `SettingsSidebar.svelte` lists three groups, each an ordered array of items: "App" (General, Notifications, History, Sync), "AI" (Models, Prompt Base, Skills), "Features" (Speech, Surface Prompts). There is no disabled item; a section appears in the sidebar only once it renders.
+
+1. Add the id to the `SettingsSection` union and an item to a group's array in `SettingsSidebar.svelte`.
 2. Create `Section<Name>.svelte` here and branch on it in `SettingsContent.svelte`'s `{#if activeSection === ...}`.
 3. Read state from `getSettingsStore()` — never `invoke("get_settings")` from a component.
 4. Write through `$lib/services/settings.ts` helpers; the store auto-refreshes on the backend's `settings-changed` event.
 
-Disabled sidebar items group under a "Coming soon" heading at the bottom of the nav (rendered smaller and faded), so the enabled section reads as a clean menu. Order in `SIDEBAR_ITEMS` is the user's mental model (General → Models → … → Advanced last), not alphabetical — the sidebar partitions by `enabled` while preserving that order. Active item is marked with a 2px left border in `--accent`, never a filled background, so the accent only signals "you are here" (the same single-accent rule as the conversation window: blue ≡ user/marker, never decoration).
+### SettingField
+
+Every control bound to a settings key is wrapped in `<SettingField key="<catalog path>">` (`itemId` for list items). It takes label and description from the catalog entry (`getSettingsCatalogStore()` in `$lib/stores/settingsCatalog.svelte.ts`, loaded once per window), marks `after_restart` entries, renders the backend field error whose concrete key maps to `key`, and sets `id="setting-<key>"`. A new key needs a catalog entry in `services/config/catalog.rs`; without one the field shows the key as its label and logs a warning. Label and help text are never written in the component.
+
+Active item is marked with a 2px left border in `--accent`, never a filled background, so the accent only signals "you are here" (the same single-accent rule as the conversation window: blue ≡ user/marker, never decoration).
 
 ### Persistence — auto-save with debounce
 
