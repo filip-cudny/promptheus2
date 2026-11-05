@@ -91,16 +91,10 @@ fn full_text(context: Option<&str>, transcript: &str) -> String {
 }
 
 fn place(context: Option<&str>, transcript: &str) -> Placement {
-    let full = full_text(context, transcript);
-    if utf16_len(&full) <= LINK_TEXT_LIMIT {
-        return Placement { q: full, context_file: None };
-    }
-    match context {
-        Some(context) if utf16_len(transcript) <= LINK_TEXT_LIMIT => Placement {
-            q: transcript.to_string(),
-            context_file: Some(context.to_string()),
-        },
-        _ => Placement { q: String::new(), context_file: Some(full) },
+    if utf16_len(transcript) <= LINK_TEXT_LIMIT {
+        Placement { q: transcript.to_string(), context_file: context.map(str::to_string) }
+    } else {
+        Placement { q: String::new(), context_file: Some(full_text(context, transcript)) }
     }
 }
 
@@ -317,16 +311,14 @@ mod tests {
     }
 
     #[test]
-    fn claude_desktop_placement_context_and_transcript_at_and_over_the_limit() {
-        let context = units(100);
-        let transcript = units(14_336 - 102);
-        let inline = place(Some(&context), &transcript);
-        assert_eq!(inline.context_file, None);
-        assert_eq!(inline.q, format!("{context}\n\n{transcript}"));
-
-        let transcript = units(14_336 - 101);
-        let split = place(Some(&context), &transcript);
-        assert_eq!(split, Placement { q: transcript, context_file: Some(context) });
+    fn claude_desktop_placement_context_always_goes_to_the_file() {
+        let short = place(Some(&units(100)), "say");
+        assert_eq!(short, Placement { q: "say".into(), context_file: Some(units(100)) });
+        let at = place(Some(&units(100)), &units(14_336));
+        assert_eq!(at, Placement { q: units(14_336), context_file: Some(units(100)) });
+        let over = place(Some(&units(100)), &units(14_337));
+        let joined = format!("{}\n\n{}", units(100), units(14_337));
+        assert_eq!(over, Placement { q: String::new(), context_file: Some(joined) });
     }
 
     #[test]
