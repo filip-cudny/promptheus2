@@ -251,3 +251,13 @@ export interface ExportedSkill {
   content: string;
 }
 
+
+export interface EnvUse {
+  key: string;
+  label: string;
+}
+
+export interface MissingEnvRef {
+  name: string;
+  used_in: EnvUse[];
+}

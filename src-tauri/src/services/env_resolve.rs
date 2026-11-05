@@ -19,6 +19,13 @@ pub fn resolve_env_refs(value: &str) -> String {
         .into_owned()
 }
 
+pub fn env_ref_names(value: &str) -> Vec<String> {
+    ENV_REF_PATTERN
+        .captures_iter(value)
+        .map(|caps| caps[1].to_string())
+        .collect()
+}
+
 #[cfg(test)]
 pub fn has_env_refs(value: &str) -> bool {
     ENV_REF_PATTERN.is_match(value)
@@ -70,6 +77,12 @@ mod tests {
     #[test]
     fn missing_var_resolves_to_empty() {
         assert_eq!(resolve_env_refs("${DEFINITELY_MISSING_VAR_XYZ}"), "");
+    }
+
+    #[test]
+    fn env_ref_names_lists_every_reference() {
+        assert_eq!(env_ref_names("${A}/x/${B}"), vec!["A", "B"]);
+        assert!(env_ref_names("no refs $A").is_empty());
     }
 
     #[test]

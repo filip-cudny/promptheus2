@@ -107,6 +107,7 @@ async fn run_shell_shortcuts(app: tauri::AppHandle, initial_settings: Settings) 
     let mut widget_moves = subscribe_or_warn(proxy.receive_recording_widget_moved().await);
     let mut widget_targets = subscribe_or_warn(proxy.receive_recording_widget_target_selected().await);
     let mut widget_removals = subscribe_or_warn(proxy.receive_recording_widget_item_removed().await);
+    let mut toast_activations = subscribe_or_warn(proxy.receive_toast_activated().await);
 
     loop {
         tokio::select! {
@@ -149,6 +150,20 @@ async fn run_shell_shortcuts(app: tauri::AppHandle, initial_settings: Settings) 
                         });
                     }
                     Err(e) => log::warn!("invalid RecordingWidgetItemRemoved signal: {e}"),
+                }
+            }
+            Some(signal) = next_signal(&mut toast_activations) => {
+                match signal.args() {
+                    Ok(args) if args.action == "open_settings" => {
+                        let app = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            if let Err(e) = crate::commands::settings_dialog::open_settings_window(app, None).await {
+                                log::warn!("opening Settings from a toast failed: {e}");
+                            }
+                        });
+                    }
+                    Ok(args) => log::warn!("unknown toast action: {}", args.action),
+                    Err(e) => log::warn!("invalid ToastActivated signal: {e}"),
                 }
             }
             Some(signal) = next_signal(&mut widget_moves) => {

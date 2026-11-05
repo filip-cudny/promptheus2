@@ -76,7 +76,7 @@ fn webview_unresponsive() -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn toast_arguments(payload: &NotificationPayload) -> (&'static str, &str, &str, bool) {
+fn toast_arguments(payload: &NotificationPayload) -> (&'static str, &str, &str, bool, &str) {
     let level = match payload.level {
         NotificationLevel::Success => "success",
         NotificationLevel::Error => "error",
@@ -84,15 +84,16 @@ fn toast_arguments(payload: &NotificationPayload) -> (&'static str, &str, &str, 
         NotificationLevel::Warning => "warning",
     };
     let message = payload.message.as_deref().unwrap_or("");
-    (level, &payload.title, message, payload.monochromatic)
+    let action = payload.action.as_deref().unwrap_or("");
+    (level, &payload.title, message, payload.monochromatic, action)
 }
 
 #[cfg(target_os = "linux")]
 async fn show_toast_through_shell(payload: &NotificationPayload) -> zbus::Result<()> {
-    let (level, title, message, monochromatic) = toast_arguments(payload);
+    let (level, title, message, monochromatic, action) = toast_arguments(payload);
     crate::services::gnome_shell::proxy()
         .await?
-        .show_toast(level, title, message, monochromatic)
+        .show_toast(level, title, message, monochromatic, action)
         .await?;
     log::debug!("notification shown through the GNOME Shell extension: level={level}");
     Ok(())
@@ -357,6 +358,7 @@ mod tests {
             title: "t".into(),
             message: message.map(String::from),
             monochromatic: true,
+            action: None,
         }
     }
 

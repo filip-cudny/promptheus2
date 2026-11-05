@@ -127,6 +127,7 @@ macro_rules! handlers {
             // === settings ===
             $crate::commands::settings::get_settings,
             $crate::commands::settings::get_settings_catalog,
+            $crate::commands::settings::get_missing_env_refs,
             $crate::commands::settings::update_setting,
             $crate::commands::settings::set_shortcut,
             $crate::commands::settings::update_surface_model,

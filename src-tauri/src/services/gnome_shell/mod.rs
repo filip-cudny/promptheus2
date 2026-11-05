@@ -31,6 +31,7 @@ pub trait Shell {
         title: &str,
         message: &str,
         monochromatic: bool,
+        action: &str,
     ) -> zbus::Result<()>;
 
     fn show_recording_widget(
@@ -91,6 +92,9 @@ pub trait Shell {
         work_width: i32,
         work_height: i32,
     ) -> zbus::Result<()>;
+
+    #[zbus(signal, name = "ToastActivated")]
+    fn toast_activated(&self, action: String) -> zbus::Result<()>;
 
     #[zbus(signal)]
     fn shortcut_activated(&self, action: String) -> zbus::Result<()>;

@@ -10,6 +10,7 @@ type Payload = {
   title: string;
   message: string | null;
   monochromatic: boolean;
+  action: string | null;
 };
 
 const DURATIONS: Record<Level, number> = {
@@ -26,6 +27,7 @@ type LiveToast = {
   shownAt: number;
   plannedMs: number;
   deadline: number;
+  action: string | null;
 };
 
 type CloseSource = "autoClose" | "dismiss" | "watchdog";
@@ -36,6 +38,7 @@ export type ToasterHandlers = {
   onmouseleave: () => void;
   onpointerdown: (e: PointerEvent) => void;
   onpointerup: (e: PointerEvent) => void;
+  onclick: (e: MouseEvent) => void;
 };
 
 export function useNotificationDrain() {
@@ -116,8 +119,10 @@ export function useNotificationDrain() {
           shownAt,
           plannedMs,
           deadline: shownAt + plannedMs,
+          action: n.action,
         });
-        const klass = n.monochromatic ? "p-toast p-mono" : `p-toast p-color-${n.level}`;
+        const tone = n.monochromatic ? "p-toast p-mono" : `p-toast p-color-${n.level}`;
+        const klass = n.action ? `${tone} p-clickable p-id-${n.id}` : tone;
         logDebug(`toast shown id=${n.id} level=${n.level} duration=${DURATIONS[n.level]}`);
         toast[n.level](n.title, {
           id: n.id,
@@ -145,6 +150,15 @@ export function useNotificationDrain() {
     },
     onpointerdown: (e) => logDebug(`toaster pointerdown button=${e.button}`),
     onpointerup: (e) => logDebug(`toaster pointerup button=${e.button}`),
+    onclick: (e) => {
+      const el = (e.target as Element).closest("[data-sonner-toast]");
+      const id = el?.className.match(/p-id-(\S+)/)?.[1];
+      if (!id || live.get(id)?.action !== "open_settings") return;
+      invoke("open_settings_window", { section: null }).catch((err) => {
+        logError(`open_settings_window failed: ${err}`);
+      });
+      toast.dismiss(id);
+    },
   };
 
   const onWindowFocus = () => logDebug("window focus");

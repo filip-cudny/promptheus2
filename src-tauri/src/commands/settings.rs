@@ -13,6 +13,7 @@ use crate::services::ai::AiService;
 use crate::services::config::catalog::{CatalogEntry, ENTRIES};
 use crate::services::config::{ConfigError, ConfigService, SurfaceKind};
 use crate::services::history_events::emit_history_changed;
+use crate::services::missing_env::{collect_missing, env_is_set, MissingEnvRef};
 use crate::services::skill::SkillService;
 use crate::services::sqlite_history::SqliteHistoryService;
 
@@ -52,6 +53,9 @@ pub(crate) async fn apply_settings_reload(app: &AppHandle, reason: &str) -> crat
     };
     rescan_and_prune(&skills, &config, &history).await?;
     apply_reloaded_settings(app, &settings);
+    if reason == "sync" {
+        crate::services::missing_env::check_and_toast(app, &settings);
+    }
     emit_changed(app)?;
     emit_skills_changed(app, reason)
 }
@@ -125,6 +129,14 @@ pub async fn get_settings(
     config: State<'_, Arc<Mutex<ConfigService>>>,
 ) -> crate::Result<Settings> {
     Ok(config.lock().await.settings().clone())
+}
+
+#[tauri::command]
+pub async fn get_missing_env_refs(
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+) -> crate::Result<Vec<MissingEnvRef>> {
+    let settings = config.lock().await.settings().clone();
+    Ok(collect_missing(&settings, env_is_set))
 }
 
 #[tauri::command]

@@ -91,6 +91,14 @@ pub fn spawn_settings_sync(app_handle: tauri::AppHandle) {
     });
 }
 
+pub fn spawn_missing_env_check(app_handle: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let config = app_handle.state::<Arc<Mutex<crate::services::config::ConfigService>>>();
+        let settings = config.lock().await.settings().clone();
+        services::missing_env::check_and_toast(&app_handle, &settings);
+    });
+}
+
 pub fn spawn_claude_desktop_cache_clear(app_handle: tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         services::speech::claude_desktop::clear_cache(&app_handle).await;

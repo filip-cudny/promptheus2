@@ -6,6 +6,7 @@
     type SettingsSection,
   } from "$lib/components/features/settings/SettingsSidebar.svelte";
   import SettingsContent from "$lib/components/features/settings/SettingsContent.svelte";
+  import MissingEnvList from "$lib/components/features/settings/MissingEnvList.svelte";
   import SettingsErrorToast from "$lib/components/features/settings/SettingsErrorToast.svelte";
 
   const store = getSettingsStore();
@@ -27,19 +28,29 @@
 </script>
 
 <div class="dialog-shell">
-  <SettingsSidebar bind:active={activeSection} />
-  <SettingsContent {activeSection} />
+  <MissingEnvList />
+  <div class="dialog-body">
+    <SettingsSidebar bind:active={activeSection} />
+    <SettingsContent {activeSection} />
+  </div>
   <SettingsErrorToast />
 </div>
 
 <style>
   .dialog-shell {
     display: flex;
+    flex-direction: column;
     height: 100vh;
     background: var(--surface-base);
     color: var(--text-primary);
     font-family: var(--font-sans);
     font-size: var(--font-size-base);
     overflow: hidden;
+  }
+
+  .dialog-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
   }
 </style>

@@ -26,6 +26,7 @@ pub struct NotificationPayload {
     pub title: String,
     pub message: Option<String>,
     pub monochromatic: bool,
+    pub action: Option<String>,
 }
 
 #[derive(Clone)]
@@ -46,6 +47,18 @@ impl NotificationService {
         message: Option<impl Into<String>>,
         settings: &Settings,
     ) {
+        self.notify_with_action(event_name, level, title, message, None, settings);
+    }
+
+    pub fn notify_with_action(
+        &self,
+        event_name: &str,
+        level: NotificationLevel,
+        title: impl Into<String>,
+        message: Option<impl Into<String>>,
+        action: Option<&str>,
+        settings: &Settings,
+    ) {
         if !matches!(level, NotificationLevel::Error)
             && !is_event_enabled(event_name, &settings.notifications.events)
         {
@@ -60,6 +73,7 @@ impl NotificationService {
             title: title.into(),
             message: message.map(|m| m.into()),
             monochromatic: settings.appearance.icons == Skin::Mono,
+            action: action.map(String::from),
         };
 
         log::debug!(
@@ -185,6 +199,7 @@ mod tests {
             title: "Done".to_string(),
             message: Some("Task completed".to_string()),
             monochromatic: true,
+            action: None,
         };
         let json: serde_json::Value = serde_json::to_value(&payload).unwrap();
         assert_eq!(json["id"], "n-1");
@@ -199,6 +214,7 @@ mod tests {
             title: "Failed".to_string(),
             message: None,
             monochromatic: false,
+            action: None,
         };
         let json: serde_json::Value = serde_json::to_value(&payload_no_msg).unwrap();
         assert_eq!(json["id"], "n-2");

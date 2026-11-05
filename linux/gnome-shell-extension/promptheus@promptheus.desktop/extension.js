@@ -278,6 +278,7 @@ const INTERFACE_XML = `
       <arg type="s" direction="in" name="title"/>
       <arg type="s" direction="in" name="message"/>
       <arg type="b" direction="in" name="monochromatic"/>
+      <arg type="s" direction="in" name="action"/>
     </method>
     <method name="ShowRecordingWidget">
       <arg type="i" direction="in" name="x"/>
@@ -327,6 +328,9 @@ const INTERFACE_XML = `
       <arg type="s" direction="out" name="outcome"/>
       <arg type="s" direction="out" name="text"/>
     </method>
+    <signal name="ToastActivated">
+      <arg type="s" name="action"/>
+    </signal>
     <signal name="ShortcutActivated">
       <arg type="s" name="action"/>
     </signal>
@@ -759,7 +763,7 @@ export default class PromptheusExtension extends Extension {
         return global.display.focus_window?.get_wm_class() ?? '';
     }
 
-    ShowToast(level, title, message, monochromatic) {
+    ShowToast(level, title, message, monochromatic, action) {
         const duration = TOAST_DURATIONS_MS[level];
         if (duration === undefined)
             throw new Error(`Unknown toast level: ${level}`);
@@ -768,7 +772,9 @@ export default class PromptheusExtension extends Extension {
             this._toastMonitor = global.display.get_current_monitor();
             global.compositor.disable_unredirect();
         }
-        const toast = {actor, timerId: 0};
+        const toast = {actor, timerId: 0, activated: false};
+        if (action !== '')
+            this._makeToastClickable(toast, action);
         this._toasts.push(toast);
         toast.timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, duration, () => {
             toast.timerId = 0;
@@ -789,6 +795,22 @@ export default class PromptheusExtension extends Extension {
             scale_y: 1,
             duration: TOAST_SHOW_ANIMATION_MS,
             mode: Clutter.AnimationMode.EASE_OUT_EXPO,
+        });
+    }
+
+    _makeToastClickable(toast, action) {
+        toast.actor.reactive = true;
+        toast.actor.connect('button-press-event', () => {
+            if (toast.activated)
+                return Clutter.EVENT_STOP;
+            toast.activated = true;
+            this._dbus.emit_signal('ToastActivated', new GLib.Variant('(s)', [action]));
+            if (toast.timerId) {
+                GLib.Source.remove(toast.timerId);
+                toast.timerId = 0;
+            }
+            this._hideToast(toast);
+            return Clutter.EVENT_STOP;
         });
     }
 

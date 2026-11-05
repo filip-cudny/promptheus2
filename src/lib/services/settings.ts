@@ -6,6 +6,7 @@ import type {
   SurfaceKind,
   SpeechToTextConfig,
   CatalogEntry,
+  MissingEnvRef,
 } from "$lib/types";
 import { invalidateCapabilities } from "$lib/stores/capabilities.svelte";
 import { getSettingsStore } from "$lib/stores/settings.svelte";
@@ -43,6 +44,10 @@ export async function getSettings(): Promise<Settings> {
 
 export async function getSettingsCatalog(): Promise<CatalogEntry[]> {
   return invoke("get_settings_catalog");
+}
+
+export async function getMissingEnvRefs(): Promise<MissingEnvRef[]> {
+  return invoke("get_missing_env_refs");
 }
 
 export async function updateSetting(

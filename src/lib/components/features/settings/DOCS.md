@@ -43,6 +43,10 @@ Active item is marked with a 2px left border in `--accent`, never a filled backg
 
 Every control bound to a settings key is wrapped in `<SettingField key="<catalog path>">` (`itemId` for list items). It takes label and description from the catalog entry (`getSettingsCatalogStore()` in `$lib/stores/settingsCatalog.svelte.ts`, loaded once per window), marks `after_restart` entries, renders the backend field error whose concrete key maps to `key`, and sets `id="setting-<key>"`. A new key needs a catalog entry in `services/config/catalog.rs`; without one the field shows the key as its label and logs a warning. Label and help text are never written in the component.
 
+### Missing environment variables
+
+`MissingEnvList.svelte` sits above sidebar and content in `src/windows/settings-dialog/App.svelte` and renders only when `getMissingEnvRefs()` (backend `get_missing_env_refs`) returns names: each `${VAR}` without a value on this machine with the labels of where it is used, plus a line to add it to `.env` in the config directory and restart. It refreshes on `settings-changed` (`onSettingsChanged`) and window focus. The same set drives the startup/sync toast (`src-tauri/src/services/DOCS.md`).
+
 ### Persistence — auto-save with debounce
 
 No Save/Cancel buttons. Every input persists on change:

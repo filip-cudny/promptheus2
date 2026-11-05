@@ -85,6 +85,7 @@ pub fn manage(
     app.manage(Arc::new(Mutex::new(config_service)));
     app.manage(clipboard_service);
     app.manage(notification_service);
+    app.manage(services::missing_env::MissingEnvToastState::default());
     app.manage(Arc::new(Mutex::new(MenuCoordinator::default())));
     app.manage(Arc::new(Mutex::new(context_service)));
     app.manage(Arc::new(Mutex::new(ai_service)));

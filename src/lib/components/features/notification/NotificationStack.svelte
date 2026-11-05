@@ -17,6 +17,7 @@
   onmouseleave={handlers?.onmouseleave}
   onpointerdown={handlers?.onpointerdown}
   onpointerup={handlers?.onpointerup}
+  onclick={handlers?.onclick}
 >
   {#snippet successIcon()}
     <CircleCheck size={20} strokeWidth={2} />
@@ -62,6 +63,10 @@
   :global(html.linux [data-sonner-toast] *) {
     transition: none !important;
     animation: none !important;
+  }
+
+  :global([data-sonner-toast].p-clickable) {
+    cursor: pointer;
   }
 
   :global([data-sonner-toast] [data-title]) {
