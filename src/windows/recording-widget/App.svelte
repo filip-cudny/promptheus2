@@ -79,6 +79,7 @@
   const CHIP_GAP = 4;
   const DROPDOWN_ROW_HEIGHT = 28;
   const DROPDOWN_PADDING = 4;
+  const DROPDOWN_SEPARATOR_HEIGHT = 9;
   const TARGET_ICONS: Record<string, string> = { "webview:claude": claudeIcon, "webview:chatgpt": chatgptIcon };
   const TARGET_ICON_SIZE = 14;
   const TARGET_ICON_GAP = 8;
@@ -153,7 +154,16 @@
   const interactive = $derived(!model.targetLocked && widgetState !== "done");
   const hasItems = $derived(model.items.length > 0);
   const pillHeight = $derived(PILL_HEIGHT + itemsHeight(model.itemRows));
-  const dropdownHeight = $derived(model.targets.length * DROPDOWN_ROW_HEIGHT + 2 * DROPDOWN_PADDING);
+  const separatorIndex = $derived(dropdownSeparatorIndex(model.targets));
+  const hasSeparator = $derived(separatorIndex >= 0);
+  const dropdownHeight = $derived(
+    model.targets.length * DROPDOWN_ROW_HEIGHT + 2 * DROPDOWN_PADDING + (hasSeparator ? DROPDOWN_SEPARATOR_HEIGHT : 0),
+  );
+
+  function dropdownSeparatorIndex(targets: { id: string }[]): number {
+    const lastWebview = targets.findLastIndex((target) => target.id.startsWith("webview:"));
+    return lastWebview >= 0 && lastWebview < targets.length - 1 ? lastWebview : -1;
+  }
 
   function itemsHeight(rows: number): number {
     if (rows <= 0) return 0;
@@ -341,6 +351,7 @@
       const direction = await invoke<string>("set_recording_widget_dropdown", {
         open: true,
         rows: model.targets.length,
+        separator: hasSeparator,
       });
       overlayUp = direction === "up";
       dropdownOpen = true;
@@ -351,7 +362,7 @@
 
   async function closeDropdown() {
     dropdownOpen = false;
-    await run("set_recording_widget_dropdown", { open: false, rows: 0 });
+    await run("set_recording_widget_dropdown", { open: false, rows: 0, separator: false });
   }
 
   async function selectTarget(id: string) {
@@ -536,7 +547,7 @@
       style:padding="{DROPDOWN_PADDING}px 0"
       style:--row-radius="{RADIUS - DROPDOWN_PADDING}px"
     >
-      {#each model.targets as target (target.id)}
+      {#each model.targets as target, index (target.id)}
         <button
           type="button"
           class="option"
@@ -552,6 +563,9 @@
           {/if}
           {target.label}
         </button>
+        {#if index === separatorIndex}
+          <div class="separator" style:height="1px" style:margin="{(DROPDOWN_SEPARATOR_HEIGHT - 1) / 2}px {PADDING_X}px"></div>
+        {/if}
       {/each}
     </div>
   {/if}
@@ -759,6 +773,11 @@
   .option:last-child {
     border-bottom-left-radius: var(--row-radius);
     border-bottom-right-radius: var(--row-radius);
+  }
+
+  .separator {
+    flex: none;
+    background: rgba(255, 255, 255, 0.12);
   }
 
   .option-icon {

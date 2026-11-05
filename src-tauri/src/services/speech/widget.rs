@@ -49,6 +49,7 @@ const ITEM_COLUMNS: usize = 2;
 const PREVIEW_CHARS: usize = 300;
 const DROPDOWN_ROW_HEIGHT: f64 = 28.0;
 const DROPDOWN_PADDING: f64 = 4.0;
+const DROPDOWN_SEPARATOR_HEIGHT: f64 = 9.0;
 
 type Rect = (i32, i32, u32, u32);
 type WorkArea = (f64, f64, f64, f64);
@@ -378,8 +379,9 @@ pub fn dropdown_opens_up(pill_origin_y: f64, pill_height: f64, work_area: WorkAr
     pill_origin_y + pill_height / 2.0 > work_area.1 + work_area.3 / 2.0
 }
 
-pub fn dropdown_height(rows: u32) -> f64 {
-    rows as f64 * DROPDOWN_ROW_HEIGHT + 2.0 * DROPDOWN_PADDING
+pub fn dropdown_height(rows: u32, separator: bool) -> f64 {
+    let separator_height = if separator { DROPDOWN_SEPARATOR_HEIGHT } else { 0.0 };
+    rows as f64 * DROPDOWN_ROW_HEIGHT + 2.0 * DROPDOWN_PADDING + separator_height
 }
 
 pub fn grown_frame(
@@ -414,7 +416,7 @@ pub fn pill_targets(
             };
             (webview_target_id(&provider.id), label)
         });
-    std::iter::once(dictation).chain(offered).chain(webviews).collect()
+    std::iter::once(dictation).chain(webviews).chain(offered).collect()
 }
 
 pub async fn configured_providers(app: &AppHandle) -> Vec<WebviewProvider> {
@@ -1080,8 +1082,8 @@ impl RecordingWidget {
         }
     }
 
-    pub async fn open_dropdown(&self, app: &AppHandle, rows: u32) -> Result<bool, String> {
-        self.open_overlay(app, OverlayKind::Dropdown, dropdown_height(rows)).await
+    pub async fn open_dropdown(&self, app: &AppHandle, rows: u32, separator: bool) -> Result<bool, String> {
+        self.open_overlay(app, OverlayKind::Dropdown, dropdown_height(rows, separator)).await
     }
 
     pub async fn open_preview(&self, app: &AppHandle) -> Result<bool, String> {
@@ -1762,16 +1764,22 @@ mod tests {
     }
 
     #[test]
-    fn webview_targets_follow_the_skills_and_only_claude_and_chatgpt_are_offered() {
+    fn webview_targets_come_before_the_skills_and_only_claude_and_chatgpt_are_offered() {
         let targets = pill_targets(
             &[skill("fix", "Fix", None)],
             &[provider("claude", "Claude"), provider("chatgpt", "ChatGPT"), provider("mistral", "Mistral")],
             ClaudeTarget::Webview,
         );
         let ids: Vec<&str> = targets.iter().map(|(id, _)| id.as_str()).collect();
-        assert_eq!(ids, ["__dictation__", "fix", "webview:claude", "webview:chatgpt"]);
-        assert_eq!(targets[2].1, "Claude");
-        assert_eq!(targets[3].1, "ChatGPT");
+        assert_eq!(ids, ["__dictation__", "webview:claude", "webview:chatgpt", "fix"]);
+        assert_eq!(targets[1].1, "Claude");
+        assert_eq!(targets[2].1, "ChatGPT");
+    }
+
+    #[test]
+    fn the_dropdown_height_includes_the_separator_only_when_there_is_one() {
+        assert_eq!(dropdown_height(4, false), 120.0);
+        assert_eq!(dropdown_height(4, true), 129.0);
     }
 
     #[test]

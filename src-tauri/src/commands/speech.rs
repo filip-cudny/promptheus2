@@ -50,8 +50,9 @@ pub async fn set_recording_widget_dropdown(
     app: AppHandle,
     open: bool,
     rows: u32,
+    separator: bool,
 ) -> crate::Result<&'static str> {
-    session::set_recording_widget_dropdown(app, open, rows).await
+    session::set_recording_widget_dropdown(app, open, rows, separator).await
 }
 
 #[tauri::command]

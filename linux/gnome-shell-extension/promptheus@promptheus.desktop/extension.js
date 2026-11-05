@@ -48,6 +48,7 @@ const WIDGET_TOOLTIP_HEIGHT = 24;
 const WIDGET_TOOLTIP_PADDING_X = 8;
 const WIDGET_DROPDOWN_ROW_HEIGHT = 28;
 const WIDGET_DROPDOWN_PADDING = 4;
+const WIDGET_DROPDOWN_SEPARATOR_HEIGHT = 9;
 const WIDGET_DEFAULT_TARGET_LABEL = 'Dictation';
 const WIDGET_BOTTOM_MARGIN = 24;
 const WIDGET_STATES = ['recording', 'paused', 'processing', 'done'];
@@ -1457,7 +1458,10 @@ export default class PromptheusExtension extends Extension {
         const {targets, selectedId} = widget.model;
         if (targets.length === 0)
             return;
-        const height = targets.length * WIDGET_DROPDOWN_ROW_HEIGHT + 2 * WIDGET_DROPDOWN_PADDING;
+        const lastWebview = targets.findLastIndex(([id]) => id.startsWith('webview:'));
+        const separatorIndex = lastWebview >= 0 && lastWebview < targets.length - 1 ? lastWebview : -1;
+        const height = targets.length * WIDGET_DROPDOWN_ROW_HEIGHT + 2 * WIDGET_DROPDOWN_PADDING +
+            (separatorIndex >= 0 ? WIDGET_DROPDOWN_SEPARATOR_HEIGHT : 0);
         const dropdown = new St.BoxLayout({
             vertical: true,
             reactive: true,
@@ -1479,6 +1483,13 @@ export default class PromptheusExtension extends Extension {
                 },
                 `height: ${WIDGET_DROPDOWN_ROW_HEIGHT}px; padding: 0 ${WIDGET_PADDING_X}px; ` +
                 `border-radius: ${top}px ${top}px ${bottom}px ${bottom}px; ${weight}`));
+            if (index === separatorIndex) {
+                dropdown.add_child(new St.Widget({
+                    reactive: false,
+                    style: `height: 1px; margin: ${(WIDGET_DROPDOWN_SEPARATOR_HEIGHT - 1) / 2}px ${WIDGET_PADDING_X}px; ` +
+                        'background-color: rgba(255,255,255,0.12);',
+                }));
+            }
         });
         const {actor} = widget;
         dropdown.set_position(actor.x, this._dropdownAbove(widget) ? actor.y - height : actor.y + actor.height);

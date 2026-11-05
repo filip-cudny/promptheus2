@@ -1162,14 +1162,15 @@ pub async fn set_recording_widget_dropdown(
     app: AppHandle,
     open: bool,
     rows: u32,
+    separator: bool,
 ) -> crate::Result<&'static str> {
-    log::debug!("recording widget intent: dropdown open={open} rows={rows}");
+    log::debug!("recording widget intent: dropdown open={open} rows={rows} separator={separator}");
     let widget = app.state::<RecordingWidget>();
     if !open {
         widget.close_dropdown(&app).await;
         return Ok("down");
     }
-    let up = widget.open_dropdown(&app, rows).await?;
+    let up = widget.open_dropdown(&app, rows, separator).await?;
     Ok(if up { "up" } else { "down" })
 }
 
