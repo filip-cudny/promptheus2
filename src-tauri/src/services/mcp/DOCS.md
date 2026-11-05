@@ -4,6 +4,8 @@ MCP (Model Context Protocol) client module. Thin wrapper around the `rmcp` crate
 
 `mod.rs` re-exports `McpError` and `McpRegistry`; `McpClient` is reached as `client::McpClient`. `McpRegistry` (`registry.rs`) starts every configured server (`start_all`), indexes tools by qualified name `<server>.<tool>` (a duplicate is skipped with a `warn` log) and routes `call_tool` to the owning server.
 
+**Server states**: a server that fails to start is dropped from `servers`, but `start_all` records the error's `Display` text (no env values, no resolved secrets) in `start_errors`. `server_states()` returns one `McpServerState` per server the registry tried (`name`, `state` `running` | `error`, `error`, `tools` = raw tool names), sorted by name. The command `list_mcp_servers` returns it; the registry is built once at startup, so the states reflect that start, not later config edits.
+
 ## McpClient
 
 Wraps `rmcp::RunningService<RoleClient, ()>`. Each instance manages one MCP server child process. Tool calls go through a cloned `Peer`; the service sits behind a `tokio::sync::Mutex` that only `close` takes, so a running tool call never blocks closing.

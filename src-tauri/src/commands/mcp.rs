@@ -3,6 +3,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::State;
 
+use crate::services::mcp::registry::McpServerState;
 use crate::services::mcp::McpRegistry;
 
 #[derive(Serialize)]
@@ -26,4 +27,11 @@ pub async fn list_mcp_tools(
         })
         .collect();
     Ok(tools)
+}
+
+#[tauri::command]
+pub async fn list_mcp_servers(
+    mcp: State<'_, Arc<McpRegistry>>,
+) -> crate::Result<Vec<McpServerState>> {
+    Ok(mcp.server_states())
 }

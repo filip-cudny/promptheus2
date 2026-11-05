@@ -227,6 +227,7 @@ impl ConfigService {
             "menu_section_order" => {
                 settings.menu_section_order = serde_json::from_value(value).map_err(invalid)?
             }
+            "mcp_servers" => settings.mcp_servers = serde_json::from_value(value).map_err(invalid)?,
             "webview_providers" => {
                 settings.webview_providers = serde_json::from_value(value).map_err(invalid)?
             }

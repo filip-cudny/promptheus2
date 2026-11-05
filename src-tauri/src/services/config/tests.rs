@@ -1053,3 +1053,20 @@ fn update_setting_menu_digit_select_delay_checks_range() {
     let written = fs::read_to_string(dir.path().join("settings.json")).unwrap();
     assert!(written.contains("\"menu_digit_select_delay_ms\": 300"), "{written}");
 }
+
+#[test]
+fn update_setting_mcp_servers_rejects_invalid_name() {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+    let bytes_before = fs::read(dir.path().join("settings.json")).unwrap();
+
+    let err = service
+        .try_mutate(|c| {
+            c.update_setting("mcp_servers", serde_json::json!({"bad name": {"command": "x"}}))
+        })
+        .unwrap_err();
+
+    let (key, _) = invalid_key_and_message(err);
+    assert_eq!(key.as_deref(), Some("mcp_servers.bad name"));
+    assert_eq!(fs::read(dir.path().join("settings.json")).unwrap(), bytes_before);
+}

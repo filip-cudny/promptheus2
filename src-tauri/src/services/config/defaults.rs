@@ -134,7 +134,30 @@ pub(crate) fn validate(settings: &Settings) -> Result<(), ConfigError> {
     }
 
     validate_webview_providers(settings)?;
+    validate_mcp_servers(settings)?;
 
+    Ok(())
+}
+
+fn validate_mcp_servers(settings: &Settings) -> Result<(), ConfigError> {
+    for (name, server) in &settings.mcp_servers {
+        let valid_name = !name.is_empty()
+            && name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+        if !valid_name {
+            return Err(ConfigError::invalid_at(
+                format!("mcp_servers.{name}"),
+                format!("MCP server name '{name}' must match [a-zA-Z0-9_-]+"),
+            ));
+        }
+        if server.command.trim().is_empty() {
+            return Err(ConfigError::invalid_at(
+                format!("mcp_servers.{name}.command"),
+                format!("MCP server '{name}' needs a command"),
+            ));
+        }
+    }
     Ok(())
 }
 

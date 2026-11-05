@@ -103,6 +103,7 @@ macro_rules! handlers {
             $crate::commands::image_preview::get_image_preview_work_area,
             // === mcp ===
             $crate::commands::mcp::list_mcp_tools,
+            $crate::commands::mcp::list_mcp_servers,
             // === menu ===
             $crate::commands::menu::get_context_menu_items,
             $crate::commands::menu::execute_menu_item,

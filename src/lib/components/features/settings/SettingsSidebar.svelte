@@ -7,6 +7,7 @@
     | "models"
     | "prompt_base"
     | "skills"
+    | "mcp_servers"
     | "chat"
     | "context_menu"
     | "speech";
@@ -37,6 +38,7 @@
         { id: "models", label: "Models" },
         { id: "prompt_base", label: "Prompt Base" },
         { id: "skills", label: "Skills" },
+        { id: "mcp_servers", label: "MCP Servers" },
       ],
     },
     {

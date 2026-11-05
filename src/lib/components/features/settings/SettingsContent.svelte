@@ -11,6 +11,7 @@
   import SectionHistory from "./SectionHistory.svelte";
   import SectionSpeech from "./SectionSpeech.svelte";
   import SectionSync from "./SectionSync.svelte";
+  import SectionMcpServers from "./SectionMcpServers.svelte";
 
   let { activeSection }: { activeSection: SettingsSection } = $props();
 
@@ -38,6 +39,8 @@
     <SectionGeneral />
   {:else if activeSection === "skills"}
     <SectionSkills />
+  {:else if activeSection === "mcp_servers"}
+    <SectionMcpServers />
   {:else if activeSection === "history"}
     <SectionHistory />
   {:else if activeSection === "speech"}

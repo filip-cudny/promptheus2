@@ -30,7 +30,7 @@ Pure TS modules (no Svelte runes, no `$lib` imports other than `import type`) li
 
 ### Sidebar groups and adding a section
 
-`SIDEBAR_GROUPS` in `SettingsSidebar.svelte` lists three groups, each an ordered array of items: "App" (General, Notifications, History, Sync), "AI" (Models, Prompt Base, Skills), "Features" (Chat, Context menu, Speech). There is no disabled item; a section appears in the sidebar only once it renders.
+`SIDEBAR_GROUPS` in `SettingsSidebar.svelte` lists three groups, each an ordered array of items: "App" (General, Notifications, History, Sync), "AI" (Models, Prompt Base, Skills, MCP Servers), "Features" (Chat, Context menu, Speech). There is no disabled item; a section appears in the sidebar only once it renders.
 
 Active item is marked with a 2px left border in `--accent`, never a filled background, so the accent only signals "you are here" (the same single-accent rule as the conversation window: blue ≡ user/marker, never decoration).
 
@@ -195,6 +195,10 @@ Save flow goes through `$lib/services/prompts.ts` → backend `save_prompt` Taur
 `WebviewProvidersEditor` edits the whole `webview_providers` list (name and URL rows, add, remove) and saves it with `updateSetting` — text debounced, remove immediate. Existing ids are kept; a new row gets its id on first save: the name lowercased with characters outside `[a-z0-9_-]` replaced by `-`, suffixed `-2`, `-3`… when taken. Rows without a name are not saved. The list is seeded from the store on mount and not re-synced from later external changes.
 
 `SectionContextMenu` shows the quick actions model and reasoning effort (`effortOptions` from `$lib/utils/effortOptions.ts`, shared with `SectionChat`), `menu_section_order`, `recent_apps_count` (`NumberInput`, min 0, saved after `autosave_debounce_ms`) and `ShortcutField` for `open_context_menu`, `execute_active_prompt`, `set_context_value`, `append_context_value`, `clear_context`. The order list shows the ids present in the setting, named (`chat` Chat; `skills`, `prompts`, `SkillProvider` Skills; `models` Models; `settings` Settings; `speech`, `SpeechMenuProvider` Speech; `lastInteraction`, `LastInteractionMenuProvider` Last interaction; `context`, `ContextMenuProvider` Context; an unknown id as is). HTML5 drag-and-drop with a grip handle moves an item; a drop saves the whole list with every id exactly as stored, so legacy aliases are never rewritten to canonical ids and no section is added or removed.
+
+### MCP Servers section
+
+`SectionMcpServers` edits the whole `mcp_servers` map: list on the left with a state chip per server (`running`, `error`, `starts after restart` for a configured server the registry did not try, `removed after restart` for one it ran that is no longer configured; states from `listMcpServers()` in `$lib/services/mcp.ts`, read once on mount), editor on the right (name, command, args one per line, env rows with `EnvRefChip` for `${VAR}` values, timeout, tool timeout rows). A failed server shows its start error in full, a running one its tools. Rows are a local draft seeded on mount; every edit saves the whole map through `updateSetting("mcp_servers", map)` (text debounced via `useSaveTracker`, delete immediate after an inline two-step confirm). Duplicate names are not saved and show an error at the name. Backend errors show at `mcp_servers.<name>` (name) and in `SettingField` for the catalog keys; `SettingField` gets no `itemId` there because its `itemId` match expects `[id]` keys and these are dotted. Changes apply after restart.
 
 ### Window registration reminders
 

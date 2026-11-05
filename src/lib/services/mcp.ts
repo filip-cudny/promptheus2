@@ -1,0 +1,20 @@
+import { invoke } from "@tauri-apps/api/core";
+
+export interface McpServerState {
+  name: string;
+  state: "running" | "error";
+  error: string | null;
+  tools: string[];
+}
+
+export interface McpServerConfig {
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  timeout_secs: number;
+  tool_timeouts: Record<string, number>;
+}
+
+export async function listMcpServers(): Promise<McpServerState[]> {
+  return invoke("list_mcp_servers");
+}
