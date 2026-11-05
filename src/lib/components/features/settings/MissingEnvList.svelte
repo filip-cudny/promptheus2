@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { CircleAlert } from "lucide-svelte";
+  import { warn as logWarn } from "@tauri-apps/plugin-log";
   import { onSettingsChanged } from "$lib/services/events";
   import { getMissingEnvRefs } from "$lib/services/settings";
   import type { MissingEnvRef } from "$lib/types";
@@ -11,7 +12,8 @@
   async function refresh() {
     try {
       missing = await getMissingEnvRefs();
-    } catch {
+    } catch (e) {
+      logWarn("Failed to read get_missing_env_refs: " + e);
       missing = [];
     }
   }
