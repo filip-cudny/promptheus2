@@ -77,6 +77,7 @@ Run from `promptheus-tauri/src-tauri/`:
 ### Workflow rules
 
 - `pnpm check` does **not** exist — use `npx svelte-check`.
+- pnpm scripts never install dependencies (`verifyDepsBeforeRun: false` in `pnpm-workspace.yaml`): after a `package.json` or `pnpm-lock.yaml` change, run `pnpm install` yourself.
 - Do not run `cargo fmt`: the crate is not rustfmt-clean, so it rewrites ~90 unrelated files. Format changed lines by hand.
 - `cargo` commands must run from `src-tauri/`, not the project root.
 - `pnpm` commands run from the project root (`promptheus-tauri/`).
