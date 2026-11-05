@@ -54,6 +54,7 @@ All commands run from `promptheus-tauri/` unless noted otherwise.
 | `npx svelte-check` | Type-check all Svelte and TS files (0 errors = pass) |
 | `pnpm build` | Vite production build to `dist/` |
 | `pnpm dev` | Vite dev server |
+| `node --test "tests/*.test.mjs"` | Unit tests of pure TS modules (Node ≥ 23 type stripping, no runner dependency) |
 
 ### Backend (Rust)
 

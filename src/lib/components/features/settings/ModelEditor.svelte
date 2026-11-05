@@ -13,7 +13,7 @@
     entriesToExtra,
     type CustomParamEntry,
   } from "./ParametersCustom.svelte";
-  import FormRow from "$lib/components/shared/ui/FormRow.svelte";
+  import SettingField from "./SettingField.svelte";
   import DangerZone from "./DangerZone.svelte";
   import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
@@ -308,7 +308,7 @@
   <section class="card">
     <h3>Basic</h3>
 
-    <FormRow label="Display name" error={errorFor("display_name")}>
+    <SettingField key="models[].display_name" itemId={model.id}>
       <input
         id="display_name"
         type="text"
@@ -319,9 +319,12 @@
           scheduleSave(false);
         }}
       />
-    </FormRow>
+      {#if validationErrors.display_name}
+        <p class="field-error">{validationErrors.display_name}</p>
+      {/if}
+    </SettingField>
 
-    <FormRow label="Model" error={errorFor("model")}>
+    <SettingField key="models[].model" itemId={model.id}>
       <input
         id="model_id"
         type="text"
@@ -333,10 +336,12 @@
           scheduleSave(false);
         }}
       />
-    </FormRow>
+      {#if validationErrors.model}
+        <p class="field-error">{validationErrors.model}</p>
+      {/if}
+    </SettingField>
 
-    <div class="field">
-      <span class="field-label">Type</span>
+    <SettingField key="models[].type" itemId={model.id}>
       <div class="segmented">
         {#each TYPE_OPTIONS as opt}
           <button
@@ -351,10 +356,9 @@
           </button>
         {/each}
       </div>
-    </div>
+    </SettingField>
 
-    <div class="field">
-      <label for="provider">Provider</label>
+    <SettingField key="models[].provider" itemId={model.id}>
       <select
         id="provider"
         value={draft.provider ?? ""}
@@ -368,9 +372,9 @@
           <option value={opt.value}>{opt.label}</option>
         {/each}
       </select>
-    </div>
+    </SettingField>
 
-    <FormRow label="Group">
+    <SettingField key="models[].group" itemId={model.id}>
       <input
         id="group"
         type="text"
@@ -382,14 +386,13 @@
           scheduleSave(false);
         }}
       />
-    </FormRow>
+    </SettingField>
   </section>
 
   <section class="card">
     <h3>Connection</h3>
 
-    <div class="field">
-      <label for="api_key">API key</label>
+    <SettingField key="models[].api_key" itemId={model.id}>
       <div class="api-key-row">
         <input
           id="api_key"
@@ -417,12 +420,9 @@
       {#if envVarName}
         <EnvRefChip varName={envVarName} resolved={envResolved} />
       {/if}
-      {#if errorFor("api_key")}
-        <p class="field-error">{errorFor("api_key")}</p>
-      {/if}
-    </div>
+    </SettingField>
 
-    <FormRow label="Base URL" error={errorFor("base_url")}>
+    <SettingField key="models[].base_url" itemId={model.id}>
       <input
         id="base_url"
         type="text"
@@ -435,11 +435,10 @@
           scheduleSave(false);
         }}
       />
-    </FormRow>
+    </SettingField>
 
     {#if showApiMode}
-      <div class="field">
-        <label for="api_mode">API mode</label>
+      <SettingField key="models[].api_mode" itemId={model.id}>
         <select
           id="api_mode"
           value={draft.api_mode ?? "responses"}
@@ -459,31 +458,32 @@
           implements <code>/v1/chat/completions</code> (most OpenAI-compatible gateways: OpenRouter,
           vLLM, Ollama, Together, etc.).
         </p>
-      </div>
+      </SettingField>
     {/if}
 
-    <div class="field toggle-field">
-      <label>
-        <input
-          type="checkbox"
-          checked={draft.store}
-          onchange={(e) => {
-            draft.store = (e.target as HTMLInputElement).checked;
-            scheduleSave(true);
-          }}
-        />
-        <span>Store request/response on provider</span>
-      </label>
-      <p class="helper">
-        When off, the provider won't retain request/response for training or logs (OpenAI-specific).
-      </p>
-    </div>
+    {#if draft.api_mode !== "completions"}
+      <SettingField key="models[].store" itemId={model.id}>
+        <div class="toggle-field">
+          <label>
+            <input
+              type="checkbox"
+              checked={draft.store}
+              onchange={(e) => {
+                draft.store = (e.target as HTMLInputElement).checked;
+                scheduleSave(true);
+              }}
+            />
+            <span>Store request/response on provider</span>
+          </label>
+        </div>
+      </SettingField>
+    {/if}
   </section>
 
   {#if isText}
     <section class="card">
       <h3>Capabilities</h3>
-      <FormRow label="Context window size">
+      <SettingField key="models[].context_window_size" itemId={model.id}>
         <input
           id="ctx_window"
           type="number"
@@ -498,7 +498,7 @@
             scheduleSave(false);
           }}
         />
-      </FormRow>
+      </SettingField>
       <CapabilitiesEditor
         capabilities={draft.capabilities ?? null}
         onChange={setCapabilities}
@@ -602,18 +602,6 @@
     margin-top: var(--space-6);
     border-top: 1px solid var(--border-faint);
     padding-top: var(--space-6);
-  }
-
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .field > label,
-  .field-label {
-    font-size: var(--font-size-md);
-    color: var(--text-secondary);
   }
 
   input[type="text"],

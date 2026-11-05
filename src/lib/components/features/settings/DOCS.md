@@ -16,6 +16,18 @@ The root is `src/windows/settings-dialog/App.svelte` (calls `store.init()` / `st
 
 `SectionSpeech.svelte` holds two selects for the Claude pill delivery, "Claude target" (`claude_target`: webview or Claude Desktop) and "Stop + chat target" (`stop_chat_target`: Chat or Claude); each saves its own field with `updateSpeechToTextConfig`.
 
+### Model creation dialog
+
+"+ model" in `ModelList` opens `CreateModelDialog.svelte` (pattern of `CreateSkillDialog`) with the type preset; nothing is written until the dialog's Create. Fields: Type, Display name, Provider, Model, API key (literal or `${VAR}`, with `EnvRefChip`), optional Base URL. `newModelErrors` (`$lib/utils/newModel.ts`) mirrors the backend `validate` rules; Create is disabled while it returns errors, and an error shows at its field once the field was blurred. A backend rejection shows at the field (`store.fieldError("models[<id>].<field>")`, the id is generated once per dialog) and keeps the dialog open; success closes it and selects the new model.
+
+### Store toggle
+
+`ModelEditor` hides "Store" when `draft.api_mode === "completions"`: the flag has no effect on Chat Completions. The stored value is kept, so switching back to Responses shows it unchanged.
+
+### Tests of pure modules
+
+Pure TS modules (no Svelte runes, no `$lib` imports other than `import type`) live in `src/lib/utils`. Their tests are `tests/*.test.mjs` (`node:test`, `node:assert`), importing the `.ts` file directly through Node type stripping; run `node --test "tests/*.test.mjs"` from the root. There is no test runner dependency; `node --test tests/` does not work on Node 25, which treats the directory as a module.
+
 ### Sidebar groups and adding a section
 
 `SIDEBAR_GROUPS` in `SettingsSidebar.svelte` lists three groups, each an ordered array of items: "App" (General, Notifications, History, Sync), "AI" (Models, Prompt Base, Skills), "Features" (Speech, Surface Prompts). There is no disabled item; a section appears in the sidebar only once it renders.

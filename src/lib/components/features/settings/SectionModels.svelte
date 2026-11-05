@@ -2,9 +2,8 @@
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import ModelList from "./ModelList.svelte";
   import ModelEditor from "./ModelEditor.svelte";
-  import { addModel } from "$lib/services/settings";
-  import { generateId } from "$lib/utils/id";
-  import type { ModelConfig, ModelType } from "$lib/types";
+  import CreateModelDialog from "./CreateModelDialog.svelte";
+  import type { ModelType } from "$lib/types";
 
   const store = getSettingsStore();
 
@@ -23,24 +22,7 @@
     selectedId ? store.models.find((m) => m.id === selectedId) ?? null : null,
   );
 
-  async function handleAdd(modelType: ModelType) {
-    const config: ModelConfig = {
-      id: generateId(),
-      model: "",
-      display_name: modelType === "stt" ? "New STT model" : "New text model",
-      type: modelType,
-      provider: modelType === "text" ? "openai" : null,
-      group: null,
-      api_key: null,
-      base_url: null,
-      parameters: null,
-      context_window_size: null,
-      api_mode: null,
-      store: true,
-    };
-    await addModel(config);
-    selectedId = config.id;
-  }
+  let creatingType = $state<ModelType | null>(null);
 
   function handleSelect(id: string) {
     selectedId = id;
@@ -53,7 +35,7 @@
     selectedId={selectedId}
     surfacesByModel={store.surfacesByModel}
     onSelect={handleSelect}
-    onAdd={handleAdd}
+    onAdd={(type) => (creatingType = type)}
   />
   <div class="editor-pane">
     {#if selectedModel}
@@ -78,6 +60,14 @@
     {/if}
   </div>
 </div>
+
+{#if creatingType}
+  <CreateModelDialog
+    modelType={creatingType}
+    onClose={() => (creatingType = null)}
+    onCreated={handleSelect}
+  />
+{/if}
 
 <style>
   .section-models {
