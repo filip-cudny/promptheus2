@@ -1160,7 +1160,10 @@ impl RecordingWidget {
                 log::warn!("hiding the recording widget for a capture failed: {e}");
                 false
             }
-            None => false,
+            None => {
+                log::warn!("hiding the recording widget for a capture failed: window not found");
+                false
+            }
         }
     }
 
