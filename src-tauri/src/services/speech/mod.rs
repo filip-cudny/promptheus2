@@ -6,6 +6,8 @@ mod recorder;
 pub mod reminder;
 pub mod retry;
 mod screenshot;
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub mod selection;
 pub mod session;
 mod transcriber;
 pub mod widget;

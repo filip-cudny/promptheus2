@@ -36,7 +36,7 @@ extern "C" {
     fn AXIsProcessTrustedWithOptions(options: *const NSDictionary<NSString, NSNumber>) -> bool;
 }
 
-type SavedItem = Vec<(String, Vec<u8>)>;
+pub(crate) type SavedItem = Vec<(String, Vec<u8>)>;
 
 struct ProviderIvars {
     url: Retained<NSString>,
@@ -100,7 +100,7 @@ fn frontmost_is_claude() -> bool {
         .is_some_and(|app| is_claude(&app))
 }
 
-async fn on_main<T: Send + 'static>(
+pub(crate) async fn on_main<T: Send + 'static>(
     app: &AppHandle,
     work: impl FnOnce() -> T + Send + 'static,
 ) -> Result<T, String> {
@@ -112,7 +112,7 @@ async fn on_main<T: Send + 'static>(
     rx.await.map_err(|e| e.to_string())
 }
 
-fn save_pasteboard() -> Vec<SavedItem> {
+pub(crate) fn save_pasteboard() -> Vec<SavedItem> {
     let Some(items) = NSPasteboard::generalPasteboard().pasteboardItems() else {
         return Vec::new();
     };
@@ -150,7 +150,7 @@ fn offer_files(paths: Vec<String>, reads: mpsc::UnboundedSender<()>) -> bool {
     pasteboard.writeObjects(&NSArray::from_retained_slice(&items))
 }
 
-fn restore_pasteboard(saved: Vec<SavedItem>) {
+pub(crate) fn restore_pasteboard(saved: Vec<SavedItem>) {
     let pasteboard = NSPasteboard::generalPasteboard();
     pasteboard.clearContents();
     PROVIDERS.with_borrow_mut(Vec::clear);
