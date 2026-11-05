@@ -325,9 +325,6 @@ fn prune_change_log(app: &AppHandle, days: u32) {
     });
     if pruned > 0 {
         log::info!("change log retention: pruned {} entries older than {} days", pruned, days);
-        if let Err(e) = app.emit("change-log-changed", ()) {
-            log::warn!("change log retention: failed to emit change-log-changed: {e}");
-        }
     }
 }
 

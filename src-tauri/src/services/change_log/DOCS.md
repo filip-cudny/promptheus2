@@ -55,4 +55,4 @@ Undo:
 
 ## Sync
 
-`settings_sync::detect` adds `<settings target parent>/change-log` to the stage paths only when the directory exists. A host whose directory does not exist yet gets the first pulled entries through the rebase but no `change-log-changed` event until the next cycle. After a pull that changed a path under the directory, `reload_changed` sets `Reloaded.change_log` and the app emits `change-log-changed` (no payload); pruning from `update_history_retention` emits it too.
+`settings_sync::detect` adds `<settings target parent>/change-log` to the stage paths only when the directory exists. A host whose directory does not exist yet gets the first pulled entries through the rebase but no `change-log-changed` event until the next cycle. After a pull that changed a path under the directory, `reload_changed` sets `Reloaded.change_log` and the app emits `change-log-changed` (no payload).

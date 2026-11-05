@@ -33,10 +33,13 @@ fn aged(days: i64, id: &str) -> ChangeLogEntry {
 
 #[test]
 fn file_name_matches_format() {
+    let dir = TempDir::new().unwrap();
     let id = new_id(Utc::now(), "my host.local");
-    let re = regex::Regex::new(r"^\d{8}T\d{6}Z-[A-Za-z0-9-]+-[0-9a-f]{8}$").unwrap();
-    assert!(re.is_match(&id), "{id}");
-    assert!(id.contains("-my-host-local-"));
+    let path = write_entry(dir.path(), &entry(&id, "2026-01-01T00:00:00Z", "my-host-local", EntryKind::Card)).unwrap();
+    let name = path.file_name().unwrap().to_str().unwrap();
+    let re = regex::Regex::new(r"^\d{8}T\d{6}Z-[A-Za-z0-9-]+-[0-9a-f]{8}\.json$").unwrap();
+    assert!(re.is_match(name), "{name}");
+    assert!(name.contains("-my-host-local-"));
 }
 
 #[test]
