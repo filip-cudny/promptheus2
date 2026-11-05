@@ -85,7 +85,9 @@ const WIDGET_DONE_ENTER_MS = 180;
 const WIDGET_DONE_ENTER_SCALE = 0.85;
 const WIDGET_WAVE_PERIOD_US = 1200 * 1000;
 const WIDGET_WAVE_FRAME_MS = 33;
-const WIDGET_BUTTON_HOVER = '#3a3a3c';
+const WIDGET_BUTTON_PLAIN = {rest: 'transparent', hover: '#3a3a3c'};
+const WIDGET_BUTTON_PRIMARY = {rest: '#e5e5e7', hover: '#cfcfd3'};
+const WIDGET_BUTTON_SECONDARY = {rest: '#3a3a3c', hover: '#48484a'};
 const SELECTION_POLL_MS = 30;
 const SELECTION_SETTLE_MS = 150;
 const SELECTION_TEXT_MIMETYPES = ['text/plain;charset=utf-8', 'text/plain', 'UTF8_STRING', 'STRING', 'TEXT'];
@@ -1157,7 +1159,7 @@ export default class PromptheusExtension extends Extension {
                 ? this._widgetActionButton('play', 'resume')
                 : this._widgetActionButton('pause', 'pause'),
             this._widgetActionButton('cancel', 'cancel', 'cancel-hover'),
-            this._widgetActionButton(widget.monochromatic ? 'check-mono' : 'check', 'stop')));
+            this._widgetActionButton('arrow-up', 'stop', undefined, WIDGET_BUTTON_PRIMARY)));
     }
 
     _widgetActions(...buttons) {
@@ -1278,7 +1280,7 @@ export default class PromptheusExtension extends Extension {
 
     _widgetButton(child, onClick,
         baseStyle = `width: ${WIDGET_BUTTON_SIZE}px; height: ${WIDGET_BUTTON_SIZE}px; border-radius: ${WIDGET_BUTTON_SIZE / 2}px;`,
-        isHeld = () => false) {
+        isHeld = () => false, background = WIDGET_BUTTON_PLAIN) {
         const button = new St.Button({
             can_focus: false,
             reactive: true,
@@ -1288,11 +1290,10 @@ export default class PromptheusExtension extends Extension {
             child,
         });
         const paint = () => {
-            button.style = `${baseStyle} background-color: ${button.hover || isHeld() ? WIDGET_BUTTON_HOVER : 'transparent'};`;
+            button.style = `${baseStyle} background-color: ${button.hover || isHeld() ? background.hover : background.rest};`;
         };
         button.connect('notify::hover', paint);
-        if (isHeld())
-            paint();
+        paint();
         button.connect('clicked', onClick);
         return button;
     }
@@ -1306,9 +1307,10 @@ export default class PromptheusExtension extends Extension {
         }, undefined, () => !!widget.selection);
     }
 
-    _widgetActionButton(iconName, action, hoverIconName = iconName) {
+    _widgetActionButton(iconName, action, hoverIconName = iconName, background = WIDGET_BUTTON_PLAIN) {
         const icon = this._widgetIcon(iconName);
-        const button = this._widgetButton(icon, () => this._emitRecordingWidgetAction(action));
+        const button = this._widgetButton(icon, () => this._emitRecordingWidgetAction(action),
+            undefined, undefined, background);
         if (hoverIconName !== iconName) {
             button.connect('notify::hover', () => {
                 icon.gicon = this._widgetGicon(button.hover ? hoverIconName : iconName);
@@ -1354,7 +1356,8 @@ export default class PromptheusExtension extends Extension {
             this._tooltipButton(widget, this._widgetActionButton('paste', 'paste'),
                 'Add clipboard to context'),
             this._tooltipButton(widget,
-                this._widgetActionButton(stopChatDestination ? 'provider-claude' : 'chat', 'stop_chat'),
+                this._widgetActionButton(stopChatDestination ? 'provider-claude' : 'chat', 'stop_chat',
+                    undefined, WIDGET_BUTTON_SECONDARY),
                 stopChatDestination ? `Stop and send to ${stopChatDestination}` : 'Stop and open chat')));
     }
 

@@ -5,6 +5,7 @@
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { attachConsole, error as logError } from "@tauri-apps/plugin-log";
   import {
+    ArrowUp,
     Check,
     ChevronsUpDown,
     ClipboardPaste,
@@ -474,8 +475,8 @@
           <button type="button" class="cancel" tabindex="-1" aria-label="Cancel" onclick={() => run("cancel_speech_recording")}>
             <X size={16} />
           </button>
-          <button type="button" tabindex="-1" aria-label="Finish" onclick={() => run("toggle_speech_recording")}>
-            <Check size={16} color={monochromatic ? "currentColor" : DONE_COLOR} />
+          <button type="button" class="primary" tabindex="-1" aria-label="Finish" onclick={() => run("toggle_speech_recording")}>
+            <ArrowUp size={16} strokeWidth={2.5} />
           </button>
         </div>
       {:else if widgetState === "processing"}
@@ -555,6 +556,7 @@
           </button>
           <button
             type="button"
+            class="secondary"
             tabindex="-1"
             aria-label={stopChatTooltip}
             data-tooltip={stopChatTooltip}
@@ -880,6 +882,25 @@
   button.cancel:hover,
   button.cancel:global(.hover) {
     color: #d97373;
+  }
+
+  button.primary {
+    background: #e5e5e7;
+    color: #1c1c1e;
+  }
+
+  button.primary:hover,
+  button.primary:global(.hover) {
+    background: #cfcfd3;
+  }
+
+  button.secondary {
+    background: #3a3a3c;
+  }
+
+  button.secondary:hover,
+  button.secondary:global(.hover) {
+    background: #48484a;
   }
 
   .status {
