@@ -24,7 +24,6 @@ use super::tools;
 #[derive(Debug, Clone)]
 pub struct Proposal {
     pub id: String,
-    pub request_summary: String,
     pub operations: Vec<Operation>,
     pub plan: Plan,
     pub tests: BTreeMap<usize, TestResult>,
@@ -85,7 +84,6 @@ struct TestArgs {
 
 #[derive(Deserialize)]
 struct ProposeArgs {
-    request_summary: String,
     operations: Vec<Operation>,
 }
 
@@ -115,6 +113,7 @@ impl Dispatcher {
         Self { ctx, proposal: Mutex::new(None) }
     }
 
+    #[cfg(test)]
     pub fn proposal(&self) -> Option<Proposal> {
         self.proposal.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
@@ -240,7 +239,6 @@ impl Dispatcher {
         let rows = Self::rows_json(&args.operations, &tests);
         let proposal = Proposal {
             id: uuid::Uuid::new_v4().simple().to_string(),
-            request_summary: args.request_summary,
             operations: args.operations,
             plan: planned,
             tests,

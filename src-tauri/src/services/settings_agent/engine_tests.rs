@@ -93,7 +93,7 @@ fn scripted_turns() -> Vec<MockReply> {
         call(
             "c4",
             "settings_propose_changes",
-            json!({"request_summary": "add a model", "operations": operations}),
+            json!({"operations": operations}),
         ),
         MockReply::Text("Proposed two changes.".to_string()),
     ]

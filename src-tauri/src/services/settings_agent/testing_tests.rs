@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 use super::operations::Operation;
 use super::plan::Plan;
@@ -28,7 +28,7 @@ fn model(id: &str, model_type: ModelType) -> ModelConfig {
 }
 
 fn plan_with(settings: Settings) -> Plan {
-    Plan { settings, files: BTreeMap::new(), rows: vec![] }
+    Plan { settings, rows: vec![] }
 }
 
 fn ctx() -> PlaceholderContext {

@@ -165,6 +165,7 @@ pub const ENTRIES: &[CatalogEntry] = &[
     live("env_vars[].renamed_from", Environment, "Previous names", "Earlier names of the variable. Each machine copies a missing value from the first previous name that has one.", Kind::List),
 ];
 
+#[cfg(test)]
 pub const FILE_ONLY: &[&str] = &[
     "autosave_debounce_ms",
     "prompt_base.system",
@@ -198,6 +199,7 @@ const OPAQUE: &[&str] = &[
     "keymaps[].bindings",
 ];
 
+#[cfg(test)]
 const KEYMAP_ACTIONS: [&str; 6] = [
     "open_context_menu",
     "speech_to_text_toggle",
@@ -230,10 +232,12 @@ pub fn catalog_path(concrete: &str) -> String {
     }
 }
 
+#[cfg(test)]
 fn has_entry(key: &str) -> bool {
     ENTRIES.iter().any(|e| e.key == key)
 }
 
+#[cfg(test)]
 fn is_covered(leaf: &str) -> bool {
     if leaf == "keymaps[].bindings" {
         return KEYMAP_ACTIONS.iter().all(|a| has_entry(&format!("keymaps.{a}")));
@@ -269,6 +273,7 @@ fn collect_leaves<'a>(value: &'a Value, path: &str, out: &mut HashMap<String, &'
     }
 }
 
+#[cfg(test)]
 pub fn uncovered_leaves(value: &Value) -> Vec<String> {
     let mut leaves = HashMap::new();
     collect_leaves(value, "", &mut leaves);

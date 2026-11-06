@@ -48,7 +48,6 @@ pub struct PlannedRow {
 #[derive(Debug, Clone)]
 pub struct Plan {
     pub settings: Settings,
-    pub files: BTreeMap<String, Option<String>>,
     pub rows: Vec<PlannedRow>,
 }
 
@@ -570,7 +569,6 @@ pub fn plan(ops: &[Operation], selected: &[bool], current: &Current) -> Result<P
     if chosen.errors.is_empty() {
         return Ok(Plan {
             settings: chosen.state.config.settings().clone(),
-            files: chosen.state.files,
             rows: chosen.rows,
         });
     }

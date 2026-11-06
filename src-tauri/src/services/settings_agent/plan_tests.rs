@@ -196,7 +196,6 @@ fn delete_skill_effects_hold_the_full_file_content_as_before() {
         .expect("notes.txt effect");
     assert_eq!(notes.before, Some(json!("notes")));
     assert!(planned.settings.skills_order.is_empty());
-    assert_eq!(planned.files["skills/old-skill/SKILL.md"], None);
 }
 
 #[test]

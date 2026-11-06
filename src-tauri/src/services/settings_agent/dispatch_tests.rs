@@ -212,7 +212,7 @@ async fn propose_tool_redacts_provider_error_and_hands_proposal_to_sink() {
     let (text, is_error) = call(
         &dispatcher,
         "settings_propose_changes",
-        json!({"request_summary": "update", "operations": [update_model_row()]}),
+        json!({"operations": [update_model_row()]}),
     )
     .await;
     assert!(!is_error);
@@ -231,7 +231,7 @@ async fn propose_with_row_errors_shows_no_card() {
     let (text, is_error) = call(
         &dispatcher,
         "settings_propose_changes",
-        json!({"request_summary": "x", "operations": [bad]}),
+        json!({"operations": [bad]}),
     )
     .await;
     assert!(!is_error);

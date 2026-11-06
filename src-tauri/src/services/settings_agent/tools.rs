@@ -52,11 +52,8 @@ pub fn definitions() -> Vec<Tool> {
             "Propose all changes of one request as one card for the user to accept or reject. Validates and tests the operations first; on row errors returns them and shows no card. A new proposal replaces the previous one.",
             json!({
                 "type": "object",
-                "properties": {
-                    "request_summary": {"type": "string", "description": "One sentence: what the user asked for."},
-                    "operations": operations_schema()
-                },
-                "required": ["request_summary", "operations"]
+                "properties": {"operations": operations_schema()},
+                "required": ["operations"]
             }),
         ),
         tool(
