@@ -138,6 +138,7 @@ macro_rules! handlers {
             $crate::commands::settings_agent::settings_agent_reject,
             $crate::commands::settings_agent::settings_agent_refresh,
             $crate::commands::settings_agent::settings_agent_test_row,
+            $crate::services::settings_agent::panel::settings_agent_panel,
             // === settings ===
             $crate::commands::settings::get_settings,
             $crate::commands::settings::get_settings_catalog,

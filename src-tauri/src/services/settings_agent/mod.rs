@@ -1,4 +1,5 @@
 pub mod apply;
+pub mod panel;
 pub mod operations;
 pub mod plan;
 #[cfg(test)]

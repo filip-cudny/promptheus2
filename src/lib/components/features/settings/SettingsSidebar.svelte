@@ -55,7 +55,11 @@
 <script lang="ts">
   import Sidebar from "$lib/components/shared/ui/Sidebar.svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
+  import { Bot } from "lucide-svelte";
+  import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import SettingsSearch from "./SettingsSearch.svelte";
+
+  const agent = getSettingsAgent();
 
   const navigation = getSettingsNavigation();
 
@@ -85,6 +89,15 @@
         {/each}
       </nav>
     {/each}
+
+    <button
+      class="agent-toggle"
+      class:active={agent.panelOpen}
+      title="Settings agent"
+      onclick={() => agent.setPanelOpen(!agent.panelOpen)}
+    >
+      <Bot size={16} />
+    </button>
   </div>
 </Sidebar>
 
@@ -138,6 +151,24 @@
     background: var(--surface-overlay-faint);
     color: var(--text-primary);
     border-left-color: var(--accent);
+  }
+
+  .agent-toggle {
+    margin: auto var(--space-8) var(--space-0);
+    align-self: flex-start;
+    display: inline-flex;
+    padding: var(--space-3);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  .agent-toggle:hover,
+  .agent-toggle.active {
+    background: var(--surface-overlay-faint);
+    color: var(--text-primary);
   }
 
   .group-label {

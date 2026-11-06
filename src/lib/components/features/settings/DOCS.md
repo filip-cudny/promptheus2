@@ -43,6 +43,19 @@ Active item is marked with a 2px left border in `--accent`, never a filled backg
 
 Every control bound to a settings key is wrapped in `<SettingField key="<catalog path>">` (`itemId` for list items). It takes label and description from the catalog entry (`getSettingsCatalogStore()` in `$lib/stores/settingsCatalog.svelte.ts`, loaded once per window), marks `after_restart` entries, renders the backend field error whose concrete key maps to `key`, and sets `id="setting-<key>"`. A new key needs a catalog entry in `services/config/catalog.rs`; without one the field shows the key as its label and logs a warning. Label and help text are never written in the component.
 
+### Agent panel
+
+The toggle (lucide `Bot`, tooltip "Settings agent") in the `SettingsSidebar` footer opens `agent/AgentPanel.svelte` (380 px, `PANEL_WIDTH` in `services/settings_agent/panel.rs`). `settings_agent_panel(open)` returns the layout mode:
+
+- `widened`: the window grew by 380 px; layout is sidebar | content | panel.
+- `overlay`: the panel sits over the content's right edge. Chosen when the window is maximized, the monitor work area has no room for width + 380, or the size did not change within ~300 ms of the resize (tiled window; GNOME Wayland ignores the resize).
+
+Geometry rule: the backend keeps the added width (0 in overlay mode); `save_geometry` subtracts it for `settings-dialog` (`geometry_without_panel`), so the saved width never includes the panel. Closing the panel shrinks the window by the added width; closing the window resets it.
+
+State is `getSettingsAgent()` (`$lib/stores/settingsAgent.svelte.ts`): messages (user text, assistant text from `chunk` events, tool calls as chips with name and status), `running`, `error`, `send`/`cancel`/`reset` over `$lib/services/settingsAgent.ts`. It calls `settings_agent_reset` once on load; the conversation lives in the module state, so it survives closing the panel and ends with the window. `AgentComposer` has a `beforeSend` snippet slot for the mic button.
+
+Links: the assistant writes `[label](setting:<key>)`. `$lib/utils/settingLinks.ts` (`parseSettingLink`, `showSettingLinks`) relabels them "show" before markdown rendering; a click on `setting:` calls `navigateTo(key)`, any other link opens through `openUrl`.
+
 ### Missing environment variables
 
 `MissingEnvList.svelte` sits above sidebar and content in `src/windows/settings-dialog/App.svelte` and renders only when `getMissingEnvRefs()` (backend `get_missing_env_refs`) returns names: each `${VAR}` without a value on this machine with the labels of where it is used, plus a line to add it to `.env` in the config directory and restart. It refreshes on `settings-changed` (`onSettingsChanged`) and window focus. The same set drives the startup/sync toast (`src-tauri/src/services/DOCS.md`).

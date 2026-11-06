@@ -6,11 +6,14 @@
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
   import SettingsContent from "$lib/components/features/settings/SettingsContent.svelte";
   import MissingEnvList from "$lib/components/features/settings/MissingEnvList.svelte";
+  import AgentPanel from "$lib/components/features/settings/agent/AgentPanel.svelte";
+  import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import SettingsErrorToast from "$lib/components/features/settings/SettingsErrorToast.svelte";
 
   const store = getSettingsStore();
 
   const navigation = getSettingsNavigation();
+  const agent = getSettingsAgent();
 
   onMount(async () => {
     const initial = (window as unknown as { __settingsInitialSection?: string })
@@ -31,6 +34,9 @@
   <div class="dialog-body">
     <SettingsSidebar />
     <SettingsContent />
+    {#if agent.panelOpen}
+      <AgentPanel />
+    {/if}
   </div>
   <SettingsErrorToast />
 </div>
@@ -51,5 +57,6 @@
     display: flex;
     flex: 1;
     min-height: 0;
+    position: relative;
   }
 </style>

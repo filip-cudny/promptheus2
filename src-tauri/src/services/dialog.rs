@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 
 use super::ai_webview;
 use super::dock::DockManager;
-use super::settings_agent::engine::{lock, SharedSession};
+use super::settings_agent::{self, engine::{lock, SharedSession}};
 use super::ui_state::{UiStateService, WindowGeometry};
 
 pub const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
@@ -399,6 +399,7 @@ pub async fn open_or_focus(
         WindowEvent::Destroyed => {
             ai_webview::cleanup_host_state(&app_handle, &destroy_label);
             if destroy_label == SETTINGS_DIALOG_LABEL {
+                settings_agent::panel::reset();
                 if let Some(session) = app_handle.try_state::<SharedSession>() {
                     lock(&session).reset();
                 }
@@ -477,12 +478,15 @@ pub fn save_geometry(app: &tauri::AppHandle, window_label: &str, geometry_key: &
     };
 
     let scale = win.scale_factor().unwrap_or(1.0);
-    let geom = WindowGeometry {
+    let mut geom = WindowGeometry {
         x: pos.x as f64 / scale,
         y: pos.y as f64 / scale,
         width: size.width as f64 / scale,
         height: size.height as f64 / scale,
     };
+    if window_label == SETTINGS_DIALOG_LABEL {
+        geom = settings_agent::panel::geometry_without_panel(geom, settings_agent::panel::added_width());
+    }
 
     let app = app.clone();
     let key = geometry_key.to_string();
