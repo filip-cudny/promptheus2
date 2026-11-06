@@ -1,5 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
+  import { cubicOut } from "svelte/easing";
+  import { prefersReducedMotion } from "svelte/motion";
+  import { fade } from "svelte/transition";
   import { invoke } from "@tauri-apps/api/core";
   import type { ContextItem } from "$lib/types/context";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
@@ -110,6 +113,7 @@
   const waveDelays = (count: number) => Array.from({ length: count }, (_, i) => (i / count - 1) * WAVE_PERIOD_MS);
   const WAVE_BARS = waveDelays(WAVE_BAR_COUNT);
   const RETRY_WAVE_BARS = waveDelays(RETRY_WAVE_BAR_COUNT);
+  const SWAP_MS = 150;
 
   let widgetState = $state<WidgetState>("recording");
   let level = $state(0);
@@ -189,6 +193,11 @@
   function startRetryCountdown(delayMs: number) {
     retryEndAt = performance.now() + delayMs;
     tickRetryCountdown();
+  }
+
+  function swap(node: Element) {
+    const instant = prefersReducedMotion.current || widgetState === "recording" || widgetState === "paused";
+    return fade(node, { duration: instant ? 0 : SWAP_MS, easing: cubicOut });
   }
 
   function barScale(factor: number): number {
@@ -456,124 +465,128 @@
         {/each}
       </div>
     {/if}
-    <div class="row" style:height="{ROW_HEIGHT}px" data-tauri-drag-region>
+    <div class="row stack" style:height="{ROW_HEIGHT}px" data-tauri-drag-region>
       {#if widgetState === "recording" || widgetState === "paused"}
-        <div class="bars" class:paused={widgetState === "paused"} style:gap="{BAR_GAP}px" data-tauri-drag-region>
-          {#each BAR_FACTORS as factor}
-            <span class="bar" style:width="{BAR_WIDTH}px" style:transform="scaleY({barScale(factor)})" data-tauri-drag-region></span>
-          {/each}
-        </div>
-        <span class="time" style:min-width="{TIME_WIDTH}px" data-tauri-drag-region>{clock}</span>
-        <div class="actions">
-          {#if widgetState === "recording"}
-            <button type="button" tabindex="-1" aria-label="Pause" onclick={() => run("pause_speech_recording")}>
-              <Pause size={16} />
+        <div class="layer" out:swap data-tauri-drag-region>
+          <div class="bars" class:paused={widgetState === "paused"} style:gap="{BAR_GAP}px" data-tauri-drag-region>
+            {#each BAR_FACTORS as factor}
+              <span class="bar" style:width="{BAR_WIDTH}px" style:transform="scaleY({barScale(factor)})" data-tauri-drag-region></span>
+            {/each}
+          </div>
+          <span class="time" style:min-width="{TIME_WIDTH}px" data-tauri-drag-region>{clock}</span>
+          <div class="actions">
+            {#if widgetState === "recording"}
+              <button type="button" tabindex="-1" aria-label="Pause" onclick={() => run("pause_speech_recording")}>
+                <Pause size={16} />
+              </button>
+            {:else}
+              <button type="button" tabindex="-1" aria-label="Resume" onclick={() => run("resume_speech_recording")}>
+                <Play size={16} />
+              </button>
+            {/if}
+            <button type="button" class="cancel" tabindex="-1" aria-label="Cancel" onclick={() => run("cancel_speech_recording")}>
+              <X size={16} />
             </button>
-          {:else}
-            <button type="button" tabindex="-1" aria-label="Resume" onclick={() => run("resume_speech_recording")}>
-              <Play size={16} />
+            <button type="button" class="primary" tabindex="-1" aria-label="Finish" onclick={() => run("toggle_speech_recording")}>
+              <ArrowUp size={16} strokeWidth={2.5} />
             </button>
-          {/if}
-          <button type="button" class="cancel" tabindex="-1" aria-label="Cancel" onclick={() => run("cancel_speech_recording")}>
-            <X size={16} />
-          </button>
-          <button type="button" class="primary" tabindex="-1" aria-label="Finish" onclick={() => run("toggle_speech_recording")}>
-            <ArrowUp size={16} strokeWidth={2.5} />
-          </button>
+          </div>
         </div>
       {:else if widgetState === "processing"}
-        <div class="wave" style:--wave-period="{WAVE_PERIOD_MS}ms" style:gap="{BAR_GAP}px" data-tauri-drag-region>
-          {#each WAVE_BARS as delayMs}
-            <span class="wave-bar" style:width="{WAVE_BAR_WIDTH}px" style:animation-delay="{delayMs}ms" data-tauri-drag-region></span>
-          {/each}
-        </div>
-      {:else if widgetState === "retrying"}
-        {#if retryRemainingMs > 0}
-          <span class="time" data-tauri-drag-region>
-            Retry {retryAttempt}/{retryMaxAttempts} in {Math.ceil(retryRemainingMs / 1000)} s
-          </span>
-        {:else}
-          <div class="wave fixed" style:--wave-period="{WAVE_PERIOD_MS}ms" style:gap="{BAR_GAP}px" data-tauri-drag-region>
-            {#each RETRY_WAVE_BARS as delayMs}
+        <div class="layer" transition:swap data-tauri-drag-region>
+          <div class="wave" style:--wave-period="{WAVE_PERIOD_MS}ms" style:gap="{BAR_GAP}px" data-tauri-drag-region>
+            {#each WAVE_BARS as delayMs}
               <span class="wave-bar" style:width="{WAVE_BAR_WIDTH}px" style:animation-delay="{delayMs}ms" data-tauri-drag-region></span>
             {/each}
           </div>
-        {/if}
-        <div class="actions">
-          <button type="button" class="cancel" tabindex="-1" aria-label="Cancel" onclick={() => run("cancel_speech_recording")}>
-            <X size={16} />
-          </button>
+        </div>
+      {:else if widgetState === "retrying"}
+        <div class="layer" transition:swap data-tauri-drag-region>
+          {#if retryRemainingMs > 0}
+            <span class="time" data-tauri-drag-region>
+              Retry {retryAttempt}/{retryMaxAttempts} in {Math.ceil(retryRemainingMs / 1000)} s
+            </span>
+          {:else}
+            <div class="wave fixed" style:--wave-period="{WAVE_PERIOD_MS}ms" style:gap="{BAR_GAP}px" data-tauri-drag-region>
+              {#each RETRY_WAVE_BARS as delayMs}
+                <span class="wave-bar" style:width="{WAVE_BAR_WIDTH}px" style:animation-delay="{delayMs}ms" data-tauri-drag-region></span>
+              {/each}
+            </div>
+          {/if}
+          <div class="actions">
+            <button type="button" class="cancel" tabindex="-1" aria-label="Cancel" onclick={() => run("cancel_speech_recording")}>
+              <X size={16} />
+            </button>
+          </div>
         </div>
       {:else}
-        <span class="status" data-tauri-drag-region>
-          <Check size={16} color={monochromatic ? "currentColor" : DONE_COLOR} />
-          Copied
-        </span>
+        <div class="layer" out:swap data-tauri-drag-region>
+          <span class="status" data-tauri-drag-region>
+            <Check size={16} color={monochromatic ? "currentColor" : DONE_COLOR} />
+            Copied
+          </span>
+        </div>
       {/if}
     </div>
-    <div class="row" style:height="{ROW_HEIGHT}px" data-tauri-drag-region>
-      {#if interactive}
+    <div class="row" class:locked={!interactive} style:height="{ROW_HEIGHT}px" data-tauri-drag-region>
+      <button
+        type="button"
+        class="target"
+        tabindex="-1"
+        aria-label="Target"
+        onclick={() => (selecting ? run("cancel_recording_widget_selection") : dropdownOpen ? closeDropdown() : openDropdown())}
+      >
+        <span class="label">{selecting && interactive ? "Select text…" : model.selectedLabel}</span>
+        {#if !selecting}
+          <ChevronsUpDown size={14} />
+        {/if}
+      </button>
+      <div class="actions">
+        {#if isMac}
+          <button
+            type="button"
+            tabindex="-1"
+            aria-label="Screenshot"
+            data-tooltip="Add screen area to context"
+            onclick={() => runAction("capture_screenshot_into_recording_widget")}
+          >
+            <span class="option-icon" style:--icon-size="{ACTION_ICON_SIZE}px" aria-hidden="true">{@html ScanSquare}</span>
+          </button>
+          <button
+            type="button"
+            class:selecting
+            tabindex="-1"
+            aria-label="Select text"
+            data-tooltip="Add selected text to context"
+            onclick={toggleSelecting}
+          >
+            <span class="option-icon" style:--icon-size="{ACTION_ICON_SIZE}px" aria-hidden="true">{@html TextSelect}</span>
+          </button>
+        {/if}
         <button
           type="button"
-          class="target"
           tabindex="-1"
-          aria-label="Target"
-          onclick={() => (selecting ? run("cancel_recording_widget_selection") : dropdownOpen ? closeDropdown() : openDropdown())}
+          aria-label="Paste"
+          data-tooltip="Add clipboard to context"
+          onclick={() => runAction("paste_into_recording_widget")}
         >
-          <span class="label">{selecting ? "Select text…" : model.selectedLabel}</span>
-          {#if !selecting}
-            <ChevronsUpDown size={14} />
+          <ClipboardPaste size={16} />
+        </button>
+        <button
+          type="button"
+          class="secondary"
+          tabindex="-1"
+          aria-label={stopChatTooltip}
+          data-tooltip={stopChatTooltip}
+          onclick={() => runAction("stop_chat_speech_recording")}
+        >
+          {#if model.stopChatDestination}
+            <span class="option-icon" style:--icon-size="{ACTION_ICON_SIZE}px" aria-hidden="true">{@html claudeIcon}</span>
+          {:else}
+            <MessageSquareShare size={16} />
           {/if}
         </button>
-        <div class="actions">
-          {#if isMac}
-            <button
-              type="button"
-              tabindex="-1"
-              aria-label="Screenshot"
-              data-tooltip="Add screen area to context"
-              onclick={() => runAction("capture_screenshot_into_recording_widget")}
-            >
-              <span class="option-icon" style:--icon-size="{ACTION_ICON_SIZE}px" aria-hidden="true">{@html ScanSquare}</span>
-            </button>
-            <button
-              type="button"
-              class:selecting
-              tabindex="-1"
-              aria-label="Select text"
-              data-tooltip="Add selected text to context"
-              onclick={toggleSelecting}
-            >
-              <span class="option-icon" style:--icon-size="{ACTION_ICON_SIZE}px" aria-hidden="true">{@html TextSelect}</span>
-            </button>
-          {/if}
-          <button
-            type="button"
-            tabindex="-1"
-            aria-label="Paste"
-            data-tooltip="Add clipboard to context"
-            onclick={() => runAction("paste_into_recording_widget")}
-          >
-            <ClipboardPaste size={16} />
-          </button>
-          <button
-            type="button"
-            class="secondary"
-            tabindex="-1"
-            aria-label={stopChatTooltip}
-            data-tooltip={stopChatTooltip}
-            onclick={() => runAction("stop_chat_speech_recording")}
-          >
-            {#if model.stopChatDestination}
-              <span class="option-icon" style:--icon-size="{ACTION_ICON_SIZE}px" aria-hidden="true">{@html claudeIcon}</span>
-            {:else}
-              <MessageSquareShare size={16} />
-            {/if}
-          </button>
-        </div>
-      {:else}
-        <span class="label" data-tauri-drag-region>{model.selectedLabel}</span>
-      {/if}
+      </div>
     </div>
   </div>
   {#if dropdownOpen}
@@ -919,9 +932,38 @@
     }
   }
 
+  .row.locked .target,
+  .row.locked .actions {
+    pointer-events: none;
+  }
+
+  .row.locked .target :global(svg),
+  .row.locked .actions {
+    opacity: 0;
+    transition: opacity 150ms cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  .row.stack {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .layer {
+    grid-area: 1 / 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .status {
       animation: none;
+    }
+
+    .row.locked .target :global(svg),
+    .row.locked .actions {
+      transition: none;
     }
   }
 

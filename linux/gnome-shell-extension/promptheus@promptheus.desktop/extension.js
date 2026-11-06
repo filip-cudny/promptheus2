@@ -84,6 +84,8 @@ const WIDGET_WAVE_AMPLITUDE = WIDGET_WAVE_HEIGHT / 3;
 const WIDGET_WAVE_OPACITY = 150;
 const WIDGET_DONE_ENTER_MS = 180;
 const WIDGET_DONE_ENTER_SCALE = 0.85;
+const WIDGET_SWAP_MS = 150;
+const WIDGET_CROSSFADE_STATES = ['processing', 'retrying', 'done'];
 const WIDGET_WAVE_PERIOD_US = 1200 * 1000;
 const WIDGET_WAVE_FRAME_MS = 33;
 const WIDGET_BUTTON_PLAIN = {rest: 'transparent', hover: '#3a3a3c'};
@@ -1018,7 +1020,10 @@ export default class PromptheusExtension extends Extension {
             tooltip: null,
             tooltipId: 0,
             tooltipHiddenAt: -Infinity,
-            row1: this._widgetRow(WIDGET_ROW_HEIGHT),
+            row1: new St.Widget({
+                layout_manager: new Clutter.BinLayout(),
+                style: `height: ${WIDGET_ROW_HEIGHT}px; padding: 0 ${WIDGET_PADDING_X}px;`,
+            }),
             row2: this._widgetRow(WIDGET_ROW_HEIGHT),
             dropdown: null,
             elapsed: formatElapsed(0),
@@ -1031,6 +1036,7 @@ export default class PromptheusExtension extends Extension {
             retry: null,
             retryLabel: null,
             retryId: 0,
+            lockedLabel: null,
             dragId: 0,
             selection: null,
         };
@@ -1107,8 +1113,11 @@ export default class PromptheusExtension extends Extension {
         }
     }
 
-    _clearWidgetContent(widget) {
+    _clearWidgetContent(widget, fadeOut = false) {
         widget.bars.forEach(bar => bar.remove_all_transitions());
+        // An outgoing wave stops moving during its WIDGET_SWAP_MS fade-out (the webview one keeps moving); unnoticeable
+        // while the fade is short against the 1.2 s wave period. If the fade grows to a visible fraction of the period,
+        // give each content its own wave timer, removed when that content is destroyed.
         this._stopWidgetWave(widget);
         if (widget.retryId) {
             GLib.Source.remove(widget.retryId);
@@ -1117,7 +1126,22 @@ export default class PromptheusExtension extends Extension {
         widget.bars = [];
         widget.timeLabel = null;
         widget.retryLabel = null;
-        widget.row1.destroy_all_children();
+        const children = widget.row1.get_children();
+        const outgoing = fadeOut ? children.pop() : null;
+        children.forEach(child => child.destroy());
+        if (outgoing) {
+            this._setUnreactive(outgoing);
+            this._easeWidgetOpacity(outgoing, 0);
+        }
+    }
+
+    _setUnreactive(actor) {
+        actor.reactive = false;
+        actor.get_children().forEach(child => this._setUnreactive(child));
+    }
+
+    _easeWidgetOpacity(actor, opacity) {
+        actor.ease({opacity, duration: WIDGET_SWAP_MS, mode: Clutter.AnimationMode.EASE_OUT_CUBIC});
     }
 
     _applyWidgetSize(widget) {
@@ -1136,7 +1160,8 @@ export default class PromptheusExtension extends Extension {
     }
 
     _setWidgetState(widget, state) {
-        this._clearWidgetContent(widget);
+        const crossfade = state !== widget.state && WIDGET_CROSSFADE_STATES.includes(state);
+        this._clearWidgetContent(widget, crossfade);
         widget.state = state;
         const content = this._widgetContent();
         if (state === 'recording' || state === 'paused') {
@@ -1161,6 +1186,10 @@ export default class PromptheusExtension extends Extension {
                 duration: WIDGET_DONE_ENTER_MS,
                 mode: Clutter.AnimationMode.EASE_OUT_CUBIC,
             });
+        }
+        else if (crossfade) {
+            content.opacity = 0;
+            this._easeWidgetOpacity(content, 255);
         }
         this._fillRow2(widget);
     }
@@ -1344,36 +1373,33 @@ export default class PromptheusExtension extends Extension {
 
     _fillRow2(widget) {
         this._closeTooltip(widget);
-        widget.row2.destroy_all_children();
         const {selectedId, selectedLabel, locked, stopChatDestination} = widget.model;
         const minimalIntents = selectedId === WIDGET_SETTINGS_AGENT_ID;
         const interactive = !locked && !minimalIntents && widget.state !== 'done';
         if (!interactive) {
             widget.selection?.finish('cancelled');
             this._closeDropdown(widget);
-            widget.row2.style = `height: ${WIDGET_ROW_HEIGHT}px; padding: 0 ${WIDGET_PADDING_X}px;`;
-            widget.row2.add_child(new St.Label({
-                text: selectedLabel,
-                x_expand: true,
-                x_align: Clutter.ActorAlign.CENTER,
-                y_align: Clutter.ActorAlign.CENTER,
-                opacity: WIDGET_WAVE_OPACITY,
-            }));
-            return;
+            if (widget.lockedLabel) {
+                widget.lockedLabel.text = selectedLabel;
+                return;
+            }
         }
+        const fade = widget.row2.get_n_children() > 0;
+        widget.row2.destroy_all_children();
         widget.row2.style = `height: ${WIDGET_ROW_HEIGHT}px; spacing: ${WIDGET_ROW_SPACING}px; ` +
             `padding: 0 ${WIDGET_PADDING_X}px 0 ${WIDGET_PADDING_X - WIDGET_TARGET_PADDING_X}px;`;
         const content = new St.BoxLayout({style: 'spacing: 4px;'});
         content.opacity = WIDGET_WAVE_OPACITY;
         const waiting = !!widget.selection;
-        content.add_child(new St.Label({text: waiting ? 'Select text…' : selectedLabel, y_align: Clutter.ActorAlign.CENTER}));
-        if (!waiting)
-            content.add_child(this._widgetIcon('chevrons-up-down', 14));
+        const label = new St.Label({text: waiting ? 'Select text…' : selectedLabel, y_align: Clutter.ActorAlign.CENTER});
+        content.add_child(label);
+        const chevron = waiting ? null : this._widgetIcon('chevrons-up-down', 14);
+        if (chevron)
+            content.add_child(chevron);
         const target = this._widgetButton(content,
             () => waiting ? this._cancelSelectionWaiting(widget) : this._toggleDropdown(widget),
             `height: 28px; border-radius: 14px; padding: 0 ${WIDGET_TARGET_PADDING_X}px;`);
-        widget.row2.add_child(target);
-        widget.row2.add_child(this._widgetActions(
+        const actions = this._widgetActions(
             this._tooltipButton(widget, this._widgetActionButton('screenshot', 'screenshot'),
                 'Add screen area to context'),
             this._tooltipButton(widget, this._selectTextButton(widget), 'Add selected text to context'),
@@ -1382,7 +1408,19 @@ export default class PromptheusExtension extends Extension {
             this._tooltipButton(widget,
                 this._widgetActionButton(stopChatDestination ? 'provider-claude' : 'chat', 'stop_chat',
                     undefined, WIDGET_BUTTON_SECONDARY),
-                stopChatDestination ? `Stop and send to ${stopChatDestination}` : 'Stop and open chat')));
+                stopChatDestination ? `Stop and send to ${stopChatDestination}` : 'Stop and open chat'));
+        widget.row2.add_child(target);
+        widget.row2.add_child(actions);
+        widget.lockedLabel = interactive ? null : label;
+        if (interactive)
+            return;
+        this._setUnreactive(widget.row2);
+        for (const actor of [chevron, actions]) {
+            if (fade)
+                this._easeWidgetOpacity(actor, 0);
+            else
+                actor.opacity = 0;
+        }
     }
 
     _fillItems(widget) {
