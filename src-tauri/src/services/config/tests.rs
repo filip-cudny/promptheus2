@@ -1070,3 +1070,111 @@ fn update_setting_mcp_servers_rejects_invalid_name() {
     assert_eq!(key.as_deref(), Some("mcp_servers.bad name"));
     assert_eq!(fs::read(dir.path().join("settings.json")).unwrap(), bytes_before);
 }
+
+fn settings_json_without_env_vars() -> serde_json::Value {
+    let mut settings = Settings::default();
+    settings.models = vec![
+        test_model("m1", "${OPENAI_API_KEY}"),
+        test_model("m2", "${OPENAI_API_KEY}"),
+        test_model("m3", "${OPENAI_API_KEY}"),
+        test_model("m4", "${ENIGMA_API_KEY}"),
+        test_model("m5", "${OPENROUTER_API_KEY}"),
+        test_stt_model("m6", "${ELEVENLABS_API_KEY}"),
+    ];
+    settings.surfaces.chat.generation.model_id = Some("m1".to_string());
+    settings.surfaces.quick_actions.generation.model_id = Some("m1".to_string());
+    settings.surfaces.title_generation.generation.model_id = Some("m1".to_string());
+    settings.surfaces.speech_to_text.keyterms_file = Some("${STT_KEYTERMS_FILE}".to_string());
+    settings.surfaces.speech_to_text.prompt = Some("${STT_PROMPT_FILE}".to_string());
+    let mut raw = serde_json::to_value(&settings).unwrap();
+    raw["mcp_servers"] = serde_json::json!({
+        "promptheus": {
+            "command": "bun",
+            "args": ["${PROMPTHEUS_MCP_PATH}/src/index.ts"],
+            "env": {
+                "LLM_API_KEY": "${OPENAI_API_KEY}",
+                "TAVILY_API_KEY": "${TAVILY_API_KEY}"
+            }
+        }
+    });
+    raw.as_object_mut().unwrap().remove("env_vars");
+    raw
+}
+
+fn load_written_settings(raw: &serde_json::Value) -> (TempDir, ConfigService, String) {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("settings.json");
+    fs::write(&path, serde_json::to_string_pretty(raw).unwrap()).unwrap();
+    let service = ConfigService::load(dir.path()).expect("load");
+    let written = fs::read_to_string(&path).unwrap();
+    (dir, service, written)
+}
+
+#[test]
+fn env_vars_are_seeded_from_references_when_the_key_is_absent() {
+    let (_dir, service, written) = load_written_settings(&settings_json_without_env_vars());
+
+    let env_vars = &service.settings().env_vars;
+    assert_eq!(env_vars.len(), 8);
+    let secret: Vec<&str> = env_vars
+        .iter()
+        .filter(|var| var.secret)
+        .map(|var| var.name.as_str())
+        .collect();
+    assert_eq!(
+        secret,
+        [
+            "ELEVENLABS_API_KEY",
+            "ENIGMA_API_KEY",
+            "OPENAI_API_KEY",
+            "OPENROUTER_API_KEY",
+            "TAVILY_API_KEY"
+        ]
+    );
+    let plain: Vec<&str> = env_vars
+        .iter()
+        .filter(|var| !var.secret)
+        .map(|var| var.name.as_str())
+        .collect();
+    assert_eq!(plain, ["PROMPTHEUS_MCP_PATH", "STT_KEYTERMS_FILE", "STT_PROMPT_FILE"]);
+    assert!(env_vars
+        .iter()
+        .all(|var| var.description.is_empty() && var.renamed_from.is_empty()));
+    assert!(serde_json::from_str::<serde_json::Value>(&written).unwrap()["env_vars"].is_array());
+}
+
+#[test]
+fn seeded_env_vars_are_stable_on_the_next_load() {
+    let (dir, first_service, first) = load_written_settings(&settings_json_without_env_vars());
+
+    let second_service = ConfigService::load(dir.path()).expect("reload");
+
+    assert_eq!(second_service.settings().env_vars, first_service.settings().env_vars);
+    assert_eq!(fs::read_to_string(dir.path().join("settings.json")).unwrap(), first);
+}
+
+#[test]
+fn existing_env_vars_are_not_reseeded() {
+    let custom = serde_json::json!([{
+        "name": "CUSTOM_VAR",
+        "description": "mine",
+        "secret": true,
+        "renamed_from": ["OLD_VAR"]
+    }]);
+    for list in [custom.clone(), serde_json::json!([])] {
+        let mut raw = settings_json_without_env_vars();
+        raw["env_vars"] = list.clone();
+
+        let (_dir, service, written) = load_written_settings(&raw);
+
+        assert_eq!(serde_json::to_value(&service.settings().env_vars).unwrap(), list);
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&written).unwrap()["env_vars"], list);
+    }
+}
+
+#[test]
+fn env_vars_follow_webview_providers_in_the_written_file() {
+    let (_dir, _service, written) = load_written_settings(&settings_json_without_env_vars());
+
+    assert_keys_in_order(&written, &["webview_providers", "env_vars"]);
+}

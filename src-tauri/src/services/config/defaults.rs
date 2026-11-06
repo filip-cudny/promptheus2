@@ -1,4 +1,5 @@
 use crate::models::settings::Settings;
+use crate::services::secrets;
 
 use super::ConfigError;
 
@@ -135,6 +136,7 @@ pub(crate) fn validate(settings: &Settings) -> Result<(), ConfigError> {
 
     validate_webview_providers(settings)?;
     validate_mcp_servers(settings)?;
+    validate_env_vars(settings)?;
 
     Ok(())
 }
@@ -155,6 +157,29 @@ fn validate_mcp_servers(settings: &Settings) -> Result<(), ConfigError> {
             return Err(ConfigError::invalid_at(
                 format!("mcp_servers.{name}.command"),
                 format!("MCP server '{name}' needs a command"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_env_vars(settings: &Settings) -> Result<(), ConfigError> {
+    let mut seen = std::collections::HashSet::new();
+    for var in &settings.env_vars {
+        let key = format!("env_vars[{}].name", var.name);
+        if !secrets::validate_name(&var.name) {
+            return Err(ConfigError::invalid_at(
+                key,
+                format!(
+                    "Environment variable name '{}' must start with a letter or '_' and contain only letters, digits and '_'",
+                    var.name
+                ),
+            ));
+        }
+        if !seen.insert(var.name.as_str()) {
+            return Err(ConfigError::invalid_at(
+                key,
+                format!("Duplicate environment variable name: '{}'", var.name),
             ));
         }
     }
@@ -215,7 +240,9 @@ fn validate_webview_providers(settings: &Settings) -> Result<(), ConfigError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::settings::{ModelConfig, ModelType, Provider, Settings, WebviewProvider};
+    use crate::models::settings::{
+        EnvVar, ModelConfig, ModelType, Provider, Settings, WebviewProvider,
+    };
 
     fn text_model(id: &str) -> ModelConfig {
         ModelConfig {
@@ -339,5 +366,43 @@ mod tests {
         };
         let err = validate(&settings).unwrap_err().to_string();
         assert!(err.contains("Duplicate webview_providers"), "{err}");
+    }
+
+    fn env_var(name: &str) -> EnvVar {
+        EnvVar {
+            name: name.into(),
+            description: String::new(),
+            secret: false,
+            renamed_from: Vec::new(),
+        }
+    }
+
+    fn settings_with_env_vars(names: &[&str]) -> Settings {
+        Settings {
+            models: vec![text_model("1")],
+            env_vars: names.iter().map(|name| env_var(name)).collect(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn validate_env_vars_duplicate_name_fails() {
+        let err = validate(&settings_with_env_vars(&["OPENAI_API_KEY", "OPENAI_API_KEY"]))
+            .unwrap_err();
+        assert!(err.to_string().contains("OPENAI_API_KEY"), "{err}");
+        assert!(err.to_string().contains("Duplicate"), "{err}");
+    }
+
+    #[test]
+    fn validate_env_vars_invalid_name_fails() {
+        for name in ["1BAD", "has-dash"] {
+            let err = validate(&settings_with_env_vars(&[name])).unwrap_err();
+            assert!(err.to_string().contains(name), "{err}");
+        }
+    }
+
+    #[test]
+    fn validate_env_vars_valid_list_passes() {
+        validate(&settings_with_env_vars(&["OPENAI_API_KEY", "_PRIVATE", "path2"])).unwrap();
     }
 }

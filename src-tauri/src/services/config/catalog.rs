@@ -21,6 +21,7 @@ pub enum Section {
     Chat,
     ContextMenu,
     Speech,
+    Environment,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -158,6 +159,10 @@ pub const ENTRIES: &[CatalogEntry] = &[
     live("surfaces.speech_to_text.claude_target", Speech, "Claude target", "Where a transcription sent to Claude goes: the Claude webview or Claude Desktop.", Kind::Choice { values: &["webview", "desktop"] }),
     live("surfaces.speech_to_text.stop_chat_target", Speech, "Stop + chat target", "Where Stop + chat sends the transcription: the app chat or Claude.", Kind::Choice { values: &["chat", "claude"] }),
     live("keymaps.speech_to_text_toggle", Speech, "Toggle speech to text", "Global shortcut that starts and stops a recording.", Kind::Shortcut),
+    live("env_vars[].name", Environment, "Name", "Name of the environment variable, referenced as ${NAME} in settings.", TEXT),
+    live("env_vars[].description", Environment, "Description", "What the variable is used for.", TEXT),
+    live("env_vars[].secret", Environment, "Secret", "Masks the value wherever it is shown.", Kind::Bool),
+    live("env_vars[].renamed_from", Environment, "Previous names", "Earlier names of the variable. Each machine copies a missing value from the first previous name that has one.", Kind::List),
 ];
 
 pub const FILE_ONLY: &[&str] = &[
@@ -324,8 +329,8 @@ mod tests {
     use super::*;
     use crate::models::capabilities::{Effort, ModelCapabilities, ReasoningMode};
     use crate::models::settings::{
-        ApiMode, KeymapGroup, McpServerConfig, ModelConfig, ModelParameters, ModelType, Provider,
-        Settings, WebviewProvider,
+        ApiMode, EnvVar, KeymapGroup, McpServerConfig, ModelConfig, ModelParameters, ModelType,
+        Provider, Settings, WebviewProvider,
     };
     use std::collections::HashMap;
 
@@ -378,6 +383,12 @@ mod tests {
             id: "claude".into(),
             name: "Claude".into(),
             url: "https://claude.ai/".into(),
+        }];
+        settings.env_vars = vec![EnvVar {
+            name: "OPENAI_API_KEY".into(),
+            description: "d".into(),
+            secret: true,
+            renamed_from: vec!["OLD_KEY".into()],
         }];
         settings.surfaces.chat.generation.model_id = Some("abc".into());
         settings.surfaces.chat.generation.parameters = full_parameters();

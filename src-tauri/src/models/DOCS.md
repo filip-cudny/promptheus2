@@ -22,6 +22,12 @@ Maps in `Settings` serialize sorted by key (`serialize_sorted`, `BTreeMap` for `
 
 `strip_removed_settings` (`services/config/migrator.rs`) runs in `parse_and_migrate` on every load, right after `migrate_monochromatic_flags` and before deserializing. It deletes the top-level keys `code_theme` and `debug_mode` (they would otherwise survive in `Settings.extra`) and every `keymaps` entry whose `context`, whitespace removed, is `os==windows`; it logs at `info` only when it removed something. Removed nested fields (`enabled_tools` of `quick_actions` and `title_generation`, `parameters` of `title_generation`) need no strip: `QuickActionsGeneration` and `TitleGeneration` do not declare them, so deserializing drops them and the next save writes the file without them.
 
+### Environment variable list `env_vars`
+
+`Settings.env_vars` (`Vec<EnvVar>`, `#[serde(default)]`, declared after `webview_providers`, so an older app keeps the key in `extra`) is the synced list of the variables settings reference as `${NAME}`. Values are never stored here (they live in `.env`). `EnvVar` fields: `name` (unique, passes `secrets::validate_name`), `description` (default empty), `secret` (default `false`, masks the value), `renamed_from` (default empty; each machine copies a missing value from the first previous name that has one). `validate` rejects an invalid or duplicate name with key `env_vars[<name>].name`; the catalog section is `environment`.
+
+Seeding: `parse_and_migrate` sets `MigrationOutcome.seed_env_vars` when the raw JSON object lacks the key `env_vars`; `build_settings` then fills the list with one entry per name `missing_env::collect_missing(&settings, |_| false)` returns (sorted by name, empty `description` and `renamed_from`). `secret` is `true` when a use key ends with `.api_key` or contains `.env.` (MCP server env value). A referenced name that fails `validate_name` is skipped with a `warn` log, so it cannot make the load fail. An existing list, also `[]`, is never re-seeded.
+
 ### Serde defaults pattern
 
 `surfaces.speech_to_text.recording_widget_at_cursor` (default `true` via `default_true` and the manual `Default` impl): the recording widget opens at the cursor and drags are not stored. `surfaces.speech_to_text.recording_widget_anchor` (`#[serde(default)]`, `PillAnchor`, default `above_right`) picks the side of the cursor: `above_right` puts the pill's bottom-left corner at the cursor; `above_*`/`below_*` × `right`/`center`/`left`.

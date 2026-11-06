@@ -104,8 +104,22 @@ pub struct Settings {
     #[serde(default = "default_webview_providers")]
     pub webview_providers: Vec<WebviewProvider>,
 
+    #[serde(default)]
+    pub env_vars: Vec<EnvVar>,
+
     #[serde(flatten)]
     pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EnvVar {
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub secret: bool,
+    #[serde(default)]
+    pub renamed_from: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -650,6 +664,7 @@ impl Default for Settings {
             mcp_servers: HashMap::new(),
             skills_order: Vec::new(),
             webview_providers: default_webview_providers(),
+            env_vars: Vec::new(),
             extra: serde_json::Map::new(),
         }
     }

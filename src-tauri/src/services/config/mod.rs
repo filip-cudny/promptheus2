@@ -12,8 +12,9 @@ pub use prompts::{PromptKind, PromptStore};
 use std::path::{Path, PathBuf};
 
 use crate::models::settings::{
-    KeymapGroup, ModelConfig, NotificationSettings, Settings, SpeechToTextConfig,
+    EnvVar, KeymapGroup, ModelConfig, NotificationSettings, Settings, SpeechToTextConfig,
 };
+use crate::services::secrets;
 use crate::services::hotkeys::{matches_current_os, translate_shortcut};
 
 pub(crate) use path::resolve_config_relative;
@@ -244,6 +245,7 @@ impl ConfigService {
             "webview_providers" => {
                 settings.webview_providers = serde_json::from_value(value).map_err(invalid)?
             }
+            "env_vars" => settings.env_vars = serde_json::from_value(value).map_err(invalid)?,
             _ => return Err(ConfigError::invalid_at(key, "unknown setting")),
         }
         Ok(())
@@ -582,8 +584,41 @@ fn build_settings(config_dir: &Path, content: &str) -> Result<Settings, ConfigEr
     migrate_explicit_capabilities(&mut settings);
     ensure_surface_defaults(&mut settings);
 
+    if outcome.seed_env_vars {
+        seed_env_vars(&mut settings);
+    }
+
     validate(&settings)?;
     Ok(settings)
+}
+
+fn seed_env_vars(settings: &mut Settings) {
+    let referenced = crate::services::missing_env::collect_missing(settings, |_| false);
+    let (valid, invalid): (Vec<_>, Vec<_>) = referenced
+        .into_iter()
+        .partition(|reference| secrets::validate_name(&reference.name));
+    for reference in &invalid {
+        log::warn!(
+            "skipped seeding env_vars entry: '{}' is not a valid variable name",
+            reference.name
+        );
+    }
+    settings.env_vars = valid
+        .into_iter()
+        .map(|reference| EnvVar {
+            secret: reference
+                .used_in
+                .iter()
+                .any(|usage| usage.key.ends_with(".api_key") || usage.key.contains(".env.")),
+            name: reference.name,
+            description: String::new(),
+            renamed_from: Vec::new(),
+        })
+        .collect();
+    log::info!(
+        "seeded env_vars from existing references: {:?}",
+        settings.env_vars.iter().map(|var| var.name.as_str()).collect::<Vec<_>>()
+    );
 }
 
 const DEFAULT_STT_KEYTERMS_PATH: &str = "data/keyterms.txt";

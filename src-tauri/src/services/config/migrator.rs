@@ -13,6 +13,7 @@ pub(super) struct MigrationOutcome {
     pub settings: Settings,
     pub inline_prompts: Vec<InlinePromptWrite>,
     pub legacy_flat_md_renames: Vec<LegacyFlatMdRename>,
+    pub seed_env_vars: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -71,6 +72,10 @@ pub(super) fn parse_and_migrate(content: &str) -> Result<MigrationOutcome, Confi
         raw
     };
 
+    let seed_env_vars = migrated
+        .as_object()
+        .is_some_and(|obj| !obj.contains_key("env_vars"));
+
     migrate_monochromatic_flags(&mut migrated);
     strip_removed_settings(&mut migrated);
 
@@ -80,6 +85,7 @@ pub(super) fn parse_and_migrate(content: &str) -> Result<MigrationOutcome, Confi
         settings,
         inline_prompts,
         legacy_flat_md_renames: LEGACY_FLAT_MD_RENAMES.to_vec(),
+        seed_env_vars,
     })
 }
 
