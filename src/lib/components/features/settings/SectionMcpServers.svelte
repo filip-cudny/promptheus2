@@ -12,7 +12,7 @@
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
   import { updateSetting } from "$lib/services/settings";
-    import { listMcpServers, type McpServerConfig, type McpServerState } from "$lib/services/mcp";
+  import { listMcpServers, type McpServerConfig, type McpServerState } from "$lib/services/mcp";
   import SettingsSection from "./SettingsSection.svelte";
   import SettingField from "./SettingField.svelte";
   import EnvVarPicker from "./EnvVarPicker.svelte";

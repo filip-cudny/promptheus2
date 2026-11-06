@@ -3,6 +3,8 @@
   import { warn as logWarn } from "@tauri-apps/plugin-log";
   import { ICON_SIZE } from "$lib/constants/ui";
   import FloatingPanel from "$lib/components/shared/ui/FloatingPanel.svelte";
+  import MenuItem from "$lib/components/shared/ui/MenuItem.svelte";
+  import MenuList from "$lib/components/shared/ui/MenuList.svelte";
   import { getEnvVars } from "$lib/services/settings";
   import { insertAt } from "$lib/utils/envVarOptions";
   import type { EnvVarStatus } from "$lib/types";
@@ -67,64 +69,13 @@
 </button>
 
 <FloatingPanel visible={open} anchorEl={buttonEl} position="below" fitContent onclose={() => (open = false)}>
-  <ul class="list" role="listbox" aria-label={ariaLabel}>
+  <MenuList>
     {#each vars as v (v.name)}
-      <li>
-        <button type="button" class="option" onclick={() => insert(v.name)}>
-          <code>{v.name}</code>
-          {#if !v.set}<span class="missing">missing</span>{/if}
-        </button>
-      </li>
+      <MenuItem label={v.name} onclick={() => insert(v.name)}>
+        {#snippet shortcut()}{#if !v.set}missing{/if}{/snippet}
+      </MenuItem>
     {:else}
-      <li class="empty">No variables listed.</li>
+      <div class="menu-list-info">No variables listed.</div>
     {/each}
-  </ul>
+  </MenuList>
 </FloatingPanel>
-
-<style>
-  .list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    min-width: 200px;
-    max-width: 320px;
-  }
-
-  .option {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-4);
-    width: 100%;
-    padding: var(--space-2) var(--space-5);
-    background: transparent;
-    border: none;
-    color: var(--text-primary);
-    cursor: pointer;
-    text-align: left;
-  }
-
-  .option:hover,
-  .option:focus-visible {
-    background: var(--surface-overlay-faint);
-    outline: none;
-  }
-
-  code {
-    font-family: var(--font-mono);
-    font-size: var(--font-size-sm);
-  }
-
-  .missing {
-    font-size: var(--font-size-xs);
-    color: var(--text-muted);
-  }
-
-  .empty {
-    padding: var(--space-2) var(--space-5);
-    font-size: var(--font-size-sm);
-    color: var(--text-muted);
-  }
-</style>
