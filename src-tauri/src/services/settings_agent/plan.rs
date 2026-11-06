@@ -519,14 +519,19 @@ fn explain_dependency(
     RowError { message: format!("depends on unchecked {noun} {}", numbers.join(", ")), ..error }
 }
 
-pub fn stale_rows(plan: &Plan, current: &Current) -> Vec<usize> {
+pub(super) struct Mismatch<'a> {
+    pub row: usize,
+    pub effect: &'a Effect,
+    pub current: Option<Value>,
+}
+
+pub(super) fn mismatches<'a>(rows: &'a [PlannedRow], current: &Current) -> Vec<Mismatch<'a>> {
     let mut json = serde_json::to_value(current.settings).unwrap_or(Value::Null);
     let mut files: BTreeMap<String, Option<String>> = BTreeMap::new();
-    let mut stale = Vec::new();
-    for planned in &plan.rows {
-        let mut changed = false;
+    let mut found = Vec::new();
+    for planned in rows {
         for effect in &planned.operation.effects {
-            match &effect.target {
+            let (expected, actual) = match &effect.target {
                 Target::Setting { path } => {
                     let segments = parse_path(path);
                     let is_removal =
@@ -535,32 +540,44 @@ pub fn stale_rows(plan: &Plan, current: &Current) -> Vec<usize> {
                         .before
                         .as_ref()
                         .map(|before| if is_removal { removed_value(before) } else { before });
-                    changed |= get_at(&json, &segments) != expected;
-                    let _ = set_at(&mut json, &segments, effect.after.clone());
+                    let actual = get_at(&json, &segments).cloned();
+                    let _ = put_at(&mut json, &segments, effect.after.clone());
+                    (expected.cloned(), actual)
                 }
                 Target::File { path } => {
                     let working = files
                         .entry(path.clone())
                         .or_insert_with(|| read_disk(current.config_dir, path).ok().flatten());
-                    let expected = effect.before.as_ref().and_then(Value::as_str);
-                    changed |= working.as_deref() != expected;
+                    let actual = working.clone().map(Value::String);
                     *working = effect.after.as_ref().and_then(Value::as_str).map(str::to_string);
+                    (effect.before.clone(), actual)
                 }
+            };
+            let is_setting = matches!(effect.target, Target::Setting { .. });
+            let as_absent = |value: &Option<Value>| match value {
+                Some(Value::Null) if is_setting => None,
+                other => other.clone(),
+            };
+            if as_absent(&actual) != as_absent(&expected) {
+                found.push(Mismatch { row: planned.row, effect, current: actual });
             }
         }
-        if changed {
-            stale.push(planned.row);
-        }
     }
+    found
+}
+
+pub fn stale_rows(plan: &Plan, current: &Current) -> Vec<usize> {
+    let mut stale: Vec<usize> = mismatches(&plan.rows, current).iter().map(|m| m.row).collect();
+    stale.dedup();
     stale
 }
 
-enum Segment {
+pub(super) enum Segment {
     Key(String),
     Item(String),
 }
 
-fn parse_path(path: &str) -> Vec<Segment> {
+pub(super) fn parse_path(path: &str) -> Vec<Segment> {
     let mut segments = Vec::new();
     let mut rest = path;
     while !rest.is_empty() {
@@ -586,7 +603,7 @@ fn item_key(item: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
-fn get_at<'a>(root: &'a Value, segments: &[Segment]) -> Option<&'a Value> {
+pub(super) fn get_at<'a>(root: &'a Value, segments: &[Segment]) -> Option<&'a Value> {
     segments.iter().try_fold(root, |node, segment| match segment {
         Segment::Key(key) => node.get(key),
         Segment::Item(id) => node
@@ -631,12 +648,52 @@ fn set_at(node: &mut Value, segments: &[Segment], new: Option<Value>) -> Result<
     }
 }
 
+pub(super) fn put_at(node: &mut Value, segments: &[Segment], new: Option<Value>) -> Result<(), String> {
+    let at_index = match (segments.last(), &new) {
+        (Some(Segment::Item(_)), Some(Value::Object(map))) if map.len() == 2 => map
+            .get("index")
+            .and_then(Value::as_u64)
+            .zip(map.get("value"))
+            .map(|(index, value)| (index as usize, value.clone())),
+        _ => None,
+    };
+    let Some((index, value)) = at_index else {
+        return set_at(node, segments, new);
+    };
+    set_at(node, segments, Some(value))?;
+    let (Some(Segment::Item(id)), parent_path) = (segments.last(), &segments[..segments.len() - 1]) else {
+        return Ok(());
+    };
+    let Some(items) = parent_mut(node, parent_path).and_then(Value::as_array_mut) else {
+        return Ok(());
+    };
+    if let Some(at) = items.iter().position(|item| item_key(item).as_deref() == Some(id.as_str())) {
+        let item = items.remove(at);
+        items.insert(index.min(items.len()), item);
+    }
+    Ok(())
+}
+
+fn parent_mut<'a>(root: &'a mut Value, segments: &[Segment]) -> Option<&'a mut Value> {
+    let mut node = root;
+    for segment in segments {
+        node = match segment {
+            Segment::Key(key) => node.get_mut(key)?,
+            Segment::Item(id) => node
+                .as_array_mut()?
+                .iter_mut()
+                .find(|item| item_key(item).as_deref() == Some(id.as_str()))?,
+        };
+    }
+    Some(node)
+}
+
 /// A removed list item is recorded as `{"index": <position>, "value": <item>}` in `before` so an undo can reinsert it at the same position.
 fn removed_item(index: usize, item: &Value) -> Value {
     json!({ "index": index, "value": item })
 }
 
-fn removed_value(before: &Value) -> &Value {
+pub(super) fn removed_value(before: &Value) -> &Value {
     match before {
         Value::Object(map) if map.len() == 2 && map.contains_key("index") => {
             map.get("value").unwrap_or(before)

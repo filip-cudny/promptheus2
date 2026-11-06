@@ -201,6 +201,10 @@ impl ConfigService {
         &self.settings
     }
 
+    pub(crate) fn replace_settings(&mut self, settings: Settings) {
+        self.settings = settings;
+    }
+
     pub fn update_setting(
         &mut self,
         key: &str,

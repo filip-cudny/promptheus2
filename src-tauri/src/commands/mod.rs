@@ -1,5 +1,6 @@
 pub mod ai;
 pub mod ai_webview;
+pub mod change_log;
 pub mod clipboard;
 pub mod context;
 pub mod context_editor;
@@ -45,6 +46,9 @@ macro_rules! handlers {
             $crate::commands::ai_webview::close_active_tab,
             $crate::commands::ai_webview::new_tab_like_active,
             $crate::commands::ai_webview::report_native_tabs,
+            // === change_log ===
+            $crate::commands::change_log::list_change_log,
+            $crate::commands::change_log::undo_change,
             // === clipboard ===
             $crate::commands::clipboard::get_clipboard_text,
             $crate::commands::clipboard::get_clipboard_image,

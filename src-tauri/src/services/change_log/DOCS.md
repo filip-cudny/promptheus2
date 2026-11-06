@@ -58,3 +58,15 @@ Undo:
 ## Sync
 
 `settings_sync::detect` adds `<settings target parent>/change-log` to the stage paths only when the directory exists. A host whose directory does not exist yet gets the first pulled entries through the rebase but no `change-log-changed` event until the next cycle. After a pull that changed a path under the directory, `reload_changed` sets `Reloaded.change_log` and the app emits `change-log-changed` (no payload).
+
+## Apply and undo
+
+`services/settings_agent/apply.rs`; commands in `commands/change_log.rs`.
+
+`apply(plan, current, ctx)`: refuses with `ApplyError::Stale(rows)` when `stale_rows` is non-empty (nothing written). Otherwise writes the rows in order: per row, its setting effects as one `ConfigService::try_mutate` (validation kept), then its file effects (content written in place with `std::fs::write`, `after = null` deletes the file and removes empty skill directories). Before the first write to a target its content is snapshotted (`settings.json` bytes once, each file's bytes or absence). On the first failing write every snapshot is restored in reverse order (`settings.json` is rewritten and the config reloaded) and `ApplyError::WriteFailed { row, message }` returns; no log file exists then. After the last write one `kind: card` entry is written with the rows' `LoggedOperation`s and their `TestResult`s (`ctx.tests`, keyed by row). `ctx.request` and `ctx.reply` go into the entry.
+
+`undo(entry_id, force, ctx)`: a `secret` entry or an entry with `secret` set goes to `secrets::undo_secret` (`Undone` or `Skipped { held_by }`). Otherwise the entry's rows are inverted (rows and effects in reverse order, `before` and `after` swapped). Each inverted effect's expected value (the original `after`) is compared with the current value in order: a difference is a `Conflict { row, target, expected_after, current }`. With conflicts and `force == false` the outcome is `Conflicts { conflicts }` and nothing is written. Otherwise the inverted rows are written with the same snapshot and restore rule, then one `kind: undo` entry with `undoes = entry_id` and the inverted effects is written. Undoing an `undo` entry therefore re-applies the original effects and writes a third entry naming the second. For setting targets a `null` and an absent value compare equal (a logged `null` reads back as absent). A removed list item is logged as `{"index", "value"}` in `before` and reinserted at that index.
+
+Outcomes (`status`, snake_case): `undone` (`entry_id` of the new undo entry), `conflicts`, `skipped` (`held_by`).
+
+Commands: `list_change_log` returns `[{entry, state}]` of all hosts, newest first, `state` is `applied` or `undone`; `undo_change(id, force)`. After a successful write `apply_settings_reload(app, "agent")` runs and `change-log-changed` is emitted. `commands::change_log::apply_plan` runs apply with the same follow-up steps for the agent loop.
