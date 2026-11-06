@@ -10,14 +10,6 @@ use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
 
 #[tauri::command]
-pub async fn check_env_var(name: String) -> crate::Result<bool> {
-    if name.is_empty() {
-        return Ok(false);
-    }
-    Ok(crate::services::env_resolve::env_value(&name).is_some_and(|v| !v.is_empty()))
-}
-
-#[tauri::command]
 pub async fn open_settings_window(
     app: tauri::AppHandle,
     section: Option<String>,

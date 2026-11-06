@@ -163,7 +163,6 @@ macro_rules! handlers {
             $crate::commands::settings_sync::sync_settings_now,
             // === settings_dialog ===
             $crate::commands::settings_dialog::open_settings_window,
-            $crate::commands::settings_dialog::check_env_var,
             $crate::commands::settings_dialog::save_secret,
             $crate::commands::settings_dialog::get_secret_value,
             // === skills ===
