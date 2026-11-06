@@ -198,7 +198,10 @@
       <div class="editor">
         {#if selected}
           {@const state = stateOf.get(selected.name)}
-          <div class="head"><SaveStatusIndicator {tracker} /></div>
+          <header class="head">
+            <h1>{selected.name || "(unnamed)"}</h1>
+            <SaveStatusIndicator {tracker} />
+          </header>
 
           {#if state?.state === "error"}
             <pre class="start-error">{state.error}</pre>
@@ -274,7 +277,7 @@
           <SettingField key="mcp_servers.*.env">
             <div class="pairs">
               {#each selected.env as pair (pair.key)}
-                <div class="pair">
+                <div class="pair env">
                   <TextInput
                     value={pair.name}
                     placeholder="NAME"
@@ -450,7 +453,16 @@
 
   .head {
     display: flex;
-    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-5);
+  }
+
+  .head h1 {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-primary);
+    margin: var(--space-0);
+    line-height: 1.2;
   }
 
   .start-error {
@@ -517,6 +529,10 @@
     display: flex;
     gap: var(--space-3);
     align-items: center;
+  }
+
+  .pair.env > :global(.text-input) {
+    flex: 0 0 38%;
   }
 
   .icon-btn {
