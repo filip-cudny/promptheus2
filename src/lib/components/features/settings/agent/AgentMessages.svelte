@@ -3,6 +3,8 @@
   import MarkdownRenderer from "$lib/components/shared/ui/MarkdownRenderer.svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
+  import SecretField from "../SecretField.svelte";
+  import ProposalCard from "./ProposalCard.svelte";
   import { parseSettingLink, showSettingLinks } from "$lib/utils/settingLinks";
 
   const agent = getSettingsAgent();
@@ -38,6 +40,19 @@
       </div>
     {/if}
   {/each}
+  {#each agent.secretRequests as request (request.request_id)}
+    <SecretField
+      name={request.name}
+      purpose={request.purpose}
+      exists={request.exists}
+      onclose={(outcome) => agent.resolveSecret(request.request_id, outcome)}
+    />
+  {/each}
+  {#if agent.proposal}
+    {#key agent.proposal.proposal_id}
+      <ProposalCard proposal={agent.proposal} />
+    {/key}
+  {/if}
   {#if agent.error}
     <div class="error">{agent.error}</div>
   {/if}

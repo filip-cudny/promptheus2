@@ -58,7 +58,15 @@ Links: the assistant writes `[label](setting:<key>)`. `$lib/utils/settingLinks.t
 
 ### Missing environment variables
 
-`MissingEnvList.svelte` sits above sidebar and content in `src/windows/settings-dialog/App.svelte` and renders only when `getMissingEnvRefs()` (backend `get_missing_env_refs`) returns names: each `${VAR}` without a value on this machine with the labels of where it is used, plus a line to add it to `.env` in the config directory and restart. It refreshes on `settings-changed` (`onSettingsChanged`) and window focus. The same set drives the startup/sync toast (`src-tauri/src/services/DOCS.md`).
+`MissingEnvList.svelte` sits above sidebar and content in `src/windows/settings-dialog/App.svelte` and renders only when `getMissingEnvRefs()` (backend `get_missing_env_refs`) returns names: each `${VAR}` without a value on this machine with the labels of where it is used, plus an "Add" button that opens `SecretField` inline under the name (no agent involved); closing it refreshes the list. It refreshes on `settings-changed` (`onSettingsChanged`) and window focus. The same set drives the startup/sync toast (`src-tauri/src/services/DOCS.md`).
+
+### Proposal card
+
+`agent/ProposalCard.svelte` renders the store's `proposal` (event `settings-agent-proposal`, one card; a new proposal replaces it, a refresh keeps the checkbox state because the card is keyed by `proposal_id`) after the secret requests in `AgentMessages`. `ProposalRow` per row: checkbox (checked by default), label, each effect as before → after (setting effects) or a line diff (`lineDiff` in `$lib/utils/lineDiff.ts`, file effects: skill and prompt files), the test result (`OK · <ms> ms` or the exact error; skill output in a collapsed "Output"), "Test" (only for model, skill and MCP rows; `settings_agent_test_row`) and "show" (`navigateTo` with the setting's concrete key; skill files switch to the Skills section, prompt files to Prompt Base). A stale row shows "changed since proposed"; "Refresh" (`settings_agent_refresh`) is offered and Apply stays disabled until none is stale. Apply sends one boolean per operation index; `stale_rows` or `error` (dependency errors name the dependent rows) show on the card and nothing is written. Success shows "Applied"; the entry id is in `proposalOutcome` of the store for the history view. Reject closes the card.
+
+### Secret field
+
+`SecretField.svelte` (props `name`, `purpose`, `exists`, `onclose(outcome)`): masked input, reveal toggle (`Eye`/`EyeOff`; for an existing value the reveal loads it with `get_secret_value`), Save (`save_secret`, writes at once as its own change, independent of any card) and Cancel. `onclose` gets `saved` or `cancelled`; the value lives only in the component state, never in a store, log or event. For agent requests the outcome goes to `settings_agent_secret_result`; the backend turns `cancelled` into `exists` when the variable already has a value.
 
 ### Persistence — auto-save with debounce
 
