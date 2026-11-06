@@ -1,4 +1,4 @@
-import { Marked, type RendererObject } from "marked";
+import { Marked, Renderer, type RendererObject } from "marked";
 import hljs from "highlight.js";
 import { icon, icons } from "$lib/utils/icons";
 
@@ -68,6 +68,9 @@ function createRenderer(): RendererObject {
 
       const copyIcon = icon(icons.Copy);
       return `<div class="code-block"><div class="code-block-header"><span class="code-lang">${langDisplayName(lang)}</span><button class="copy-btn" data-copy-index="${idx}">${copyIcon}</button></div><pre><code class="hljs">${codeHtml}</code></pre></div>`;
+    },
+    table(token) {
+      return `<div class="table-wrapper">${Renderer.prototype.table.call(this, token)}</div>`;
     },
   };
 }

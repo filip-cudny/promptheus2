@@ -312,15 +312,17 @@
     color: var(--text-secondary);
   }
 
-  .markdown-renderer :global(table) {
-    display: block;
+  .markdown-renderer :global(.table-wrapper) {
     overflow-x: auto;
     max-width: 100%;
-    width: max-content;
-    border-collapse: collapse;
     border: 1px solid var(--border-default);
     border-radius: 6px;
     margin: var(--space-3) var(--space-0);
+  }
+
+  .markdown-renderer :global(table) {
+    width: 100%;
+    border-collapse: collapse;
     font-size: var(--font-size-base);
   }
 
