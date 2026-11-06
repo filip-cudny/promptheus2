@@ -28,6 +28,7 @@ pub enum Outcome {
     FocusLost,
     NoRead,
     NoPermission,
+    Timeout,
     Failed(String),
 }
 
@@ -36,6 +37,7 @@ enum Action {
     None,
     Fallback(&'static str),
     PasteToast,
+    ClipboardToast,
 }
 
 impl Outcome {
@@ -46,6 +48,7 @@ impl Outcome {
             Ok("no_window") => Outcome::NoWindow,
             Ok("focus_lost") => Outcome::FocusLost,
             Ok("no_read") => Outcome::NoRead,
+            Ok("timeout") => Outcome::Timeout,
             Ok(_) => Outcome::Failed("unknown outcome".into()),
             Err(e) => Outcome::Failed(e.into()),
         }
@@ -58,6 +61,7 @@ impl Outcome {
             Outcome::FocusLost => "FocusLost",
             Outcome::NoRead => "NoRead",
             Outcome::NoPermission => "NoPermission",
+            Outcome::Timeout => "Timeout",
             Outcome::Failed(_) => "Failed",
         }
     }
@@ -69,6 +73,7 @@ impl Outcome {
             Outcome::NoPermission => Action::Fallback("Accessibility permission missing"),
             Outcome::Failed(_) => Action::Fallback("could not hand over to Claude Desktop"),
             Outcome::FocusLost | Outcome::NoRead => Action::PasteToast,
+            Outcome::Timeout => Action::ClipboardToast,
         }
     }
 }
@@ -87,6 +92,19 @@ fn full_text(context: Option<&str>, transcript: &str) -> String {
     match context {
         Some(context) => format!("{context}\n\n{transcript}"),
         None => transcript.to_string(),
+    }
+}
+
+fn timeout_description(image_names: &[String], copied: bool) -> String {
+    if !copied {
+        "copying the message failed".to_string()
+    } else if image_names.is_empty() {
+        "the message is on the clipboard".to_string()
+    } else {
+        format!(
+            "the message is on the clipboard; not attached: {}",
+            image_names.join(", "),
+        )
     }
 }
 
@@ -218,6 +236,7 @@ pub async fn deliver(app: AppHandle, transcript: String) {
     let run = NEXT_RUN.fetch_add(1, Ordering::Relaxed);
     let (context, images) = read_context(&app).await;
     let full = full_text(context.as_deref(), &transcript);
+    let image_names: Vec<String> = images.iter().map(|image| image.name.clone()).collect();
     let Placement { q, context_file } = place(context.as_deref(), &transcript);
 
     let warm = is_warm();
@@ -266,11 +285,17 @@ pub async fn deliver(app: AppHandle, transcript: String) {
         log::warn!(target: LOG_TARGET, "run={run} failed: {reason}");
     }
 
-    act(&app, run, full, &outcome).await;
+    act(&app, run, full, &image_names, &outcome).await;
     schedule_run_dir_removal(&app, run);
 }
 
-async fn act(app: &AppHandle, run: u64, full: String, outcome: &Outcome) {
+async fn act(
+    app: &AppHandle,
+    run: u64,
+    full: String,
+    image_names: &[String],
+    outcome: &Outcome,
+) {
     match outcome.action() {
         Action::None => {}
         Action::Fallback(reason) => {
@@ -284,6 +309,27 @@ async fn act(app: &AppHandle, run: u64, full: String, outcome: &Outcome) {
                 NotificationLevel::Error,
                 "Not sent to Claude Desktop",
                 Some(format!("paste with {key}+V and press Enter")),
+            )
+            .await;
+        }
+        Action::ClipboardToast => {
+            let clipboard_app = app.clone();
+            let copied = tauri::async_runtime::spawn_blocking(move || {
+                crate::services::clipboard::write_text(&clipboard_app, &full)
+            })
+            .await
+            .is_ok_and(|result| result.is_ok());
+            if copied {
+                log::warn!(target: LOG_TARGET, "run={run}: not sent, text copied");
+            } else {
+                log::warn!(target: LOG_TARGET, "run={run}: not sent, copying the text failed");
+            }
+            NotificationService::notify_now(
+                app,
+                "webview_send_failed",
+                NotificationLevel::Error,
+                "Not sent to Claude Desktop",
+                Some(timeout_description(image_names, copied)),
             )
             .await;
         }
@@ -359,6 +405,7 @@ mod tests {
         assert_eq!(Outcome::from_reply(Ok("no_window".into())), Outcome::NoWindow);
         assert_eq!(Outcome::from_reply(Ok("focus_lost".into())), Outcome::FocusLost);
         assert_eq!(Outcome::from_reply(Ok("no_read".into())), Outcome::NoRead);
+        assert_eq!(Outcome::from_reply(Ok("timeout".into())), Outcome::Timeout);
         assert!(matches!(Outcome::from_reply(Ok("bogus".into())), Outcome::Failed(_)));
         let unknown = Outcome::from_reply(Err("org.freedesktop.DBus.Error.UnknownMethod".into()));
         assert!(matches!(unknown, Outcome::Failed(_)));
@@ -372,5 +419,25 @@ mod tests {
         assert_eq!(Outcome::FocusLost.action(), Action::PasteToast);
         assert_eq!(Outcome::NoRead.action(), Action::PasteToast);
         assert_eq!(Outcome::Sent.action(), Action::None);
+        assert_eq!(Outcome::Timeout.action(), Action::ClipboardToast);
+    }
+
+    #[test]
+    fn claude_desktop_timeout_description_names_unattached_images() {
+        assert_eq!(timeout_description(&[], true), "the message is on the clipboard");
+        let names = ["image-1.png".to_string(), "image-2.png".to_string()];
+        assert_eq!(
+            timeout_description(&names, true),
+            "the message is on the clipboard; not attached: image-1.png, image-2.png",
+        );
+        assert_eq!(timeout_description(&names, false), "copying the message failed");
+    }
+
+    #[test]
+    fn claude_desktop_full_text_over_the_limit_joins_context_and_transcript() {
+        let transcript = units(LINK_TEXT_LIMIT + 1);
+        let joined = format!("{}\n\n{}", units(100), transcript);
+        assert_eq!(full_text(Some(&units(100)), &transcript), joined);
+        assert_eq!(place(Some(&units(100)), &transcript).q, "");
     }
 }
