@@ -18,9 +18,11 @@
   let {
     kind,
     description,
+    minHeight,
   }: {
     kind: PromptKind;
     description?: string;
+    minHeight?: number;
   } = $props();
 
   const settingsStore = getSettingsStore();
@@ -119,6 +121,7 @@
       {highlightPattern}
       placeholder={doc ? "" : "Loading…"}
       disabled={!doc}
+      {minHeight}
     />
   </div>
 

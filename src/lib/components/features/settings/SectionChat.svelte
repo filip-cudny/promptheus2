@@ -124,6 +124,7 @@
         <div class="prompt">
           <PromptEditor
             kind="title_generation"
+            minHeight={0}
             description="Used to auto-name conversations after the first user message."
           />
         </div>

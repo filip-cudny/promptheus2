@@ -197,6 +197,8 @@ The list caption replaced a 7 px accent dot before the row name. The dot collide
 
 Only `kind: "environment"` shows the placeholders affordance: a `{ }` icon button in the title row opens an `EnvPlaceholdersPopover` anchored to the button. Clicking a chip calls `HighlightedTextarea.insert(token)` and closes the popover. The editor icon buttons use the global `.editor-icon-btn` class (`styles/global.css`). Other prompts get a description that says they are sent verbatim — no placeholder substitution happens for them.
 
+A `PromptEditor` or `SttKeytermsEditor` inside a fixed-height wrapper (Chat 280px, Speech 320px) must fit in it: the Chat and Speech `PromptEditor`s and the keyterms raw pane pass `minHeight={0}` to `HighlightedTextarea` (its default 320px min-height plus the editor header is taller than the wrapper), and the keyterms chip pane has no min-height, so it shrinks and scrolls. Content taller than the wrapper is painted over the next field.
+
 ### Section shells & tabbed prompts
 
 `SettingsSection.svelte` is a shared scaffold every section can use: optional title + hint header (with a thin `--border-faint` divider) and a scrollable padded body. Use it for sections that have a "page" feel (`SectionPromptBase`, `SectionChat`, `SectionSpeech`); the models section keeps its own list+editor split layout but should still match `SettingsSection`'s padding rhythm where possible.

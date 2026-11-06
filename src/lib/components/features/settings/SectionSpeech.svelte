@@ -112,6 +112,7 @@
         <div class="editor">
           <PromptEditor
             kind="speech_to_text"
+            minHeight={0}
             description="Optional bias prompt for the speech-to-text model. Leave empty to disable."
           />
         </div>

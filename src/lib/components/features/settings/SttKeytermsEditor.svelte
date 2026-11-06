@@ -311,6 +311,7 @@
         bind:value={rawContent}
         placeholder={doc ? "" : "Loading…"}
         disabled={!doc}
+        minHeight={0}
       />
     </div>
   {/if}
@@ -397,7 +398,6 @@
   /* ---- chip pane ---- */
   .chip-pane {
     flex: 1;
-    min-height: 280px;
     align-content: flex-start;
     display: flex;
     flex-wrap: wrap;
