@@ -5,10 +5,11 @@
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import ToolCallGroup from "$lib/components/features/conversation-dialog/tool-call/ToolCallGroup.svelte";
   import ThinkingBlock from "$lib/components/shared/ui/ThinkingBlock.svelte";
+  import ProcessingIndicator from "$lib/components/features/conversation-dialog/components/ProcessingIndicator.svelte";
   import SecretField from "../SecretField.svelte";
   import ProposalCard from "./ProposalCard.svelte";
   import { parseSettingLink, showSettingLinks } from "$lib/utils/settingLinks";
-  import { thinkingText } from "$lib/utils/agentReply";
+  import { showsProcessing, thinkingText } from "$lib/utils/agentReply";
   import { parseContentSegments, toRenderBlocks } from "$lib/utils/toolCallMarkers";
   import type { ToolCall } from "$lib/types/ai";
 
@@ -57,6 +58,9 @@
               {/if}
             {/if}
           {/each}
+          {#if i === agent.messages.length - 1 && showsProcessing(message, agent.running)}
+            <ProcessingIndicator />
+          {/if}
         </div>
       {/if}
     {/each}

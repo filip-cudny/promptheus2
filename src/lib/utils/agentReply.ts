@@ -25,6 +25,7 @@ export function applyStreamEvent(reply: AgentReply, event: StreamEvent) {
         reply.thinkingParts.push(reply.thinking);
         reply.thinking = null;
       }
+      reply.text += `{{tool_call:${event.data.tool_call.tool_call_id}}}`;
       reply.iterationText = reply.text;
       reply.isThinking = false;
       reply.toolCalls.push({ ...event.data.tool_call });
@@ -50,4 +51,17 @@ export function applyStreamEvent(reply: AgentReply, event: StreamEvent) {
 export function thinkingText(reply: AgentReply): string {
   const parts = reply.thinking != null ? [...reply.thinkingParts, reply.thinking] : reply.thinkingParts;
   return parts.join("\n\n");
+}
+
+const FINISHED_STATUSES = ["completed", "failed", "cancelled"];
+
+export function showsProcessing(reply: AgentReply, running: boolean): boolean {
+  if (!running || reply.isThinking) return false;
+  const waitingForContent =
+    !reply.text &&
+    !thinkingText(reply) &&
+    !reply.toolCalls.some((call) => call.status === "in_progress" || call.status === "pending");
+  const processingToolResults =
+    reply.toolCalls.length > 0 && reply.toolCalls.every((call) => FINISHED_STATUSES.includes(call.status));
+  return waitingForContent || processingToolResults;
 }
