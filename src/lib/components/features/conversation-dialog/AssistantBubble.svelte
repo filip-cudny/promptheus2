@@ -2,7 +2,8 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { saveSvg } from "$lib/services/fileSave";
   import { formatDuration } from "$lib/utils/format";
-  import type { ConversationNode, ContentSegment } from "$lib/types/conversation";
+  import { hasToolCallMarkers, parseContentSegments, toRenderBlocks } from "$lib/utils/toolCallMarkers";
+  import type { ConversationNode } from "$lib/types/conversation";
   import type { ToolCall } from "$lib/types/ai";
   import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import MarkdownRenderer from "$lib/components/shared/ui/MarkdownRenderer.svelte";
@@ -49,29 +50,7 @@
     onDelete: (nodeId: string) => void;
   } = $props();
 
-  const TOOL_CALL_MARKER_PATTERN = /\{\{tool_call:([^}]+)\}\}/g;
-  const TOOL_CALL_MARKER_TEST = /\{\{tool_call:[^}]+\}\}/;
-
-  function parseContentSegments(content: string): ContentSegment[] {
-    const segments: ContentSegment[] = [];
-    let lastIndex = 0;
-
-    for (const match of content.matchAll(TOOL_CALL_MARKER_PATTERN)) {
-      if (match.index > lastIndex) {
-        segments.push({ type: "text", text: content.slice(lastIndex, match.index) });
-      }
-      segments.push({ type: "tool_call", tool_call_id: match[1] });
-      lastIndex = match.index + match[0].length;
-    }
-
-    if (lastIndex < content.length) {
-      segments.push({ type: "text", text: content.slice(lastIndex) });
-    }
-
-    return segments;
-  }
-
-  let hasMarkers = $derived(TOOL_CALL_MARKER_TEST.test(displayContent));
+  let hasMarkers = $derived(hasToolCallMarkers(displayContent));
 
   let segments = $derived(hasMarkers ? parseContentSegments(displayContent) : []);
 
@@ -101,26 +80,7 @@
     return map;
   });
 
-  type RenderBlock =
-    | { kind: "text"; text: string }
-    | { kind: "tool_group"; toolCallIds: string[] };
-
-  let renderBlocks = $derived.by(() => {
-    const blocks: RenderBlock[] = [];
-    for (const seg of segments) {
-      if (seg.type === "text" && seg.text.trim()) {
-        blocks.push({ kind: "text", text: seg.text });
-      } else if (seg.type === "tool_call") {
-        const last = blocks[blocks.length - 1];
-        if (last && last.kind === "tool_group") {
-          last.toolCallIds.push(seg.tool_call_id);
-        } else {
-          blocks.push({ kind: "tool_group", toolCallIds: [seg.tool_call_id] });
-        }
-      }
-    }
-    return blocks;
-  });
+  let renderBlocks = $derived(toRenderBlocks(segments));
 
   let editMode = $state(false);
   const edit = useEditSegments({ parseContent: parseContentSegments });

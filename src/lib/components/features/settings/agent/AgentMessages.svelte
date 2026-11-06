@@ -3,9 +3,12 @@
   import MarkdownRenderer from "$lib/components/shared/ui/MarkdownRenderer.svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
+  import ToolCallGroup from "$lib/components/features/conversation-dialog/tool-call/ToolCallGroup.svelte";
   import SecretField from "../SecretField.svelte";
   import ProposalCard from "./ProposalCard.svelte";
   import { parseSettingLink, showSettingLinks } from "$lib/utils/settingLinks";
+  import { parseContentSegments, toRenderBlocks } from "$lib/utils/toolCallMarkers";
+  import type { ToolCall } from "$lib/types/ai";
 
   const agent = getSettingsAgent();
   const navigation = getSettingsNavigation();
@@ -15,6 +18,12 @@
     if (key) navigation.navigateTo(key);
     else openUrl(url);
   }
+
+  function groupCalls(ids: string[], calls: ToolCall[]): ToolCall[] {
+    return ids
+      .map((id) => calls.find((call) => call.tool_call_id === id))
+      .filter((call): call is ToolCall => call != null);
+  }
 </script>
 
 <div class="messages">
@@ -23,20 +32,20 @@
       <div class="user">{message.text}</div>
     {:else}
       <div class="assistant">
-        {#if message.toolCalls.length > 0}
-          <div class="chips">
-            {#each message.toolCalls as call (call.id)}
-              <span class="chip" data-status={call.status}>{call.name}</span>
-            {/each}
-          </div>
-        {/if}
-        {#if message.text}
-          <MarkdownRenderer
-            content={showSettingLinks(message.text)}
-            isStreaming={agent.running && i === agent.messages.length - 1}
-            onopen={open}
-          />
-        {/if}
+        {#each toRenderBlocks(parseContentSegments(message.text)) as block}
+          {#if block.kind === "text"}
+            <MarkdownRenderer
+              content={showSettingLinks(block.text)}
+              isStreaming={agent.running && i === agent.messages.length - 1}
+              onopen={open}
+            />
+          {:else}
+            {@const calls = groupCalls(block.toolCallIds, message.toolCalls)}
+            {#if calls.length > 0}
+              <ToolCallGroup toolCalls={calls} isStreaming={agent.running && i === agent.messages.length - 1} />
+            {/if}
+          {/if}
+        {/each}
       </div>
     {/if}
   {/each}
@@ -76,29 +85,6 @@
     background: var(--accent-bg-soft);
     border-radius: var(--radius-md);
     white-space: pre-wrap;
-  }
-
-  .chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    margin-bottom: var(--space-3);
-  }
-
-  .chip {
-    padding: 1px var(--space-4);
-    font-size: var(--font-size-xs);
-    color: var(--text-secondary);
-    background: var(--surface-overlay-faint);
-    border-radius: var(--radius-md);
-  }
-
-  .chip[data-status="failed"] {
-    color: var(--danger, #e5484d);
-  }
-
-  .chip[data-status="in_progress"] {
-    opacity: 0.7;
   }
 
   .error {

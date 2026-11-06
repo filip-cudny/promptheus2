@@ -1,4 +1,4 @@
-import type { StreamEvent, ToolCallStatus } from "$lib/types/ai";
+import type { StreamEvent, ToolCall } from "$lib/types/ai";
 import {
   onSettingsAgentProposal,
   onSettingsAgentSecretRequest,
@@ -18,15 +18,9 @@ import {
   type SecretRequest,
 } from "$lib/services/settingsAgent";
 
-export interface AgentToolCall {
-  id: string;
-  name: string;
-  status: ToolCallStatus;
-}
-
 export type AgentMessage =
   | { id: number; role: "user"; text: string }
-  | { id: number; role: "assistant"; text: string; toolCalls: AgentToolCall[] };
+  | { id: number; role: "assistant"; text: string; toolCalls: ToolCall[] };
 
 let nextId = 0;
 let messages = $state<AgentMessage[]>([]);
@@ -74,16 +68,27 @@ function onEvent(event: StreamEvent) {
       error = event.data.message;
       break;
     case "tool_call_start":
-      reply.toolCalls.push({
-        id: event.data.tool_call.tool_call_id,
-        name: event.data.tool_call.tool_display_name || event.data.tool_call.tool_name,
-        status: "in_progress",
-      });
+      reply.toolCalls.push({ ...event.data.tool_call });
       break;
     case "tool_call_done": {
-      const call = reply.toolCalls.find((c) => c.id === event.data.tool_call_id);
-      if (call) call.status = event.data.error ? "failed" : "completed";
+      const call = reply.toolCalls.find((c) => c.tool_call_id === event.data.tool_call_id);
+      if (call) {
+        call.result = event.data.result;
+        call.error = event.data.error;
+        call.status = event.data.error ? "failed" : "completed";
+        call.completed_at = new Date().toISOString();
+      }
       break;
+    }
+  }
+}
+
+function cancelUnfinishedToolCalls() {
+  const now = new Date().toISOString();
+  for (const call of lastAssistant()?.toolCalls ?? []) {
+    if (call.status === "in_progress" || call.status === "pending") {
+      call.status = "cancelled";
+      call.completed_at = now;
     }
   }
 }
@@ -100,6 +105,7 @@ async function send(text: string) {
   } catch (e) {
     error = String(e);
   } finally {
+    cancelUnfinishedToolCalls();
     running = false;
   }
 }
