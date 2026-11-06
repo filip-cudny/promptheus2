@@ -667,3 +667,12 @@ fn add_env_var_refuses_an_existing_or_invalid_name_and_update_an_unknown_one() {
         ]
     );
 }
+
+#[test]
+fn delete_model_of_an_unknown_id_lists_the_existing_ids() {
+    let (settings, dir) = (fixture_settings(), config_dir());
+
+    let errors = plan_all(&[Operation::DeleteModel { id: "nope".into() }], &settings, &dir).unwrap_err();
+
+    assert_eq!(errors[0].message, "model 'nope' not found; models: abc, def, stt1");
+}

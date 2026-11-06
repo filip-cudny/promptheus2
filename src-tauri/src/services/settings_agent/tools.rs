@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use rmcp::model::Tool;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
+
+use super::operations::Operation;
 
 pub const READ: &str = "settings_read";
 pub const TEST: &str = "settings_test";
@@ -15,11 +17,259 @@ fn tool(name: &'static str, description: &'static str, schema: Value) -> Tool {
     Tool::new(name, description, Arc::new(schema))
 }
 
+fn string() -> Value {
+    json!({"type": "string"})
+}
+
+fn string_enum(values: &[&str]) -> Value {
+    json!({"type": "string", "enum": values})
+}
+
+fn free_object() -> Value {
+    json!({"type": "object"})
+}
+
+fn object(properties: Vec<(&str, Value)>, required: &[&str]) -> Value {
+    let properties: Map<String, Value> =
+        properties.into_iter().map(|(name, schema)| (name.to_string(), schema)).collect();
+    json!({"type": "object", "properties": properties, "required": required})
+}
+
+fn model_schema() -> Value {
+    object(
+        vec![
+            ("id", string()),
+            ("model", string()),
+            ("display_name", string()),
+            ("type", string_enum(&["text", "stt"])),
+            ("provider", string_enum(&["openai", "anthropic", "gemini", "elevenlabs"])),
+            ("group", string()),
+            ("api_key", string()),
+            ("base_url", string()),
+            ("parameters", free_object()),
+            ("context_window_size", json!({"type": "integer"})),
+            ("api_mode", string_enum(&["responses", "completions"])),
+            ("capabilities", free_object()),
+            ("store", json!({"type": "boolean"})),
+        ],
+        &["id", "model", "display_name"],
+    )
+}
+
+fn mcp_config_schema() -> Value {
+    object(
+        vec![
+            ("command", string()),
+            ("args", json!({"type": "array", "items": string()})),
+            ("env", json!({"type": "object", "additionalProperties": string()})),
+            ("timeout_secs", json!({"type": "integer"})),
+            ("tool_timeouts", json!({"type": "object", "additionalProperties": {"type": "integer"}})),
+        ],
+        &["command"],
+    )
+}
+
+fn web_provider_schema() -> Value {
+    object(vec![("id", string()), ("name", string()), ("url", string())], &["id", "name", "url"])
+}
+
+fn frontmatter_schema() -> Value {
+    object(
+        vec![
+            ("name", string()),
+            ("display_name", string()),
+            ("description", string()),
+            ("model", string()),
+            ("parameters", free_object()),
+            ("offered_in", json!({"type": "array", "items": string_enum(&["context_menu", "pill"])})),
+        ],
+        &["name"],
+    )
+}
+
+fn branch(op: &str, description: &str, properties: Vec<(&str, Value)>, required: &[&str]) -> Value {
+    let mut all_properties = vec![("op", string_enum(&[op]))];
+    all_properties.extend(properties);
+    let mut all_required = vec!["op"];
+    all_required.extend_from_slice(required);
+    let mut schema = object(all_properties, &all_required);
+    schema["description"] = json!(description);
+    schema
+}
+
+fn skill_properties() -> Vec<(&'static str, Value)> {
+    vec![
+        ("slug", string()),
+        ("frontmatter", frontmatter_schema()),
+        ("body", string()),
+        ("sample_input", string()),
+    ]
+}
+
+fn env_var_properties() -> Vec<(&'static str, Value)> {
+    vec![("name", string()), ("description", string()), ("secret", json!({"type": "boolean"}))]
+}
+
+fn operation_branches() -> Vec<Value> {
+    let skill_required = ["slug", "frontmatter", "body", "sample_input"];
+    vec![
+        branch(
+            "set_setting",
+            "Sets one setting to a value. Use it for every setting of the catalog, including one field of a model or web provider by its concrete key such as `models[<id>].store`.",
+            vec![("key", string()), ("value", json!({}))],
+            &["key", "value"],
+        ),
+        branch(
+            "add_model",
+            "Adds a new model with a unique `model.id`. Put an API key only as a `${VAR}` reference.",
+            vec![("model", model_schema())],
+            &["model"],
+        ),
+        branch(
+            "update_model",
+            "Replaces the whole model `id` with `model`, whose `id` stays the same. A field left out falls back to its default; an empty `api_key` keeps the stored one.",
+            vec![("id", string()), ("model", model_schema())],
+            &["id", "model"],
+        ),
+        branch(
+            "delete_model",
+            "Deletes the model `id` and clears every model choice of the settings that pointed to it.",
+            vec![("id", string())],
+            &["id"],
+        ),
+        branch(
+            "create_skill",
+            "Creates a skill whose `slug` does not exist yet. `frontmatter.name` equals the slug, `body` is the prompt, `sample_input` the text the skill is tested with.",
+            skill_properties(),
+            &skill_required,
+        ),
+        branch(
+            "update_skill",
+            "Replaces the frontmatter, body and sample input of the existing skill `slug`.",
+            skill_properties(),
+            &skill_required,
+        ),
+        branch("delete_skill", "Deletes the skill `slug` with its files.", vec![("slug", string())], &["slug"]),
+        branch(
+            "reorder_skills",
+            "Sets the display order of the skills to the list of slugs `order`.",
+            vec![("order", json!({"type": "array", "items": string()}))],
+            &["order"],
+        ),
+        branch(
+            "write_prompt",
+            "Replaces the content of one prompt file.",
+            vec![
+                (
+                    "kind",
+                    string_enum(&[
+                        "system",
+                        "about_you",
+                        "environment",
+                        "input_format",
+                        "title_generation",
+                        "speech_to_text",
+                        "stt_keyterms",
+                    ]),
+                ),
+                ("content", string()),
+            ],
+            &["kind", "content"],
+        ),
+        branch(
+            "add_mcp_server",
+            "Adds an MCP server called `name`, which must not exist yet.",
+            vec![("name", string()), ("config", mcp_config_schema())],
+            &["name", "config"],
+        ),
+        branch(
+            "update_mcp_server",
+            "Replaces the whole configuration of the existing MCP server `name`.",
+            vec![("name", string()), ("config", mcp_config_schema())],
+            &["name", "config"],
+        ),
+        branch("delete_mcp_server", "Deletes the MCP server `name`.", vec![("name", string())], &["name"]),
+        branch(
+            "add_webview_provider",
+            "Adds a web provider; `provider.id` must not exist yet.",
+            vec![("provider", web_provider_schema())],
+            &["provider"],
+        ),
+        branch(
+            "update_webview_provider",
+            "Replaces the whole web provider `id` with `provider`, whose `id` stays the same.",
+            vec![("id", string()), ("provider", web_provider_schema())],
+            &["id", "provider"],
+        ),
+        branch(
+            "delete_webview_provider",
+            "Deletes the web provider `id`.",
+            vec![("id", string())],
+            &["id"],
+        ),
+        branch(
+            "set_shortcut",
+            "Binds a keyboard shortcut to the action `action`; leave `shortcut` out or null to clear the binding.",
+            vec![("action", string()), ("shortcut", string())],
+            &["action"],
+        ),
+        branch(
+            "add_env_var",
+            "Lists a new environment variable `name` so that settings can reference it as `${NAME}`; set `secret` to true for keys and tokens. Its value is entered with `settings_secret`.",
+            env_var_properties(),
+            &["name"],
+        ),
+        branch(
+            "update_env_var",
+            "Changes the description and secret flag of the listed variable `name`.",
+            env_var_properties(),
+            &["name"],
+        ),
+        branch(
+            "rename_env_var",
+            "Renames the listed variable `name` to `new_name` and rewrites every `${name}` reference.",
+            vec![("name", string()), ("new_name", string())],
+            &["name", "new_name"],
+        ),
+        branch(
+            "delete_env_var",
+            "Removes the listed variable `name`; fails while a setting still references it.",
+            vec![("name", string())],
+            &["name"],
+        ),
+    ]
+}
+
+pub fn operation_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {"op": string_enum(&Operation::NAMES)},
+        "required": ["op"],
+        "anyOf": operation_branches()
+    })
+}
+
+pub fn operation_fields(op: &str) -> Option<(Vec<String>, Vec<String>)> {
+    let branch = operation_branches().into_iter().find(|branch| branch["properties"]["op"]["enum"][0] == op)?;
+    let names = |value: &Value| -> Vec<String> {
+        value.as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from).collect()
+    };
+    let required: Vec<String> = names(&branch["required"]).into_iter().filter(|name| name != "op").collect();
+    let optional = branch["properties"]
+        .as_object()
+        .into_iter()
+        .flat_map(|properties| properties.keys())
+        .filter(|name| *name != "op" && !required.contains(name))
+        .cloned()
+        .collect();
+    Some((required, optional))
+}
+
 fn operations_schema() -> Value {
     json!({
         "type": "array",
-        "description": "Operations in execution order. Each is an object with an `op` field: set_setting, add_model, update_model, delete_model, create_skill, update_skill, delete_skill, reorder_skills, write_prompt, add_mcp_server, update_mcp_server, delete_mcp_server, add_webview_provider, update_webview_provider, delete_webview_provider, set_shortcut, add_env_var, update_env_var, rename_env_var, delete_env_var. A later operation may reference a model or skill added by an earlier one.",
-        "items": {"type": "object", "properties": {"op": {"type": "string"}}, "required": ["op"]},
+        "description": "Operations in execution order. A later operation may reference a model or skill added by an earlier one.",
+        "items": operation_schema(),
         "minItems": 1
     })
 }
@@ -28,7 +278,7 @@ pub fn definitions() -> Vec<Tool> {
     vec![
         tool(
             READ,
-            "Read the live settings. `values`: all settings; `models`: models (api_key shown as a ${VAR} reference or [redacted]); `skills`: name, description, model and offered_in per skill; `skill`: one skill's frontmatter and body (needs `name`); `prompt`: one prompt (needs `name`: system, about_you, environment, input_format, title_generation, speech_to_text, stt_keyterms); `missing_env`: ${VAR} references without a value; `env_vars`: listed environment variables with description, secret flag, whether set on this machine and where used; never values.",
+            "Reads the live settings and returns them as JSON. `what` picks the part: `values` all settings; `models` the models (api_key shown as a ${VAR} reference or [redacted]); `skills` name, description, model and offered_in per skill; `skill` one skill's frontmatter and body (needs `name`); `prompt` one prompt (needs `name`: system, about_you, environment, input_format, title_generation, speech_to_text, stt_keyterms). `missing_env` lists the ${VAR} references without a value; `env_vars` lists the environment variables with description, secret flag, whether set on this machine and where used. It never returns a secret value and changes nothing.",
             json!({
                 "type": "object",
                 "properties": {
@@ -40,7 +290,7 @@ pub fn definitions() -> Vec<Tool> {
         ),
         tool(
             TEST,
-            "Check operations without proposing them: validates them as a whole and runs the test of each model, skill and MCP server row on the settings as they would be after the operations. Shows nothing to the user and writes nothing.",
+            "Checks a list of operations without proposing it. It validates the operations in order against the live settings, then runs the test of each model, skill and MCP server row on the settings as they would be after the operations. It returns `rows` with a label and test result per row, or `errors` with the row number and message of every operation that is invalid, in which case nothing was tested. It shows nothing to the user and writes nothing.",
             json!({
                 "type": "object",
                 "properties": {"operations": operations_schema()},
@@ -49,7 +299,7 @@ pub fn definitions() -> Vec<Tool> {
         ),
         tool(
             PROPOSE_CHANGES,
-            "Propose all changes of one request as one card for the user to accept or reject. Validates and tests the operations first; on row errors returns them and shows no card. A new proposal replaces the previous one.",
+            "Proposes a list of operations as one card for the user to accept or reject; the card is the only way a change reaches the settings. The operations are validated and tested first, as in `settings_test`. It returns `proposal_id` and `rows` with a label and test result per row, or `errors` with the row number and message of every invalid operation, in which case no card is shown and nothing was proposed. A new proposal replaces the previous one.",
             json!({
                 "type": "object",
                 "properties": {"operations": operations_schema()},
@@ -58,7 +308,7 @@ pub fn definitions() -> Vec<Tool> {
         ),
         tool(
             SECRET,
-            "Ask the user to enter a secret (API key, token) for the environment variable `name`. The name must first be listed with `add_env_var` in an applied proposal; then this tool asks for its value. The app shows a masked input; the value never reaches you. Returns the outcome: saved, cancelled, or exists (the variable already has a value and the user closed without saving). Reference the variable as ${NAME} in operations.",
+            "Asks the user to enter a secret (API key, token) for the environment variable `name`, which must first be listed with `add_env_var` in an applied proposal. The app shows a masked input and the value never reaches you. It returns the outcome: saved, cancelled, or exists (the variable already has a value and the user closed without saving). Reference the variable as ${NAME} in operations.",
             json!({
                 "type": "object",
                 "properties": {

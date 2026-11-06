@@ -197,7 +197,16 @@ fn find_model<'a>(settings: &'a Settings, id: &str) -> Result<&'a ModelConfig, F
         .models
         .iter()
         .find(|m| m.id == id)
-        .ok_or_else(|| Fail::new(format!("model '{id}' not found")))
+        .ok_or_else(|| Fail::new(format!("model '{id}' not found; models: {}", model_ids(settings, |_| true))))
+}
+
+fn model_ids(settings: &Settings, keep: impl Fn(&ModelConfig) -> bool) -> String {
+    let ids: Vec<&str> = settings.models.iter().filter(|m| keep(m)).map(|m| m.id.as_str()).collect();
+    ids.join(", ")
+}
+
+fn skill_not_found(settings: &Settings, slug: &str) -> Fail {
+    Fail::new(format!("skill '{slug}' not found; skills: {}", settings.skills_order.join(", ")))
 }
 
 fn set_mcp_servers(
@@ -225,7 +234,10 @@ fn env_var_position(settings: &Settings, name: &str) -> Result<usize, Fail> {
         .env_vars
         .iter()
         .position(|var| var.name == name)
-        .ok_or_else(|| Fail::at(format!("env_vars[{name}]"), "variable not found"))
+        .ok_or_else(|| {
+            let names: Vec<&str> = settings.env_vars.iter().map(|var| var.name.as_str()).collect();
+            Fail::at(format!("env_vars[{name}]"), format!("variable not found; variables: {}", names.join(", ")))
+        })
 }
 
 fn add_env_var(state: &mut State, name: &str, description: &str, secret: bool) -> Result<(), Fail> {
@@ -429,14 +441,14 @@ fn apply(state: &mut State, current: &Current, op: &Operation) -> Result<Vec<Eff
             let content = render_skill(slug, frontmatter, body)?;
             let path = skill_path(slug);
             if state.read(current, &path)?.is_none() {
-                return Err(Fail::new(format!("skill '{slug}' not found")));
+                return Err(skill_not_found(state.settings(), slug));
             }
             state.write(current, &path, Some(content), &mut effects)?;
         }
         Operation::DeleteSkill { slug } => {
             validate_slug(slug)?;
             if state.read(current, &skill_path(slug))?.is_none() {
-                return Err(Fail::new(format!("skill '{slug}' not found")));
+                return Err(skill_not_found(state.settings(), slug));
             }
             for path in state.skill_files(current, slug) {
                 state.write(current, &path, None, &mut effects)?;
@@ -533,7 +545,11 @@ fn check_model_references(settings: &Settings) -> Result<(), Fail> {
         };
         match settings.models.iter().find(|m| m.id == id) {
             None => {
-                return Err(Fail::at(entry.key, format!("{} references unknown model id '{id}'", entry.key)))
+                let valid = model_ids(settings, |model| !wrong_type(model));
+                return Err(Fail::at(
+                    entry.key,
+                    format!("{} references unknown model id '{id}'; models: {valid}", entry.key),
+                ));
             }
             Some(model) if wrong_type(model) => {
                 return Err(Fail::at(

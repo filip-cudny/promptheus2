@@ -81,6 +81,7 @@ fn new_env_file_is_private_and_invalid_names_are_rejected() {
         Err(SecretError::InvalidName(_))
     ));
     assert!(validate_name("_ok1") && !validate_name("a-b") && !validate_name(""));
+    crate::services::env_resolve::set_override("SEC_MODE", None);
 }
 
 #[test]

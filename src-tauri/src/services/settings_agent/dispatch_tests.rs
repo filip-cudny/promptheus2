@@ -5,6 +5,7 @@ use async_trait::async_trait;
 use serde_json::{json, Value};
 use tempfile::TempDir;
 
+use super::operations::Operation;
 use super::dispatch::{Context, Dispatcher, Proposal, ProposalSink, SecretAnswer, SecretPrompt};
 use crate::models::settings::{EnvVar, McpServerConfig, ModelConfig, ModelType, Provider, Settings};
 use crate::services::ai::mock::{MockProvider, MockReply};
@@ -237,6 +238,33 @@ async fn propose_with_row_errors_shows_no_card() {
     .await;
     assert!(!is_error);
     assert!(text.contains("\"errors\""), "{text}");
+    assert!(sink.0.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn propose_reports_every_bad_row_of_the_arguments_and_shows_no_card() {
+    let (_dir, dispatcher, sink) = fixture(|_| Arc::new(CancellingPrompt));
+    let valid = json!({"op": "set_setting", "key": "theme", "value": "light"});
+    let wrong_op = json!({"op": "update_model next"});
+    let no_id = json!({"op": "update_model", "model": model("env-model", "${OPENAI_KEY}")});
+    let (text, is_error) = call(
+        &dispatcher,
+        "settings_propose_changes",
+        json!({"operations": [valid, wrong_op, no_id]}),
+    )
+    .await;
+    assert!(!is_error, "{text}");
+    let result: Value = serde_json::from_str(&text).unwrap();
+    let errors = result["errors"].as_array().unwrap();
+    assert_eq!(errors.iter().map(|e| e["row"].clone()).collect::<Vec<_>>(), [json!(2), json!(3)]);
+    let unknown = errors[0]["message"].as_str().unwrap();
+    assert!(unknown.contains("update_model next"), "{unknown}");
+    for name in Operation::NAMES {
+        assert!(unknown.contains(name), "{name} missing in {unknown}");
+    }
+    let missing = errors[1]["message"].as_str().unwrap();
+    assert!(missing.contains("id") && missing.contains("model"), "{missing}");
+    assert!(result["note"].as_str().unwrap().contains("Nothing was proposed"), "{text}");
     assert!(sink.0.lock().unwrap().is_empty());
 }
 

@@ -13,6 +13,8 @@ pub mod dispatch;
 #[cfg(test)]
 mod dispatch_tests;
 pub mod tools;
+#[cfg(test)]
+mod tools_tests;
 pub mod engine;
 #[cfg(test)]
 mod engine_tests;

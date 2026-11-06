@@ -73,6 +73,29 @@ pub enum Operation {
 }
 
 impl Operation {
+    pub const NAMES: [&'static str; 20] = [
+        "set_setting",
+        "add_model",
+        "update_model",
+        "delete_model",
+        "create_skill",
+        "update_skill",
+        "delete_skill",
+        "reorder_skills",
+        "write_prompt",
+        "add_mcp_server",
+        "update_mcp_server",
+        "delete_mcp_server",
+        "add_webview_provider",
+        "update_webview_provider",
+        "delete_webview_provider",
+        "set_shortcut",
+        "add_env_var",
+        "update_env_var",
+        "rename_env_var",
+        "delete_env_var",
+    ];
+
     pub fn name(&self) -> &'static str {
         match self {
             Self::SetSetting { .. } => "set_setting",

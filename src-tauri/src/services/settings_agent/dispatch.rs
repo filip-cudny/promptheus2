@@ -77,13 +77,8 @@ struct ReadArgs {
 }
 
 #[derive(Deserialize)]
-struct TestArgs {
-    operations: Vec<Operation>,
-}
-
-#[derive(Deserialize)]
-struct ProposeArgs {
-    operations: Vec<Operation>,
+struct OperationsArgs {
+    operations: Vec<Value>,
 }
 
 #[derive(Deserialize)]
@@ -98,12 +93,48 @@ fn parse<T: serde::de::DeserializeOwned>(arguments: &Value) -> Result<T, String>
     serde_json::from_value(arguments.clone()).map_err(|e| format!("invalid arguments: {e}"))
 }
 
-fn row_errors(errors: &[RowError]) -> Value {
+const NOTHING_PROPOSED: &str =
+    "Nothing was proposed. Fix the rows named in `errors` and send the whole corrected list of operations again.";
+const NOTHING_TESTED: &str =
+    "Nothing was tested. Fix the rows named in `errors` and send the whole corrected list of operations again.";
+
+fn row_errors(errors: &[RowError], note: &str) -> Value {
     json!({
         "errors": errors
             .iter()
             .map(|e| json!({"row": e.row + 1, "key": e.key, "message": e.message}))
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>(),
+        "note": note
+    })
+}
+
+fn parse_operation(item: &Value) -> Result<Operation, String> {
+    let valid_ops = Operation::NAMES.join(", ");
+    let Some(given) = item.get("op") else {
+        return Err(format!("`op` is missing; valid ops: {valid_ops}"));
+    };
+    let name = given.as_str().map_or_else(|| given.to_string(), String::from);
+    let Some((required, optional)) = tools::operation_fields(&name) else {
+        return Err(format!("unknown op '{name}'; valid ops: {valid_ops}"));
+    };
+    serde_json::from_value(item.clone()).map_err(|e| {
+        let optional = if optional.is_empty() { "none".to_string() } else { optional.join(", ") };
+        format!("{name}: {e}; fields: {}, optional: {optional}", required.join(", "))
+    })
+}
+
+fn parse_operations(arguments: &Value) -> Result<Result<Vec<Operation>, Vec<RowError>>, String> {
+    let args: OperationsArgs = parse(arguments)?;
+    let (operations, errors): (Vec<_>, Vec<_>) = args
+        .operations
+        .iter()
+        .enumerate()
+        .map(|(row, item)| parse_operation(item).map_err(|message| RowError { row, key: None, message }))
+        .partition(Result::is_ok);
+    Ok(if errors.is_empty() {
+        Ok(operations.into_iter().flatten().collect())
+    } else {
+        Err(errors.into_iter().filter_map(Result::err).collect())
     })
 }
 
@@ -213,27 +244,33 @@ impl Dispatcher {
     }
 
     async fn test(&self, arguments: &Value) -> Handled {
-        let args: TestArgs = parse(arguments)?;
-        match self.plan_all(&args.operations) {
-            Err(errors) => Ok(row_errors(&errors)),
+        let operations = match parse_operations(arguments)? {
+            Ok(operations) => operations,
+            Err(errors) => return Ok(row_errors(&errors, NOTHING_TESTED)),
+        };
+        match self.plan_all(&operations) {
+            Err(errors) => Ok(row_errors(&errors, NOTHING_TESTED)),
             Ok(planned) => {
-                let tests = self.run_tests(&args.operations, &planned).await;
-                Ok(json!({"rows": Self::rows_json(&args.operations, &tests)}))
+                let tests = self.run_tests(&operations, &planned).await;
+                Ok(json!({"rows": Self::rows_json(&operations, &tests)}))
             }
         }
     }
 
     async fn propose(&self, arguments: &Value) -> Handled {
-        let args: ProposeArgs = parse(arguments)?;
-        let planned = match self.plan_all(&args.operations) {
-            Err(errors) => return Ok(row_errors(&errors)),
+        let operations = match parse_operations(arguments)? {
+            Ok(operations) => operations,
+            Err(errors) => return Ok(row_errors(&errors, NOTHING_PROPOSED)),
+        };
+        let planned = match self.plan_all(&operations) {
+            Err(errors) => return Ok(row_errors(&errors, NOTHING_PROPOSED)),
             Ok(planned) => planned,
         };
-        let tests = self.run_tests(&args.operations, &planned).await;
-        let rows = Self::rows_json(&args.operations, &tests);
+        let tests = self.run_tests(&operations, &planned).await;
+        let rows = Self::rows_json(&operations, &tests);
         let proposal = Proposal {
             id: uuid::Uuid::new_v4().simple().to_string(),
-            operations: args.operations,
+            operations,
             plan: planned,
             tests,
         };
