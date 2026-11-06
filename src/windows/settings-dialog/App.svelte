@@ -31,7 +31,7 @@
 
 <div class="dialog-shell">
   <MissingEnvList />
-  <div class="dialog-body">
+  <div class="dialog-body" class:with-panel={agent.panelOpen}>
     <SettingsSidebar />
     <SettingsContent />
     {#if agent.panelOpen}
@@ -58,5 +58,6 @@
     flex: 1;
     min-height: 0;
     position: relative;
+    container: settings-body / inline-size;
   }
 </style>

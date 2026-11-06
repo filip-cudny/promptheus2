@@ -45,10 +45,17 @@ Every control bound to a settings key is wrapped in `<SettingField key="<catalog
 
 ### Agent panel
 
-The toggle (lucide `Bot`, tooltip "Settings agent") in the `SettingsSidebar` footer opens `agent/AgentPanel.svelte` (380 px, `PANEL_WIDTH` in `services/settings_agent/panel.rs`). `settings_agent_panel(open)` returns the layout mode:
+The "Ask agent" row (lucide `Sparkles`, no accent colour) directly under the search in `SettingsSidebar` toggles `agent/AgentPanel.svelte` (380 px, `PANEL_WIDTH` in `services/settings_agent/panel.rs`). The panel header has `Sparkles` and the title on the left, "New conversation" (`SquarePen`, disabled while the agent runs) and "Close" (`X`) on the right.
 
-- `widened`: the window grew by 380 px; layout is sidebar | content | panel.
-- `overlay`: the panel sits over the content's right edge. Chosen when the window is maximized, the monitor work area has no room for width + 380, or the size did not change within ~300 ms of the resize (tiled window; GNOME Wayland ignores the resize).
+Layout depends only on the width of `.dialog-body` (a CSS container named `settings-body`; `.with-panel` while the panel is open), not on the panel mode:
+
+- At least 1340 px (sidebar 220 + content 740 + panel 380): sidebar | content (`flex: 0 1 1040px`) | panel (`flex: 1 1 380px`, `min-width: 380px`) in one row, so no empty band is left between a width-limited editor and the panel.
+- Narrower: the panel overlays the content's right edge at 380 px.
+
+`settings_agent_panel(open)` still returns a mode (`widened` or `overlay`) that drives only the window widening; the UI does not read it:
+
+- `widened`: the window grew by 380 px.
+- `overlay`: the window did not grow. Chosen when the window is maximized, the monitor work area has no room for width + 380, or the size did not change within ~300 ms of the resize (tiled window; GNOME Wayland ignores the resize).
 
 Geometry rule: the backend keeps the added width (0 in overlay mode); `save_geometry` subtracts it for `settings-dialog` (`geometry_without_panel`), so the saved width never includes the panel. Closing the panel shrinks the window by the added width; closing the window resets it.
 

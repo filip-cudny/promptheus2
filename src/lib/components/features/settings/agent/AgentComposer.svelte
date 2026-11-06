@@ -47,67 +47,98 @@
 </script>
 
 <div class="composer">
-  <textarea
-    bind:this={input}
-    bind:value={text}
-    onkeydown={handleKeydown}
-    rows="2"
-    placeholder="Ask about settings"
-  ></textarea>
-  <div class="actions">
-    {@render beforeSend?.()}
-    <button class="action" title="Dictate" disabled={running} onclick={() => agent.dictate()}>
-      <Mic size={14} />
-    </button>
-    {#if running}
-      <button class="action" title="Stop" onclick={oncancel}><Square size={14} /></button>
-    {:else}
-      <button class="action" title="Send" disabled={!text.trim()} onclick={submit}>
-        <ArrowUp size={14} />
+  <div class="box">
+    <textarea
+      bind:this={input}
+      bind:value={text}
+      onkeydown={handleKeydown}
+      rows="2"
+      placeholder="Ask about settings"
+    ></textarea>
+    <div class="bar">
+      {@render beforeSend?.()}
+      <button class="icon" title="Dictate" disabled={running} onclick={() => agent.dictate()}>
+        <Mic size={14} />
       </button>
-    {/if}
+      {#if running}
+        <button class="send" title="Stop" onclick={oncancel}><Square size={14} /></button>
+      {:else}
+        <button class="send" title="Send" disabled={!text.trim()} onclick={submit}>
+          <ArrowUp size={14} />
+        </button>
+      {/if}
+    </div>
   </div>
 </div>
 
 <style>
   .composer {
-    display: flex;
-    align-items: flex-end;
-    gap: var(--space-4);
-    padding: var(--space-6);
+    padding: 10px 12px 12px;
     border-top: 1px solid var(--border-faint);
   }
 
-  textarea {
-    flex: 1;
-    resize: none;
-    padding: var(--space-4);
+  .box {
+    max-width: 760px;
+    margin: 0 auto;
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
     background: var(--surface-sunken);
+    padding: 8px 8px 6px 10px;
+  }
+
+  .box:focus-within {
+    border-color: var(--accent-border);
+  }
+
+  textarea {
+    display: block;
+    width: 100%;
+    resize: none;
+    padding: 0;
+    background: transparent;
     color: var(--text-primary);
-    border: 1px solid var(--border-faint);
-    border-radius: var(--radius-md);
+    border: none;
+    outline: none;
     font: inherit;
   }
 
-  .actions {
+  .bar {
     display: flex;
-    gap: var(--space-2);
+    justify-content: flex-end;
+    align-items: center;
+    gap: 4px;
   }
 
-  .action {
+  .icon,
+  .send {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
-    background: var(--accent-bg-soft);
-    color: var(--text-primary);
+    width: 26px;
+    height: 26px;
     border: none;
-    border-radius: var(--radius-md);
     cursor: pointer;
   }
 
-  .action:disabled {
+  .icon {
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 4px;
+  }
+
+  .icon:hover:not(:disabled) {
+    background: var(--surface-overlay);
+    color: var(--text-primary);
+  }
+
+  .send {
+    background: var(--text-primary);
+    color: var(--surface-base);
+    border-radius: 50%;
+  }
+
+  .icon:disabled,
+  .send:disabled {
     opacity: 0.4;
     cursor: default;
   }

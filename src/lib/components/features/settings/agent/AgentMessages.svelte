@@ -27,44 +27,46 @@
 </script>
 
 <div class="messages">
-  {#each agent.messages as message, i (message.id)}
-    {#if message.role === "user"}
-      <div class="user">{message.text}</div>
-    {:else}
-      <div class="assistant">
-        {#each toRenderBlocks(parseContentSegments(message.text)) as block}
-          {#if block.kind === "text"}
-            <MarkdownRenderer
-              content={showSettingLinks(block.text)}
-              isStreaming={agent.running && i === agent.messages.length - 1}
-              onopen={open}
-            />
-          {:else}
-            {@const calls = groupCalls(block.toolCallIds, message.toolCalls)}
-            {#if calls.length > 0}
-              <ToolCallGroup toolCalls={calls} isStreaming={agent.running && i === agent.messages.length - 1} />
+  <div class="column">
+    {#each agent.messages as message, i (message.id)}
+      {#if message.role === "user"}
+        <div class="user">{message.text}</div>
+      {:else}
+        <div class="assistant">
+          {#each toRenderBlocks(parseContentSegments(message.text)) as block}
+            {#if block.kind === "text"}
+              <MarkdownRenderer
+                content={showSettingLinks(block.text)}
+                isStreaming={agent.running && i === agent.messages.length - 1}
+                onopen={open}
+              />
+            {:else}
+              {@const calls = groupCalls(block.toolCallIds, message.toolCalls)}
+              {#if calls.length > 0}
+                <ToolCallGroup toolCalls={calls} isStreaming={agent.running && i === agent.messages.length - 1} />
+              {/if}
             {/if}
-          {/if}
-        {/each}
-      </div>
+          {/each}
+        </div>
+      {/if}
+    {/each}
+    {#each agent.secretRequests as request (request.request_id)}
+      <SecretField
+        name={request.name}
+        purpose={request.purpose}
+        exists={request.exists}
+        onclose={(outcome) => agent.resolveSecret(request.request_id, outcome)}
+      />
+    {/each}
+    {#if agent.proposal}
+      {#key agent.proposal.proposal_id}
+        <ProposalCard proposal={agent.proposal} />
+      {/key}
     {/if}
-  {/each}
-  {#each agent.secretRequests as request (request.request_id)}
-    <SecretField
-      name={request.name}
-      purpose={request.purpose}
-      exists={request.exists}
-      onclose={(outcome) => agent.resolveSecret(request.request_id, outcome)}
-    />
-  {/each}
-  {#if agent.proposal}
-    {#key agent.proposal.proposal_id}
-      <ProposalCard proposal={agent.proposal} />
-    {/key}
-  {/if}
-  {#if agent.error}
-    <div class="error">{agent.error}</div>
-  {/if}
+    {#if agent.error}
+      <div class="error">{agent.error}</div>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -72,19 +74,29 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    padding: var(--space-6);
+  }
+
+  .column {
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
-    padding: var(--space-6);
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
   }
 
   .user {
     align-self: flex-end;
-    max-width: 90%;
-    padding: var(--space-3) var(--space-5);
+    max-width: 85%;
+    padding: 7px 11px;
     background: var(--accent-bg-soft);
-    border-radius: var(--radius-md);
+    border-radius: 10px 10px 2px 10px;
     white-space: pre-wrap;
+  }
+
+  .assistant {
+    line-height: 1.55;
   }
 
   .error {

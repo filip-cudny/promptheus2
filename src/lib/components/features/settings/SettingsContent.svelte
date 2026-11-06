@@ -59,6 +59,12 @@
     min-width: 0;
   }
 
+  @container settings-body (min-width: 1340px) {
+    :global(.with-panel) .content {
+      flex: 0 1 1040px;
+    }
+  }
+
   .loading,
   .error {
     margin: auto;
