@@ -11,6 +11,7 @@ use super::engine::{
     lock, run_turn, Emit, EngineContext, SharedSession, PROPOSAL_EVENT, SECRET_REQUEST_EVENT,
 };
 use super::plan::{plan, Current};
+use crate::models::ai::ToolCallStatus;
 use crate::models::capabilities::{Effort, ModelCapabilities, ReasoningMode};
 use crate::models::settings::{ModelConfig, ModelType, Provider, Settings};
 use crate::services::ai::mock::{MockProvider, MockReply};
@@ -19,6 +20,7 @@ use crate::services::change_log::{change_log_dir, load_all};
 use crate::services::config::ConfigService;
 use crate::services::env_resolve::set_override;
 use crate::services::execution::lifecycle::{ExecutionSnapshot, LiveExecution};
+use crate::services::execution::types::MAX_TOOL_LOOP_ITERATIONS;
 use crate::services::placeholder_registry::PlaceholderContext;
 
 const SECRETS: [&str; 3] = ["sk-env-111", "sk-literal-333", "sk-new-444"];
@@ -321,16 +323,16 @@ async fn empty_agent_model_falls_back_to_the_chat_model() {
 
 #[tokio::test]
 async fn agent_reasoning_effort_reaches_the_request_over_the_chat_one() {
-    let two = run_on_agent_and_chat_models(Some("agent-model"), Some("high"), Some("low")).await;
+    let two = run_on_agent_and_chat_models(Some("agent-model"), Some("low"), Some("high")).await;
     two.run.outcome.as_ref().unwrap();
-    assert_eq!(only_request(&two.run.requests)["parameters"]["reasoning_effort"], "high");
+    assert_eq!(only_request(&two.run.requests)["parameters"]["reasoning_effort"], "low");
 }
 
 #[tokio::test]
-async fn chat_reasoning_effort_never_reaches_the_request() {
-    let two = run_on_agent_and_chat_models(None, None, Some("low")).await;
+async fn unset_agent_reasoning_effort_falls_back_to_the_chat_one() {
+    let two = run_on_agent_and_chat_models(Some("agent-model"), None, Some("high")).await;
     two.run.outcome.as_ref().unwrap();
-    assert!(only_request(&two.chat_requests)["parameters"]["reasoning_effort"].is_null());
+    assert_eq!(only_request(&two.run.requests)["parameters"]["reasoning_effort"], "high");
 }
 
 #[tokio::test]
@@ -360,4 +362,28 @@ async fn reasoning_item_of_a_tool_round_goes_back_on_the_assistant_message() {
     assert_eq!(with_items[0]["role"], "assistant");
     assert_eq!(with_items[0]["reasoning_items"], json!([item]));
     assert!(with_items[0]["tool_calls"].is_array());
+}
+
+#[tokio::test]
+async fn reaching_the_tool_round_limit_ends_the_turn_with_the_last_tool_error() {
+    let bad_row = json!({"operations": [{"op": "delete_model", "id": "ghost-id"}]});
+    let script = (0..=MAX_TOOL_LOOP_ITERATIONS)
+        .map(|n| call(&format!("c{n}"), "settings_propose_changes", bad_row.clone()))
+        .collect();
+
+    let run = run(Some("env-model"), script).await;
+
+    assert!(run.outcome.is_err());
+    assert_eq!(run.requests.lock().unwrap().len(), MAX_TOOL_LOOP_ITERATIONS + 1);
+    let live = run.live.lock().await;
+    let error = live.snapshot.error.clone().unwrap();
+    assert!(error.contains("Stopped after 10 tool rounds"), "{error}");
+    assert!(error.contains("model 'ghost-id' not found"), "{error}");
+    let last = live.snapshot.tool_calls.last().unwrap();
+    assert_eq!(last.tool_call_id, format!("c{MAX_TOOL_LOOP_ITERATIONS}"));
+    assert!(matches!(last.status, ToolCallStatus::Failed));
+    assert_eq!(
+        last.error.as_deref(),
+        Some("not run: the agent reached the limit of 10 tool rounds")
+    );
 }

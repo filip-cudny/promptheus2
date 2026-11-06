@@ -12,7 +12,9 @@ use crate::services::ai::AiService;
 use crate::services::config::catalog;
 use crate::services::execution::lifecycle::LiveExecution;
 use crate::services::execution::stream::{build_tool_loop_messages, run_stream_loop};
-use crate::services::execution::types::{PendingToolCall, MAX_TOOL_LOOP_ITERATIONS};
+use crate::services::execution::types::{
+    PendingToolCall, ToolExecutionResult, MAX_TOOL_LOOP_ITERATIONS,
+};
 use crate::services::placeholder_registry::PlaceholderContext;
 use crate::services::secrets;
 use crate::Error;
@@ -255,10 +257,16 @@ async fn tool_loop(
     });
     let settings = (ctx.settings)();
     let model_id = agent_model(&settings, &ctx.ai, live).await?;
-    let parameters = settings.surfaces.settings_agent.generation.parameters.clone();
+    let parameters = settings
+        .surfaces
+        .chat
+        .generation
+        .parameters
+        .merged_with(&settings.surfaces.settings_agent.generation.parameters);
     log::debug!("settings agent turn starts on model '{model_id}'");
 
     let mut prefix = String::new();
+    let mut last_tool_error: Option<String> = None;
     for iteration in 0..=MAX_TOOL_LOOP_ITERATIONS {
         if *cancel_rx.borrow() {
             return Err(fail(live, "Cancelled".into()).await);
@@ -286,13 +294,7 @@ async fn tool_loop(
         }
         if iteration == MAX_TOOL_LOOP_ITERATIONS {
             log::warn!("settings agent tool loop reached {MAX_TOOL_LOOP_ITERATIONS} iterations");
-            live.lock().await.finish_done(
-                result.full_text.clone(),
-                result.full_thinking,
-                result.prompt_tokens,
-                result.completion_tokens,
-            );
-            return Ok(result.full_text);
+            return Err(stop_at_limit(live, &result.pending_tool_calls, last_tool_error).await);
         }
         prefix.clone_from(&result.full_text);
         live.lock().await.snapshot.finished = false;
@@ -301,6 +303,9 @@ async fn tool_loop(
         else {
             return Err(fail(live, "Cancelled".into()).await);
         };
+        if let Some(error) = results.iter().rev().find_map(tool_error) {
+            last_tool_error = Some(error);
+        }
         messages.extend(build_tool_loop_messages(
             &result.pending_tool_calls,
             &result.full_text,
@@ -311,12 +316,40 @@ async fn tool_loop(
     unreachable!("the loop returns at its last iteration")
 }
 
+fn tool_error(result: &ToolExecutionResult) -> Option<String> {
+    if result.is_error {
+        return Some(result.result_text.clone());
+    }
+    let parsed: Value = serde_json::from_str(&result.result_text).ok()?;
+    let last = parsed.get("errors")?.as_array()?.last()?;
+    Some(format!("row {}: {}", last["row"], last["message"].as_str().unwrap_or_default()))
+}
+
+async fn stop_at_limit(
+    live: &Arc<TokioMutex<LiveExecution>>,
+    pending: &[PendingToolCall],
+    last_tool_error: Option<String>,
+) -> Error {
+    let not_run = format!("not run: the agent reached the limit of {MAX_TOOL_LOOP_ITERATIONS} tool rounds");
+    {
+        let mut live = live.lock().await;
+        for call in pending {
+            live.finish_tool_call(call.tool_call_id.clone(), None, Some(not_run.clone()));
+        }
+    }
+    let mut message = format!("Stopped after {MAX_TOOL_LOOP_ITERATIONS} tool rounds without finishing.");
+    if let Some(error) = last_tool_error {
+        message.push_str(&format!(" Last tool error: {error}"));
+    }
+    fail(live, message).await
+}
+
 async fn dispatch_all(
     dispatcher: &Dispatcher,
     pending: &[PendingToolCall],
     live: &Arc<TokioMutex<LiveExecution>>,
     cancel_rx: &watch::Receiver<bool>,
-) -> Option<Vec<crate::services::execution::types::ToolExecutionResult>> {
+) -> Option<Vec<ToolExecutionResult>> {
     let mut results = Vec::with_capacity(pending.len());
     for call in pending {
         if *cancel_rx.borrow() {
