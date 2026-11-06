@@ -111,6 +111,15 @@ pub fn build_tool_payloads(
         .collect()
 }
 
+pub const STRICT_META_KEY: &str = "promptheus/strict";
+
+fn is_strict(tool: &rmcp::model::Tool) -> bool {
+    tool.meta
+        .as_ref()
+        .and_then(|meta| meta.get(STRICT_META_KEY))
+        .is_some_and(|value| value == &json!(true))
+}
+
 pub fn mcp_tool_to_payload(
     tool: &rmcp::model::Tool,
     provider: &Provider,
@@ -130,12 +139,16 @@ pub fn mcp_tool_to_payload(
             })
         }
         (Provider::Openai, ApiMode::Responses) => {
-            json!({
+            let mut payload = json!({
                 "type": "function",
                 "name": tool.name,
                 "description": description,
                 "parameters": schema,
-            })
+            });
+            if is_strict(tool) {
+                payload["strict"] = json!(true);
+            }
+            payload
         }
         (Provider::Anthropic, _) => {
             json!({
@@ -294,5 +307,43 @@ mod tests {
         assert_eq!(payload["name"], "get_weather");
         assert_eq!(payload["description"], "Get weather for a location");
         assert_eq!(payload["input_schema"]["type"], "object");
+    }
+
+    fn strict_tool() -> rmcp::model::Tool {
+        let mut meta = rmcp::model::Meta::new();
+        meta.insert(STRICT_META_KEY.to_string(), json!(true));
+        make_test_mcp_tool().with_meta(meta)
+    }
+
+    fn settings_tool(name: &str) -> rmcp::model::Tool {
+        crate::services::settings_agent::tools::definitions()
+            .into_iter()
+            .find(|tool| tool.name == name)
+            .unwrap()
+    }
+
+    #[test]
+    fn strict_marker_adds_strict_to_the_responses_payload_only() {
+        let tool = strict_tool();
+        let responses = mcp_tool_to_payload(&tool, &Provider::Openai, &ApiMode::Responses);
+        assert_eq!(responses["strict"], json!(true));
+        let completions = mcp_tool_to_payload(&tool, &Provider::Openai, &ApiMode::Completions);
+        assert!(completions.get("strict").is_none() && completions["function"].get("strict").is_none());
+        let anthropic = mcp_tool_to_payload(&tool, &Provider::Anthropic, &ApiMode::Responses);
+        assert!(anthropic.get("strict").is_none());
+    }
+
+    #[test]
+    fn tools_without_the_marker_get_no_strict() {
+        let payload = mcp_tool_to_payload(&make_test_mcp_tool(), &Provider::Openai, &ApiMode::Responses);
+        assert!(payload.get("strict").is_none());
+        for name in ["settings_propose_changes", "settings_test"] {
+            let payload = mcp_tool_to_payload(&settings_tool(name), &Provider::Openai, &ApiMode::Responses);
+            assert!(payload.get("strict").is_none(), "{name}");
+        }
+        for name in ["settings_read", "settings_secret"] {
+            let payload = mcp_tool_to_payload(&settings_tool(name), &Provider::Openai, &ApiMode::Responses);
+            assert_eq!(payload["strict"], json!(true), "{name}");
+        }
     }
 }

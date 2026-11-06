@@ -314,3 +314,63 @@ fn tool_names_are_valid_function_names() {
         assert!(tool.name.starts_with("settings_"));
     }
 }
+
+fn apply_delete_of_literal_key_model(dir: &std::path::Path) -> String {
+    use super::apply::{apply, Context as ApplyContext};
+    use super::plan::{plan, Current};
+    use crate::services::change_log::change_log_dir;
+    use crate::services::config::ConfigService;
+
+    let mut settings = fixture_settings();
+    settings.models.push(model("deleted-model", "sk-deleted-999"));
+    std::fs::write(dir.join("settings.json"), serde_json::to_string_pretty(&settings).unwrap()).unwrap();
+    let mut config = ConfigService::load(dir).unwrap();
+    let operations = [Operation::DeleteModel { id: "deleted-model".into() }];
+    let current_settings = config.settings().clone();
+    let current = Current { settings: &current_settings, config_dir: dir };
+    let planned = plan(&operations, &[true], &current).unwrap_or_else(|errors| panic!("{errors:?}"));
+    let log_dir = change_log_dir(dir);
+    let mut ctx = ApplyContext {
+        config: &mut config,
+        config_dir: dir,
+        log_dir: &log_dir,
+        host: "test-host",
+        request: Some("delete the model".into()),
+        reply: None,
+        tests: Default::default(),
+    };
+    apply(&planned, &current, &mut ctx).unwrap()
+}
+
+#[tokio::test]
+async fn change_log_reads_never_return_the_literal_key_of_a_deleted_model() {
+    let (dir, dispatcher, _) = fixture(|_| Arc::new(CancellingPrompt));
+    let entry_id = apply_delete_of_literal_key_model(dir.path());
+    let reads = [
+        json!({"what": "change_log"}),
+        json!({"what": "change_log", "key": "models[deleted-model]"}),
+        json!({"what": "change_log", "name": entry_id}),
+    ];
+    for arguments in reads {
+        let (text, is_error) = call(&dispatcher, "settings_read", arguments.clone()).await;
+        assert!(!is_error, "{arguments}: {text}");
+        assert!(!text.contains("sk-deleted-999"), "leaked in {text}");
+        assert!(text.contains(&entry_id), "{arguments}: {text}");
+        assert!(text.contains("[redacted]"), "{arguments}: {text}");
+    }
+}
+
+#[tokio::test]
+async fn change_log_read_with_strict_nulls_and_an_unknown_name() {
+    let (_dir, dispatcher, _) = fixture(|_| Arc::new(CancellingPrompt));
+    let all_null = json!({
+        "what": "change_log", "name": null, "since": null, "until": null,
+        "key": null, "op": null, "text": null, "host": null, "limit": null
+    });
+    let (text, is_error) = call(&dispatcher, "settings_read", all_null).await;
+    assert!(!is_error, "{text}");
+    assert_eq!(serde_json::from_str::<Value>(&text).unwrap(), json!({"entries": [], "more": 0}));
+    let (text, is_error) = call(&dispatcher, "settings_read", json!({"what": "change_log", "name": "nope"})).await;
+    assert!(is_error);
+    assert_eq!(text, "change log entry 'nope' not found");
+}

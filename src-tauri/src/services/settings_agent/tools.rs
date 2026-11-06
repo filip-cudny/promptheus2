@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
-use rmcp::model::Tool;
+use rmcp::model::{Meta, Tool};
 use serde_json::{json, Map, Value};
 
 use super::operations::Operation;
+use crate::services::ai::tools::STRICT_META_KEY;
 
 pub const READ: &str = "settings_read";
 pub const TEST: &str = "settings_test";
@@ -15,6 +16,10 @@ fn tool(name: &'static str, description: &'static str, schema: Value) -> Tool {
         unreachable!("tool schemas are objects");
     };
     Tool::new(name, description, Arc::new(schema))
+}
+
+fn strict(tool: Tool) -> Tool {
+    tool.with_meta(Meta(Map::from_iter([(STRICT_META_KEY.to_string(), json!(true))])))
 }
 
 fn string() -> Value {
@@ -276,18 +281,26 @@ fn operations_schema() -> Value {
 
 pub fn definitions() -> Vec<Tool> {
     vec![
-        tool(
+        strict(tool(
             READ,
-            "Reads the live settings and returns them as JSON. `what` picks the part: `values` all settings; `models` the models (api_key shown as a ${VAR} reference or [redacted]); `skills` name, description, model and offered_in per skill; `skill` one skill's frontmatter and body (needs `name`); `prompt` one prompt (needs `name`: system, about_you, environment, input_format, title_generation, speech_to_text, stt_keyterms). `missing_env` lists the ${VAR} references without a value; `env_vars` lists the environment variables with description, secret flag, whether set on this machine and where used. It never returns a secret value and changes nothing.",
+            "Reads the live settings and returns them as JSON. `what` picks the part: `values` all settings; `models` the models (api_key shown as a ${VAR} reference or [redacted]); `skills` name, description, model and offered_in per skill; `skill` one skill's frontmatter and body (needs `name`); `prompt` one prompt (needs `name`: system, about_you, environment, input_format, title_generation, speech_to_text, stt_keyterms). `missing_env` lists the ${VAR} references without a value; `env_vars` lists the environment variables with description, secret flag, whether set on this machine and where used. `change_log` lists the earlier changes (cards, secret changes, undos), newest first, with request, reply, state (applied or undone) and the before and after of every setting; narrow it with `since`, `until`, `key`, `op`, `text`, `host` and `limit`, or read one whole entry, file contents included, with `name` set to its id. It never returns a secret value and changes nothing.",
             json!({
                 "type": "object",
                 "properties": {
-                    "what": {"type": "string", "enum": ["values", "models", "skills", "skill", "prompt", "missing_env", "env_vars"]},
-                    "name": {"type": "string", "description": "Skill slug or prompt name, for `skill` and `prompt`."}
+                    "what": {"type": "string", "enum": ["values", "models", "skills", "skill", "prompt", "missing_env", "env_vars", "change_log"]},
+                    "name": {"type": ["string", "null"], "description": "For `skill` and `prompt`: skill slug or prompt name. For `change_log`: an entry id, which returns that entry whole and ignores the other filters. Otherwise null."},
+                    "since": {"type": ["string", "null"], "description": "For `change_log`: RFC 3339 time; only entries created at or after it. Otherwise null."},
+                    "until": {"type": ["string", "null"], "description": "For `change_log`: RFC 3339 time; only entries created at or before it. Otherwise null."},
+                    "key": {"type": ["string", "null"], "description": "For `change_log`: only entries with a setting effect whose path starts with it, e.g. `models[<id>]`. Otherwise null."},
+                    "op": {"type": ["string", "null"], "description": "For `change_log`: only entries with an operation of this type, e.g. `delete_model`. Otherwise null."},
+                    "text": {"type": ["string", "null"], "description": "For `change_log`: only entries whose request, reply or an operation label contains it, ignoring case. Otherwise null."},
+                    "host": {"type": ["string", "null"], "description": "For `change_log`: only entries of this host. Otherwise null."},
+                    "limit": {"type": ["integer", "null"], "description": "For `change_log`: number of entries returned, default 20, maximum 100. Otherwise null."}
                 },
-                "required": ["what"]
+                "required": ["what", "name", "since", "until", "key", "op", "text", "host", "limit"],
+                "additionalProperties": false
             }),
-        ),
+        )),
         tool(
             TEST,
             "Checks a list of operations without proposing it. It validates the operations in order against the live settings, then runs the test of each model, skill and MCP server row on the settings as they would be after the operations. It returns `rows` with a label and test result per row, or `errors` with the row number and message of every operation that is invalid, in which case nothing was tested. It shows nothing to the user and writes nothing.",
@@ -306,7 +319,7 @@ pub fn definitions() -> Vec<Tool> {
                 "required": ["operations"]
             }),
         ),
-        tool(
+        strict(tool(
             SECRET,
             "Asks the user to enter a secret (API key, token) for the environment variable `name`, which must first be listed with `add_env_var` in an applied proposal. The app shows a masked input and the value never reaches you. It returns the outcome: saved, cancelled, or exists (the variable already has a value and the user closed without saving). Reference the variable as ${NAME} in operations.",
             json!({
@@ -315,8 +328,9 @@ pub fn definitions() -> Vec<Tool> {
                     "name": {"type": "string", "description": "Environment variable name, letters, digits and underscores."},
                     "purpose": {"type": "string", "description": "What the secret is for, shown to the user."}
                 },
-                "required": ["name", "purpose"]
+                "required": ["name", "purpose"],
+                "additionalProperties": false
             }),
-        ),
+        )),
     ]
 }

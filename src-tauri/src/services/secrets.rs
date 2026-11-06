@@ -17,7 +17,7 @@ use crate::services::env_resolve::{
 use crate::services::missing_env::collect_missing;
 
 const ENV_FILE_NAME: &str = ".env";
-const REDACTED: &str = "[redacted]";
+pub(crate) const REDACTED: &str = "[redacted]";
 
 static ENV_WRITE_LOCK: Mutex<()> = Mutex::new(());
 

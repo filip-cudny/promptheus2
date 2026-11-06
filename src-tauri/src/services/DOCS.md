@@ -218,6 +218,8 @@ Multi-provider LLM service. Lives in `ai/` subdirectory with one file per provid
 1. Create `services/ai/<provider>.rs` implementing `AiProvider`.
 2. Replace the `unavailable_models` arm of `AiService::new()` for that `Provider` variant (the variant already exists in `models/settings.rs`).
 
+**Strict tools** (`tools.rs`): `mcp_tool_to_payload` adds `"strict": true` to the OpenAI Responses payload only for a tool whose `rmcp::model::Tool` has `_meta` key `promptheus/strict` (`STRICT_META_KEY`) set to `true`; the schema of such a tool must satisfy OpenAI strict rules (every object `additionalProperties: false`, every property required, optional ones nullable), otherwise the API rejects the request. Completions, Anthropic and tools without the key never get `strict`; MCP servers do not set it. Today the settings agent's `settings_read` and `settings_secret` carry it.
+
 **Streaming architecture**: The `complete_stream` trait method returns an owned `Stream`. The execution commands (`commands/execution_stream.rs`, `commands/execution_control.rs`) bridge the streams the executors consume to a `tauri::ipc::Channel<StreamEvent>`. The per-service `AiService` lock is released (via clone of the cheap `Arc`-backed handle) before stream iteration to avoid holding it for the duration of the HTTP response.
 
 **SSE parser** (`sse.rs`): Converts a `reqwest::Response` byte stream into parsed `data:` line payloads. Handles line buffering, comment skipping, and `[DONE]` termination. Provider-agnostic — usable by any SSE-based provider.

@@ -18,3 +18,6 @@ mod tools_tests;
 pub mod engine;
 #[cfg(test)]
 mod engine_tests;
+pub mod change_log_read;
+#[cfg(test)]
+mod change_log_read_tests;

@@ -109,3 +109,52 @@ fn propose_and_test_tools_embed_the_operation_schema() {
         assert_eq!(items["anyOf"].as_array().unwrap().len(), Operation::NAMES.len(), "{}", tool.name);
     }
 }
+
+fn assert_strict_objects(schema: &Value, at: &str) {
+    if let Some(properties) = schema.get("properties").and_then(Value::as_object) {
+        assert_eq!(schema["additionalProperties"], json!(false), "{at}");
+        let mut keys: Vec<&str> = properties.keys().map(String::as_str).collect();
+        let mut listed = required(schema);
+        keys.sort();
+        listed.sort();
+        assert_eq!(keys, listed, "{at}");
+        for (name, child) in properties {
+            assert_strict_objects(child, &format!("{at}.{name}"));
+        }
+    }
+    if let Some(items) = schema.get("items") {
+        assert_strict_objects(items, &format!("{at}[]"));
+    }
+}
+
+#[test]
+fn read_and_secret_schemas_satisfy_the_strict_rules() {
+    for tool in definitions().iter().filter(|tool| tool.name == "settings_read" || tool.name == "settings_secret") {
+        let schema = Value::Object((*tool.input_schema).clone());
+        assert_strict_objects(&schema, &tool.name);
+    }
+}
+
+#[test]
+fn read_filters_other_than_what_are_nullable() {
+    let tool = definitions().into_iter().find(|tool| tool.name == "settings_read").unwrap();
+    let properties = tool.input_schema["properties"].as_object().unwrap();
+    assert!(properties["what"]["enum"].as_array().unwrap().contains(&json!("change_log")));
+    for (name, schema) in properties.iter().filter(|(name, _)| *name != "what") {
+        let types = schema["type"].as_array().unwrap_or_else(|| panic!("{name} is not nullable"));
+        assert!(types.contains(&json!("null")), "{name}");
+    }
+    assert_eq!(properties["limit"]["type"], json!(["integer", "null"]));
+}
+
+#[test]
+fn only_read_and_secret_carry_the_strict_marker() {
+    for tool in definitions() {
+        let marked = tool
+            .meta
+            .as_ref()
+            .and_then(|meta| meta.get(crate::services::ai::tools::STRICT_META_KEY))
+            == Some(&json!(true));
+        assert_eq!(marked, tool.name == "settings_read" || tool.name == "settings_secret", "{}", tool.name);
+    }
+}

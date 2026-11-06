@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 
 use crate::models::settings::Settings;
 use crate::services::ai::AiService;
-use crate::services::change_log::TestResult;
+use crate::services::change_log::{change_log_dir, load_all, TestResult};
 use crate::services::config::ConfigService;
 use crate::services::execution::types::{PendingToolCall, ToolExecutionResult};
 use crate::services::missing_env::{collect_missing, env_is_set, env_var_overview};
@@ -16,6 +16,7 @@ use crate::services::placeholder_registry::PlaceholderContext;
 use crate::services::secrets::{self, Redactor};
 use crate::services::skill::SkillService;
 
+use super::change_log_read::{self, Filters};
 use super::operations::{Operation, PromptFile};
 use super::plan::{plan, Current, Plan, RowError};
 use super::testing::test_row;
@@ -68,12 +69,14 @@ enum What {
     Prompt,
     MissingEnv,
     EnvVars,
+    ChangeLog,
 }
 
 #[derive(Deserialize)]
 struct ReadArgs {
     what: What,
-    name: Option<String>,
+    #[serde(flatten)]
+    filters: Filters,
 }
 
 #[derive(Deserialize)]
@@ -168,7 +171,7 @@ impl Dispatcher {
         let args: ReadArgs = parse(arguments)?;
         let settings = (self.ctx.settings)();
         let redactor = Redactor::new(&self.ctx.config_dir, &settings);
-        let name = || args.name.clone().ok_or_else(|| "`name` is required".to_string());
+        let name = || args.filters.name.clone().ok_or_else(|| "`name` is required".to_string());
         match args.what {
             What::Values => Ok(redactor.redact_settings(&settings)),
             What::Models => Ok(redactor.redact_settings(&settings)["models"].clone()),
@@ -199,6 +202,9 @@ impl Dispatcher {
             }
             What::EnvVars => {
                 serde_json::to_value(env_var_overview(&settings, env_is_set)).map_err(|e| e.to_string())
+            }
+            What::ChangeLog => {
+                change_log_read::read(&load_all(&change_log_dir(&self.ctx.config_dir)), &args.filters)
             }
         }
     }
