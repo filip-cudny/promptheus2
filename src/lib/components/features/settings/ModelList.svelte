@@ -123,7 +123,6 @@
   .model-list {
     width: 280px;
     flex-shrink: 0;
-    background: var(--surface-sunken);
     border-right: 1px solid var(--border-faint);
     display: flex;
     flex-direction: column;
