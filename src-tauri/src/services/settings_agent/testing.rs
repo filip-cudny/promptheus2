@@ -25,6 +25,7 @@ pub async fn test_row(
     let start = Instant::now();
     let outcome = match operation {
         Operation::AddModel { model } | Operation::UpdateModel { model, .. } => {
+            let model = plan.settings.models.iter().find(|m| m.id == model.id).unwrap_or(model);
             test_model(model, ai).await
         }
         Operation::CreateSkill { frontmatter, body, sample_input, .. }
