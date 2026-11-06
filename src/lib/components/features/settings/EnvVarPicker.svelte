@@ -11,14 +11,17 @@
   import SecretField from "./SecretField.svelte";
 
   const NEW_ACTION = "__new_env_var__";
+  const PLAIN_ACTION = "__plain_value__";
   const ROW_PREFIX = /^row \d+: /;
 
   let {
     value,
     onchange,
+    allowPlain = false,
   }: {
     value: string;
     onchange: (value: string) => void;
+    allowPlain?: boolean;
   } = $props();
 
   type Step =
@@ -39,8 +42,13 @@
       vars.map((v) => v.name),
     ),
   );
+  const plain = $derived(
+    allowPlain && (reference.kind === "literal" || reference.kind === "empty"),
+  );
   const options = $derived(
-    pickerOptions(vars, value, [{ value: NEW_ACTION, label: "New…" }]),
+    allowPlain
+      ? pickerOptions(vars, value, [{ value: PLAIN_ACTION, label: "Plain value" }], false)
+      : pickerOptions(vars, value, [{ value: NEW_ACTION, label: "New…" }]),
   );
 
   async function refresh() {
@@ -73,6 +81,10 @@
       return;
     }
     step = null;
+    if (next === PLAIN_ACTION) {
+      if (!plain) onchange("");
+      return;
+    }
     if (next !== value) onchange(next);
   }
 
@@ -116,10 +128,22 @@
 
 <div class="picker" role="presentation" onkeydown={swallowEnterSubmit}>
   <div class="row">
-    <SelectDropdown bind:value={() => value, pick} {options} ariaLabel="API key" />
+    <SelectDropdown
+      bind:value={() => (plain ? PLAIN_ACTION : value), pick}
+      {options}
+      ariaLabel={allowPlain ? "Variable value" : "API key"}
+    />
+    {#if plain}
+      <TextInput
+        {value}
+        placeholder="value"
+        aria-label="Plain value"
+        oninput={(e: Event) => onchange((e.target as HTMLInputElement).value)}
+      />
+    {/if}
     {#if reference.kind === "unlisted"}
       <Button disabled={busy} onclick={() => addToList(reference.name, "")}>Add to list</Button>
-    {:else if reference.kind === "literal"}
+    {:else if reference.kind === "literal" && !allowPlain}
       <Button onclick={() => startForm(true)}>Move to a variable</Button>
     {/if}
   </div>
@@ -153,6 +177,8 @@
 
 <style>
   .picker {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     gap: var(--space-3);

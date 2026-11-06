@@ -12,11 +12,11 @@
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
   import { updateSetting } from "$lib/services/settings";
-  import { checkEnvVar } from "$lib/services/settingsDialog";
-  import { listMcpServers, type McpServerConfig, type McpServerState } from "$lib/services/mcp";
+    import { listMcpServers, type McpServerConfig, type McpServerState } from "$lib/services/mcp";
   import SettingsSection from "./SettingsSection.svelte";
   import SettingField from "./SettingField.svelte";
-  import EnvRefChip, { parseEnvRef } from "./EnvRefChip.svelte";
+  import EnvVarPicker from "./EnvVarPicker.svelte";
+  import InsertVariableButton from "./InsertVariableButton.svelte";
 
   type Pair<V> = { key: number; name: string; value: V };
   type Row = {
@@ -63,7 +63,8 @@
   let removedName = $state<string | null>(null);
   let confirmDelete = $state(false);
   let states = $state<McpServerState[]>([]);
-  let envResolved = $state<Record<string, boolean>>({});
+  let commandRow = $state<HTMLElement | undefined>();
+  let argsEl = $state<HTMLTextAreaElement | undefined>();
 
   const selected = $derived(rows.find((r) => r.key === selectedKey) ?? null);
   const stateOf = $derived(new Map(states.map((s) => [s.name, s])));
@@ -84,16 +85,6 @@
   onDestroy(() => {
     void tracker.flush();
     tracker.destroy();
-  });
-
-  $effect(() => {
-    for (const pair of selected?.env ?? []) {
-      const name = parseEnvRef(pair.value);
-      if (name && !(name in envResolved)) {
-        envResolved[name] = false;
-        checkEnvVar(name).then((ok) => (envResolved[name] = ok));
-      }
-    }
   });
 
   $effect(() => {
@@ -236,33 +227,53 @@
           </FormRow>
 
           <SettingField key="mcp_servers.*.command">
-            <TextInput
-              value={selected.command}
-              aria-label="Command"
-              oninput={(e: Event) => {
-                selected.command = (e.target as HTMLInputElement).value;
-                edited();
-              }}
-            />
+            <div class="with-action" bind:this={commandRow}>
+              <TextInput
+                value={selected.command}
+                aria-label="Command"
+                oninput={(e: Event) => {
+                  selected.command = (e.target as HTMLInputElement).value;
+                  edited();
+                }}
+              />
+              <InsertVariableButton
+                ariaLabel="Insert variable into command"
+                field={() => commandRow?.querySelector("input")}
+                oninsert={(text) => {
+                  selected.command = text;
+                  edited();
+                }}
+              />
+            </div>
           </SettingField>
 
           <SettingField key="mcp_servers.*.args">
-            <textarea
-              rows="3"
-              aria-label="Arguments, one per line"
-              placeholder="One argument per line"
-              value={selected.args}
-              oninput={(e) => {
-                selected.args = e.currentTarget.value;
-                edited();
-              }}
-            ></textarea>
+            <div class="with-action top">
+              <textarea
+                bind:this={argsEl}
+                rows="3"
+                aria-label="Arguments, one per line"
+                placeholder="One argument per line"
+                value={selected.args}
+                oninput={(e) => {
+                  selected.args = e.currentTarget.value;
+                  edited();
+                }}
+              ></textarea>
+              <InsertVariableButton
+                ariaLabel="Insert variable into arguments"
+                field={() => argsEl}
+                oninsert={(text) => {
+                  selected.args = text;
+                  edited();
+                }}
+              />
+            </div>
           </SettingField>
 
           <SettingField key="mcp_servers.*.env">
             <div class="pairs">
               {#each selected.env as pair (pair.key)}
-                {@const ref = parseEnvRef(pair.value)}
                 <div class="pair">
                   <TextInput
                     value={pair.name}
@@ -273,12 +284,11 @@
                       edited();
                     }}
                   />
-                  <TextInput
+                  <EnvVarPicker
+                    allowPlain
                     value={pair.value}
-                    placeholder={'value or ${VAR}'}
-                    aria-label="Variable value"
-                    oninput={(e: Event) => {
-                      pair.value = (e.target as HTMLInputElement).value;
+                    onchange={(next) => {
+                      pair.value = next;
                       edited();
                     }}
                   />
@@ -291,7 +301,6 @@
                     <X size={ICON_SIZE.sm} />
                   </button>
                 </div>
-                {#if ref}<EnvRefChip varName={ref} resolved={envResolved[ref] ?? false} />{/if}
               {/each}
               <div>
                 <Button onclick={() => addPair(selected.env, "")}>
@@ -486,6 +495,16 @@
     color: var(--text-primary);
     font-family: var(--font-mono);
     font-size: var(--font-size-md);
+  }
+
+  .with-action {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+  }
+
+  .with-action.top {
+    align-items: flex-start;
   }
 
   .pairs {

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   classifyReference,
+  insertAt,
   parseEnvRef,
   pickerOptions,
 } from "../src/lib/utils/envVarOptions.ts";
@@ -76,4 +77,33 @@ test("extras come last", () => {
   const options = pickerOptions(listed, "sk-test", [NEW]);
   assert.deepEqual(options.at(-1), NEW);
   assert.equal(options.at(-2).label, "Literal key");
+});
+
+test("literal option can be left out", () => {
+  const options = pickerOptions(listed, "sk-test", [NEW], false);
+  assert.deepEqual(options.map((o) => o.label), [
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY (missing)",
+    "New…",
+  ]);
+  assert.equal(pickerOptions(listed, "${GEMINI_KEY}", [], false).at(-1).label, "GEMINI_KEY (not listed)");
+});
+
+test("insertAt into an empty string", () => {
+  assert.deepEqual(insertAt("", 0, 0, "${A}"), { text: "${A}", caret: 4 });
+});
+
+test("insertAt at the start", () => {
+  assert.deepEqual(insertAt("/src/index.ts", 0, 0, "${P}"), {
+    text: "${P}/src/index.ts",
+    caret: 4,
+  });
+});
+
+test("insertAt in the middle", () => {
+  assert.deepEqual(insertAt("ab", 1, 1, "${A}"), { text: "a${A}b", caret: 5 });
+});
+
+test("insertAt replaces a selection", () => {
+  assert.deepEqual(insertAt("abcd", 1, 3, "${A}"), { text: "a${A}d", caret: 5 });
 });
