@@ -224,3 +224,8 @@ pub async fn settings_agent_test_row(
     }
     Ok(result)
 }
+
+#[tauri::command]
+pub async fn settings_agent_panel(app: AppHandle, open: bool) -> crate::Result<&'static str> {
+    crate::services::settings_agent::panel::set_open(&app, open).await
+}

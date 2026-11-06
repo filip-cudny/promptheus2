@@ -10,18 +10,27 @@ pub const PANEL_WIDTH: f64 = 380.0;
 const RESIZE_WAIT: Duration = Duration::from_millis(300);
 const RESIZE_POLL: Duration = Duration::from_millis(30);
 
-static ADDED_WIDTH: Mutex<f64> = Mutex::new(0.0);
+#[derive(Default)]
+pub struct PanelState(Mutex<f64>);
 
-pub fn added_width() -> f64 {
-    *ADDED_WIDTH.lock().unwrap_or_else(|e| e.into_inner())
+impl PanelState {
+    fn get(&self) -> f64 {
+        *self.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn set(&self, width: f64) {
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()) = width;
+    }
 }
 
-pub fn reset() {
-    set_added_width(0.0);
+pub fn added_width(app: &tauri::AppHandle) -> f64 {
+    app.try_state::<PanelState>().map_or(0.0, |s| s.get())
 }
 
-fn set_added_width(width: f64) {
-    *ADDED_WIDTH.lock().unwrap_or_else(|e| e.into_inner()) = width;
+pub fn reset(app: &tauri::AppHandle) {
+    if let Some(state) = app.try_state::<PanelState>() {
+        state.set(0.0);
+    }
 }
 
 pub fn geometry_without_panel(geometry: WindowGeometry, added_width: f64) -> WindowGeometry {
@@ -31,25 +40,26 @@ pub fn geometry_without_panel(geometry: WindowGeometry, added_width: f64) -> Win
     }
 }
 
-#[tauri::command]
-pub async fn settings_agent_panel(app: tauri::AppHandle, open: bool) -> crate::Result<&'static str> {
-    let win = window(&app, SETTINGS_DIALOG_LABEL)?;
+pub async fn set_open(app: &tauri::AppHandle, open: bool) -> crate::Result<&'static str> {
+    app.manage(PanelState::default());
+    let state = app.state::<PanelState>();
+    let win = window(app, SETTINGS_DIALOG_LABEL)?;
     let scale = win.scale_factor()?;
     let size = win.inner_size()?;
     let logical_w = size.width as f64 / scale;
     let logical_h = size.height as f64 / scale;
 
     if !open {
-        let added = added_width();
+        let added = state.get();
         if added > 0.0 {
             win.set_size(LogicalSize::new(logical_w - added, logical_h))?;
-            reset();
+            state.set(0.0);
             log::debug!(target: "app_lib::services::settings_agent::panel", "panel closed, shrunk by {added}");
         }
         return Ok("overlay");
     }
 
-    if added_width() > 0.0 {
+    if state.get() > 0.0 {
         return Ok("widened");
     }
 
@@ -73,7 +83,7 @@ pub async fn settings_agent_panel(app: tauri::AppHandle, open: bool) -> crate::R
         tokio::time::sleep(RESIZE_POLL).await;
         waited += RESIZE_POLL;
         if win.inner_size()?.width != size.width {
-            set_added_width(PANEL_WIDTH);
+            state.set(PANEL_WIDTH);
             return Ok("widened");
         }
     }

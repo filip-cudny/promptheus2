@@ -399,7 +399,7 @@ pub async fn open_or_focus(
         WindowEvent::Destroyed => {
             ai_webview::cleanup_host_state(&app_handle, &destroy_label);
             if destroy_label == SETTINGS_DIALOG_LABEL {
-                settings_agent::panel::reset();
+                settings_agent::panel::reset(&app_handle);
                 if let Some(session) = app_handle.try_state::<SharedSession>() {
                     lock(&session).reset();
                 }
@@ -485,7 +485,7 @@ pub fn save_geometry(app: &tauri::AppHandle, window_label: &str, geometry_key: &
         height: size.height as f64 / scale,
     };
     if window_label == SETTINGS_DIALOG_LABEL {
-        geom = settings_agent::panel::geometry_without_panel(geom, settings_agent::panel::added_width());
+        geom = settings_agent::panel::geometry_without_panel(geom, settings_agent::panel::added_width(app));
     }
 
     let app = app.clone();
