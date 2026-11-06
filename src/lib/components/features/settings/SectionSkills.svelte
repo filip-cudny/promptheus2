@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount, untrack } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import SettingsSection from "./SettingsSection.svelte";
   import SkillList from "./SkillList.svelte";
   import SkillEditor from "./SkillEditor.svelte";
@@ -26,19 +26,24 @@
 
   onDestroy(() => {});
 
+  let requestedSlug = $state<string | null>(null);
+
+  $effect(() => {
+    const item = navigation.selectedItem;
+    if (item?.list === "skills") requestedSlug = item.id;
+  });
+
   $effect(() => {
     const names = store.full.map((s) => s.name);
-    if (selectedSlug && !names.includes(selectedSlug)) {
+    const requested = requestedSlug;
+    if (requested && names.includes(requested)) {
+      selectedSlug = requested;
+      requestedSlug = null;
+    } else if (selectedSlug && !names.includes(selectedSlug)) {
       selectedSlug = names[0] ?? null;
     } else if (!selectedSlug && names.length > 0) {
       selectedSlug = names[0];
     }
-  });
-
-  $effect(() => {
-    const item = navigation.selectedItem;
-    if (item?.list !== "skills") return;
-    if (untrack(() => store.full.some((s) => s.name === item.id))) selectedSlug = item.id;
   });
 
   const selected = $derived(
