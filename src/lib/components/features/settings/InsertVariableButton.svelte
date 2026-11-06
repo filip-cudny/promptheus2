@@ -6,7 +6,7 @@
   import MenuItem from "$lib/components/shared/ui/MenuItem.svelte";
   import MenuList from "$lib/components/shared/ui/MenuList.svelte";
   import { getEnvVars } from "$lib/services/settings";
-  import { insertAt } from "$lib/utils/envVarOptions";
+  import { groupByKind, insertAt } from "$lib/utils/envVarOptions";
   import type { EnvVarStatus } from "$lib/types";
 
   let {
@@ -23,6 +23,14 @@
   let open = $state(false);
   let vars = $state<EnvVarStatus[]>([]);
 
+  const groups = $derived.by(() => {
+    const { secrets, variables } = groupByKind(vars);
+    return [
+      { label: "Secrets", items: secrets },
+      { label: "Variables", items: variables },
+    ].filter((g) => g.items.length > 0);
+  });
+
   async function toggle() {
     open = !open;
     if (!open) return;
@@ -36,7 +44,10 @@
   function insert(name: string) {
     open = false;
     const el = field();
-    if (!el) return;
+    if (!el) {
+      oninsert(`\${${name}}`);
+      return;
+    }
     const start = el.selectionStart ?? el.value.length;
     const end = el.selectionEnd ?? el.value.length;
     const { text, caret } = insertAt(el.value, start, end, `\${${name}}`);
@@ -70,12 +81,25 @@
 
 <FloatingPanel visible={open} anchorEl={buttonEl} position="below" fitContent onclose={() => (open = false)}>
   <MenuList>
-    {#each vars as v (v.name)}
-      <MenuItem label={v.name} onclick={() => insert(v.name)}>
-        {#snippet shortcut()}{#if !v.set}missing{/if}{/snippet}
-      </MenuItem>
+    {#each groups as group (group.label)}
+      <div class="group-label">{group.label}</div>
+      {#each group.items as v (v.name)}
+        <MenuItem label={v.name} onclick={() => insert(v.name)}>
+          {#snippet shortcut()}{#if !v.set}missing{/if}{/snippet}
+        </MenuItem>
+      {/each}
     {:else}
       <div class="menu-list-info">No variables listed.</div>
     {/each}
   </MenuList>
 </FloatingPanel>
+
+<style>
+  .group-label {
+    padding: var(--space-2) var(--space-4) var(--space-1);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+</style>

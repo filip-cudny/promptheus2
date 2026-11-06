@@ -1,22 +1,27 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from "svelte";
   import { Plus, X } from "lucide-svelte";
-  import { error as logError } from "@tauri-apps/plugin-log";
+  import { error as logError, warn as logWarn } from "@tauri-apps/plugin-log";
   import { ICON_SIZE } from "$lib/constants/ui";
   import Button from "$lib/components/shared/ui/Button.svelte";
   import FormRow from "$lib/components/shared/ui/FormRow.svelte";
+  import Chip from "$lib/components/shared/ui/Chip.svelte";
   import NumberInput from "$lib/components/shared/ui/NumberInput.svelte";
   import TextInput from "$lib/components/shared/ui/TextInput.svelte";
   import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
-  import { updateSetting } from "$lib/services/settings";
+  import { onSettingsChanged } from "$lib/services/events";
+  import { applyEnvVarOperation, getEnvVars, updateSetting } from "$lib/services/settings";
   import { listMcpServers, type McpServerConfig, type McpServerState } from "$lib/services/mcp";
   import SettingsSection from "./SettingsSection.svelte";
   import SettingField from "./SettingField.svelte";
-  import EnvVarPicker from "./EnvVarPicker.svelte";
   import InsertVariableButton from "./InsertVariableButton.svelte";
+  import { classifyReference, parseEnvRef } from "$lib/utils/envVarOptions";
+  import type { EnvVarStatus } from "$lib/types";
+
+  const ROW_PREFIX = /^row \d+: /;
 
   type Pair<V> = { key: number; name: string; value: V };
   type Row = {
@@ -65,6 +70,11 @@
   let states = $state<McpServerState[]>([]);
   let commandRow = $state<HTMLElement | undefined>();
   let argsEl = $state<HTMLTextAreaElement | undefined>();
+  let valueCells = $state<Record<number, HTMLElement | undefined>>({});
+  let envVars = $state<EnvVarStatus[]>([]);
+  let envLoaded = $state(false);
+  let envErrors = $state<Record<number, string>>({});
+  let unlisten: (() => void) | null = null;
 
   const selected = $derived(rows.find((r) => r.key === selectedKey) ?? null);
   const stateOf = $derived(new Map(states.map((s) => [s.name, s])));
@@ -72,17 +82,56 @@
   const selectedRemoved = $derived(
     selected ? null : (removed.find((s) => s.name === removedName) ?? null),
   );
+  const envNames = $derived(envVars.map((v) => v.name));
   const duplicateName = $derived(
     selected !== null && rows.some((r) => r !== selected && r.name === selected.name),
   );
 
-  onMount(() => {
+  async function refreshEnv() {
+    try {
+      envVars = await getEnvVars();
+      envLoaded = true;
+    } catch (e) {
+      logWarn("Failed to read get_env_vars: " + e);
+    }
+  }
+
+  function referenceState(value: string): string | null {
+    if (!envLoaded) return null;
+    const reference = classifyReference(value, envNames);
+    if (reference.kind === "unlisted") return "not listed";
+    if (reference.kind !== "listed") return null;
+    return envVars.find((v) => v.name === reference.name)?.set ? "set" : "missing";
+  }
+
+  async function addToList(pair: Pair<string>, name: string) {
+    delete envErrors[pair.key];
+    try {
+      await applyEnvVarOperation({ op: "add_env_var", name, description: "", secret: true });
+    } catch (e) {
+      envErrors[pair.key] = String(e).replace(ROW_PREFIX, "");
+      return;
+    }
+    await refreshEnv();
+  }
+
+  function setEnvValue(pair: Pair<string>, value: string) {
+    pair.value = value;
+    edited();
+  }
+
+  onMount(async () => {
+    window.addEventListener("focus", refreshEnv);
     listMcpServers()
       .then((s) => (states = s))
       .catch((e) => logError(`list_mcp_servers failed: ${e}`));
+    unlisten = await onSettingsChanged(refreshEnv);
+    await refreshEnv();
   });
 
   onDestroy(() => {
+    window.removeEventListener("focus", refreshEnv);
+    unlisten?.();
     void tracker.flush();
     tracker.destroy();
   });
@@ -276,33 +325,70 @@
 
           <SettingField key="mcp_servers.*.env">
             <div class="pairs">
+              {#if selected.env.length > 0}
+                <div class="pair env env-head" aria-hidden="true">
+                  <span class="name-col">Name in server</span>
+                  <span>Value</span>
+                </div>
+              {/if}
               {#each selected.env as pair (pair.key)}
-                <div class="pair env">
-                  <TextInput
-                    value={pair.name}
-                    placeholder="NAME"
-                    aria-label="Variable name"
-                    oninput={(e: Event) => {
-                      pair.name = (e.target as HTMLInputElement).value;
-                      edited();
-                    }}
-                  />
-                  <EnvVarPicker
-                    allowPlain
-                    value={pair.value}
-                    onchange={(next) => {
-                      pair.value = next;
-                      edited();
-                    }}
-                  />
-                  <button
-                    type="button"
-                    class="icon-btn"
-                    aria-label="Remove variable"
-                    onclick={() => removePair(selected.env, pair.key)}
-                  >
-                    <X size={ICON_SIZE.sm} />
-                  </button>
+                {@const ref = parseEnvRef(pair.value)}
+                {@const refState = ref ? referenceState(pair.value) : null}
+                <div class="env-item">
+                  <div class="pair env">
+                    <TextInput
+                      value={pair.name}
+                      placeholder="NAME"
+                      aria-label="Variable name"
+                      oninput={(e: Event) => {
+                        pair.name = (e.target as HTMLInputElement).value;
+                        edited();
+                      }}
+                    />
+                    <div class="value-cell" bind:this={valueCells[pair.key]}>
+                      {#if ref}
+                        <span class="chip-slot">
+                          <Chip>
+                            <span class="chip-text">{refState ? `${ref} · ${refState}` : ref}</span>
+                            {#if refState === "not listed"}
+                              <button type="button" class="chip-btn" onclick={() => addToList(pair, ref)}>
+                                Add to list
+                              </button>
+                            {/if}
+                            <button
+                              type="button"
+                              class="chip-btn clear"
+                              aria-label="Clear value"
+                              onclick={() => setEnvValue(pair, "")}
+                            >
+                              <X size={ICON_SIZE.sm} />
+                            </button>
+                          </Chip>
+                        </span>
+                      {:else}
+                        <TextInput
+                          value={pair.value}
+                          placeholder="value"
+                          aria-label={pair.name ? `Value of ${pair.name}` : "Variable value"}
+                          oninput={(e: Event) => setEnvValue(pair, (e.target as HTMLInputElement).value)}
+                        />
+                      {/if}
+                      <InsertVariableButton
+                        ariaLabel="Insert variable into value"
+                        field={() => valueCells[pair.key]?.querySelector("input")}
+                        oninsert={(text) => setEnvValue(pair, text)}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      class="icon-btn"
+                      aria-label="Remove variable"
+                      onclick={() => removePair(selected.env, pair.key)}
+                    >
+                      <X size={ICON_SIZE.sm} />
+                    </button>
+                  </div>
+                  {#if envErrors[pair.key]}<p class="env-error">{envErrors[pair.key]}</p>{/if}
                 </div>
               {/each}
               <div>
@@ -531,8 +617,60 @@
     align-items: center;
   }
 
-  .pair.env > :global(.text-input) {
+  .pair.env > :global(.text-input),
+  .env-head .name-col {
     flex: 0 0 38%;
+  }
+
+  .env-head {
+    font-size: var(--font-size-xs);
+    color: var(--text-muted);
+  }
+
+  .value-cell {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+  }
+
+  .chip-slot {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+  }
+
+  .chip-slot > :global(.chip) {
+    max-width: 100%;
+  }
+
+  .chip-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .chip-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0;
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    font: inherit;
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+  }
+
+  .chip-btn.clear {
+    color: var(--text-muted);
+  }
+
+  .env-error {
+    margin: var(--space-1) 0 0;
+    font-size: var(--font-size-sm);
+    color: var(--danger);
   }
 
   .icon-btn {

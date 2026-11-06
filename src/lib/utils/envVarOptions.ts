@@ -35,7 +35,6 @@ export function pickerOptions(
   listed: Pick<EnvVarStatus, "name" | "set">[],
   value: string | null | undefined,
   extras: PickerOption[],
-  includeLiteral = true,
 ): PickerOption[] {
   const options = listed.map((v) => ({
     value: `\${${v.name}}`,
@@ -47,10 +46,20 @@ export function pickerOptions(
   );
   if (state.kind === "unlisted" && value) {
     options.push({ value, label: `${state.name} (not listed)` });
-  } else if (includeLiteral && state.kind === "literal" && value) {
+  } else if (state.kind === "literal" && value) {
     options.push({ value, label: LITERAL_LABEL });
   }
   return [...options, ...extras];
+}
+
+export function groupByKind<T extends { name: string; secret: boolean }>(
+  vars: T[],
+): { secrets: T[]; variables: T[] } {
+  const sorted = [...vars].sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    secrets: sorted.filter((v) => v.secret),
+    variables: sorted.filter((v) => !v.secret),
+  };
 }
 
 export function insertAt(

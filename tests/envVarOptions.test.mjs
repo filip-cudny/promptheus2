@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   classifyReference,
+  groupByKind,
   insertAt,
   parseEnvRef,
   pickerOptions,
@@ -79,14 +80,21 @@ test("extras come last", () => {
   assert.equal(options.at(-2).label, "Literal key");
 });
 
-test("literal option can be left out", () => {
-  const options = pickerOptions(listed, "sk-test", [NEW], false);
-  assert.deepEqual(options.map((o) => o.label), [
-    "OPENAI_API_KEY",
-    "ANTHROPIC_API_KEY (missing)",
-    "New…",
+test("groupByKind splits secrets from variables, each sorted by name", () => {
+  const { secrets, variables } = groupByKind([
+    { name: "B", secret: true },
+    { name: "C", secret: false },
+    { name: "A", secret: false },
+    { name: "AB", secret: true },
   ]);
-  assert.equal(pickerOptions(listed, "${GEMINI_KEY}", [], false).at(-1).label, "GEMINI_KEY (not listed)");
+  assert.deepEqual(secrets.map((v) => v.name), ["AB", "B"]);
+  assert.deepEqual(variables.map((v) => v.name), ["A", "C"]);
+  assert.deepEqual(groupByKind([]), { secrets: [], variables: [] });
+  assert.deepEqual(groupByKind([{ name: "A", secret: true }]).variables, []);
+});
+
+test("a token with a prefix is a literal", () => {
+  assert.deepEqual(classifyReference("Bearer ${A}", ["A"]), { kind: "literal" });
 });
 
 test("insertAt into an empty string", () => {
