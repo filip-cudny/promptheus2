@@ -69,7 +69,7 @@ impl Cf {
         Cf::owned(value)
     }
 
-    fn string(&self) -> Option<String> {
+    pub(crate) fn string(&self) -> Option<String> {
         (self.type_id() == unsafe { CFStringGetTypeID() })
             .then(|| unsafe { &*(self.0 as *const NSString) }.to_string())
     }
