@@ -312,6 +312,38 @@
     color: var(--text-secondary);
   }
 
+  .markdown-renderer :global(table) {
+    display: block;
+    overflow-x: auto;
+    max-width: 100%;
+    width: max-content;
+    border-collapse: collapse;
+    border: 1px solid var(--border-default);
+    border-radius: 6px;
+    margin: var(--space-3) var(--space-0);
+    font-size: var(--font-size-base);
+  }
+
+  .markdown-renderer :global(th) {
+    text-align: left;
+    font-weight: var(--font-weight-semibold);
+    color: var(--text-secondary);
+    background: var(--surface-overlay-faint);
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-default);
+  }
+
+  .markdown-renderer :global(td) {
+    padding: 6px 10px;
+    border-top: 1px solid var(--border-faint);
+    vertical-align: top;
+  }
+
+  .markdown-renderer :global(th:first-child),
+  .markdown-renderer :global(td:first-child) {
+    white-space: nowrap;
+  }
+
   .markdown-renderer :global(code) {
     background: var(--surface-overlay);
     padding: 2px 5px;
