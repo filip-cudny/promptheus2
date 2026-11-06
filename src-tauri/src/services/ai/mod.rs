@@ -1,6 +1,8 @@
 pub mod capabilities;
 pub mod encoder;
 mod http;
+#[cfg(test)]
+pub mod mock;
 pub mod openai;
 pub mod openai_responses;
 pub mod provider;
@@ -134,6 +136,28 @@ impl AiService {
             inner: Arc::new(AiServiceInner {
                 providers,
                 unavailable_models,
+            }),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn with_provider(model_id: &str, provider: Box<dyn AiProvider>) -> Self {
+        let mut providers = HashMap::new();
+        providers.insert(
+            model_id.to_string(),
+            ProviderEntry {
+                provider,
+                model_name: model_id.to_string(),
+                parameters: ModelParameters::default(),
+                provider_type: Provider::default(),
+                api_mode: ApiMode::default(),
+                capabilities: ModelCapabilities::minimal(),
+            },
+        );
+        Self {
+            inner: Arc::new(AiServiceInner {
+                providers,
+                unavailable_models: HashMap::new(),
             }),
         }
     }
