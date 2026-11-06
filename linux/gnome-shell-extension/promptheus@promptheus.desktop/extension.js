@@ -172,7 +172,6 @@ function msUntilRetryTextChange(remainingMs) {
 }
 
 const PASTE_FOCUS_TIMEOUT_MS = 2000;
-const PASTE_SETTLE_MS = 600;
 const PASTE_POLL_MS = 50;
 const PASTE_WINDOW_TIMEOUT_MS = 20000;
 const PASTE_WINDOW_POLL_MS = 100;
@@ -333,6 +332,10 @@ const INTERFACE_XML = `
       <arg type="as" direction="in" name="uris"/>
       <arg type="s" direction="out" name="outcome"/>
     </method>
+    <method name="HasAppWindow">
+      <arg type="s" direction="in" name="wm_class"/>
+      <arg type="b" direction="out" name="present"/>
+    </method>
     <method name="WatchAppTitles">
       <arg type="s" direction="in" name="wm_class"/>
       <arg type="u" direction="in" name="duration_ms"/>
@@ -430,6 +433,13 @@ export default class PromptheusExtension extends Extension {
         for (const stop of [...watch.stops])
             stop();
         console.log('WatchAppTitles: end');
+    }
+
+    HasAppWindow(wmClass) {
+        const present = global.get_window_actors()
+            .some(actor => isMainWindowOf(actor.get_meta_window(), wmClass));
+        console.log(`HasAppWindow: ${present}`);
+        return present;
     }
 
     WatchAppTitles(wmClass, durationMs) {
@@ -622,8 +632,10 @@ export default class PromptheusExtension extends Extension {
             if (!await waitFor(focused, PASTE_FOCUS_TIMEOUT_MS))
                 return finish('focus_lost');
             step('focused');
-            await sleep(state.cold ? PASTE_COLD_SETTLE_MS : PASTE_SETTLE_MS);
-            step('settle done');
+            if (state.cold) {
+                await sleep(PASTE_COLD_SETTLE_MS);
+                step('settle done');
+            }
             const keyboard = Clutter.get_default_backend().get_default_seat()
                 .create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
             let saved = null;

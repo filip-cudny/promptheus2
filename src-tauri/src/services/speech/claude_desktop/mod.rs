@@ -203,6 +203,30 @@ async fn paste(app: &AppHandle, run: u64, files: &[PathBuf], warm: bool) -> Outc
     }
 }
 
+async fn open(app: &AppHandle, run: u64, q: &str) -> Result<(), Outcome> {
+    let url = link(q);
+    let opening = Instant::now();
+    #[cfg(target_os = "linux")]
+    if linux::open_link(url.clone()).await? {
+        log::debug!(
+            target: LOG_TARGET,
+            "run={run}: link handed over in {} ms",
+            opening.elapsed().as_millis(),
+        );
+        return Ok(());
+    }
+    app.opener().open_url(url, None::<&str>).map_err(|e| {
+        log::warn!(target: LOG_TARGET, "run={run}: opening the link failed: {e}");
+        Outcome::Failed("opening the link failed".into())
+    })?;
+    log::debug!(
+        target: LOG_TARGET,
+        "run={run}: link opened in {} ms",
+        opening.elapsed().as_millis(),
+    );
+    Ok(())
+}
+
 async fn start_title_watch() {
     #[cfg(target_os = "linux")]
     linux::watch_titles().await;
@@ -251,20 +275,9 @@ pub async fn deliver(app: AppHandle, transcript: String) {
             Ok(files) => {
                 start_title_watch().await;
                 log::debug!(target: LOG_TARGET, "run={run}: title watch started");
-                let opening = Instant::now();
-                let outcome = match app.opener().open_url(link(&q), None::<&str>) {
-                    Err(e) => {
-                        log::warn!(target: LOG_TARGET, "run={run}: opening the link failed: {e}");
-                        Outcome::Failed("opening the link failed".into())
-                    }
-                    Ok(()) => {
-                        log::debug!(
-                            target: LOG_TARGET,
-                            "run={run}: link opened in {} ms",
-                            opening.elapsed().as_millis(),
-                        );
-                        paste(&app, run, &files, warm.unwrap_or(false)).await
-                    }
+                let outcome = match open(&app, run, &q).await {
+                    Err(outcome) => outcome,
+                    Ok(()) => paste(&app, run, &files, warm.unwrap_or(false)).await,
                 };
                 (outcome, files.len())
             }
