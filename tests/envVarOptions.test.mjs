@@ -14,6 +14,7 @@ const NEW = { value: "__new__", label: "New…" };
 
 test("parseEnvRef accepts exactly one token", () => {
   assert.equal(parseEnvRef("${A_1}"), "A_1");
+  assert.equal(parseEnvRef("${openai_key}"), "openai_key");
   assert.equal(parseEnvRef("${A}/x"), null);
   assert.equal(parseEnvRef("sk-test"), null);
   assert.equal(parseEnvRef(""), null);
@@ -27,6 +28,15 @@ test("listed reference", () => {
   const options = pickerOptions(listed, "${OPENAI_API_KEY}", []);
   assert.deepEqual(options[0], { value: "${OPENAI_API_KEY}", label: "OPENAI_API_KEY" });
   assert.equal(options.length, 2);
+});
+
+test("a lowercase listed name is a listed reference, not a literal", () => {
+  assert.deepEqual(classifyReference("${openai_key}", ["openai_key"]), {
+    kind: "listed",
+    name: "openai_key",
+  });
+  const options = pickerOptions([{ name: "openai_key", set: true }], "${openai_key}", []);
+  assert.deepEqual(options, [{ value: "${openai_key}", label: "openai_key" }]);
 });
 
 test("listed but missing is labelled", () => {

@@ -1,6 +1,6 @@
 import type { EnvVarStatus } from "$lib/types";
 
-const ENV_REF_RE = /^\$\{([A-Z_][A-Z0-9_]*)\}$/;
+const ENV_REF_RE = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/;
 
 export const LITERAL_LABEL = "Literal key";
 

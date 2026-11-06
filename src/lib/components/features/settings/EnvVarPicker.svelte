@@ -15,11 +15,9 @@
 
   let {
     value,
-    ariaLabel = "API key",
     onchange,
   }: {
     value: string;
-    ariaLabel?: string;
     onchange: (value: string) => void;
   } = $props();
 
@@ -104,10 +102,6 @@
     if (outcome === "saved" || !moving) onchange(`\${${name}}`);
   }
 
-  async function addUnlisted(name: string) {
-    await addToList(name, "");
-  }
-
   function swallowEnterSubmit(e: KeyboardEvent) {
     if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") e.preventDefault();
   }
@@ -122,9 +116,9 @@
 
 <div class="picker" role="presentation" onkeydown={swallowEnterSubmit}>
   <div class="row">
-    <SelectDropdown bind:value={() => value, pick} {options} {ariaLabel} />
+    <SelectDropdown bind:value={() => value, pick} {options} ariaLabel="API key" />
     {#if reference.kind === "unlisted"}
-      <Button disabled={busy} onclick={() => addUnlisted(reference.name)}>Add to list</Button>
+      <Button disabled={busy} onclick={() => addToList(reference.name, "")}>Add to list</Button>
     {:else if reference.kind === "literal"}
       <Button onclick={() => startForm(true)}>Move to a variable</Button>
     {/if}
