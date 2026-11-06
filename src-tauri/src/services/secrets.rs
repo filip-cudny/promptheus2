@@ -2,6 +2,7 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 
 use chrono::Utc;
 
@@ -17,6 +18,12 @@ use crate::services::missing_env::collect_missing;
 
 const ENV_FILE_NAME: &str = ".env";
 const REDACTED: &str = "[redacted]";
+
+static ENV_WRITE_LOCK: Mutex<()> = Mutex::new(());
+
+fn lock_env_writes() -> MutexGuard<'static, ()> {
+    ENV_WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum SecretError {
@@ -131,6 +138,35 @@ pub fn current_value(config_dir: &Path, name: &str) -> Option<String> {
     }
 }
 
+fn non_empty_value(config_dir: &Path, name: &str) -> Option<String> {
+    current_value(config_dir, name).filter(|value| !value.is_empty())
+}
+
+pub(crate) fn copy_renamed_values(config_dir: &Path, settings: &Settings) -> Vec<String> {
+    let _guard = lock_env_writes();
+    let mut filled = Vec::new();
+    for var in &settings.env_vars {
+        if non_empty_value(config_dir, &var.name).is_some() {
+            continue;
+        }
+        let Some((old, value)) = var
+            .renamed_from
+            .iter()
+            .find_map(|old| non_empty_value(config_dir, old).map(|value| (old, value)))
+        else {
+            continue;
+        };
+        if let Err(e) = write_env_var(config_dir, &var.name, Some(&value)) {
+            log::warn!("env var '{}' not copied from '{old}': {e}", var.name);
+            continue;
+        }
+        set_override(&var.name, Some(value));
+        log::info!("env var '{}' copied from '{old}'", var.name);
+        filled.push(var.name.clone());
+    }
+    filled
+}
+
 fn write_backup(config_dir: &Path, entry_id: &str, name: &str, value: &str) -> std::io::Result<String> {
     let dir = secret_backup_dir(config_dir);
     std::fs::create_dir_all(&dir)?;
@@ -160,6 +196,7 @@ fn apply_secret(
     if !validate_name(name) {
         return Err(SecretError::InvalidName(name.to_string()));
     }
+    let _guard = lock_env_writes();
     let now = Utc::now();
     let id = new_id(now, host);
     let previous = current_value(config_dir, name);

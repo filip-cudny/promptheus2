@@ -47,8 +47,10 @@ pub(crate) async fn apply_settings_reload(app: &AppHandle, reason: &str) -> crat
     let skills = app.state::<Arc<Mutex<SkillService>>>();
     let history = app.state::<Arc<Mutex<SqliteHistoryService>>>();
 
+    let config_dir = app.path().app_config_dir()?;
     let settings = {
         let guard = config.lock().await;
+        crate::services::secrets::copy_renamed_values(&config_dir, guard.settings());
         rebuild_ai(&guard, &mut *ai.lock().await);
         guard.settings().clone()
     };

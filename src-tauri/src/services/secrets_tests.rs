@@ -171,3 +171,69 @@ fn redactor_removes_every_source_and_keeps_names() {
     assert!(!json.contains("literal-secret-3"));
     assert!(json.contains("${SEC_RED_REF}"));
 }
+
+fn env_var(name: &str, renamed_from: &[&str]) -> crate::models::settings::EnvVar {
+    crate::models::settings::EnvVar {
+        name: name.to_string(),
+        description: String::new(),
+        secret: true,
+        renamed_from: renamed_from.iter().map(|s| s.to_string()).collect(),
+    }
+}
+
+fn settings_with(vars: Vec<crate::models::settings::EnvVar>) -> Settings {
+    let mut settings = Settings::default();
+    settings.env_vars = vars;
+    settings
+}
+
+#[test]
+fn copy_fills_missing_name_from_renamed_from_and_keeps_old_key() {
+    let dir = config_dir();
+    std::fs::write(dir.path().join(".env"), "CPY_OLD=\"v1\"\n").unwrap();
+    let settings = settings_with(vec![env_var("CPY_NEW", &["CPY_OLD"])]);
+
+    assert_eq!(copy_renamed_values(dir.path(), &settings), vec!["CPY_NEW".to_string()]);
+
+    assert_eq!(current_value(dir.path(), "CPY_NEW").as_deref(), Some("v1"));
+    assert_eq!(super::env_resolve::env_value("CPY_NEW").as_deref(), Some("v1"));
+    assert!(env_file_text(&dir).contains("CPY_OLD=\"v1\"\n"));
+}
+
+#[test]
+fn copy_leaves_an_already_set_name_untouched() {
+    let dir = config_dir();
+    let original = "CPY_SET_OLD=\"v1\"\nCPY_SET_NEW=\"v2\"\n";
+    std::fs::write(dir.path().join(".env"), original).unwrap();
+    let settings = settings_with(vec![env_var("CPY_SET_NEW", &["CPY_SET_OLD"])]);
+
+    assert!(copy_renamed_values(dir.path(), &settings).is_empty());
+
+    assert_eq!(current_value(dir.path(), "CPY_SET_NEW").as_deref(), Some("v2"));
+    assert_eq!(env_file_text(&dir), original);
+}
+
+#[test]
+fn copy_takes_the_first_listed_old_name_that_has_a_value() {
+    let dir = config_dir();
+    std::fs::write(dir.path().join(".env"), "CPY_ORD_A=\"cpy-ord-a-value\"\n").unwrap();
+    let settings = settings_with(vec![env_var("CPY_ORD_NEW", &["CPY_ORD_B", "CPY_ORD_A"])]);
+    copy_renamed_values(dir.path(), &settings);
+    assert_eq!(current_value(dir.path(), "CPY_ORD_NEW").as_deref(), Some("cpy-ord-a-value"));
+
+    let both = config_dir();
+    std::fs::write(both.path().join(".env"), "CPY_ORD2_A=\"cpy-ord2-a-value\"\nCPY_ORD2_B=\"cpy-ord2-b-value\"\n").unwrap();
+    let settings = settings_with(vec![env_var("CPY_ORD2_NEW", &["CPY_ORD2_B", "CPY_ORD2_A"])]);
+    copy_renamed_values(both.path(), &settings);
+    assert_eq!(current_value(both.path(), "CPY_ORD2_NEW").as_deref(), Some("cpy-ord2-b-value"));
+}
+
+#[test]
+fn second_copy_returns_empty() {
+    let dir = config_dir();
+    std::fs::write(dir.path().join(".env"), "CPY_TWICE_OLD=\"v1\"\n").unwrap();
+    let settings = settings_with(vec![env_var("CPY_TWICE_NEW", &["CPY_TWICE_OLD"])]);
+
+    assert_eq!(copy_renamed_values(dir.path(), &settings).len(), 1);
+    assert!(copy_renamed_values(dir.path(), &settings).is_empty());
+}

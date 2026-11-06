@@ -20,6 +20,7 @@ pub fn run(app: &mut tauri::App) -> std::result::Result<(), Box<dyn std::error::
     let config_service = ConfigService::load(&config_dir)
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
     log::info!("config loaded from {}", config_dir.display());
+    services::secrets::copy_renamed_values(&config_dir, config_service.settings());
 
     if config_service.settings().show_tray_icon {
         setup::tray::install(app)?;
