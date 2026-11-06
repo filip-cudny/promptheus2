@@ -493,20 +493,30 @@ fn explain_dependency(
     if everything.errors.iter().any(|e| e.row == error.row) {
         return error;
     }
-    let blockers: Vec<String> = (0..error.row)
-        .filter(|unchecked| !selected[*unchecked])
-        .filter(|unchecked| {
-            let mut with_row = selected.to_vec();
-            with_row[*unchecked] = true;
-            !run(ops, &with_row, current).errors.iter().any(|e| e.row == error.row)
-        })
-        .map(|unchecked| (unchecked + 1).to_string())
-        .collect();
+    let passes_with = |added: &[usize]| {
+        let mut with_rows = selected.to_vec();
+        for row in added {
+            with_rows[*row] = true;
+        }
+        !run(ops, &with_rows, current).errors.iter().any(|e| e.row == error.row)
+    };
+    let unchecked: Vec<usize> = (0..error.row).filter(|row| !selected[*row]).collect();
+    let mut blockers: Vec<usize> = unchecked.iter().copied().filter(|row| passes_with(&[*row])).collect();
     if blockers.is_empty() {
+        blockers = unchecked.clone();
+        for row in &unchecked {
+            let without: Vec<usize> = blockers.iter().copied().filter(|b| b != row).collect();
+            if passes_with(&without) {
+                blockers = without;
+            }
+        }
+    }
+    if blockers.is_empty() || !passes_with(&blockers) {
         return error;
     }
     let noun = if blockers.len() == 1 { "row" } else { "rows" };
-    RowError { message: format!("depends on unchecked {noun} {}", blockers.join(", ")), ..error }
+    let numbers: Vec<String> = blockers.iter().map(|row| (row + 1).to_string()).collect();
+    RowError { message: format!("depends on unchecked {noun} {}", numbers.join(", ")), ..error }
 }
 
 pub fn stale_rows(plan: &Plan, current: &Current) -> Vec<usize> {

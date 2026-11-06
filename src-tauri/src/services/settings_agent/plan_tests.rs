@@ -125,6 +125,22 @@ fn dependent_row_plans_when_selected_and_names_the_unchecked_row() {
 }
 
 #[test]
+fn row_needing_two_unchecked_rows_names_both() {
+    let (settings, dir) = (fixture_settings(), config_dir());
+    let ops = vec![
+        Operation::AddModel { model: model("x", ModelType::Text, "${X_KEY}") },
+        Operation::UpdateModel { id: "x".into(), model: model("x", ModelType::Stt, "${X_KEY}") },
+        set_setting("surfaces.speech_to_text.model_id", json!("x")),
+    ];
+    let current = Current { settings: &settings, config_dir: dir.path() };
+
+    plan(&ops, &[true, true, true], &current).expect("all selected");
+    let errors = plan(&ops, &[false, false, true], &current).unwrap_err();
+    let row3 = errors.iter().find(|e| e.row == 2).expect("row 3 error");
+    assert_eq!(row3.message, "depends on unchecked rows 1, 2");
+}
+
+#[test]
 fn literal_api_key_is_a_row_error_and_env_reference_passes() {
     let (settings, dir) = (fixture_settings(), config_dir());
 
