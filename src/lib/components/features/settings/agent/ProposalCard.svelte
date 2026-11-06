@@ -1,9 +1,12 @@
 <script lang="ts">
+  import { Undo2 } from "lucide-svelte";
+  import { ICON_SIZE } from "$lib/constants/ui";
   import Button from "$lib/components/shared/ui/Button.svelte";
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
   import type { ProposalData, ProposalEffect } from "$lib/services/settingsAgent";
   import ProposalRow from "./ProposalRow.svelte";
+  import UndoConflicts from "../UndoConflicts.svelte";
 
   const agent = getSettingsAgent();
   const navigation = getSettingsNavigation();
@@ -13,7 +16,7 @@
   let unchecked = $state<Record<number, boolean>>({});
 
   const outcome = $derived(agent.proposalOutcome);
-  const applied = $derived(outcome?.kind === "applied");
+  const done = $derived(outcome?.kind === "applied" || outcome?.kind === "undone");
   const hasStale = $derived(proposal.rows.some((r) => r.stale));
   const anySelected = $derived(proposal.rows.some((r) => !unchecked[r.row]));
 
@@ -37,17 +40,30 @@
     <ProposalRow
       {row}
       bind:checked={() => !unchecked[row.row], (v) => (unchecked[row.row] = !v)}
-      disabled={applied}
+      disabled={done}
       onshow={show}
       ontest={() => agent.testRow(row.row)}
     />
   {/each}
-  {#if outcome?.kind === "blocked"}
+  {#if outcome && "message" in outcome && outcome.message}
     <div class="blocked">{outcome.message}</div>
   {/if}
+  {#if outcome?.kind === "applied" && outcome.conflicts}
+    <UndoConflicts
+      conflicts={outcome.conflicts}
+      disabled={agent.undoing}
+      oncancel={() => agent.dismissUndoConflicts()}
+      onforce={() => agent.undoProposal(true)}
+    />
+  {/if}
   <div class="actions">
-    {#if applied}
+    {#if outcome?.kind === "applied"}
       <span class="applied">Applied</span>
+      <Button variant="ghost" disabled={agent.undoing} onclick={() => agent.undoProposal(false)}>
+        <Undo2 size={ICON_SIZE.sm} /> Undo
+      </Button>
+    {:else if outcome?.kind === "undone"}
+      <span class="undone">Undone</span>
     {:else}
       {#if hasStale}
         <Button variant="ghost" onclick={() => agent.refreshProposal()}>Refresh</Button>
@@ -89,6 +105,11 @@
 
   .applied {
     color: var(--success);
+    font-weight: var(--font-weight-semibold);
+  }
+
+  .undone {
+    color: var(--text-muted);
     font-weight: var(--font-weight-semibold);
   }
 </style>

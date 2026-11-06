@@ -1,5 +1,6 @@
 import type { StreamEvent } from "$lib/types/ai";
 import { applyStreamEvent, emptyReply, type AgentReply } from "$lib/utils/agentReply";
+import { undoChange, type UndoConflict } from "$lib/services/changeLog";
 import {
   onSettingsAgentProposal,
   onSettingsAgentSecretRequest,
@@ -31,12 +32,14 @@ let panelOpen = $state(false);
 let panelMode = $state<PanelMode>("overlay");
 
 export type ProposalOutcome =
-  | { kind: "applied"; entryId: string }
-  | { kind: "blocked"; message: string };
+  | { kind: "applied"; entryId: string; conflicts?: UndoConflict[]; message?: string }
+  | { kind: "blocked"; message: string }
+  | { kind: "undone" };
 
 let proposal = $state<ProposalData | null>(null);
 let proposalOutcome = $state<ProposalOutcome | null>(null);
 let applying = $state(false);
+let undoing = $state(false);
 let secretRequests = $state<SecretRequest[]>([]);
 
 settingsAgentReset().catch((e) => (error = String(e)));
@@ -136,6 +139,29 @@ async function applyProposal(selected: boolean[]) {
   }
 }
 
+async function undoProposal(force: boolean) {
+  const current = proposalOutcome;
+  if (current?.kind !== "applied" || undoing) return;
+  const { entryId } = current;
+  undoing = true;
+  let next: ProposalOutcome;
+  try {
+    const result = await undoChange(entryId, force);
+    if (result.status === "undone") next = { kind: "undone" };
+    else if (result.status === "conflicts") next = { kind: "applied", entryId, conflicts: result.conflicts };
+    else next = { kind: "applied", entryId, message: `Secret backup is on ${result.held_by}` };
+  } catch (e) {
+    next = { kind: "applied", entryId, message: `Undo failed: ${e}` };
+  } finally {
+    undoing = false;
+  }
+  if (proposalOutcome === current) proposalOutcome = next;
+}
+
+function dismissUndoConflicts() {
+  if (proposalOutcome?.kind === "applied") proposalOutcome = { kind: "applied", entryId: proposalOutcome.entryId };
+}
+
 async function rejectProposal() {
   if (!proposal) return;
   const id = proposal.proposal_id;
@@ -192,8 +218,11 @@ export function getSettingsAgent() {
     get proposal() { return proposal; },
     get proposalOutcome() { return proposalOutcome; },
     get applying() { return applying; },
+    get undoing() { return undoing; },
     get secretRequests() { return secretRequests; },
     applyProposal,
+    undoProposal,
+    dismissUndoConflicts,
     rejectProposal,
     refreshProposal,
     testRow,

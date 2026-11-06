@@ -3,7 +3,7 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import Button from "$lib/components/shared/ui/Button.svelte";
   import { lineDiff } from "$lib/utils/lineDiff";
-  import { conflictLines, entryTitle, formatEntryTime, formatValue } from "$lib/utils/changeLog";
+  import { entryTitle, formatEntryTime, formatValue } from "$lib/utils/changeLog";
   import {
     listChangeLog,
     onChangeLogChanged,
@@ -12,6 +12,7 @@
     type UndoConflict,
   } from "$lib/services/changeLog";
   import { error as logError } from "@tauri-apps/plugin-log";
+  import UndoConflicts from "./UndoConflicts.svelte";
 
   let items = $state<ChangeLogItem[]>([]);
   let expanded = $state<Record<string, boolean>>({});
@@ -85,16 +86,12 @@
       {#if entry.request}<div class="request">{entry.request}</div>{/if}
       {#if messages[entry.id]}<div class="message">{messages[entry.id]}</div>{/if}
       {#if conflicts[entry.id]}
-        <div class="conflict">
-          <div>These values changed since this entry:</div>
-          <ul>
-            {#each conflictLines(conflicts[entry.id]) as line}<li>{line}</li>{/each}
-          </ul>
-          <div class="actions">
-            <Button variant="ghost" onclick={() => delete conflicts[entry.id]}>Cancel</Button>
-            <Button variant="danger" disabled={busy !== null} onclick={() => undo(entry.id, true)}>Undo anyway</Button>
-          </div>
-        </div>
+        <UndoConflicts
+          conflicts={conflicts[entry.id]}
+          disabled={busy !== null}
+          oncancel={() => delete conflicts[entry.id]}
+          onforce={() => undo(entry.id, true)}
+        />
       {/if}
       {#if expanded[entry.id]}
         {#if entry.secret}
@@ -198,25 +195,6 @@
   .message {
     font-size: var(--font-size-sm);
     color: var(--warning);
-  }
-
-  .conflict {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    font-size: var(--font-size-sm);
-    color: var(--warning);
-  }
-
-  .conflict ul {
-    margin: 0;
-    padding-left: var(--space-5);
-    word-break: break-word;
-  }
-
-  .actions {
-    display: flex;
-    gap: var(--space-3);
   }
 
   .op,
