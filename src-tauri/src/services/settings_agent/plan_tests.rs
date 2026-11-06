@@ -125,6 +125,20 @@ fn dependent_row_plans_when_selected_and_names_the_unchecked_row() {
 }
 
 #[test]
+fn settings_agent_model_and_reasoning_effort_plan_as_settings() {
+    let (settings, dir) = (fixture_settings(), config_dir());
+    let ops = vec![
+        set_setting("surfaces.settings_agent.generation.model_id", json!("def")),
+        set_setting("surfaces.settings_agent.generation.parameters.reasoning_effort", json!("high")),
+    ];
+
+    let planned = plan_all(&ops, &settings, &dir).expect("both plan");
+    let agent = &planned.settings.surfaces.settings_agent.generation;
+    assert_eq!(agent.model_id.as_deref(), Some("def"));
+    assert_eq!(agent.parameters.reasoning_effort.as_deref(), Some("high"));
+}
+
+#[test]
 fn row_needing_two_unchecked_rows_names_both() {
     let (settings, dir) = (fixture_settings(), config_dir());
     let ops = vec![

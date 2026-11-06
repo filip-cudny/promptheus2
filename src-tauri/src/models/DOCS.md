@@ -18,6 +18,8 @@ Maps in `Settings` serialize sorted by key (`serialize_sorted`, `BTreeMap` for `
 
 `Settings.menu_digit_select_delay_ms` (`u32`, default 200, catalog range 100–1000, live) is how long the context menu waits for a second digit when a two-digit number is still possible.
 
+`Settings.surfaces.settings_agent` (`SettingsAgentConfig`, `#[serde(default)]`) holds `generation: QuickActionsGeneration` (`model_id`, `parameters`); an empty `model_id` falls back to the chat model at run time (`settings_agent/engine.rs`), `defaults.rs` does not fill it.
+
 ### Removed settings keys
 
 `strip_removed_settings` (`services/config/migrator.rs`) runs in `parse_and_migrate` on every load, right after `migrate_monochromatic_flags` and before deserializing. It deletes the top-level keys `code_theme` and `debug_mode` (they would otherwise survive in `Settings.extra`) and every `keymaps` entry whose `context`, whitespace removed, is `os==windows`; it logs at `info` only when it removed something. Removed nested fields (`enabled_tools` of `quick_actions` and `title_generation`, `parameters` of `title_generation`) need no strip: `QuickActionsGeneration` and `TitleGeneration` do not declare them, so deserializing drops them and the next save writes the file without them.

@@ -110,6 +110,17 @@ fn test_delete_model_clears_references() {
 }
 
 #[test]
+fn test_delete_model_clears_settings_agent_model() {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+    service.add_model(test_model("agent-to-delete", "${KEY}"));
+    service.settings.surfaces.settings_agent.generation.model_id = Some("agent-to-delete".to_string());
+
+    service.delete_model("agent-to-delete");
+    assert_eq!(service.settings().surfaces.settings_agent.generation.model_id, None);
+}
+
+#[test]
 fn test_direct_api_key_preserved_on_save() {
     let dir = setup_test_dir();
     let mut service = ConfigService::load(dir.path()).expect("load");

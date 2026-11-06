@@ -135,6 +135,8 @@ pub const ENTRIES: &[CatalogEntry] = &[
     live("surfaces.chat.generation.parameters.reasoning_effort", Chat, "Reasoning effort", "How much reasoning the chat model spends on a reply, where the model supports it.", TEXT),
     live("surfaces.chat.generation.enabled_tools", Chat, "Enabled tools", "Tools the assistant may call in chat.", Kind::List),
     live("surfaces.title_generation.generation.model_id", Chat, "Title model", "Model used to name conversations. Falls back to the chat model when empty.", TEXT_MODEL),
+    live("surfaces.settings_agent.generation.model_id", Chat, "Settings agent model", "Model used by the settings agent. Falls back to the chat model when empty.", TEXT_MODEL),
+    live("surfaces.settings_agent.generation.parameters.reasoning_effort", Chat, "Settings agent reasoning effort", "How much reasoning the settings agent model spends on a reply, where the model supports it.", TEXT),
     live("webview_providers[].name", Chat, "Provider name", "Name of a web chat provider shown in the app.", TEXT),
     live("webview_providers[].url", Chat, "Provider URL", "Address of a web chat provider. Must use http or https.", TEXT),
     live("surfaces.quick_actions.generation.model_id", ContextMenu, "Quick actions model", "Model used for prompts run from the context menu. Falls back to the chat model when empty.", TEXT_MODEL),
@@ -189,6 +191,11 @@ pub const FILE_ONLY: &[&str] = &[
     "surfaces.quick_actions.generation.parameters.top_p",
     "surfaces.quick_actions.generation.parameters.frequency_penalty",
     "surfaces.quick_actions.generation.parameters.presence_penalty",
+    "surfaces.settings_agent.generation.parameters.temperature",
+    "surfaces.settings_agent.generation.parameters.max_tokens",
+    "surfaces.settings_agent.generation.parameters.top_p",
+    "surfaces.settings_agent.generation.parameters.frequency_penalty",
+    "surfaces.settings_agent.generation.parameters.presence_penalty",
 ];
 
 const OPAQUE: &[&str] = &[
@@ -400,6 +407,8 @@ mod tests {
         settings.surfaces.quick_actions.generation.model_id = Some("abc".into());
         settings.surfaces.quick_actions.generation.parameters = full_parameters();
         settings.surfaces.title_generation.generation.model_id = Some("abc".into());
+        settings.surfaces.settings_agent.generation.model_id = Some("abc".into());
+        settings.surfaces.settings_agent.generation.parameters = full_parameters();
         let stt = &mut settings.surfaces.speech_to_text;
         stt.model_id = Some("abc".into());
         stt.language = Some("en".into());

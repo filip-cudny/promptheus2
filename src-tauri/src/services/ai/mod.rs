@@ -162,6 +162,33 @@ impl AiService {
         }
     }
 
+    #[cfg(test)]
+    pub fn with_providers(
+        providers: Vec<(&str, Box<dyn AiProvider>)>,
+        capabilities: ModelCapabilities,
+    ) -> Self {
+        let providers = providers
+            .into_iter()
+            .map(|(model_id, provider)| {
+                let entry = ProviderEntry {
+                    provider,
+                    model_name: model_id.to_string(),
+                    parameters: ModelParameters::default(),
+                    provider_type: Provider::default(),
+                    api_mode: ApiMode::default(),
+                    capabilities: capabilities.clone(),
+                };
+                (model_id.to_string(), entry)
+            })
+            .collect();
+        Self {
+            inner: Arc::new(AiServiceInner {
+                providers,
+                unavailable_models: HashMap::new(),
+            }),
+        }
+    }
+
     pub async fn complete(
         &self,
         model_id: &str,

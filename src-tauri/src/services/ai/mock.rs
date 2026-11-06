@@ -31,6 +31,8 @@ impl MockProvider {
 
     fn next_reply(&self, request: &CompletionRequest) -> MockReply {
         let recorded = serde_json::json!({
+            "model": request.model,
+            "parameters": request.parameters,
             "messages": request.messages,
             "tool_payloads": request.tool_payloads,
         });

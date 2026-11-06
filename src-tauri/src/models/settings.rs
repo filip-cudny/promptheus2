@@ -196,6 +196,9 @@ pub struct Surfaces {
 
     #[serde(default)]
     pub speech_to_text: SpeechToTextConfig,
+
+    #[serde(default)]
+    pub settings_agent: SettingsAgentConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -244,6 +247,12 @@ impl Default for PromptBase {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct QuickActionsConfig {
+    #[serde(default)]
+    pub generation: QuickActionsGeneration,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SettingsAgentConfig {
     #[serde(default)]
     pub generation: QuickActionsGeneration,
 }
@@ -952,6 +961,8 @@ mod tests {
         settings.surfaces.title_generation.prompt = "Title prompt".to_string();
         settings.surfaces.speech_to_text.model_id = Some("stt-1".to_string());
         settings.surfaces.speech_to_text.language = Some("en".to_string());
+        settings.surfaces.settings_agent.generation.model_id = Some("model-4".to_string());
+        settings.surfaces.settings_agent.generation.parameters.reasoning_effort = Some("low".to_string());
 
         let json = serde_json::to_string(&settings).unwrap();
         let parsed: Settings = serde_json::from_str(&json).unwrap();
@@ -965,6 +976,16 @@ mod tests {
         assert_eq!(parsed.surfaces.title_generation.prompt, "Title prompt");
         assert_eq!(parsed.surfaces.speech_to_text.model_id.as_deref(), Some("stt-1"));
         assert_eq!(parsed.surfaces.speech_to_text.language.as_deref(), Some("en"));
+        assert_eq!(parsed.surfaces.settings_agent.generation.model_id.as_deref(), Some("model-4"));
+        assert_eq!(parsed.surfaces.settings_agent.generation.parameters.reasoning_effort.as_deref(), Some("low"));
+    }
+
+    #[test]
+    fn test_surfaces_without_settings_agent_default_to_empty() {
+        let surfaces: Surfaces = serde_json::from_str("{}").unwrap();
+
+        assert_eq!(surfaces.settings_agent.generation.model_id, None);
+        assert_eq!(surfaces.settings_agent.generation.parameters.reasoning_effort, None);
     }
 
     #[test]

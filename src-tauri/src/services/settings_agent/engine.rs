@@ -207,16 +207,24 @@ async fn fail(live: &Arc<TokioMutex<LiveExecution>>, message: String) -> Error {
     Error::Other(message)
 }
 
-async fn chat_model(
+async fn agent_model(
     settings: &Settings,
     ai: &AiService,
     live: &Arc<TokioMutex<LiveExecution>>,
 ) -> crate::Result<String> {
-    let Some(model_id) = settings.surfaces.chat.generation.model_id.clone() else {
-        return Err(fail(live, "no chat model configured".into()).await);
+    let agent_model_id = settings
+        .surfaces
+        .settings_agent
+        .generation
+        .model_id
+        .clone()
+        .filter(|id| !id.is_empty());
+    let Some(model_id) = agent_model_id.or_else(|| settings.surfaces.chat.generation.model_id.clone())
+    else {
+        return Err(fail(live, "no settings agent or chat model configured".into()).await);
     };
     if !ai.has_model(&model_id) {
-        return Err(fail(live, format!("chat model '{model_id}' is not available")).await);
+        return Err(fail(live, format!("model '{model_id}' is not available")).await);
     }
     Ok(model_id)
 }
@@ -245,7 +253,10 @@ async fn tool_loop(
         proposals: sink.clone(),
         secrets: sink,
     });
-    let model_id = chat_model(&(ctx.settings)(), &ctx.ai, live).await?;
+    let settings = (ctx.settings)();
+    let model_id = agent_model(&settings, &ctx.ai, live).await?;
+    let parameters = settings.surfaces.settings_agent.generation.parameters.clone();
+    log::debug!("settings agent turn starts on model '{model_id}'");
 
     let mut prefix = String::new();
     for iteration in 0..=MAX_TOOL_LOOP_ITERATIONS {
@@ -254,7 +265,13 @@ async fn tool_loop(
         }
         let stream = match ctx
             .ai
-            .complete_stream(&model_id, messages.clone(), None, None, tools::definitions())
+            .complete_stream(
+                &model_id,
+                messages.clone(),
+                Some(parameters.clone()),
+                None,
+                tools::definitions(),
+            )
             .await
         {
             Ok(stream) => stream,

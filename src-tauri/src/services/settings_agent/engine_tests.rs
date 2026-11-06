@@ -11,6 +11,7 @@ use super::engine::{
     lock, run_turn, Emit, EngineContext, SharedSession, PROPOSAL_EVENT, SECRET_REQUEST_EVENT,
 };
 use super::plan::{plan, Current};
+use crate::models::capabilities::{Effort, ModelCapabilities, ReasoningMode};
 use crate::models::settings::{ModelConfig, ModelType, Provider, Settings};
 use crate::services::ai::mock::{MockProvider, MockReply};
 use crate::services::ai::{AiError, AiService};
@@ -100,9 +101,14 @@ fn scripted_turns() -> Vec<MockReply> {
 }
 
 async fn run(chat_model: Option<&str>, script: Vec<MockReply>) -> Run {
+    let (provider, requests) = MockProvider::new(script);
+    let ai = AiService::with_provider("env-model", Box::new(provider));
+    run_with(fixture_settings(chat_model), ai, requests).await
+}
+
+async fn run_with(settings: Settings, ai: AiService, requests: Arc<Mutex<Vec<String>>>) -> Run {
     let dir = TempDir::new().unwrap();
     std::fs::write(dir.path().join(".env"), "OPENAI_KEY=sk-env-111\n").unwrap();
-    let settings = fixture_settings(chat_model);
     std::fs::write(dir.path().join("settings.json"), serde_json::to_string_pretty(&settings).unwrap()).unwrap();
     std::fs::create_dir_all(dir.path().join("skills")).unwrap();
 
@@ -112,12 +118,11 @@ async fn run(chat_model: Option<&str>, script: Vec<MockReply>) -> Run {
         config_dir: dir.path().to_path_buf(),
         events: Mutex::default(),
     });
-    let (provider, requests) = MockProvider::new(script);
     let ctx = EngineContext {
         settings: Arc::new(move || settings.clone()),
         config_dir: dir.path().to_path_buf(),
         skills_dir: dir.path().join("skills"),
-        ai: AiService::with_provider("env-model", Box::new(provider)),
+        ai,
         ai_factory: Arc::new(|_| {
             let error = AiError::ApiStatus {
                 status: 401,
@@ -238,4 +243,66 @@ async fn unavailable_chat_model_is_named_in_the_error() {
     assert!(run.requests.lock().unwrap().is_empty());
     let error = run.live.lock().await.snapshot.error.clone().unwrap();
     assert!(error.contains("ghost-model"), "{error}");
+}
+
+struct TwoModels {
+    run: Run,
+    chat_requests: Arc<Mutex<Vec<String>>>,
+}
+
+async fn run_on_agent_and_chat_models(
+    agent_model: Option<&str>,
+    agent_effort: Option<&str>,
+    chat_effort: Option<&str>,
+) -> TwoModels {
+    let (agent_provider, agent_requests) = MockProvider::new(vec![MockReply::Text("done".into())]);
+    let (chat_provider, chat_requests) = MockProvider::new(vec![MockReply::Text("done".into())]);
+    let ai = AiService::with_providers(
+        vec![("agent-model", Box::new(agent_provider)), ("chat-model", Box::new(chat_provider))],
+        ModelCapabilities {
+            reasoning: ReasoningMode::Effort { allowed: vec![Effort::Low, Effort::Medium, Effort::High] },
+        },
+    );
+    let mut settings = fixture_settings(Some("chat-model"));
+    settings.surfaces.settings_agent.generation.model_id = agent_model.map(str::to_string);
+    settings.surfaces.settings_agent.generation.parameters.reasoning_effort = agent_effort.map(str::to_string);
+    settings.surfaces.chat.generation.parameters.reasoning_effort = chat_effort.map(str::to_string);
+    let run = run_with(settings, ai, agent_requests).await;
+    TwoModels { run, chat_requests }
+}
+
+fn only_request(requests: &Arc<Mutex<Vec<String>>>) -> Value {
+    let requests = requests.lock().unwrap();
+    assert_eq!(requests.len(), 1);
+    serde_json::from_str(&requests[0]).unwrap()
+}
+
+#[tokio::test]
+async fn agent_model_serves_the_turn_when_set() {
+    let two = run_on_agent_and_chat_models(Some("agent-model"), None, None).await;
+    two.run.outcome.as_ref().unwrap();
+    assert_eq!(only_request(&two.run.requests)["model"], "agent-model");
+    assert!(two.chat_requests.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn empty_agent_model_falls_back_to_the_chat_model() {
+    let two = run_on_agent_and_chat_models(None, None, None).await;
+    two.run.outcome.as_ref().unwrap();
+    assert_eq!(only_request(&two.chat_requests)["model"], "chat-model");
+    assert!(two.run.requests.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn agent_reasoning_effort_reaches_the_request_over_the_chat_one() {
+    let two = run_on_agent_and_chat_models(Some("agent-model"), Some("high"), Some("low")).await;
+    two.run.outcome.as_ref().unwrap();
+    assert_eq!(only_request(&two.run.requests)["parameters"]["reasoning_effort"], "high");
+}
+
+#[tokio::test]
+async fn chat_reasoning_effort_never_reaches_the_request() {
+    let two = run_on_agent_and_chat_models(None, None, Some("low")).await;
+    two.run.outcome.as_ref().unwrap();
+    assert!(only_request(&two.chat_requests)["parameters"]["reasoning_effort"].is_null());
 }

@@ -69,6 +69,7 @@ pub enum SurfaceKind {
     QuickActions,
     TitleGeneration,
     SpeechToText,
+    SettingsAgent,
 }
 
 const MAX_PREFERRED_NAME_LEN: usize = 60;
@@ -311,6 +312,9 @@ impl ConfigService {
                 self.settings.surfaces.title_generation.generation.model_id = model_id
             }
             SurfaceKind::SpeechToText => self.settings.surfaces.speech_to_text.model_id = model_id,
+            SurfaceKind::SettingsAgent => {
+                self.settings.surfaces.settings_agent.generation.model_id = model_id
+            }
         }
     }
 
@@ -324,6 +328,9 @@ impl ConfigService {
             SurfaceKind::Chat => &mut self.settings.surfaces.chat.generation.parameters,
             SurfaceKind::QuickActions => {
                 &mut self.settings.surfaces.quick_actions.generation.parameters
+            }
+            SurfaceKind::SettingsAgent => {
+                &mut self.settings.surfaces.settings_agent.generation.parameters
             }
             SurfaceKind::TitleGeneration => {
                 log::warn!("update_surface_parameter: title_generation has no parameters field");
@@ -372,7 +379,10 @@ impl ConfigService {
     pub fn update_surface_enabled_tools(&mut self, surface: SurfaceKind, tools: Vec<String>) {
         match surface {
             SurfaceKind::Chat => self.settings.surfaces.chat.generation.enabled_tools = tools,
-            SurfaceKind::QuickActions | SurfaceKind::TitleGeneration | SurfaceKind::SpeechToText => {
+            SurfaceKind::QuickActions
+            | SurfaceKind::TitleGeneration
+            | SurfaceKind::SpeechToText
+            | SurfaceKind::SettingsAgent => {
                 log::warn!("update_surface_enabled_tools: {surface:?} has no tools");
             }
         }
@@ -408,6 +418,9 @@ impl ConfigService {
         }
         if s.speech_to_text.model_id.as_deref() == Some(model_id) {
             s.speech_to_text.model_id = None;
+        }
+        if s.settings_agent.generation.model_id.as_deref() == Some(model_id) {
+            s.settings_agent.generation.model_id = None;
         }
     }
 
