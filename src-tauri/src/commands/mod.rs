@@ -75,6 +75,7 @@ macro_rules! handlers {
             // === dock ===
             $crate::commands::dock::hide_dialog_window,
             // === env_vars ===
+            $crate::commands::env_vars::get_env_vars,
             $crate::commands::env_vars::apply_env_var_operation,
             // === execution_stream ===
             $crate::commands::execution_stream::execute_skill,

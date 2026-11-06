@@ -140,6 +140,33 @@ pub fn collect_missing(settings: &Settings, is_set: impl Fn(&str) -> bool) -> Ve
         .collect()
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct EnvVarStatus {
+    pub name: String,
+    pub description: String,
+    pub secret: bool,
+    pub set: bool,
+    pub used_in: Vec<EnvUse>,
+}
+
+pub fn env_var_overview(settings: &Settings, is_set: impl Fn(&str) -> bool) -> Vec<EnvVarStatus> {
+    let mut uses: BTreeMap<String, Vec<EnvUse>> = collect_missing(settings, |_| false)
+        .into_iter()
+        .map(|m| (m.name, m.used_in))
+        .collect();
+    settings
+        .env_vars
+        .iter()
+        .map(|var| EnvVarStatus {
+            name: var.name.clone(),
+            description: var.description.clone(),
+            secret: var.secret,
+            set: is_set(&var.name),
+            used_in: uses.remove(&var.name).unwrap_or_default(),
+        })
+        .collect()
+}
+
 pub fn should_toast(last_shown: &BTreeSet<String>, current: &BTreeSet<String>) -> bool {
     current.iter().any(|name| !last_shown.contains(name))
 }

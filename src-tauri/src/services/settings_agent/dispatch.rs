@@ -11,7 +11,7 @@ use crate::services::ai::AiService;
 use crate::services::change_log::TestResult;
 use crate::services::config::ConfigService;
 use crate::services::execution::types::{PendingToolCall, ToolExecutionResult};
-use crate::services::missing_env::{collect_missing, env_is_set};
+use crate::services::missing_env::{collect_missing, env_is_set, env_var_overview};
 use crate::services::placeholder_registry::PlaceholderContext;
 use crate::services::secrets::{self, Redactor};
 use crate::services::skill::SkillService;
@@ -69,6 +69,7 @@ enum What {
     Skill,
     Prompt,
     MissingEnv,
+    EnvVars,
 }
 
 #[derive(Deserialize)]
@@ -171,6 +172,9 @@ impl Dispatcher {
             What::Prompt => self.prompt(&name()?),
             What::MissingEnv => {
                 serde_json::to_value(collect_missing(&settings, env_is_set)).map_err(|e| e.to_string())
+            }
+            What::EnvVars => {
+                serde_json::to_value(env_var_overview(&settings, env_is_set)).map_err(|e| e.to_string())
             }
         }
     }

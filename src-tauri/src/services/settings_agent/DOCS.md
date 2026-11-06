@@ -4,7 +4,7 @@ Proposes changes to the app settings; the user applies them. Files: `tools.rs` (
 
 ## Tools
 
-`settings_read` (values, models, skills, skill, prompt, missing_env), `settings_test` (validate and test operations, show nothing), `settings_propose_changes` (one card per request), `settings_secret` (masked input for a `${VAR}`; the agent learns only `saved`, `cancelled` or `exists`). Anything else is an error result.
+`settings_read` (values, models, skills, skill, prompt, missing_env, env_vars), `settings_test` (validate and test operations, show nothing), `settings_propose_changes` (one card per request), `settings_secret` (masked input for a `${VAR}`; the agent learns only `saved`, `cancelled` or `exists`). Anything else is an error result.
 
 ## Environment variable operations
 
@@ -15,6 +15,7 @@ Proposes changes to the app settings; the user applies them. Files: `tools.rs` (
 - `set_setting` refuses `env_vars` (`SETTINGS_MANAGED_BY_OTHER_OPERATIONS`).
 - Walker: `missing_env::visit_refs` (read, with key and label) and `visit_refs_mut` (`&mut String`) visit the same fields in the same order; `collect_missing` and rename use them, so a new field that may hold `${VAR}` is added there once.
 - List key: list items are keyed in effect paths (`<list>[<key>]`) by `id`, `context` or `name` (`plan.rs::item_key`, `catalog.rs::collect_leaves`), so an effect on one `env_vars` entry is independent of the others and its Undo does not conflict with a later edit of another. A rename is a removal of `env_vars[old]` plus an addition of `env_vars[new]`; an apply appends the new entry at the end of the list, an Undo restores the old one at its position.
+- Read: `settings_read` `what: "env_vars"` and the command `get_env_vars` (`commands/env_vars.rs`, fresh settings) return `missing_env::env_var_overview`: one `EnvVarStatus` per `Settings::env_vars` entry in list order with `name`, `description`, `secret`, `set` (value present on this machine, `env_is_set`) and `used_in` (key and label of each field that references it, from `collect_missing(settings, |_| false)`). It has no value field.
 - GUI: `apply_env_var_operation(operation)` (`commands/env_vars.rs`) accepts only these four, plans one operation with `plan::plan_single` (same `plan` as the agent) and writes a `Card` entry through `apply_plan` without request, reply or tests; it returns the entry id.
 
 ## Loop

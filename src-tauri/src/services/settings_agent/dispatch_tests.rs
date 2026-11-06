@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use tempfile::TempDir;
 
 use super::dispatch::{Context, Dispatcher, Proposal, ProposalSink, SecretAnswer, SecretPrompt};
-use crate::models::settings::{McpServerConfig, ModelConfig, ModelType, Provider, Settings};
+use crate::models::settings::{EnvVar, McpServerConfig, ModelConfig, ModelType, Provider, Settings};
 use crate::services::ai::mock::{MockProvider, MockReply};
 use crate::services::ai::{AiError, AiService};
 use crate::services::execution::types::PendingToolCall;
@@ -47,6 +47,20 @@ fn fixture_settings() -> Settings {
         },
     )]);
     settings.surfaces.chat.generation.model_id = Some("env-model".into());
+    settings.env_vars = vec![
+        EnvVar {
+            name: "OPENAI_KEY".into(),
+            description: "OpenAI key".into(),
+            secret: true,
+            renamed_from: vec![],
+        },
+        EnvVar {
+            name: "TOOLS_DIR".into(),
+            description: "Tools path".into(),
+            secret: false,
+            renamed_from: vec![],
+        },
+    ];
     settings
 }
 
@@ -143,12 +157,35 @@ async fn every_read_variant_is_free_of_secrets() {
         json!({"what": "prompt", "name": "system"}),
         json!({"what": "prompt", "name": "stt_keyterms"}),
         json!({"what": "missing_env"}),
+        json!({"what": "env_vars"}),
     ];
     for arguments in reads {
         let (text, is_error) = call(&dispatcher, "settings_read", arguments.clone()).await;
         assert!(!is_error, "{arguments}: {text}");
         assert_clean(&text);
     }
+}
+
+#[tokio::test]
+async fn env_vars_read_lists_state_and_usages_without_values() {
+    let (_dir, dispatcher, _) = fixture(|_| Arc::new(CancellingPrompt));
+    let (text, is_error) = call(&dispatcher, "settings_read", json!({"what": "env_vars"})).await;
+    assert!(!is_error, "{text}");
+    assert_clean(&text);
+    let rows: Vec<Value> = serde_json::from_str(&text).unwrap();
+    assert_eq!(rows.len(), 2);
+    for row in &rows {
+        for field in ["name", "description", "secret", "set", "used_in"] {
+            assert!(row.get(field).is_some(), "{field} missing in {row}");
+        }
+        assert!(row["set"].is_boolean());
+    }
+    assert_eq!(rows[0]["name"], "OPENAI_KEY");
+    assert_eq!(rows[0]["secret"], true);
+    assert!(rows[0]["used_in"][0]["label"].as_str().unwrap().ends_with("API key"));
+    assert_eq!(rows[1]["name"], "TOOLS_DIR");
+    assert_eq!(rows[1]["secret"], false);
+    assert_eq!(rows[1]["used_in"], json!([]));
 }
 
 #[tokio::test]
