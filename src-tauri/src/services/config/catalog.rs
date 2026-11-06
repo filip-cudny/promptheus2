@@ -256,7 +256,7 @@ fn collect_leaves<'a>(value: &'a Value, path: &str, out: &mut HashMap<String, &'
         }
         Value::Array(items) if items.iter().any(Value::is_object) => {
             for (index, item) in items.iter().enumerate() {
-                let name = ["id", "context"]
+                let name = ["id", "context", "name"]
                     .iter()
                     .find_map(|field| item.get(field).and_then(Value::as_str))
                     .map_or_else(|| index.to_string(), str::to_string);

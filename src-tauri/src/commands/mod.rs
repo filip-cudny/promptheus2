@@ -5,6 +5,7 @@ pub mod clipboard;
 pub mod context;
 pub mod context_editor;
 pub mod dock;
+pub mod env_vars;
 pub mod execution_control;
 pub mod execution_generation;
 pub mod execution_stream;
@@ -73,6 +74,8 @@ macro_rules! handlers {
             $crate::commands::conversation_dialog::get_dialog_init_params,
             // === dock ===
             $crate::commands::dock::hide_dialog_window,
+            // === env_vars ===
+            $crate::commands::env_vars::apply_env_var_operation,
             // === execution_stream ===
             $crate::commands::execution_stream::execute_skill,
             $crate::commands::execution_stream::execute_conversation_from_tree,

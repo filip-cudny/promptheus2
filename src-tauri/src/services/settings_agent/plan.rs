@@ -3,19 +3,21 @@ use std::path::Path;
 
 use serde_json::{json, Map, Value};
 
-use crate::models::settings::{McpServerConfig, ModelConfig, Settings, WebviewProvider};
+use crate::models::settings::{EnvVar, McpServerConfig, ModelConfig, Settings, WebviewProvider};
 use crate::models::skill::SkillFrontmatter;
 use crate::services::change_log::{Effect, LoggedOperation, Target};
 use crate::services::config::catalog::{self, Kind, ModelKind};
 use crate::services::config::{resolve_config_relative, validate, ConfigError, ConfigService, PromptStore};
 use crate::services::env_resolve::env_ref_names;
+use crate::services::missing_env::{collect_missing, visit_refs_mut};
 use crate::services::secrets;
 use crate::services::skill::{validate_slug, SkillError};
 
+use super::engine::describe;
 use super::operations::Operation;
 
-const SETTINGS_MANAGED_BY_OTHER_OPERATIONS: [&str; 4] =
-    ["models", "mcp_servers", "webview_providers", "keymaps"];
+const SETTINGS_MANAGED_BY_OTHER_OPERATIONS: [&str; 5] =
+    ["models", "mcp_servers", "webview_providers", "keymaps", "env_vars"];
 
 const OPAQUE_PATHS: [&str; 5] = [
     "models[].parameters",
@@ -214,6 +216,95 @@ fn set_webview_providers(state: &mut State, providers: Vec<WebviewProvider>) -> 
     Ok(())
 }
 
+fn set_env_vars(state: &mut State, vars: Vec<EnvVar>) -> Result<(), Fail> {
+    state.config.update_setting("env_vars", serde_json::to_value(vars)?)?;
+    Ok(())
+}
+
+fn env_var_position(settings: &Settings, name: &str) -> Result<usize, Fail> {
+    settings
+        .env_vars
+        .iter()
+        .position(|var| var.name == name)
+        .ok_or_else(|| Fail::at(format!("env_vars[{name}]"), "variable not found"))
+}
+
+fn add_env_var(state: &mut State, name: &str, description: &str, secret: bool) -> Result<(), Fail> {
+    if !secrets::validate_name(name) {
+        return Err(Fail::at(format!("env_vars[{name}].name"), "not a valid variable name"));
+    }
+    let mut vars = state.settings().env_vars.clone();
+    if vars.iter().any(|var| var.name == name) {
+        return Err(Fail::at(format!("env_vars[{name}]"), "variable already exists"));
+    }
+    vars.push(EnvVar {
+        name: name.to_string(),
+        description: description.to_string(),
+        secret,
+        renamed_from: Vec::new(),
+    });
+    set_env_vars(state, vars)
+}
+
+fn update_env_var(state: &mut State, name: &str, description: &str, secret: bool) -> Result<(), Fail> {
+    let mut vars = state.settings().env_vars.clone();
+    let var = &mut vars[env_var_position(state.settings(), name)?];
+    var.description = description.to_string();
+    var.secret = secret;
+    set_env_vars(state, vars)
+}
+
+fn rename_env_var(
+    state: &mut State,
+    current: &Current,
+    name: &str,
+    new_name: &str,
+) -> Result<(), Fail> {
+    let mut settings = state.settings().clone();
+    let position = env_var_position(&settings, name)?;
+    let key = format!("env_vars[{name}].name");
+    if !secrets::validate_name(new_name) {
+        return Err(Fail::at(key, format!("{new_name} is not a valid variable name")));
+    }
+    if settings.env_vars.iter().any(|var| var.name == new_name) {
+        return Err(Fail::at(key, format!("{new_name} already exists")));
+    }
+    let new_value = secrets::current_value(current.config_dir, new_name).filter(|v| !v.is_empty());
+    if let Some(new_value) = new_value {
+        let old_value = secrets::current_value(current.config_dir, name);
+        if old_value.as_deref() != Some(new_value.as_str()) {
+            return Err(Fail::at(key, format!("{new_name} already has a different value on this machine")));
+        }
+    }
+    let var = &mut settings.env_vars[position];
+    let mut renamed_from = vec![name.to_string()];
+    for old in &var.renamed_from {
+        if old != new_name && !renamed_from.contains(old) {
+            renamed_from.push(old.clone());
+        }
+    }
+    var.name = new_name.to_string();
+    var.renamed_from = renamed_from;
+    let (old_token, new_token) = (format!("${{{name}}}"), format!("${{{new_name}}}"));
+    visit_refs_mut(&mut settings, |value| *value = value.replace(&old_token, &new_token));
+    state.config = ConfigService::detached(settings, current.config_dir);
+    Ok(())
+}
+
+fn delete_env_var(state: &mut State, name: &str) -> Result<(), Fail> {
+    let mut vars = state.settings().env_vars.clone();
+    let position = env_var_position(state.settings(), name)?;
+    let uses = collect_missing(state.settings(), |_| false)
+        .into_iter()
+        .find(|missing| missing.name == name);
+    if let Some(missing) = uses {
+        let labels: Vec<&str> = missing.used_in.iter().map(|u| u.label.as_str()).collect();
+        return Err(Fail::at(format!("env_vars[{name}]"), format!("used in: {}", labels.join(", "))));
+    }
+    vars.remove(position);
+    set_env_vars(state, vars)
+}
+
 fn set_setting(state: &mut State, current: &Current, key: &str, value: Value) -> Result<(), Fail> {
     let top = key.split(['.', '[']).next().unwrap_or("");
     let settable = !SETTINGS_MANAGED_BY_OTHER_OPERATIONS.contains(&top)
@@ -382,6 +473,14 @@ fn apply(state: &mut State, current: &Current, op: &Operation) -> Result<Vec<Eff
         Operation::SetShortcut { action, shortcut } => {
             state.config.set_shortcut(action, shortcut.as_deref())?
         }
+        Operation::AddEnvVar { name, description, secret } => {
+            add_env_var(state, name, description, *secret)?
+        }
+        Operation::UpdateEnvVar { name, description, secret } => {
+            update_env_var(state, name, description, *secret)?
+        }
+        Operation::RenameEnvVar { name, new_name } => rename_env_var(state, current, name, new_name)?,
+        Operation::DeleteEnvVar { name } => delete_env_var(state, name)?,
     }
     Ok(effects)
 }
@@ -481,6 +580,10 @@ pub fn plan(ops: &[Operation], selected: &[bool], current: &Current) -> Result<P
         .into_iter()
         .map(|error| explain_dependency(error, ops, &selected, current, &everything))
         .collect())
+}
+
+pub(crate) fn plan_single(op: Operation, current: &Current) -> Result<Plan, String> {
+    plan(&[op], &[true], current).map_err(|errors| describe(&errors))
 }
 
 fn explain_dependency(
@@ -597,7 +700,7 @@ pub(super) fn parse_path(path: &str) -> Vec<Segment> {
 }
 
 fn item_key(item: &Value) -> Option<String> {
-    ["id", "context"]
+    ["id", "context", "name"]
         .iter()
         .find_map(|field| item.get(field).and_then(Value::as_str))
         .map(str::to_string)

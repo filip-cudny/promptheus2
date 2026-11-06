@@ -6,7 +6,8 @@ use tempfile::TempDir;
 
 use super::apply::{apply, undo, ApplyError, Context, UndoOutcome};
 use super::operations::{Operation, PromptFile};
-use super::plan::{plan, Current, Plan};
+use super::plan::{plan, plan_single, Current, Plan};
+use super::plan_tests::{env_var, referencing_settings};
 use crate::models::settings::{
     KeymapGroup, McpServerConfig, ModelConfig, ModelType, Provider, Settings, WebviewProvider,
 };
@@ -84,6 +85,10 @@ fn fixture_settings() -> Settings {
 }
 
 fn setup() -> (TempDir, ConfigService) {
+    setup_with(fixture_settings())
+}
+
+fn setup_with(settings: Settings) -> (TempDir, ConfigService) {
     let dir = TempDir::new().unwrap();
     let skill_dir = dir.path().join("skills/old-skill");
     std::fs::create_dir_all(&skill_dir).unwrap();
@@ -91,7 +96,7 @@ fn setup() -> (TempDir, ConfigService) {
     std::fs::write(skill_dir.join("notes.txt"), "notes").unwrap();
     std::fs::write(
         dir.path().join("settings.json"),
-        serde_json::to_string_pretty(&fixture_settings()).unwrap(),
+        serde_json::to_string_pretty(&settings).unwrap(),
     )
     .unwrap();
     let config = ConfigService::load(dir.path()).unwrap();
@@ -376,4 +381,101 @@ fn undo_of_the_undo_entry_reapplies_and_names_the_second_entry() {
     let redo = entries.iter().find(|e| e.id == redo_id).unwrap();
     assert_eq!(redo.kind, EntryKind::Undo);
     assert_eq!(redo.undoes.as_deref(), Some(undo_id.as_str()));
+}
+
+fn rename(name: &str, new_name: &str) -> Operation {
+    Operation::RenameEnvVar { name: name.into(), new_name: new_name.into() }
+}
+
+#[test]
+fn undo_of_a_rename_restores_name_previous_names_and_every_reference() {
+    let mut settings = referencing_settings("PHX_APPLY_OLD");
+    settings.env_vars[0].renamed_from = vec!["PHX_APPLY_ANCIENT".into()];
+    let (dir, mut config) = setup_with(settings);
+    let start = tree(dir.path());
+    let before = serde_json::to_value(config.settings()).unwrap();
+    let planned = make_plan(&[rename("PHX_APPLY_OLD", "PHX_APPLY_NEW")], &config, dir.path());
+
+    let card_id = run_apply(&planned, &mut config, dir.path()).unwrap();
+    let renamed = &config.settings().env_vars[1];
+    assert_eq!(renamed.name, "PHX_APPLY_NEW");
+    assert_eq!(renamed.renamed_from, vec!["PHX_APPLY_OLD", "PHX_APPLY_ANCIENT"]);
+    undone_id(run_undo(&card_id, false, &mut config, dir.path()));
+
+    assert_eq!(serde_json::to_value(config.settings()).unwrap(), before);
+    assert_eq!(tree(dir.path()), start);
+}
+
+#[test]
+fn a_separate_update_of_another_variable_does_not_conflict_with_the_rename_undo() {
+    let (dir, mut config) = setup_with(referencing_settings("PHX_APPLY_A"));
+    let start = tree(dir.path());
+    let renamed = make_plan(&[rename("PHX_APPLY_A", "PHX_APPLY_A2")], &config, dir.path());
+    let rename_id = run_apply(&renamed, &mut config, dir.path()).unwrap();
+    let update = Operation::UpdateEnvVar {
+        name: "PHX_PLAN_BYSTANDER".into(),
+        description: "changed".into(),
+        secret: true,
+    };
+    let updated = make_plan(&[update], &config, dir.path());
+    run_apply(&updated, &mut config, dir.path()).unwrap();
+
+    let outcome = run_undo(&rename_id, false, &mut config, dir.path());
+
+    undone_id(outcome);
+    let vars = &config.settings().env_vars;
+    assert_eq!(vars[0].name, "PHX_APPLY_A");
+    assert_eq!(vars[1].description, "changed");
+    assert_ne!(tree(dir.path()), start);
+}
+
+#[test]
+fn the_gui_path_writes_the_same_card_operations_as_the_agent_path() {
+    let operation = || rename("PHX_APPLY_GUI_OLD", "PHX_APPLY_GUI_NEW");
+    let operations_of = |through_gui: bool| {
+        let (dir, mut config) = setup_with(referencing_settings("PHX_APPLY_GUI_OLD"));
+        let current = Current { settings: config.settings(), config_dir: dir.path() };
+        let planned = if through_gui {
+            plan_single(operation(), &current).unwrap()
+        } else {
+            plan(&[operation()], &[true], &current).unwrap()
+        };
+        let id = run_apply(&planned, &mut config, dir.path()).unwrap();
+        let entries = load_all(&change_log_dir(dir.path()));
+        let entry = entries.into_iter().find(|e| e.id == id).unwrap();
+        assert_eq!(entry.kind, EntryKind::Card);
+        entry.operations
+    };
+
+    let (gui, agent) = (operations_of(true), operations_of(false));
+
+    assert_eq!(gui.len(), agent.len());
+    for (gui, agent) in gui.iter().zip(&agent) {
+        assert_eq!(gui.label, agent.label);
+        assert_eq!(gui.op, agent.op);
+        assert_eq!(gui.effects, agent.effects);
+        assert_eq!(gui.test, agent.test);
+    }
+}
+
+#[test]
+fn add_update_and_delete_env_var_each_round_trip_through_undo() {
+    let mut settings = fixture_settings();
+    settings.env_vars = vec![env_var("PHX_APPLY_EXISTING")];
+    for operation in [
+        Operation::AddEnvVar { name: "PHX_APPLY_ADDED".into(), description: "d".into(), secret: true },
+        Operation::UpdateEnvVar { name: "PHX_APPLY_EXISTING".into(), description: "d".into(), secret: true },
+        Operation::DeleteEnvVar { name: "PHX_APPLY_EXISTING".into() },
+    ] {
+        let name = operation.name();
+        let (dir, mut config) = setup_with(settings.clone());
+        let start = tree(dir.path());
+        let planned = make_plan(std::slice::from_ref(&operation), &config, dir.path());
+
+        let card_id = run_apply(&planned, &mut config, dir.path()).unwrap();
+        assert_ne!(tree(dir.path()), start, "{name} changed nothing");
+        undone_id(run_undo(&card_id, false, &mut config, dir.path()));
+
+        assert_eq!(tree(dir.path()), start, "{name}");
+    }
 }

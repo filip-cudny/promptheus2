@@ -6,7 +6,7 @@ use tempfile::TempDir;
 use super::operations::{Operation, PromptFile};
 use super::plan::{plan, stale_rows, Current, Plan, RowError};
 use crate::models::settings::{
-    KeymapGroup, McpServerConfig, ModelConfig, ModelType, Provider, Settings, WebviewProvider,
+    EnvVar, KeymapGroup, McpServerConfig, ModelConfig, ModelType, Provider, Settings, WebviewProvider,
 };
 use crate::models::skill::SkillFrontmatter;
 use crate::services::change_log::{Effect, Target};
@@ -323,6 +323,20 @@ fn operation_deserializes_from_its_tagged_form_and_labels_itself() {
 }
 
 #[test]
+fn env_var_operations_deserialize_with_defaults_and_label_themselves() {
+    let parse = |value: Value| serde_json::from_value::<Operation>(value).unwrap();
+
+    let add = parse(json!({ "op": "add_env_var", "name": "A" }));
+    assert_eq!((add.name(), add.label().as_str()), ("add_env_var", "Add variable A"));
+    let update = parse(json!({ "op": "update_env_var", "name": "A", "description": "d", "secret": true }));
+    assert_eq!((update.name(), update.label().as_str()), ("update_env_var", "Update variable A"));
+    let rename = parse(json!({ "op": "rename_env_var", "name": "A", "new_name": "B" }));
+    assert_eq!((rename.name(), rename.label().as_str()), ("rename_env_var", "Rename variable A to B"));
+    let delete = parse(json!({ "op": "delete_env_var", "name": "A" }));
+    assert_eq!((delete.name(), delete.label().as_str()), ("delete_env_var", "Delete variable A"));
+}
+
+#[test]
 fn skill_errors_are_attributed_to_their_row() {
     let (settings, dir) = (fixture_settings(), config_dir());
     let ops = vec![
@@ -356,4 +370,219 @@ fn skill_errors_are_attributed_to_their_row() {
     let errors = plan_all(&ops, &settings, &dir).unwrap_err();
 
     assert_eq!(errors.iter().map(|e| e.row).collect::<Vec<_>>(), vec![0, 1, 2, 3, 4]);
+}
+
+pub(super) fn env_var(name: &str) -> EnvVar {
+    EnvVar { name: name.into(), description: String::new(), secret: false, renamed_from: vec![] }
+}
+
+pub(super) fn referencing_settings(name: &str) -> Settings {
+    let token = format!("${{{name}}}");
+    let mut settings = fixture_settings();
+    settings.env_vars = vec![env_var(name), env_var("PHX_PLAN_BYSTANDER")];
+    settings.models[0].api_key = Some(token.clone());
+    settings.mcp_servers = HashMap::from([(
+        "tools".to_string(),
+        McpServerConfig {
+            command: token.clone(),
+            args: vec![token.clone(), format!("{token}/x"), format!("${{{name}_X}}")],
+            env: HashMap::from([("LLM_API_KEY".to_string(), token.clone())]),
+            ..mcp("run-tools")
+        },
+    )]);
+    let base = &mut settings.prompt_base;
+    base.system = format!("{token}/system.md");
+    base.about_you = format!("{token}/about.md");
+    base.environment = format!("{token}/environment.md");
+    base.input_format = format!("{token}/input.md");
+    settings.surfaces.title_generation.prompt = format!("{token}/title.md");
+    settings.surfaces.speech_to_text.prompt = Some(format!("{token}/stt.md"));
+    settings.surfaces.speech_to_text.keyterms_file = Some(format!("{token}/terms.md"));
+    settings
+}
+
+fn rename(name: &str, new_name: &str) -> Operation {
+    Operation::RenameEnvVar { name: name.into(), new_name: new_name.into() }
+}
+
+fn env_names(settings: &Settings) -> Vec<&str> {
+    settings.env_vars.iter().map(|var| var.name.as_str()).collect()
+}
+
+#[test]
+fn rename_env_var_rewrites_every_reference_and_records_the_old_name() {
+    let (settings, dir) = (referencing_settings("PHX_PLAN_OLD"), config_dir());
+
+    let planned = plan_all(&[rename("PHX_PLAN_OLD", "PHX_PLAN_NEW")], &settings, &dir).unwrap();
+
+    let renamed = &planned.settings;
+    assert_eq!(env_names(renamed), vec!["PHX_PLAN_NEW", "PHX_PLAN_BYSTANDER"]);
+    assert_eq!(renamed.env_vars[0].renamed_from, vec!["PHX_PLAN_OLD"]);
+    assert_eq!(renamed.models[0].api_key.as_deref(), Some("${PHX_PLAN_NEW}"));
+    let server = &renamed.mcp_servers["tools"];
+    assert_eq!(server.command, "${PHX_PLAN_NEW}");
+    assert_eq!(
+        server.args,
+        vec!["${PHX_PLAN_NEW}", "${PHX_PLAN_NEW}/x", "${PHX_PLAN_OLD_X}"]
+    );
+    assert_eq!(server.env["LLM_API_KEY"], "${PHX_PLAN_NEW}");
+    let base = &renamed.prompt_base;
+    assert_eq!(base.system, "${PHX_PLAN_NEW}/system.md");
+    assert_eq!(base.about_you, "${PHX_PLAN_NEW}/about.md");
+    assert_eq!(base.environment, "${PHX_PLAN_NEW}/environment.md");
+    assert_eq!(base.input_format, "${PHX_PLAN_NEW}/input.md");
+    assert_eq!(renamed.surfaces.title_generation.prompt, "${PHX_PLAN_NEW}/title.md");
+    let stt = &renamed.surfaces.speech_to_text;
+    assert_eq!(stt.prompt.as_deref(), Some("${PHX_PLAN_NEW}/stt.md"));
+    assert_eq!(stt.keyterms_file.as_deref(), Some("${PHX_PLAN_NEW}/terms.md"));
+}
+
+#[test]
+fn a_second_rename_puts_the_newest_old_name_first() {
+    let (settings, dir) = (referencing_settings("PHX_PLAN_FIRST"), config_dir());
+    let ops = [rename("PHX_PLAN_FIRST", "PHX_PLAN_SECOND"), rename("PHX_PLAN_SECOND", "PHX_PLAN_THIRD")];
+
+    let planned = plan_all(&ops, &settings, &dir).unwrap();
+
+    assert_eq!(
+        planned.settings.env_vars[0].renamed_from,
+        vec!["PHX_PLAN_SECOND", "PHX_PLAN_FIRST"]
+    );
+}
+
+#[test]
+fn rename_env_var_refuses_unknown_taken_and_invalid_names() {
+    let (settings, dir) = (referencing_settings("PHX_PLAN_KNOWN"), config_dir());
+    let ops = vec![
+        rename("PHX_PLAN_MISSING", "PHX_PLAN_X"),
+        rename("PHX_PLAN_KNOWN", "PHX_PLAN_BYSTANDER"),
+        rename("PHX_PLAN_KNOWN", "1 bad"),
+    ];
+
+    let errors = plan_all(&ops, &settings, &dir).unwrap_err();
+
+    let keys: Vec<_> = errors.iter().map(|e| e.key.as_deref()).collect();
+    assert_eq!(
+        keys,
+        vec![
+            Some("env_vars[PHX_PLAN_MISSING]"),
+            Some("env_vars[PHX_PLAN_KNOWN].name"),
+            Some("env_vars[PHX_PLAN_KNOWN].name"),
+        ]
+    );
+}
+
+#[test]
+fn rename_env_var_refuses_a_target_with_a_different_value_on_this_machine() {
+    let (settings, dir) = (referencing_settings("PHX_PLAN_VAL_OLD"), config_dir());
+    let env_file = dir.path().join(".env");
+
+    std::fs::write(&env_file, "PHX_PLAN_VAL_OLD=a\nPHX_PLAN_VAL_NEW=b\n").unwrap();
+    let errors = plan_all(&[rename("PHX_PLAN_VAL_OLD", "PHX_PLAN_VAL_NEW")], &settings, &dir).unwrap_err();
+    assert_eq!(errors[0].key.as_deref(), Some("env_vars[PHX_PLAN_VAL_OLD].name"));
+    assert_eq!(
+        errors[0].message,
+        "PHX_PLAN_VAL_NEW already has a different value on this machine"
+    );
+
+    std::fs::write(&env_file, "PHX_PLAN_VAL_NEW=b\n").unwrap();
+    assert!(plan_all(&[rename("PHX_PLAN_VAL_OLD", "PHX_PLAN_VAL_NEW")], &settings, &dir).is_err());
+
+    std::fs::write(&env_file, "PHX_PLAN_VAL_OLD=a\nPHX_PLAN_VAL_NEW=a\n").unwrap();
+    assert!(plan_all(&[rename("PHX_PLAN_VAL_OLD", "PHX_PLAN_VAL_NEW")], &settings, &dir).is_ok());
+
+    std::fs::write(&env_file, "PHX_PLAN_VAL_OLD=a\n").unwrap();
+    assert!(plan_all(&[rename("PHX_PLAN_VAL_OLD", "PHX_PLAN_VAL_NEW")], &settings, &dir).is_ok());
+}
+
+#[test]
+fn delete_env_var_names_every_usage_and_removes_an_unreferenced_entry() {
+    let (settings, dir) = (referencing_settings("PHX_PLAN_USED"), config_dir());
+
+    let errors = plan_all(&[Operation::DeleteEnvVar { name: "PHX_PLAN_USED".into() }], &settings, &dir)
+        .unwrap_err();
+
+    assert_eq!(errors[0].key.as_deref(), Some("env_vars[PHX_PLAN_USED]"));
+    for label in ["Model abc API key", "MCP server tools command", "MCP server tools arguments", "System prompt file"] {
+        assert!(errors[0].message.contains(label), "{label} missing in {}", errors[0].message);
+    }
+
+    let planned =
+        plan_all(&[Operation::DeleteEnvVar { name: "PHX_PLAN_BYSTANDER".into() }], &settings, &dir).unwrap();
+    assert_eq!(env_names(&planned.settings), vec!["PHX_PLAN_USED"]);
+    let errors =
+        plan_all(&[Operation::DeleteEnvVar { name: "PHX_PLAN_MISSING".into() }], &settings, &dir).unwrap_err();
+    assert_eq!(errors[0].key.as_deref(), Some("env_vars[PHX_PLAN_MISSING]"));
+}
+
+#[test]
+fn delete_env_var_passes_after_a_row_reassigns_the_only_reference() {
+    let (mut settings, dir) = (fixture_settings(), config_dir());
+    settings.env_vars = vec![env_var("PHX_PLAN_GONE")];
+    settings.models[0].api_key = Some("${PHX_PLAN_GONE}".into());
+    let ops = vec![
+        Operation::UpdateModel { id: "abc".into(), model: model("abc", ModelType::Text, "${OPENAI_KEY}") },
+        Operation::DeleteEnvVar { name: "PHX_PLAN_GONE".into() },
+    ];
+
+    let planned = plan_all(&ops, &settings, &dir).unwrap();
+
+    assert!(planned.settings.env_vars.is_empty());
+}
+
+#[test]
+fn set_setting_cannot_touch_env_vars() {
+    let (settings, dir) = (fixture_settings(), config_dir());
+    let ops = vec![
+        set_setting("env_vars", json!([])),
+        set_setting("env_vars[PHX_PLAN_X].description", json!("d")),
+    ];
+
+    let errors = plan_all(&ops, &settings, &dir).unwrap_err();
+
+    assert_eq!(errors.iter().map(|e| e.row).collect::<Vec<_>>(), vec![0, 1]);
+}
+
+#[test]
+fn add_then_update_env_var_leaves_the_new_description_and_flag() {
+    let (settings, dir) = (fixture_settings(), config_dir());
+    let ops = vec![
+        Operation::AddEnvVar { name: "PHX_PLAN_ADDED".into(), description: "first".into(), secret: false },
+        Operation::UpdateEnvVar { name: "PHX_PLAN_ADDED".into(), description: "second".into(), secret: true },
+    ];
+
+    let planned = plan_all(&ops, &settings, &dir).unwrap();
+
+    assert_eq!(
+        planned.settings.env_vars,
+        vec![EnvVar {
+            name: "PHX_PLAN_ADDED".into(),
+            description: "second".into(),
+            secret: true,
+            renamed_from: vec![],
+        }]
+    );
+}
+
+#[test]
+fn add_env_var_refuses_an_existing_or_invalid_name_and_update_an_unknown_one() {
+    let (mut settings, dir) = (fixture_settings(), config_dir());
+    settings.env_vars = vec![env_var("PHX_PLAN_PRESENT")];
+    let ops = vec![
+        Operation::AddEnvVar { name: "PHX_PLAN_PRESENT".into(), description: String::new(), secret: false },
+        Operation::AddEnvVar { name: "has space".into(), description: String::new(), secret: false },
+        Operation::UpdateEnvVar { name: "PHX_PLAN_MISSING".into(), description: String::new(), secret: false },
+    ];
+
+    let errors = plan_all(&ops, &settings, &dir).unwrap_err();
+
+    let keys: Vec<_> = errors.iter().map(|e| e.key.as_deref()).collect();
+    assert_eq!(
+        keys,
+        vec![
+            Some("env_vars[PHX_PLAN_PRESENT]"),
+            Some("env_vars[has space].name"),
+            Some("env_vars[PHX_PLAN_MISSING]"),
+        ]
+    );
 }

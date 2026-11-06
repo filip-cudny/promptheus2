@@ -54,6 +54,22 @@ pub enum Operation {
     UpdateWebviewProvider { id: String, provider: WebviewProvider },
     DeleteWebviewProvider { id: String },
     SetShortcut { action: String, shortcut: Option<String> },
+    AddEnvVar {
+        name: String,
+        #[serde(default)]
+        description: String,
+        #[serde(default)]
+        secret: bool,
+    },
+    UpdateEnvVar {
+        name: String,
+        #[serde(default)]
+        description: String,
+        #[serde(default)]
+        secret: bool,
+    },
+    RenameEnvVar { name: String, new_name: String },
+    DeleteEnvVar { name: String },
 }
 
 impl Operation {
@@ -75,6 +91,10 @@ impl Operation {
             Self::UpdateWebviewProvider { .. } => "update_webview_provider",
             Self::DeleteWebviewProvider { .. } => "delete_webview_provider",
             Self::SetShortcut { .. } => "set_shortcut",
+            Self::AddEnvVar { .. } => "add_env_var",
+            Self::UpdateEnvVar { .. } => "update_env_var",
+            Self::RenameEnvVar { .. } => "rename_env_var",
+            Self::DeleteEnvVar { .. } => "delete_env_var",
         }
     }
 
@@ -102,6 +122,10 @@ impl Operation {
             Self::DeleteWebviewProvider { id } => format!("Delete web provider {id}"),
             Self::SetShortcut { action, shortcut: Some(_) } => format!("Set shortcut for {action}"),
             Self::SetShortcut { action, shortcut: None } => format!("Clear shortcut for {action}"),
+            Self::AddEnvVar { name, .. } => format!("Add variable {name}"),
+            Self::UpdateEnvVar { name, .. } => format!("Update variable {name}"),
+            Self::RenameEnvVar { name, new_name } => format!("Rename variable {name} to {new_name}"),
+            Self::DeleteEnvVar { name } => format!("Delete variable {name}"),
         }
     }
 }
