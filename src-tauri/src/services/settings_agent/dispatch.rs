@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -56,7 +56,6 @@ pub struct Context {
 
 pub struct Dispatcher {
     ctx: Context,
-    proposal: Mutex<Option<Proposal>>,
 }
 
 #[derive(Deserialize)]
@@ -110,12 +109,7 @@ fn row_errors(errors: &[RowError]) -> Value {
 
 impl Dispatcher {
     pub fn new(ctx: Context) -> Self {
-        Self { ctx, proposal: Mutex::new(None) }
-    }
-
-    #[cfg(test)]
-    pub fn proposal(&self) -> Option<Proposal> {
-        self.proposal.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        Self { ctx }
     }
 
     pub async fn dispatch(&self, call: &PendingToolCall) -> ToolExecutionResult {
@@ -245,7 +239,6 @@ impl Dispatcher {
         };
         log::info!("settings agent proposal {} with {} rows", proposal.id, rows.len());
         let id = proposal.id.clone();
-        *self.proposal.lock().unwrap_or_else(|e| e.into_inner()) = Some(proposal.clone());
         self.ctx.proposals.proposed(&proposal);
         Ok(json!({"proposal_id": id, "rows": rows}))
     }

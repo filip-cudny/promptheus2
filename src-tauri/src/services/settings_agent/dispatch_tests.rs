@@ -64,11 +64,11 @@ fn fixture_settings() -> Settings {
     settings
 }
 
-struct Sink(std::sync::Mutex<Vec<String>>);
+struct Sink(std::sync::Mutex<Vec<Proposal>>);
 
 impl ProposalSink for Sink {
     fn proposed(&self, proposal: &Proposal) {
-        self.0.lock().unwrap().push(proposal.id.clone());
+        self.0.lock().unwrap().push(proposal.clone());
     }
 }
 
@@ -218,8 +218,9 @@ async fn propose_tool_redacts_provider_error_and_hands_proposal_to_sink() {
     assert!(!is_error);
     assert!(text.contains("[redacted]"), "{text}");
     assert_clean(&text);
-    let proposal = dispatcher.proposal().expect("proposal held");
-    assert_eq!(sink.0.lock().unwrap().as_slice(), [proposal.id.clone()]);
+    let proposals = sink.0.lock().unwrap();
+    assert_eq!(proposals.len(), 1);
+    let proposal = &proposals[0];
     assert!(text.contains(&proposal.id));
     assert!(!proposal.tests[&0].ok);
 }
@@ -236,7 +237,6 @@ async fn propose_with_row_errors_shows_no_card() {
     .await;
     assert!(!is_error);
     assert!(text.contains("\"errors\""), "{text}");
-    assert!(dispatcher.proposal().is_none());
     assert!(sink.0.lock().unwrap().is_empty());
 }
 
