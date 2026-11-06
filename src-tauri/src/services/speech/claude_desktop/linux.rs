@@ -136,6 +136,14 @@ async fn restore_claude_window() -> WindowState {
     }
 }
 
+fn handoff_result(status: ExitStatus) -> Result<(), Outcome> {
+    if status.success() {
+        Ok(())
+    } else {
+        Err(Outcome::Failed(format!("the claude:// handler failed ({status})")))
+    }
+}
+
 /// `Ok(false)`: no Claude window (or no way to tell), the caller opens the link itself.
 pub async fn open_link(url: String) -> Result<bool, Outcome> {
     match restore_claude_window().await {
@@ -168,6 +176,10 @@ pub async fn open_link(url: String) -> Result<bool, Outcome> {
                 "handler exited in {} ms (status {code})",
                 spawned.elapsed().as_millis(),
             );
+            if let Err(outcome) = handoff_result(status) {
+                log::info!(target: LOG_TARGET, "handler failed ({status}), not handed over");
+                return Err(outcome);
+            }
             tokio::time::sleep(HANDOFF_SETTLE).await;
             log::debug!(target: LOG_TARGET, "settle {} ms done", HANDOFF_SETTLE.as_millis());
             Ok(true)
@@ -199,5 +211,20 @@ mod tests {
     #[test]
     fn window_state_from_reply_rejects_an_unknown_string() {
         assert_eq!(WindowState::from_reply("minimized"), None);
+    }
+
+    #[test]
+    fn handoff_result_accepts_exit_status_zero() {
+        assert_eq!(handoff_result(ExitStatus::from_raw(0)), Ok(()));
+    }
+
+    #[test]
+    fn handoff_result_fails_on_exit_status_one() {
+        assert!(matches!(handoff_result(ExitStatus::from_raw(1 << 8)), Err(Outcome::Failed(_))));
+    }
+
+    #[test]
+    fn handoff_result_fails_on_termination_by_a_signal() {
+        assert!(matches!(handoff_result(ExitStatus::from_raw(9)), Err(Outcome::Failed(_))));
     }
 }
