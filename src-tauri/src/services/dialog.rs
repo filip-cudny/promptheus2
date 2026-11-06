@@ -6,9 +6,11 @@ use tokio::sync::Mutex;
 
 use super::ai_webview;
 use super::dock::DockManager;
+use super::settings_agent::engine::{lock, SharedSession};
 use super::ui_state::{UiStateService, WindowGeometry};
 
 pub const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
+pub const SETTINGS_DIALOG_LABEL: &str = "settings-dialog";
 pub const SHELL_TOOLBAR_LABEL: &str = "shell-toolbar";
 pub const TOOLBAR_HEIGHT: f64 = 40.0;
 pub const SHELL_BG: Color = Color(0x1e, 0x1e, 0x1e, 0xff);
@@ -396,6 +398,11 @@ pub async fn open_or_focus(
         }
         WindowEvent::Destroyed => {
             ai_webview::cleanup_host_state(&app_handle, &destroy_label);
+            if destroy_label == SETTINGS_DIALOG_LABEL {
+                if let Some(session) = app_handle.try_state::<SharedSession>() {
+                    lock(&session).reset();
+                }
+            }
             let dock = app_handle.state::<DockManager>();
             if is_conversation_dialog_host(&destroy_label) {
                 dock.host_destroyed(&app_handle);

@@ -18,6 +18,7 @@ pub mod prompts;
 pub mod provider_menu;
 pub mod conversation_dialog;
 pub mod settings;
+pub mod settings_agent;
 pub mod settings_dialog;
 pub mod settings_sync;
 pub mod skills;
@@ -128,6 +129,15 @@ macro_rules! handlers {
             $crate::commands::provider_menu::hide_provider_menu,
             $crate::commands::provider_menu::size_provider_menu,
             $crate::commands::provider_menu::provider_menu_select,
+            // === settings_agent ===
+            $crate::commands::settings_agent::settings_agent_send,
+            $crate::commands::settings_agent::settings_agent_cancel,
+            $crate::commands::settings_agent::settings_agent_reset,
+            $crate::commands::settings_agent::settings_agent_secret_result,
+            $crate::commands::settings_agent::settings_agent_apply,
+            $crate::commands::settings_agent::settings_agent_reject,
+            $crate::commands::settings_agent::settings_agent_refresh,
+            $crate::commands::settings_agent::settings_agent_test_row,
             // === settings ===
             $crate::commands::settings::get_settings,
             $crate::commands::settings::get_settings_catalog,

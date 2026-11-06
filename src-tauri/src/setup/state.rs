@@ -17,6 +17,7 @@ use crate::services::mcp::McpRegistry;
 use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::notification::NotificationService;
 use crate::services::recent_apps::RecentAppsState;
+use crate::services::settings_agent::engine::SharedSession;
 use crate::services::settings_sync::SettingsSync;
 use crate::services::shell_env::get_shell_env;
 use crate::services::skill::SkillService;
@@ -116,6 +117,7 @@ pub fn manage(
         conversation_context::ConversationContextCache::new(),
     )));
     app.manage(Arc::new(RecentAppsState::new()));
+    app.manage(SharedSession::default());
     app.manage(Arc::new(SettingsSync::new(
         config_dir.to_path_buf(),
         Arc::new(|| get_shell_env().clone()),

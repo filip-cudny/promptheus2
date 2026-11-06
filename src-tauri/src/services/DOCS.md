@@ -9,6 +9,7 @@ One file or directory per service; the file name is the service name. Directorie
 - `ai/` — `provider.rs` (`AiProvider`, `CompletionRequest`, `StreamChunk`), `openai.rs` (Completions) and `openai_responses.rs` (Responses), `http.rs` (`OpenAiHttp`, the HTTP layer both OpenAI providers share), `encoder.rs` (per-API capability encoding functions), `sse.rs` (SSE line parser)
 - `execution/` — `lifecycle.rs` (`PromptExecutionService`, `ExecutionError`), `skill_executor.rs` and `conversation_executor.rs` (message preparation and result recording), `stream.rs` (stream and tool loop)
 - `change_log/` — see [change_log/DOCS.md](change_log/DOCS.md)
+- `settings_agent/` — see [settings_agent/DOCS.md](settings_agent/DOCS.md)
 - `secrets.rs` — see "Secrets" below
 - `settings_sync/` — `git.rs` (`GitRunner`), `detect.rs`, `reload.rs`
 - `speech/` — see [speech/DOCS.md](speech/DOCS.md); `mcp/` — see [mcp/DOCS.md](mcp/DOCS.md)
