@@ -9,6 +9,7 @@ use crate::services::gnome_shell;
 
 const CLAUDE_WM_CLASS: &str = "com.anthropic.Claude";
 const TITLE_WATCH_MS: u32 = 15_000;
+const RESTORE_TIMEOUT_MS: u32 = 2000;
 
 // Starting value from the 2026-11-06 measurement (handler start +577-882 ms after the link), to be
 // corrected by repeated live runs. Stops being correct when a handler that handed over to the
@@ -156,31 +157,66 @@ fn reap(mut child: Child) {
     });
 }
 
-async fn has_claude_window() -> Option<bool> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WindowState {
+    Absent,
+    Shown,
+    Restored,
+    RestoreTimeout,
+}
+
+impl WindowState {
+    fn from_reply(reply: &str) -> Option<Self> {
+        match reply {
+            "absent" => Some(Self::Absent),
+            "shown" => Some(Self::Shown),
+            "restored" => Some(Self::Restored),
+            "restore_timeout" => Some(Self::RestoreTimeout),
+            _ => None,
+        }
+    }
+}
+
+async fn restore_claude_window() -> WindowState {
     if !gnome_shell::is_gnome_wayland() {
-        return None;
+        return WindowState::Absent;
     }
     let result = async {
         let proxy = gnome_shell::proxy().await?;
-        proxy.has_app_window(CLAUDE_WM_CLASS).await
+        proxy.restore_app_window(CLAUDE_WM_CLASS).await
     }
     .await;
     match result {
-        Ok(present) => {
-            log::debug!(target: LOG_TARGET, "Claude window present: {present}");
-            Some(present)
-        }
+        Ok(reply) => WindowState::from_reply(&reply).map_or_else(
+            || {
+                log::debug!(target: LOG_TARGET, "unknown window state reply, treated as absent");
+                WindowState::Absent
+            },
+            |state| {
+                log::debug!(target: LOG_TARGET, "Claude window: {state:?}");
+                state
+            },
+        ),
         Err(e) => {
-            log::debug!(target: LOG_TARGET, "window check failed: {e}");
-            None
+            log::debug!(target: LOG_TARGET, "window check failed, treated as absent: {e}");
+            WindowState::Absent
         }
     }
 }
 
 /// `Ok(false)`: no Claude window (or no way to tell), the caller opens the link itself.
 pub async fn open_link(url: String) -> Result<bool, Outcome> {
-    if has_claude_window().await != Some(true) {
-        return Ok(false);
+    match restore_claude_window().await {
+        WindowState::Absent => return Ok(false),
+        WindowState::RestoreTimeout => {
+            log::info!(
+                target: LOG_TARGET,
+                "Claude window not restored within {} ms",
+                RESTORE_TIMEOUT_MS,
+            );
+            return Err(Outcome::Timeout);
+        }
+        WindowState::Shown | WindowState::Restored => {}
     }
     let mut child = spawn_handler(url).await?;
     let spawned = Instant::now();
@@ -230,6 +266,19 @@ mod tests {
 
     fn strings(parts: &[&str]) -> Option<Vec<String>> {
         Some(parts.iter().map(|part| part.to_string()).collect())
+    }
+
+    #[test]
+    fn window_state_from_reply_maps_the_extension_states() {
+        assert_eq!(WindowState::from_reply("absent"), Some(WindowState::Absent));
+        assert_eq!(WindowState::from_reply("shown"), Some(WindowState::Shown));
+        assert_eq!(WindowState::from_reply("restored"), Some(WindowState::Restored));
+        assert_eq!(WindowState::from_reply("restore_timeout"), Some(WindowState::RestoreTimeout));
+    }
+
+    #[test]
+    fn window_state_from_reply_rejects_an_unknown_string() {
+        assert_eq!(WindowState::from_reply("minimized"), None);
     }
 
     #[test]

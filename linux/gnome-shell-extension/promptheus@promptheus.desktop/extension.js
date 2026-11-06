@@ -176,6 +176,7 @@ const PASTE_POLL_MS = 50;
 const PASTE_WINDOW_TIMEOUT_MS = 20000;
 const PASTE_WINDOW_POLL_MS = 100;
 const PASTE_COLD_SETTLE_MS = 4000;
+const RESTORE_TIMEOUT_MS = 2000;
 const PASTE_READ_DELAY_MS = 1000;
 const PASTE_RESTORE_DELAY_MS = 500;
 const RESTORED_TEXT_MIMETYPE = 'text/plain;charset=utf-8';
@@ -332,9 +333,9 @@ const INTERFACE_XML = `
       <arg type="as" direction="in" name="uris"/>
       <arg type="s" direction="out" name="outcome"/>
     </method>
-    <method name="HasAppWindow">
+    <method name="RestoreAppWindow">
       <arg type="s" direction="in" name="wm_class"/>
-      <arg type="b" direction="out" name="present"/>
+      <arg type="s" direction="out" name="state"/>
     </method>
     <method name="WatchAppTitles">
       <arg type="s" direction="in" name="wm_class"/>
@@ -435,11 +436,30 @@ export default class PromptheusExtension extends Extension {
         console.log('WatchAppTitles: end');
     }
 
-    HasAppWindow(wmClass) {
-        const present = global.get_window_actors()
-            .some(actor => isMainWindowOf(actor.get_meta_window(), wmClass));
-        console.log(`HasAppWindow: ${present}`);
-        return present;
+    async RestoreAppWindowAsync(params, invocation) {
+        const [wmClass] = params;
+        const finish = state => {
+            console.log(`RestoreAppWindow: ${state}`);
+            invocation.return_value(new GLib.Variant('(s)', [state]));
+        };
+        try {
+            const win = global.get_window_actors()
+                .map(actor => actor.get_meta_window())
+                .find(candidate => isMainWindowOf(candidate, wmClass));
+            if (!win)
+                return finish('absent');
+            if (!win.minimized)
+                return finish('shown');
+            const startUs = GLib.get_monotonic_time();
+            Main.activateWindow(win);
+            const restored = await waitFor(
+                () => !win.minimized && global.display.focus_window === win, RESTORE_TIMEOUT_MS);
+            console.log(`RestoreAppWindow: minimized, restore wait ${elapsedMsSince(startUs)} ms`);
+            finish(restored ? 'restored' : 'restore_timeout');
+        } catch (e) {
+            logError(e, 'Promptheus: RestoreAppWindow failed');
+            invocation.return_dbus_error('com.promptheus.Shell.Error', String(e));
+        }
     }
 
     WatchAppTitles(wmClass, durationMs) {
