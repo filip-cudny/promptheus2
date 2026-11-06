@@ -7,7 +7,7 @@ export * from "./history";
 export * from "./conversation";
 export * from "./settingsCatalog";
 
-export type SurfaceKind = "chat" | "quick_actions" | "title_generation" | "speech_to_text";
+export type SurfaceKind = "chat" | "quick_actions" | "title_generation" | "settings_agent" | "speech_to_text";
 
 export interface Settings {
   show_tray_icon: boolean;
@@ -52,6 +52,7 @@ export interface Surfaces {
   chat: ChatConfig;
   quick_actions: QuickActionsConfig;
   title_generation: TitleGenConfig;
+  settings_agent: SettingsAgentConfig;
   speech_to_text: SpeechToTextConfig;
 }
 
@@ -71,6 +72,10 @@ export interface QuickActionsGeneration {
 }
 
 export interface QuickActionsConfig {
+  generation: QuickActionsGeneration;
+}
+
+export interface SettingsAgentConfig {
   generation: QuickActionsGeneration;
 }
 

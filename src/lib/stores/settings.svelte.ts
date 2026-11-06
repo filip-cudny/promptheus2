@@ -20,6 +20,7 @@ const surfaceModelIds = $derived.by<Record<SurfaceKind, string | null>>(() => {
       chat: null,
       quick_actions: null,
       title_generation: null,
+      settings_agent: null,
       speech_to_text: null,
     };
   }
@@ -27,6 +28,7 @@ const surfaceModelIds = $derived.by<Record<SurfaceKind, string | null>>(() => {
     chat: s.surfaces.chat.generation.model_id,
     quick_actions: s.surfaces.quick_actions.generation.model_id,
     title_generation: s.surfaces.title_generation.generation.model_id,
+    settings_agent: s.surfaces.settings_agent.generation.model_id,
     speech_to_text: s.surfaces.speech_to_text.model_id,
   };
 });

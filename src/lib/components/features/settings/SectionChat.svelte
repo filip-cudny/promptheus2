@@ -11,6 +11,7 @@
     updateSurfaceReasoningEffort,
   } from "$lib/services/settings";
   import { effortOptions } from "$lib/utils/effortOptions";
+  import { agentModelId } from "$lib/utils/agentModel";
   import SettingsSection from "./SettingsSection.svelte";
   import SettingField from "./SettingField.svelte";
   import PromptEditor from "./PromptEditor.svelte";
@@ -20,6 +21,11 @@
   const chat = $derived(store.settings?.surfaces.chat.generation ?? null);
   const titleModelId = $derived(
     store.settings?.surfaces.title_generation.generation.model_id ?? null,
+  );
+
+  const agent = $derived(store.settings?.surfaces.settings_agent.generation ?? null);
+  const effectiveAgentModelId = $derived(
+    store.settings ? agentModelId(store.settings.surfaces) : null,
   );
 
   const textModels = $derived(
@@ -37,9 +43,17 @@
     ),
   );
 
+  const agentEffortOptions = $derived(
+    effortOptions(
+      getCachedCapabilities(effectiveAgentModelId)?.reasoning,
+      agent?.parameters.reasoning_effort,
+    ),
+  );
+
   let tools = $state<string[]>([]);
 
   $effect(() => prefetchCapabilities(chat?.model_id ?? null));
+  $effect(() => prefetchCapabilities(effectiveAgentModelId));
 
   onMount(() => {
     invoke<{ name: string; server: string }[]>("list_mcp_tools")
@@ -120,6 +134,32 @@
               )}
           />
         </SettingField>
+
+        {#if agent}
+          <SettingField key="surfaces.settings_agent.generation.model_id">
+            <SelectDropdown
+              value={agent.model_id ?? ""}
+              options={titleModelOptions}
+              ariaLabel="Settings agent model"
+              onchange={(id) =>
+                run("update_surface_model settings_agent", () =>
+                  updateSurfaceModel("settings_agent", id || null),
+                )}
+            />
+          </SettingField>
+
+          <SettingField key="surfaces.settings_agent.generation.parameters.reasoning_effort">
+            <SelectDropdown
+              value={agent.parameters.reasoning_effort ?? ""}
+              options={agentEffortOptions}
+              ariaLabel="Settings agent reasoning effort"
+              onchange={(v) =>
+                run("update reasoning_effort settings_agent", () =>
+                  updateSurfaceReasoningEffort("settings_agent", v || null),
+                )}
+            />
+          </SettingField>
+        {/if}
 
         <div class="prompt">
           <PromptEditor

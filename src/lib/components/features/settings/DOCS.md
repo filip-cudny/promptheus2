@@ -45,7 +45,7 @@ Every control bound to a settings key is wrapped in `<SettingField key="<catalog
 
 ### Agent panel
 
-The "Ask agent" row (lucide `Sparkles`, no accent colour) directly under the search in `SettingsSidebar` toggles `agent/AgentPanel.svelte` (380 px, `PANEL_WIDTH` in `services/settings_agent/panel.rs`). The panel header has `Sparkles` and the title on the left, "New conversation" (`SquarePen`, disabled while the agent runs) and "Close" (`X`) on the right.
+The "Ask agent" row (lucide `Sparkles`, no accent colour) directly under the search in `SettingsSidebar` toggles `agent/AgentPanel.svelte` (380 px, `PANEL_WIDTH` in `services/settings_agent/panel.rs`). The panel header has `Sparkles`, the title and the model the agent uses (muted, one line with ellipsis; effective id from `$lib/utils/agentModel.ts`: the settings agent model, else the chat model; "No model" when unset or unknown; nothing until settings load) on the left, "New conversation" (`SquarePen`, disabled while the agent runs) and "Close" (`X`) on the right.
 
 Layout depends only on the width of `.dialog-body` (a CSS container named `settings-body`; `.with-panel` while the panel is open), not on the panel mode:
 
@@ -238,7 +238,7 @@ Save flow goes through `$lib/services/prompts.ts` → backend `save_prompt` Taur
 
 ### Chat and Speech sections
 
-`SectionChat` shows the default chat model, reasoning effort (as the model editor's effort select: "None" first, all levels when the model does not advertise effort, a saved value the model does not accept shown as "not accepted by this model"; plus "Default" = `null`), MCP tools as checkboxes of qualified `server.tool` names (from `list_mcp_tools`; empty state when none), the title generation model and prompt (`PromptEditor` kind `title_generation`), and `WebviewProvidersEditor`.
+`SectionChat` shows the default chat model, reasoning effort (as the model editor's effort select: "None" first, all levels when the model does not advertise effort, a saved value the model does not accept shown as "not accepted by this model"; plus "Default" = `null`), MCP tools as checkboxes of qualified `server.tool` names (from `list_mcp_tools`; empty state when none), the title generation model, the settings agent model ("Chat model" = fall back to the chat model) and its reasoning effort (options gated by the capabilities of the effective model, as for chat), the title generation prompt (`PromptEditor` kind `title_generation`), and `WebviewProvidersEditor`.
 
 `SectionSpeech` shows STT model, language (empty = `null`), `no_verbatim`, the STT prompt (`PromptEditor` kind `speech_to_text`), keyterms (`SttKeytermsEditor`) and the `speech_to_text_toggle` shortcut, then the recording and failure-handling cards.
 
