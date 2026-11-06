@@ -67,6 +67,7 @@
     align-items: center;
     gap: var(--space-4);
     flex: 1;
+    min-width: 0;
     font-weight: var(--font-weight-semibold);
     color: var(--text-secondary);
   }
@@ -77,7 +78,7 @@
     white-space: nowrap;
     text-overflow: ellipsis;
     font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-normal, 400);
+    font-weight: var(--font-weight-regular);
     color: var(--text-muted);
   }
 
