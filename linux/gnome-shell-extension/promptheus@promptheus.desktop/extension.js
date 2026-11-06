@@ -148,6 +148,16 @@ function isAppWindow(win, title) {
     return win.get_wm_class() === APP_WM_CLASS && win.get_title() === title;
 }
 
+function isMainWindowOf(win, wmClass) {
+    return win.get_wm_class() === wmClass &&
+        win.get_window_type() === Meta.WindowType.NORMAL &&
+        !win.get_transient_for();
+}
+
+function elapsedMsSince(startUs) {
+    return Math.floor((GLib.get_monotonic_time() - startUs) / 1000);
+}
+
 function formatElapsed(elapsedMs) {
     const seconds = Math.floor(elapsedMs / 1000);
     return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
@@ -323,6 +333,10 @@ const INTERFACE_XML = `
       <arg type="as" direction="in" name="uris"/>
       <arg type="s" direction="out" name="outcome"/>
     </method>
+    <method name="WatchAppTitles">
+      <arg type="s" direction="in" name="wm_class"/>
+      <arg type="u" direction="in" name="duration_ms"/>
+    </method>
     <method name="CaptureArea">
       <arg type="s" direction="in" name="path"/>
       <arg type="s" direction="out" name="outcome"/>
@@ -365,6 +379,7 @@ export default class PromptheusExtension extends Extension {
         this._pending = new Map();
         this._activations = new Map();
         this._overlayStops = new Set();
+        this._titleWatch = null;
         this._anchors = new Map();
         this._watchId = 0;
         this._toasts = [];
@@ -402,6 +417,53 @@ export default class PromptheusExtension extends Extension {
             if (this._typeOverlay(win))
                 stop();
         });
+    }
+
+    _stopTitleWatch() {
+        const watch = this._titleWatch;
+        if (!watch)
+            return;
+        this._titleWatch = null;
+        global.display.disconnect(watch.createdId);
+        if (watch.timeoutId)
+            GLib.source_remove(watch.timeoutId);
+        for (const stop of [...watch.stops])
+            stop();
+        console.log('WatchAppTitles: end');
+    }
+
+    WatchAppTitles(wmClass, durationMs) {
+        this._stopTitleWatch();
+        const startUs = GLib.get_monotonic_time();
+        const stops = new Set();
+        const track = (win, created) => {
+            let matched = isMainWindowOf(win, wmClass);
+            if (!matched && !created)
+                return;
+            if (matched && created)
+                console.log(`WatchAppTitles: window ${win.get_id()} created +${elapsedMsSince(startUs)} ms`);
+            this._watchWindow(win, stops, (_, pspec) => {
+                if (!matched) {
+                    matched = isMainWindowOf(win, wmClass);
+                    if (matched)
+                        console.log(`WatchAppTitles: window ${win.get_id()} created +${elapsedMsSince(startUs)} ms`);
+                } else if (pspec?.name === 'title') {
+                    console.log(`WatchAppTitles: title change window ${win.get_id()} +${elapsedMsSince(startUs)} ms`);
+                }
+            });
+        };
+        const watch = {stops, createdId: 0, timeoutId: 0};
+        this._titleWatch = watch;
+        watch.createdId = global.display.connect('window-created', (display, win) => track(win, true));
+        watch.timeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, durationMs, () => {
+            watch.timeoutId = 0;
+            this._stopTitleWatch();
+            return GLib.SOURCE_REMOVE;
+        });
+        const existing = global.get_window_actors().map(actor => actor.get_meta_window());
+        for (const win of existing)
+            track(win, false);
+        console.log(`WatchAppTitles: start (${stops.size} windows)`);
     }
 
     _watchWindow(win, stops, onChange) {
@@ -443,6 +505,7 @@ export default class PromptheusExtension extends Extension {
         }
         for (const stop of [...this._overlayStops])
             stop();
+        this._stopTitleWatch();
         this._unwatchSender();
         this._ungrabAll();
         for (const pending of [...this._pending.values()])
@@ -536,15 +599,15 @@ export default class PromptheusExtension extends Extension {
         const [wmClass, uris] = params;
         const clipboard = Meta.SelectionType.SELECTION_CLIPBOARD;
         const state = {cold: false, restored: false};
+        const startUs = GLib.get_monotonic_time();
+        const step = text => console.log(`PasteIntoApp: ${text} +${elapsedMsSince(startUs)} ms`);
         const finish = outcome => {
             console.log(`PasteIntoApp: outcome ${outcome} (${state.cold ? 'cold' : 'warm'}, restored ${state.restored})`);
             invocation.return_value(new GLib.Variant('(s)', [outcome]));
         };
         const findWindow = () => global.get_window_actors()
             .map(actor => actor.get_meta_window())
-            .find(candidate => candidate.get_wm_class() === wmClass &&
-                candidate.get_window_type() === Meta.WindowType.NORMAL &&
-                !candidate.get_transient_for());
+            .find(candidate => isMainWindowOf(candidate, wmClass));
         try {
             let win = findWindow();
             const focused = () => global.display.focus_window === win;
@@ -554,10 +617,13 @@ export default class PromptheusExtension extends Extension {
             }
             if (!win)
                 return finish('no_window');
+            step(`window found (${state.cold ? 'cold' : 'warm'})`);
             Main.activateWindow(win);
             if (!await waitFor(focused, PASTE_FOCUS_TIMEOUT_MS))
                 return finish('focus_lost');
+            step('focused');
             await sleep(state.cold ? PASTE_COLD_SETTLE_MS : PASTE_SETTLE_MS);
+            step('settle done');
             const keyboard = Clutter.get_default_backend().get_default_seat()
                 .create_virtual_device(Clutter.InputDeviceType.KEYBOARD_DEVICE);
             let saved = null;
@@ -571,6 +637,7 @@ export default class PromptheusExtension extends Extension {
                     [Clutter.KEY_Control_L, PRESSED], [Clutter.KEY_v, PRESSED],
                     [Clutter.KEY_v, RELEASED], [Clutter.KEY_Control_L, RELEASED],
                 ]);
+                step(`files pasted, Ctrl+V sent (${uris.length} URIs)`);
                 // Fixed delay instead of a read confirmation: Meta.SelectionSourceMemory reports no
                 // read. Claude Desktop reads text/uri-list at Ctrl+V and its message waits for the
                 // uploads (Enter 1.08 s after pasting 4 x 25.5 MB images sent all of them). Upgrade
@@ -582,10 +649,12 @@ export default class PromptheusExtension extends Extension {
             if (!focused())
                 return finish('focus_lost');
             sendKeys(keyboard, [[Clutter.KEY_Return, Clutter.KeyState.PRESSED], [Clutter.KEY_Return, Clutter.KeyState.RELEASED]]);
+            step('Return sent');
             if (saved) {
                 await sleep(PASTE_RESTORE_DELAY_MS);
                 global.display.get_selection().set_owner(clipboard, saved);
                 state.restored = true;
+                step('clipboard restored');
             }
             finish('sent');
         } catch (e) {

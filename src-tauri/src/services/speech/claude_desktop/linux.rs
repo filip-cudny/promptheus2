@@ -1,9 +1,24 @@
 use std::path::PathBuf;
 
-use super::Outcome;
+use super::{Outcome, LOG_TARGET};
 use crate::services::gnome_shell;
 
 const CLAUDE_WM_CLASS: &str = "com.anthropic.Claude";
+const TITLE_WATCH_MS: u32 = 15_000;
+
+pub async fn watch_titles() {
+    if !gnome_shell::is_gnome_wayland() {
+        return;
+    }
+    let result = async {
+        let proxy = gnome_shell::proxy().await?;
+        proxy.watch_app_titles(CLAUDE_WM_CLASS, TITLE_WATCH_MS).await
+    }
+    .await;
+    if let Err(e) = result {
+        log::debug!(target: LOG_TARGET, "title watch not started: {e}");
+    }
+}
 
 pub async fn paste_into_claude(files: &[PathBuf]) -> Outcome {
     if !gnome_shell::is_gnome_wayland() {

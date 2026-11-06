@@ -21,6 +21,8 @@ pub trait Shell {
 
     fn paste_into_app(&self, wm_class: &str, uris: &[&str]) -> zbus::Result<String>;
 
+    fn watch_app_titles(&self, wm_class: &str, duration_ms: u32) -> zbus::Result<()>;
+
     fn capture_area(&self, path: &str) -> zbus::Result<String>;
 
     fn capture_selection(&self) -> zbus::Result<(String, String)>;

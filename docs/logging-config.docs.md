@@ -9,7 +9,8 @@ Configured in `src-tauri/src/setup/log.rs` via `tauri-plugin-log`, identical in 
 - **Targets**: stdout, log file (`LogDir { file_name: None }`), webview console
 - **Global level** (`.level`): `Info`
 - **App crate** (`.level_for("app_lib", ...)`): `Debug`
-- **Timestamps**: local timezone (`TimezoneStrategy::UseLocal`)
+- **Timestamps**: local timezone (`TimezoneStrategy::UseLocal`), with milliseconds
+- **Line format**: `[YYYY-MM-DD][HH:MM:SS.mmm][LEVEL][target] message`, built by `format_line` in `log.rs` from `chrono::Local::now()` and installed with `.format(...)` after `.timezone_strategy(...)` (the strategy's own format has whole seconds and would otherwise win)
 - **Override**: `RUST_LOG` env var, parsed in `log.rs`
 - **Rotation**: not configured, the plugin defaults apply (see "Rotation")
 

@@ -31,6 +31,8 @@ pub mod notification_window;
 pub mod placeholder_registry;
 pub mod hotkeys;
 #[cfg(target_os = "macos")]
+pub(crate) mod macos_ax;
+#[cfg(target_os = "macos")]
 pub mod macos_panel;
 pub mod execution;
 pub mod recent_apps;

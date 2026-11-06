@@ -19,6 +19,7 @@ use tauri::AppHandle;
 use tokio::sync::{mpsc, oneshot};
 
 use super::{Outcome, LOG_TARGET};
+use crate::services::macos_ax::{AXUIElementCreateApplication, Cf};
 
 const CLAUDE_BUNDLE: &str = "com.anthropic.claudefordesktop";
 const FRONTMOST_POLL: Duration = Duration::from_millis(100);
@@ -27,6 +28,8 @@ const SETTLE_WARM: Duration = Duration::from_millis(600);
 const SETTLE_COLD: Duration = Duration::from_millis(4000);
 const READ_TIMEOUT: Duration = Duration::from_secs(3);
 const RESTORE_DELAY: Duration = Duration::from_millis(500);
+const TITLE_WATCH: Duration = Duration::from_secs(15);
+const TITLE_POLL: Duration = Duration::from_millis(25);
 const KEY_V: CGKeyCode = 9;
 const KEY_RETURN: CGKeyCode = 36;
 
@@ -87,6 +90,53 @@ pub fn claude_running() -> bool {
         .runningApplications()
         .iter()
         .any(|app| is_claude(&app))
+}
+
+fn claude_pid() -> Option<i32> {
+    NSWorkspace::sharedWorkspace()
+        .runningApplications()
+        .iter()
+        .find(|app| is_claude(app))
+        .map(|app| app.processIdentifier())
+}
+
+fn focused_title(pid: i32) -> Option<String> {
+    Cf::owned(unsafe { AXUIElementCreateApplication(pid) })?
+        .attribute("AXFocusedWindow")?
+        .string_attribute("AXTitle")
+}
+
+pub fn watch_titles() {
+    tauri::async_runtime::spawn(watch_titles_task());
+}
+
+async fn watch_titles_task() {
+    let start = Instant::now();
+    let running_at_start = claude_running();
+    log::debug!(target: LOG_TARGET, "title watch start (claude running: {running_at_start})");
+    let mut pid = None;
+    let mut last_title: Option<String> = None;
+    while start.elapsed() < TITLE_WATCH {
+        let known = pid;
+        let Ok((found, title)) = tauri::async_runtime::spawn_blocking(move || {
+            let pid = known.or_else(claude_pid);
+            (pid, pid.and_then(focused_title))
+        })
+        .await
+        else {
+            break;
+        };
+        if pid.is_none() && found.is_some() && !running_at_start {
+            log::debug!(target: LOG_TARGET, "Claude process found +{} ms", start.elapsed().as_millis());
+        }
+        pid = found;
+        if title.is_some() && title != last_title {
+            log::debug!(target: LOG_TARGET, "title change +{} ms", start.elapsed().as_millis());
+            last_title = title;
+        }
+        tokio::time::sleep(TITLE_POLL).await;
+    }
+    log::debug!(target: LOG_TARGET, "title watch end");
 }
 
 fn is_claude(app: &objc2_app_kit::NSRunningApplication) -> bool {
@@ -239,7 +289,9 @@ pub async fn paste_into_claude(app: &AppHandle, files: &[PathBuf], warm: bool) -
         return Outcome::NoWindow;
     };
     log::debug!(target: LOG_TARGET, "Claude Desktop frontmost after {} ms", found_after.as_millis());
-    tokio::time::sleep(if warm { SETTLE_WARM } else { SETTLE_COLD }).await;
+    let settle = if warm { SETTLE_WARM } else { SETTLE_COLD };
+    tokio::time::sleep(settle).await;
+    log::debug!(target: LOG_TARGET, "settle {} ms done", settle.as_millis());
 
     let saved = if files.is_empty() {
         None

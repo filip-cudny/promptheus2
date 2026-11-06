@@ -5,7 +5,7 @@ pub(crate) mod macos;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use base64::Engine;
 use tauri::{AppHandle, Manager};
@@ -159,21 +159,37 @@ async fn prepare_files(
         .map_err(|e| e.to_string())?
 }
 
-async fn paste(app: &AppHandle, files: &[PathBuf], warm: bool) -> Outcome {
+async fn paste(app: &AppHandle, run: u64, files: &[PathBuf], warm: bool) -> Outcome {
     #[cfg(target_os = "linux")]
     {
         let _ = (app, warm);
-        linux::paste_into_claude(files).await
+        log::debug!(target: LOG_TARGET, "run={run}: PasteIntoApp requested");
+        let requested = Instant::now();
+        let outcome = linux::paste_into_claude(files).await;
+        log::debug!(
+            target: LOG_TARGET,
+            "run={run}: PasteIntoApp replied in {} ms",
+            requested.elapsed().as_millis(),
+        );
+        outcome
     }
     #[cfg(target_os = "macos")]
     {
+        let _ = run;
         macos::paste_into_claude(app, files, warm).await
     }
     #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
-        let _ = (app, files, warm);
+        let _ = (app, run, files, warm);
         Outcome::Failed("unsupported platform".into())
     }
+}
+
+async fn start_title_watch() {
+    #[cfg(target_os = "linux")]
+    linux::watch_titles().await;
+    #[cfg(target_os = "macos")]
+    macos::watch_titles();
 }
 
 fn is_warm() -> Option<bool> {
@@ -214,12 +230,22 @@ pub async fn deliver(app: AppHandle, transcript: String) {
                 (Outcome::Failed("writing files failed".into()), 0)
             }
             Ok(files) => {
+                start_title_watch().await;
+                log::debug!(target: LOG_TARGET, "run={run}: title watch started");
+                let opening = Instant::now();
                 let outcome = match app.opener().open_url(link(&q), None::<&str>) {
                     Err(e) => {
                         log::warn!(target: LOG_TARGET, "run={run}: opening the link failed: {e}");
                         Outcome::Failed("opening the link failed".into())
                     }
-                    Ok(()) => paste(&app, &files, warm.unwrap_or(false)).await,
+                    Ok(()) => {
+                        log::debug!(
+                            target: LOG_TARGET,
+                            "run={run}: link opened in {} ms",
+                            opening.elapsed().as_millis(),
+                        );
+                        paste(&app, run, &files, warm.unwrap_or(false)).await
+                    }
                 };
                 (outcome, files.len())
             }
