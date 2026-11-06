@@ -327,6 +327,7 @@ impl ConversationExecutor {
                     let new_messages = build_tool_loop_messages(
                         &result.pending_tool_calls,
                         &result.full_text,
+                        &result.reasoning_items,
                         &tool_results,
                     );
 

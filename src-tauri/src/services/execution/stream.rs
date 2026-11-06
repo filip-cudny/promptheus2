@@ -41,6 +41,7 @@ pub async fn run_stream_loop(
     let mut prompt_tokens: Option<usize> = None;
     let mut completion_tokens: Option<usize> = None;
     let mut pending_tool_calls: Vec<PendingToolCall> = Vec::new();
+    let mut reasoning_items: Vec<serde_json::Value> = Vec::new();
     let mut cancel_rx = cancel_rx;
 
     loop {
@@ -68,6 +69,11 @@ pub async fn run_stream_loop(
                 if let Some(usage) = chunk.usage {
                     prompt_tokens = Some(usage.prompt_tokens);
                     completion_tokens = Some(usage.completion_tokens);
+                }
+
+                if let Some(item) = chunk.reasoning_item {
+                    reasoning_items.push(item);
+                    continue;
                 }
 
                 if let Some(tool_event) = chunk.tool_call_event {
@@ -178,6 +184,7 @@ pub async fn run_stream_loop(
         prompt_tokens,
         completion_tokens,
         pending_tool_calls,
+        reasoning_items,
     })
 }
 
@@ -246,6 +253,7 @@ pub async fn execute_tool_calls(
 pub fn build_tool_loop_messages(
     pending: &[PendingToolCall],
     accumulated_text: &str,
+    reasoning_items: &[serde_json::Value],
     results: &[ToolExecutionResult],
 ) -> Vec<ProcessedMessage> {
     let mut messages = Vec::with_capacity(1 + results.len());
@@ -267,6 +275,7 @@ pub fn build_tool_loop_messages(
         content: MessageContent::Text(accumulated_text.to_string()),
         tool_calls: Some(tool_calls),
         tool_call_id: None,
+        reasoning_items: (!reasoning_items.is_empty()).then(|| reasoning_items.to_vec()),
     });
 
     for r in results {
@@ -275,6 +284,7 @@ pub fn build_tool_loop_messages(
             content: MessageContent::Text(r.result_text.clone()),
             tool_calls: None,
             tool_call_id: Some(r.tool_call_id.clone()),
+            reasoning_items: None,
         });
     }
 
@@ -344,6 +354,7 @@ mod tests {
             accumulated_thinking: None,
             usage: None,
             tool_call_event: None,
+            reasoning_item: None,
         }
     }
 
@@ -469,6 +480,42 @@ mod tests {
         let live = live.lock().await;
         assert!(!live.snapshot.finished);
         assert_eq!(live.snapshot.tool_calls[0].arguments, serde_json::json!({"q": 1}));
+    }
+
+    fn reasoning_item() -> serde_json::Value {
+        serde_json::json!({"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc"})
+    }
+
+    #[tokio::test]
+    async fn stream_loop_collects_reasoning_items_without_events() {
+        let (live, events) = recording_live();
+        let stream = stream_of(vec![Ok(StreamChunk::reasoning_item("", reasoning_item()))]);
+
+        let result = run_stream_loop(stream, live, None, "").await.unwrap();
+
+        assert_eq!(result.reasoning_items, vec![reasoning_item()]);
+        assert_eq!(event_names(&events), ["done"]);
+    }
+
+    #[test]
+    fn tool_loop_messages_carry_reasoning_items_on_the_assistant_message_only() {
+        let pending = vec![PendingToolCall {
+            tool_call_id: "c1".to_string(),
+            tool_name: "lookup".to_string(),
+            arguments: serde_json::json!({}),
+        }];
+        let results = vec![ToolExecutionResult {
+            tool_call_id: "c1".to_string(),
+            result_text: "ok".to_string(),
+            is_error: false,
+        }];
+
+        let messages = build_tool_loop_messages(&pending, "", &[reasoning_item()], &results);
+        let without = build_tool_loop_messages(&pending, "", &[], &results);
+
+        assert_eq!(messages[0].reasoning_items, Some(vec![reasoning_item()]));
+        assert_eq!(messages[1].reasoning_items, None);
+        assert_eq!(without[0].reasoning_items, None);
     }
 
     #[tokio::test]

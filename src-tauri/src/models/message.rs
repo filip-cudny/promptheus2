@@ -41,6 +41,8 @@ pub struct ProcessedMessage {
     pub tool_calls: Option<Vec<ToolCallPayload>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
+    #[serde(skip)]
+    pub reasoning_items: Option<Vec<serde_json::Value>>,
 }
 
 impl ProcessedMessage {
@@ -58,6 +60,7 @@ impl ProcessedMessage {
             content,
             tool_calls: None,
             tool_call_id: None,
+            reasoning_items: None,
         }
     }
 }
@@ -158,6 +161,7 @@ mod tests {
                 },
             }]),
             tool_call_id: None,
+            reasoning_items: None,
         };
         let value = serde_json::to_value(&msg).unwrap();
         assert_eq!(
@@ -186,6 +190,7 @@ mod tests {
             content: MessageContent::Text("72°F, partly cloudy".into()),
             tool_calls: None,
             tool_call_id: Some("call_123".into()),
+            reasoning_items: None,
         };
         let value = serde_json::to_value(&msg).unwrap();
         assert_eq!(
@@ -204,6 +209,14 @@ mod tests {
         let value = serde_json::to_value(&msg).unwrap();
         assert!(value.get("tool_calls").is_none());
         assert!(value.get("tool_call_id").is_none());
+    }
+
+    #[test]
+    fn reasoning_items_are_never_serialized() {
+        let mut msg = ProcessedMessage::text("assistant", "");
+        msg.reasoning_items = Some(vec![json!({"type": "reasoning", "id": "rs_1"})]);
+        let value = serde_json::to_value(&msg).unwrap();
+        assert!(value.get("reasoning_items").is_none());
     }
 
     #[test]

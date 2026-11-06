@@ -24,6 +24,7 @@ pub struct StreamChunk {
     pub accumulated_thinking: Option<String>,
     pub usage: Option<TokenUsage>,
     pub tool_call_event: Option<ToolCallEvent>,
+    pub reasoning_item: Option<serde_json::Value>,
 }
 
 impl StreamChunk {
@@ -41,12 +42,20 @@ impl StreamChunk {
                 .then(|| accumulated_thinking.to_string()),
             usage: None,
             tool_call_event: None,
+            reasoning_item: None,
         }
     }
 
     pub fn tool_call(accumulated: &str, event: ToolCallEvent) -> Self {
         Self {
             tool_call_event: Some(event),
+            ..Self::content(String::new(), accumulated, None, "")
+        }
+    }
+
+    pub fn reasoning_item(accumulated: &str, item: serde_json::Value) -> Self {
+        Self {
+            reasoning_item: Some(item),
             ..Self::content(String::new(), accumulated, None, "")
         }
     }

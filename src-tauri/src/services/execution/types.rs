@@ -10,6 +10,7 @@ pub struct StreamResult {
     pub prompt_tokens: Option<usize>,
     pub completion_tokens: Option<usize>,
     pub pending_tool_calls: Vec<PendingToolCall>,
+    pub reasoning_items: Vec<serde_json::Value>,
 }
 
 pub struct ToolExecutionResult {

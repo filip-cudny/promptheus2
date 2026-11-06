@@ -21,10 +21,14 @@ pub fn encode_responses_capabilities(
     params: &ModelParameters,
     out: &mut Map<String, Value>,
 ) {
+    if !matches!(caps.reasoning, ReasoningMode::Effort { .. }) {
+        return;
+    }
+    out.insert("include".into(), serde_json::json!(["reasoning.encrypted_content"]));
     let Some(value) = params.reasoning_effort.as_deref() else {
         return;
     };
-    if !matches!(caps.reasoning, ReasoningMode::Effort { .. }) || !caps.accepts_effort(value) {
+    if !caps.accepts_effort(value) {
         return;
     }
     let mut reasoning = serde_json::json!({ "effort": value });
@@ -130,7 +134,22 @@ mod tests {
             &params_with_effort("xhigh"),
             &mut out,
         );
-        assert!(out.is_empty());
+        assert!(out.get("reasoning").is_none());
+    }
+
+    #[test]
+    fn responses_includes_encrypted_reasoning_for_effort_models_without_effort() {
+        let mut out = Map::new();
+        encode_responses_capabilities(
+            &caps_effort(vec![Effort::Medium]),
+            &ModelParameters::default(),
+            &mut out,
+        );
+        assert_eq!(
+            out.get("include"),
+            Some(&serde_json::json!(["reasoning.encrypted_content"]))
+        );
+        assert!(out.get("reasoning").is_none());
     }
 
     #[test]

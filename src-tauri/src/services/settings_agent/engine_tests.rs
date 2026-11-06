@@ -332,3 +332,32 @@ async fn chat_reasoning_effort_never_reaches_the_request() {
     two.run.outcome.as_ref().unwrap();
     assert!(only_request(&two.chat_requests)["parameters"]["reasoning_effort"].is_null());
 }
+
+#[tokio::test]
+async fn reasoning_item_of_a_tool_round_goes_back_on_the_assistant_message() {
+    let item = json!({"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc"});
+    let script = vec![
+        MockReply::ReasoningThenToolCalls {
+            reasoning_item: item.clone(),
+            calls: vec![("c1".into(), "settings_read".into(), json!({}))],
+        },
+        MockReply::Text("done".into()),
+    ];
+
+    let run = run(Some("env-model"), script).await;
+
+    run.outcome.as_ref().unwrap();
+    let requests = run.requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    let second: Value = serde_json::from_str(&requests[1]).unwrap();
+    let with_items: Vec<&Value> = second["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|m| m.get("reasoning_items").is_some())
+        .collect();
+    assert_eq!(with_items.len(), 1);
+    assert_eq!(with_items[0]["role"], "assistant");
+    assert_eq!(with_items[0]["reasoning_items"], json!([item]));
+    assert!(with_items[0]["tool_calls"].is_array());
+}

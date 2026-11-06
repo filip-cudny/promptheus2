@@ -46,21 +46,20 @@ fn to_responses_messages(msg: &ProcessedMessage) -> Vec<serde_json::Value> {
         }
     }
 
-    let mut results = Vec::new();
-
     if let Some(ref tool_calls) = msg.tool_calls {
-        for tc in tool_calls {
-            results.push(serde_json::json!({
-                "type": "function_call",
-                "call_id": tc.id,
-                "name": tc.function.name,
-                "arguments": tc.function.arguments,
+        if !tool_calls.is_empty() {
+            let mut results: Vec<serde_json::Value> =
+                msg.reasoning_items.iter().flatten().cloned().collect();
+            results.extend(tool_calls.iter().map(|tc| {
+                serde_json::json!({
+                    "type": "function_call",
+                    "call_id": tc.id,
+                    "name": tc.function.name,
+                    "arguments": tc.function.arguments,
+                })
             }));
+            return results;
         }
-    }
-
-    if !results.is_empty() {
-        return results;
     }
 
     let content = match &msg.content {
@@ -176,7 +175,7 @@ struct ResponseEvent {
     #[serde(default)]
     response: Option<ResponseWrapper>,
     #[serde(default)]
-    item: Option<OutputItemEvent>,
+    item: Option<serde_json::Value>,
     #[serde(default)]
     item_id: Option<String>,
     #[serde(default)]
@@ -279,6 +278,11 @@ impl StreamState {
             .push_back(StreamChunk::tool_call(&self.accumulated, event));
     }
 
+    fn push_reasoning_item(&mut self, item: serde_json::Value) {
+        self.pending_chunks
+            .push_back(StreamChunk::reasoning_item(&self.accumulated, item));
+    }
+
     fn resolve_call_id(&self, raw_id: String) -> String {
         self.item_id_to_call_id.get(&raw_id).cloned().unwrap_or(raw_id)
     }
@@ -308,6 +312,12 @@ impl StreamState {
     }
 }
 
+fn parse_output_item(raw: serde_json::Value) -> Option<OutputItemEvent> {
+    serde_json::from_value(raw)
+        .map_err(|e| log::warn!("responses: failed to parse output item: {e}"))
+        .ok()
+}
+
 fn process_event(state: &mut StreamState, event: ResponseEvent) {
     log::trace!("responses: event_type={}", event.event_type);
 
@@ -330,7 +340,9 @@ fn process_event(state: &mut StreamState, event: ResponseEvent) {
             state.push_content(delta, None);
         }
         "response.output_item.added" => {
-            let Some(item) = event.item else { return };
+            let Some(item) = event.item.and_then(parse_output_item) else {
+                return;
+            };
             match item.item_type.as_deref() {
                 Some("web_search_call") => {
                     let tool_call_id = item.id.unwrap_or_default();
@@ -371,7 +383,15 @@ fn process_event(state: &mut StreamState, event: ResponseEvent) {
             state.complete_function_call(call_id, event.name, event.arguments);
         }
         "response.output_item.done" => {
-            let Some(item) = event.item else { return };
+            let Some(raw) = event.item else { return };
+            if raw.get("type").and_then(|t| t.as_str()) == Some("reasoning") {
+                log::trace!("responses: reasoning item done");
+                state.push_reasoning_item(raw);
+                return;
+            }
+            let Some(item) = parse_output_item(raw) else {
+                return;
+            };
             match item.item_type.as_deref() {
                 Some("web_search_call") => {
                     let tool_call_id = item.id.unwrap_or_default();
@@ -651,6 +671,100 @@ mod tests {
             vec!["started:ws_1:web_search", r#"done:ws_1:Some("a\nb"):None"#]
         );
         assert_eq!(chunks[0].accumulated, "{{tool_call:ws_1}}");
+    }
+
+    #[tokio::test]
+    async fn reasoning_item_done_is_emitted_whole_beside_a_function_call() {
+        let chunks = run(&[
+            r#"{"type":"response.output_item.done","item":{"type":"reasoning","id":"rs_1","summary":[],"encrypted_content":"enc"}}"#,
+            ADDED_1,
+            r#"{"type":"response.output_item.done","item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{}"}}"#,
+        ])
+        .await;
+
+        let items: Vec<_> = chunks.iter().filter_map(|c| c.reasoning_item.as_ref()).collect();
+        assert_eq!(items, vec![&reasoning_item()]);
+        assert_eq!(
+            tool_events(&chunks),
+            vec!["started:call_1:lookup", "complete:call_1:lookup:{}"]
+        );
+    }
+
+    fn reasoning_item() -> serde_json::Value {
+        serde_json::json!({"type": "reasoning", "id": "rs_1", "summary": [], "encrypted_content": "enc"})
+    }
+
+    fn tool_call_payload(id: &str) -> crate::models::message::ToolCallPayload {
+        crate::models::message::ToolCallPayload {
+            id: id.into(),
+            call_type: "function".into(),
+            function: crate::models::message::ToolCallFunction {
+                name: "lookup".into(),
+                arguments: "{}".into(),
+            },
+        }
+    }
+
+    fn request_with(
+        messages: Vec<ProcessedMessage>,
+        capabilities: crate::models::capabilities::ModelCapabilities,
+    ) -> CompletionRequest {
+        CompletionRequest {
+            model: "m".into(),
+            messages,
+            parameters: Default::default(),
+            tool_payloads: vec![],
+            capabilities,
+        }
+    }
+
+    fn assistant_tool_call_message() -> ProcessedMessage {
+        ProcessedMessage {
+            tool_calls: Some(vec![tool_call_payload("call_1")]),
+            reasoning_items: Some(vec![reasoning_item()]),
+            ..ProcessedMessage::text("assistant", "")
+        }
+    }
+
+    #[test]
+    fn request_puts_reasoning_item_right_before_its_function_call() {
+        use crate::models::capabilities::{Effort, ModelCapabilities, ReasoningMode};
+
+        let capabilities = ModelCapabilities {
+            reasoning: ReasoningMode::Effort { allowed: vec![Effort::Medium] },
+        };
+        let request = request_with(
+            vec![
+                ProcessedMessage::text("user", "hi"),
+                assistant_tool_call_message(),
+                ProcessedMessage {
+                    tool_call_id: Some("call_1".into()),
+                    ..ProcessedMessage::text("tool", "ok")
+                },
+            ],
+            capabilities,
+        );
+
+        let body = build_request_body(&request, true, false);
+
+        let input = body["input"].as_array().unwrap();
+        assert_eq!(input.len(), 4);
+        assert_eq!(input[1], reasoning_item());
+        assert_eq!(input[2]["type"], "function_call");
+        assert_eq!(input[2]["call_id"], "call_1");
+        assert_eq!(body["include"], serde_json::json!(["reasoning.encrypted_content"]));
+    }
+
+    #[test]
+    fn request_has_no_include_without_effort_capability() {
+        let request = request_with(
+            vec![assistant_tool_call_message()],
+            crate::models::capabilities::ModelCapabilities::minimal(),
+        );
+
+        let body = build_request_body(&request, true, false);
+
+        assert!(body.get("include").is_none());
     }
 
     #[tokio::test]

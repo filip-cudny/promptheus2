@@ -301,7 +301,12 @@ async fn tool_loop(
         else {
             return Err(fail(live, "Cancelled".into()).await);
         };
-        messages.extend(build_tool_loop_messages(&result.pending_tool_calls, &result.full_text, &results));
+        messages.extend(build_tool_loop_messages(
+            &result.pending_tool_calls,
+            &result.full_text,
+            &result.reasoning_items,
+            &results,
+        ));
     }
     unreachable!("the loop returns at its last iteration")
 }
