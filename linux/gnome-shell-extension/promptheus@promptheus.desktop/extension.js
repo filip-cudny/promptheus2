@@ -448,13 +448,14 @@ export default class PromptheusExtension extends Extension {
                 .find(candidate => isMainWindowOf(candidate, wmClass));
             if (!win)
                 return finish('absent');
-            if (!win.minimized)
+            if (!win.minimized && global.display.focus_window === win)
                 return finish('shown');
+            const cause = win.minimized ? 'minimized' : 'unfocused';
             const startUs = GLib.get_monotonic_time();
             Main.activateWindow(win);
             const restored = await waitFor(
                 () => !win.minimized && global.display.focus_window === win, RESTORE_TIMEOUT_MS);
-            console.log(`RestoreAppWindow: minimized, restore wait ${elapsedMsSince(startUs)} ms`);
+            console.log(`RestoreAppWindow: ${cause}, restore wait ${elapsedMsSince(startUs)} ms`);
             finish(restored ? 'restored' : 'restore_timeout');
         } catch (e) {
             logError(e, 'Promptheus: RestoreAppWindow failed');
