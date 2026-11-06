@@ -7,32 +7,33 @@
   import TextInput from "$lib/components/shared/ui/TextInput.svelte";
   import { onSettingsChanged } from "$lib/services/events";
   import { applyEnvVarOperation, getEnvVars } from "$lib/services/settings";
-  import { getSettingsStore } from "$lib/stores/settings.svelte";
   import type { EnvVarOperation, EnvVarStatus } from "$lib/types";
+  import { groupByKind } from "$lib/utils/envVarOptions";
   import SettingsSection from "./SettingsSection.svelte";
   import SecretField from "./SecretField.svelte";
+
+  type Kind = "secrets" | "variables";
 
   const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
   const NAME_ERROR = "Use letters, digits and underscores; the first character is not a digit.";
   const ROW_PREFIX = /^row \d+: /;
 
-  const store = getSettingsStore();
-
   let vars = $state<EnvVarStatus[]>([]);
   let loaded = $state(false);
-  let drafts = $state<Record<string, string>>({});
   let errors = $state<Record<string, string>>({});
   let valueFor = $state<string | null>(null);
-  let renaming = $state<string | null>(null);
-  let renameText = $state("");
+  let editing = $state<string | null>(null);
+  let editName = $state("");
+  let editDescription = $state("");
   let confirmingDelete = $state<string | null>(null);
 
-  let newName = $state("");
-  let newDescription = $state("");
-  let newSecret = $state(true);
-  let addError = $state<string | null>(null);
+  let adds = $state<Record<Kind, { name: string; description: string; error: string | null }>>({
+    secrets: { name: "", description: "", error: null },
+    variables: { name: "", description: "", error: null },
+  });
 
-  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  const groups = $derived(groupByKind(vars));
+
   let unlisten: (() => void) | null = null;
 
   async function refresh() {
@@ -54,109 +55,96 @@
     return null;
   }
 
-  function descriptionOf(v: EnvVarStatus): string {
-    return drafts[v.name] ?? v.description;
-  }
-
-  async function saveRow(name: string, secret?: boolean): Promise<boolean> {
-    clearTimeout(timers.get(name));
-    timers.delete(name);
-    const v = vars.find((x) => x.name === name);
-    if (!v) return false;
-    delete errors[name];
-    const description = drafts[name] ?? v.description;
-    const error = await apply({
-      op: "update_env_var",
-      name,
-      description,
-      secret: secret ?? v.secret,
-    });
-    if (error) {
-      errors[name] = error;
-      return false;
-    }
-    if (drafts[name] === description) delete drafts[name];
-    return true;
-  }
-
-  function editDescription(v: EnvVarStatus, text: string) {
-    drafts[v.name] = text;
-    clearTimeout(timers.get(v.name));
-    timers.set(
-      v.name,
-      setTimeout(() => void saveRow(v.name), store.settings?.autosave_debounce_ms ?? 1000),
-    );
-  }
-
-  async function toggleSecret(v: EnvVarStatus, input: HTMLInputElement) {
-    if (!(await saveRow(v.name, input.checked))) input.checked = v.secret;
-  }
-
-  async function flushPending() {
-    for (const name of [...timers.keys()]) await saveRow(name);
-  }
-
-  async function add() {
-    const name = newName.trim();
-    addError = null;
+  async function add(kind: Kind) {
+    const form = adds[kind];
+    const name = form.name.trim();
+    form.error = null;
     if (!NAME_PATTERN.test(name)) {
-      addError = NAME_ERROR;
+      form.error = NAME_ERROR;
       return;
     }
     const error = await apply({
       op: "add_env_var",
       name,
-      description: newDescription,
-      secret: newSecret,
+      description: form.description,
+      secret: kind === "secrets",
     });
     if (error) {
-      addError = error;
+      form.error = error;
       return;
     }
-    newName = "";
-    newDescription = "";
+    form.name = "";
+    form.description = "";
     valueFor = name;
   }
 
-  function startRename(v: EnvVarStatus) {
+  function startEdit(v: EnvVarStatus) {
     delete errors[v.name];
-    renaming = v.name;
-    renameText = v.name;
+    editing = v.name;
+    editName = v.name;
+    editDescription = v.description;
   }
 
-  async function rename(v: EnvVarStatus) {
-    const newNameValue = renameText.trim();
-    if (newNameValue === v.name) {
-      renaming = null;
-      return;
-    }
-    if (!NAME_PATTERN.test(newNameValue)) {
+  function cancelEdit(v: EnvVarStatus) {
+    editing = null;
+    delete errors[v.name];
+  }
+
+  async function save(v: EnvVarStatus) {
+    const newName = editName.trim();
+    const nameChanged = newName !== v.name;
+    delete errors[v.name];
+    if (nameChanged && !NAME_PATTERN.test(newName)) {
       errors[v.name] = NAME_ERROR;
       return;
     }
-    if (timers.has(v.name) && !(await saveRow(v.name))) return;
+    if (editDescription !== v.description) {
+      const error = await apply({
+        op: "update_env_var",
+        name: v.name,
+        description: editDescription,
+        secret: v.secret,
+      });
+      if (error) {
+        errors[v.name] = error;
+        return;
+      }
+    }
+    if (nameChanged) {
+      const error = await apply({ op: "rename_env_var", name: v.name, new_name: newName });
+      if (error) {
+        errors[v.name] = error;
+        return;
+      }
+      if (valueFor === v.name) valueFor = null;
+    }
+    editing = null;
+  }
+
+  async function move(v: EnvVarStatus) {
     delete errors[v.name];
-    const error = await apply({ op: "rename_env_var", name: v.name, new_name: newNameValue });
+    const error = await apply({
+      op: "update_env_var",
+      name: v.name,
+      description: v.description,
+      secret: !v.secret,
+    });
     if (error) {
       errors[v.name] = error;
       return;
     }
-    renaming = null;
-    if (valueFor === v.name) valueFor = null;
+    editing = null;
   }
 
-  function onRenameKeydown(e: KeyboardEvent, v: EnvVarStatus) {
-    if (e.key === "Enter") void rename(v);
+  function onEditKeydown(e: KeyboardEvent, v: EnvVarStatus) {
+    if (e.key === "Enter") void save(v);
     else if (e.key === "Escape") {
       e.stopPropagation();
-      renaming = null;
-      delete errors[v.name];
+      cancelEdit(v);
     }
   }
 
   async function remove(v: EnvVarStatus) {
-    clearTimeout(timers.get(v.name));
-    timers.delete(v.name);
     delete errors[v.name];
     const error = await apply({ op: "delete_env_var", name: v.name });
     confirmingDelete = null;
@@ -177,108 +165,107 @@
   onDestroy(() => {
     window.removeEventListener("focus", refresh);
     unlisten?.();
-    void flushPending();
   });
 </script>
 
+{#snippet row(v: EnvVarStatus)}
+  <div class="row">
+    <div class="head">
+      <code class="name">{v.name}</code>
+      <span class="state" class:ok={v.set} class:missing={!v.set}>
+        {#if v.set}<Check size={ICON_SIZE.sm} />{:else}<AlertCircle size={ICON_SIZE.sm} />{/if}
+        {v.set ? "set" : "missing"}
+      </span>
+      <span class="spacer"></span>
+      <Button onclick={() => (valueFor = valueFor === v.name ? null : v.name)}>
+        {v.set ? "Change value" : "Set value"}
+      </Button>
+      <Button onclick={() => startEdit(v)}>Edit</Button>
+      {#if confirmingDelete === v.name}
+        <span class="confirm-text">Delete <strong>{v.name}</strong>?</span>
+        <Button onclick={() => (confirmingDelete = null)}>Cancel</Button>
+        <Button variant="danger" onclick={() => remove(v)}>Yes, delete</Button>
+      {:else}
+        <Button variant="danger" onclick={() => (confirmingDelete = v.name)}>Delete</Button>
+      {/if}
+    </div>
+
+    {#if editing === v.name}
+      <div class="edit">
+        <TextInput
+          bind:value={editName}
+          placeholder="NAME"
+          aria-label="Name of {v.name}"
+          error={Boolean(errors[v.name])}
+          onkeydown={(e: KeyboardEvent) => onEditKeydown(e, v)}
+        />
+        <TextInput
+          bind:value={editDescription}
+          placeholder="Description"
+          aria-label="Description of {v.name}"
+          onkeydown={(e: KeyboardEvent) => onEditKeydown(e, v)}
+        />
+        <div class="actions">
+          <Button variant="primary" onclick={() => save(v)}>Save</Button>
+          <Button onclick={() => cancelEdit(v)}>Cancel</Button>
+          <span class="spacer"></span>
+          <Button onclick={() => move(v)}>
+            {v.secret ? "Move to Variables" : "Move to Secrets"}
+          </Button>
+        </div>
+      </div>
+    {/if}
+
+    {#if v.description}<p class="description">{v.description}</p>{/if}
+
+    <p class="uses">
+      {v.used_in.length > 0 ? `Used in: ${v.used_in.map((u) => u.label).join(", ")}` : "not used"}
+    </p>
+
+    {#if errors[v.name]}<p class="error">{errors[v.name]}</p>{/if}
+
+    {#if valueFor === v.name}
+      <SecretField name={v.name} exists={v.set} masked={v.secret} onclose={closeValue} />
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet card(kind: Kind, title: string, items: EnvVarStatus[], emptyText: string)}
+  <section class="card">
+    <h3>{title}</h3>
+    {#if loaded && items.length === 0}
+      <p class="muted">{emptyText}</p>
+    {/if}
+    {#each items as v (v.name)}
+      {@render row(v)}
+    {/each}
+    <div class="add">
+      <TextInput
+        bind:value={adds[kind].name}
+        placeholder="NAME"
+        aria-label="{title} name"
+        error={Boolean(adds[kind].error)}
+        onkeydown={(e: KeyboardEvent) => e.key === "Enter" && add(kind)}
+      />
+      <TextInput
+        bind:value={adds[kind].description}
+        placeholder="Description"
+        aria-label="{title} description"
+        onkeydown={(e: KeyboardEvent) => e.key === "Enter" && add(kind)}
+      />
+      <Button variant="primary" onclick={() => add(kind)}>Add</Button>
+    </div>
+    {#if adds[kind].error}<p class="error">{adds[kind].error}</p>{/if}
+  </section>
+{/snippet}
+
 <SettingsSection
   title="Environment"
-  hint={"Variables referenced as ${NAME} in models and MCP servers. Names and descriptions sync; values stay on this machine."}
+  hint="Pick these in models and MCP servers. Names and descriptions sync; values stay on this machine."
 >
   {#snippet body()}
-    <section class="card">
-      <h3>Variables</h3>
-      {#if loaded && vars.length === 0}
-        <p class="muted">No variables yet.</p>
-      {/if}
-      {#each vars as v (v.name)}
-        <div class="row">
-          <div class="head">
-            {#if renaming === v.name}
-              <TextInput
-                bind:value={renameText}
-                aria-label="New name"
-                error={Boolean(errors[v.name])}
-                onkeydown={(e: KeyboardEvent) => onRenameKeydown(e, v)}
-              />
-              <Button variant="primary" onclick={() => rename(v)}>Rename</Button>
-              <Button onclick={() => (renaming = null)}>Cancel</Button>
-            {:else}
-              <code class="name">{v.name}</code>
-              {#if v.secret}<span class="marker">secret</span>{/if}
-              <span class="state" class:ok={v.set} class:missing={!v.set}>
-                {#if v.set}<Check size={ICON_SIZE.sm} />{:else}<AlertCircle size={ICON_SIZE.sm} />{/if}
-                {v.set ? "set" : "missing"}
-              </span>
-              <span class="spacer"></span>
-              <Button onclick={() => (valueFor = valueFor === v.name ? null : v.name)}>
-                {v.set ? "Change value" : "Set value"}
-              </Button>
-              <Button onclick={() => startRename(v)}>Rename</Button>
-              {#if confirmingDelete === v.name}
-                <span class="confirm-text">Delete <strong>{v.name}</strong>?</span>
-                <Button onclick={() => (confirmingDelete = null)}>Cancel</Button>
-                <Button variant="danger" onclick={() => remove(v)}>Yes, delete</Button>
-              {:else}
-                <Button variant="danger" onclick={() => (confirmingDelete = v.name)}>Delete</Button>
-              {/if}
-            {/if}
-          </div>
-
-          <div class="edit">
-            <TextInput
-              value={descriptionOf(v)}
-              placeholder="Description"
-              aria-label="Description of {v.name}"
-              oninput={(e: Event) => editDescription(v, (e.target as HTMLInputElement).value)}
-            />
-            <label class="check">
-              <input
-                type="checkbox"
-                checked={v.secret}
-                onchange={(e) => toggleSecret(v, e.currentTarget)}
-              />
-              Secret
-            </label>
-          </div>
-
-          <p class="uses">
-            {v.used_in.length > 0 ? v.used_in.map((u) => u.label).join(", ") : "not used"}
-          </p>
-
-          {#if errors[v.name]}<p class="error">{errors[v.name]}</p>{/if}
-
-          {#if valueFor === v.name}
-            <SecretField name={v.name} exists={v.set} masked={v.secret} onclose={closeValue} />
-          {/if}
-        </div>
-      {/each}
-    </section>
-
-    <section class="card">
-      <h3>Add variable</h3>
-      <div class="add">
-        <TextInput
-          bind:value={newName}
-          placeholder="NAME"
-          aria-label="Variable name"
-          error={Boolean(addError)}
-          onkeydown={(e: KeyboardEvent) => e.key === "Enter" && add()}
-        />
-        <TextInput
-          bind:value={newDescription}
-          placeholder="Description"
-          aria-label="Variable description"
-          onkeydown={(e: KeyboardEvent) => e.key === "Enter" && add()}
-        />
-        <label class="check">
-          <input type="checkbox" bind:checked={newSecret} />
-          Secret
-        </label>
-        <Button variant="primary" onclick={add}>Add</Button>
-      </div>
-      {#if addError}<p class="error">{addError}</p>{/if}
-    </section>
+    {@render card("secrets", "Secrets", groups.secrets, "No secrets.")}
+    {@render card("variables", "Variables", groups.variables, "No variables.")}
   {/snippet}
 </SettingsSection>
 
@@ -318,15 +305,19 @@
   }
 
   .head,
-  .edit,
+  .actions,
   .add {
     display: flex;
     align-items: center;
     gap: var(--space-3);
   }
 
-  .head :global(.text-input),
-  .edit :global(.text-input),
+  .edit {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
   .add :global(.text-input) {
     flex: 1;
     min-width: 0;
@@ -340,14 +331,6 @@
     font-family: var(--font-mono);
     font-size: var(--font-size-md);
     color: var(--text-primary);
-  }
-
-  .marker {
-    font-size: var(--font-size-xs);
-    color: var(--text-secondary);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-md);
-    padding: var(--space-1) var(--space-2);
   }
 
   .state {
@@ -370,15 +353,7 @@
     color: var(--text-primary);
   }
 
-  .check {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--font-size-md);
-    color: var(--text-primary);
-    white-space: nowrap;
-  }
-
+  .description,
   .uses,
   .muted {
     margin: var(--space-0);
