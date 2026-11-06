@@ -68,6 +68,10 @@ impl Session {
         self.generation += 1;
     }
 
+    fn is_cancelled(&self) -> bool {
+        self.cancel.as_ref().is_some_and(|cancel| *cancel.borrow())
+    }
+
     pub fn resolve_secret(&mut self, request_id: &str, answer: SecretAnswer) -> bool {
         self.pending_secrets
             .remove(request_id)
@@ -94,7 +98,13 @@ struct SessionSink {
 
 impl ProposalSink for SessionSink {
     fn proposed(&self, proposal: &Proposal) {
-        lock(&self.session).proposal = Some(proposal.clone());
+        {
+            let mut s = lock(&self.session);
+            if s.is_cancelled() {
+                return;
+            }
+            s.proposal = Some(proposal.clone());
+        }
         let settings = (self.settings)();
         let current = Current { settings: &settings, config_dir: &self.config_dir };
         self.emit.emit(PROPOSAL_EVENT, proposal_payload(proposal, &current));
@@ -106,7 +116,13 @@ impl SecretPrompt for SessionSink {
     async fn ask(&self, name: &str, purpose: &str) -> SecretAnswer {
         let request_id = uuid::Uuid::new_v4().simple().to_string();
         let (sender, receiver) = oneshot::channel();
-        lock(&self.session).pending_secrets.insert(request_id.clone(), sender);
+        {
+            let mut s = lock(&self.session);
+            if s.is_cancelled() {
+                return SecretAnswer::Cancelled;
+            }
+            s.pending_secrets.insert(request_id.clone(), sender);
+        }
         let exists = secrets::current_value(&self.config_dir, name).is_some();
         self.emit.emit(
             SECRET_REQUEST_EVENT,
@@ -252,7 +268,11 @@ async fn tool_loop(
         }
         prefix.clone_from(&result.full_text);
         live.lock().await.snapshot.finished = false;
-        let results = dispatch_all(&dispatcher, &result.pending_tool_calls, live).await;
+        let Some(results) =
+            dispatch_all(&dispatcher, &result.pending_tool_calls, live, &cancel_rx).await
+        else {
+            return Err(fail(live, "Cancelled".into()).await);
+        };
         messages.extend(build_tool_loop_messages(&result.pending_tool_calls, &result.full_text, &results));
     }
     unreachable!("the loop returns at its last iteration")
@@ -262,9 +282,13 @@ async fn dispatch_all(
     dispatcher: &Dispatcher,
     pending: &[PendingToolCall],
     live: &Arc<TokioMutex<LiveExecution>>,
-) -> Vec<crate::services::execution::types::ToolExecutionResult> {
+    cancel_rx: &watch::Receiver<bool>,
+) -> Option<Vec<crate::services::execution::types::ToolExecutionResult>> {
     let mut results = Vec::with_capacity(pending.len());
     for call in pending {
+        if *cancel_rx.borrow() {
+            return None;
+        }
         let result = dispatcher.dispatch(call).await;
         let (output, error) = if result.is_error {
             (None, Some(result.result_text.clone()))
@@ -274,7 +298,7 @@ async fn dispatch_all(
         live.lock().await.finish_tool_call(result.tool_call_id.clone(), output, error);
         results.push(result);
     }
-    results
+    Some(results)
 }
 
 pub async fn run_turn(

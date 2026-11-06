@@ -142,7 +142,11 @@ async fn apply(
     let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
     let current = Current { settings: &settings, config_dir: &config_dir };
     let planned = plan(&proposal.operations, &selected, &current).map_err(|e| describe(&e))?;
-    let stale = stale_rows(&planned, &current);
+    let selected_rows: Vec<usize> = planned.rows.iter().map(|r| r.row).collect();
+    let stale: Vec<usize> = stale_rows(&proposal.plan, &current)
+        .into_iter()
+        .filter(|row| selected_rows.contains(row))
+        .collect();
     if !stale.is_empty() {
         return Ok(ApplyResult::Stale { stale_rows: stale });
     }
