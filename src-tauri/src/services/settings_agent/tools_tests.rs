@@ -158,3 +158,14 @@ fn only_read_and_secret_carry_the_strict_marker() {
         assert_eq!(marked, tool.name == "settings_read" || tool.name == "settings_secret", "{}", tool.name);
     }
 }
+
+#[test]
+fn secret_tool_and_system_prompt_offer_showing_and_changing_a_current_value() {
+    let tool = definitions().into_iter().find(|tool| tool.name == "settings_secret").unwrap();
+    let description = tool.description.unwrap();
+    let prompt = include_str!("system_prompt.md");
+    for text in [description.as_ref(), prompt] {
+        assert!(text.contains("see or change the current value"), "{text}");
+        assert!(text.contains("toggle that reveals it"), "{text}");
+    }
+}

@@ -321,7 +321,7 @@ pub fn definitions() -> Vec<Tool> {
         ),
         strict(tool(
             SECRET,
-            "Asks the user to enter a secret (API key, token) for the environment variable `name`, which must first be listed with `add_env_var` in an applied proposal. The app shows a masked input and the value never reaches you. It returns the outcome: saved, cancelled, or exists (the variable already has a value and the user closed without saving). Reference the variable as ${NAME} in operations.",
+            "Shows the user a masked input for the secret (API key, token) of the environment variable `name`, which must first be listed with `add_env_var` in an applied proposal. Call it to ask for a value, and also when the user wants to see or change the current value of a listed variable: when the variable has a value, the app shows the user the current value masked, with a toggle that reveals it, and the user may replace it. The value is shown only to the user and never reaches you. It returns the outcome: saved, cancelled, or exists (the variable already has a value and the user closed without saving). Reference the variable as ${NAME} in operations.",
             json!({
                 "type": "object",
                 "properties": {
