@@ -7,6 +7,7 @@
   import NumberInput from "$lib/components/shared/ui/NumberInput.svelte";
   import SelectDropdown from "$lib/components/shared/ui/SelectDropdown.svelte";
   import Button from "$lib/components/shared/ui/Button.svelte";
+  import ChangeHistory from "./ChangeHistory.svelte";
   import ConfirmDialog from "$lib/components/shared/ui/ConfirmDialog.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { updateHistoryRetention } from "$lib/services/settings";
@@ -211,6 +212,8 @@
         {/if}
       </div>
     </div>
+
+    <ChangeHistory />
   {/snippet}
 </SettingsSection>
 

@@ -231,6 +231,10 @@ Save flow goes through `$lib/services/prompts.ts` → backend `save_prompt` Taur
 
 `navigateTo(key)` of `getSettingsNavigation()` (`$lib/stores/settingsNavigation.svelte.ts`) is the single entry point for jumps, also for the settings agent's links. `key` is a catalog or concrete path (`models[<id>].api_key`, `mcp_servers.<name>.env`). It switches `activeSection` (owned by that store), sets `selectedItem` when the concrete path names a list item (`SectionModels` and `SectionMcpServers` select it), scrolls `setting-<catalog path>` into view and sets `highlighted` for 2000 ms; `SettingField` draws an accent outline while its catalog path matches.
 
+### Change history
+
+`ChangeHistory` is a card at the bottom of `SectionHistory`: the settings agent's change-log entries of all hosts, newest first (`listChangeLog` in `$lib/services/changeLog.ts`). Each entry shows a title (`entryTitle` in `$lib/utils/changeLog.ts`: row labels for a card, `Secret <name>`, `Undo of <time of the undone entry>`), local time, host, kind, the request, and a state badge `applied` / `undone`. Expanding it shows each row's effects as before → after (file effects as a line diff) and test results; a secret entry shows only the variable name. Undo calls `undoChange(id, false)`: `conflicts` shows an inline list of targets with current vs expected value and "Undo anyway" (`force: true`); `skipped` shows "Secret backup is on <host>"; `undone` reloads the list. The list reloads on mount, on `change-log-changed` and on window focus.
+
 ### Window registration reminders
 
 The settings dialog is a separate Tauri window. When adding new windows nearby (e.g., a sub-dialog), register the HTML entry in `vite.config.ts` `rollupOptions.input` AND the label in `src-tauri/capabilities/default.json`: `"windows"` for windows, `"webviews"` for child webviews (`conversation-dialog`, `shell-toolbar`). See [project root CLAUDE.md](../../../../../CLAUDE.md). Prefer not to spawn child dialogs from settings — inline confirms cover all current cases.
