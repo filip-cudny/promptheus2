@@ -76,6 +76,7 @@ pub async fn settings_agent_send(
         ai_factory: Arc::new(|settings| AiService::new(&settings.models)),
         placeholders: placeholders(&app).await,
         emit: Arc::new(TauriEmit(app.clone())),
+        transcript_dir: app.path().app_data_dir()?.join("settings-agent-turns"),
     };
     let (live, _cancel) = PromptExecutionService::new().start_live(
         &uuid::Uuid::new_v4().to_string(),

@@ -15,6 +15,7 @@ use crate::services::config::catalog::{CatalogEntry, ENTRIES};
 use crate::services::config::{ConfigError, ConfigService, SurfaceKind};
 use crate::services::history_events::emit_history_changed;
 use crate::services::missing_env::{collect_missing, env_is_set, MissingEnvRef};
+use crate::services::settings_agent::transcript;
 use crate::services::skill::SkillService;
 use crate::services::sqlite_history::SqliteHistoryService;
 
@@ -302,6 +303,7 @@ pub async fn update_history_retention(
     );
 
     prune_change_log(&app, days);
+    prune_settings_agent_transcripts(&app, days);
 
     if pruned > 0 {
         emit_history_changed(&app, None, None)?;
@@ -327,6 +329,22 @@ fn prune_change_log(app: &AppHandle, days: u32) {
     });
     if pruned > 0 {
         log::info!("change log retention: pruned {} entries older than {} days", pruned, days);
+    }
+}
+
+fn prune_settings_agent_transcripts(app: &AppHandle, days: u32) {
+    let app_data_dir = match app.path().app_data_dir() {
+        Ok(dir) => dir,
+        Err(e) => {
+            log::warn!("settings agent transcripts retention: app data dir unavailable: {e}");
+            return;
+        }
+    };
+    let pruned = tokio::task::block_in_place(|| {
+        transcript::prune(&app_data_dir.join("settings-agent-turns"), days, chrono::Utc::now())
+    });
+    if pruned > 0 {
+        log::info!("settings agent transcripts: pruned {} older than {} days", pruned, days);
     }
 }
 

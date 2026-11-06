@@ -1,6 +1,6 @@
 # Settings agent
 
-Proposes changes to the app settings; the user applies them. Files: `tools.rs` (tool definitions), `dispatch.rs` (`Dispatcher`, redaction of every tool result), `plan.rs`/`apply.rs`/`testing.rs` (plan, write, test rows), `engine.rs` (session and tool loop), `system_prompt.md`. Commands: `commands/settings_agent.rs`.
+Proposes changes to the app settings; the user applies them. Files: `tools.rs` (tool definitions), `dispatch.rs` (`Dispatcher`, redaction of every tool result), `plan.rs`/`apply.rs`/`testing.rs` (plan, write, test rows), `engine.rs` (session and tool loop), `transcript.rs` (per-turn transcript file), `system_prompt.md`. Commands: `commands/settings_agent.rs`.
 
 ## Tools
 
@@ -34,6 +34,14 @@ Argument errors are per row: `dispatch::parse_operations` parses `operations` as
 ## Session
 
 One `Session` (`Arc<std::sync::Mutex<Session>>`, managed in `setup/state.rs`, never locked across an await): messages, `last_request`, `last_reply`, the current `proposal`, pending secret prompts, the cancel sender. In memory only: `settings_agent_reset` and the `Destroyed` event of the `settings-dialog` window (`services/dialog.rs`) reset it, resolve pending prompts as `cancelled` and cancel a running turn (a generation counter keeps a cancelled turn from writing back). One turn at a time. Each applied card keeps request and reply in its change-log entry.
+
+## Transcript
+
+Every turn leaves one JSON file in `<app_data_dir>/settings-agent-turns/` (`transcript.rs`; the dir of `history.db`, local, never synced; `EngineContext::transcript_dir`), named `<UTC YYYYMMDDTHHMMSSZ of the turn start>-<8 hex of a v4 uuid>.json`; the stem is the turn `id`. `run_turn` writes it once when the turn ends, on every end: reply, error (also before any request, and from inside `run_stream_loop`), cancel, loop limit. A write failure logs `warn` and does not change the outcome; `debug` logs the id and path, never content. The app log carries no user text, model text, tool arguments or results; the transcript is where they live.
+
+Format (snake_case): `id`, `started_at`, `finished_at` (RFC 3339 UTC), `model_id` (null when none was found), `parameters` (the merged `ModelParameters` sent), `user_text`, `iterations: [{started_at, millis, text, thinking, reasoning_items, tool_calls: [{id, name, arguments, result, error, millis}]}]`, `end: {kind: "reply" | "error" | "cancelled" | "loop_limit", reply?, error?}`. An iteration is one provider request: `millis` is request start to end of stream, `text` is that round's own text (without the earlier rounds' prefix), `reasoning_items` a count (content is not stored). A tool call's `result` or `error` is the dispatched `result_text` (already through `Redactor`); calls not run at the loop limit carry the not-run text as `error`. A round cancelled during its request has no iteration. The end `error` passes `Redactor::new(config_dir, settings).redact` before it is stored; `user_text`, `arguments` and model text are stored as they are.
+
+Pruning: `transcript::prune(dir, retention_days, now)` deletes files whose `started_at` is older than `history_retention_days` (0 deletes nothing; an unreadable file is skipped with `warn`). It runs at startup (`setup/state.rs`) and in `update_history_retention`, next to the change log prune.
 
 ## Events and commands
 

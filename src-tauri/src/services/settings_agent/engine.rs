@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::time::Instant;
 
 use async_trait::async_trait;
+use chrono::Utc;
 use serde_json::{json, Value};
 use tokio::sync::{oneshot, watch, Mutex as TokioMutex};
 
@@ -23,6 +25,7 @@ use super::dispatch::{Context, Dispatcher, Proposal, ProposalSink, SecretAnswer,
 use super::operations::Operation;
 use super::plan::{plan, stale_rows, Current, RowError};
 use super::tools;
+use super::transcript::{self, End, Iteration, ToolCallRecord, Transcript};
 
 pub const PROPOSAL_EVENT: &str = "settings-agent-proposal";
 pub const SECRET_REQUEST_EVENT: &str = "settings-agent-secret-request";
@@ -90,6 +93,7 @@ pub struct EngineContext {
     pub ai_factory: Arc<dyn Fn(&Settings) -> AiService + Send + Sync>,
     pub placeholders: PlaceholderContext,
     pub emit: Arc<dyn Emit>,
+    pub transcript_dir: PathBuf,
 }
 
 struct SessionSink {
@@ -237,6 +241,7 @@ async fn tool_loop(
     ctx: &EngineContext,
     live: &Arc<TokioMutex<LiveExecution>>,
     cancel_rx: watch::Receiver<bool>,
+    transcript: &mut Transcript,
 ) -> crate::Result<String> {
     let sink = Arc::new(SessionSink {
         session: Arc::clone(session),
@@ -256,13 +261,15 @@ async fn tool_loop(
         secrets: sink,
     });
     let settings = (ctx.settings)();
-    let model_id = agent_model(&settings, &ctx.ai, live).await?;
     let parameters = settings
         .surfaces
         .chat
         .generation
         .parameters
         .merged_with(&settings.surfaces.settings_agent.generation.parameters);
+    transcript.parameters = parameters.clone();
+    let model_id = agent_model(&settings, &ctx.ai, live).await?;
+    transcript.model_id = Some(model_id.clone());
     log::debug!("settings agent turn starts on model '{model_id}'");
 
     let mut prefix = String::new();
@@ -271,6 +278,8 @@ async fn tool_loop(
         if *cancel_rx.borrow() {
             return Err(fail(live, "Cancelled".into()).await);
         }
+        let round_started = Instant::now();
+        let round_started_at = Utc::now();
         let stream = match ctx
             .ai
             .complete_stream(
@@ -286,7 +295,16 @@ async fn tool_loop(
             Err(e) => return Err(fail(live, e.to_string()).await),
         };
         let result = run_stream_loop(stream, Arc::clone(live), Some(cancel_rx.clone()), &prefix).await?;
+        let mut round = Iteration {
+            started_at: transcript::timestamp(round_started_at),
+            millis: elapsed_millis(round_started),
+            text: result.full_text.strip_prefix(prefix.as_str()).unwrap_or(&result.full_text).to_string(),
+            thinking: result.full_thinking.clone(),
+            reasoning_items: result.reasoning_items.len(),
+            tool_calls: Vec::new(),
+        };
         if result.pending_tool_calls.is_empty() {
+            transcript.iterations.push(round);
             if !result.full_text.is_empty() {
                 messages.push(ProcessedMessage::text("assistant", result.full_text.clone()));
             }
@@ -294,13 +312,24 @@ async fn tool_loop(
         }
         if iteration == MAX_TOOL_LOOP_ITERATIONS {
             log::warn!("settings agent tool loop reached {MAX_TOOL_LOOP_ITERATIONS} iterations");
-            return Err(stop_at_limit(live, &result.pending_tool_calls, last_tool_error).await);
+            let error = stop_at_limit(live, &result.pending_tool_calls, last_tool_error).await;
+            round.tool_calls = result.pending_tool_calls.iter().map(not_run_record).collect();
+            transcript.iterations.push(round);
+            transcript.end = Some(End::LoopLimit { error: error.to_string() });
+            return Err(error);
         }
         prefix.clone_from(&result.full_text);
         live.lock().await.snapshot.finished = false;
-        let Some(results) =
-            dispatch_all(&dispatcher, &result.pending_tool_calls, live, &cancel_rx).await
-        else {
+        let dispatched = dispatch_all(
+            &dispatcher,
+            &result.pending_tool_calls,
+            live,
+            &cancel_rx,
+            &mut round.tool_calls,
+        )
+        .await;
+        transcript.iterations.push(round);
+        let Some(results) = dispatched else {
             return Err(fail(live, "Cancelled".into()).await);
         };
         if let Some(error) = results.iter().rev().find_map(tool_error) {
@@ -325,12 +354,31 @@ fn tool_error(result: &ToolExecutionResult) -> Option<String> {
     Some(format!("row {}: {}", last["row"], last["message"].as_str().unwrap_or_default()))
 }
 
+fn not_run_text() -> String {
+    format!("not run: the agent reached the limit of {MAX_TOOL_LOOP_ITERATIONS} tool rounds")
+}
+
+fn not_run_record(call: &PendingToolCall) -> ToolCallRecord {
+    ToolCallRecord {
+        id: call.tool_call_id.clone(),
+        name: call.tool_name.clone(),
+        arguments: call.arguments.clone(),
+        result: None,
+        error: Some(not_run_text()),
+        millis: 0,
+    }
+}
+
+fn elapsed_millis(since: Instant) -> u64 {
+    u64::try_from(since.elapsed().as_millis()).unwrap_or(u64::MAX)
+}
+
 async fn stop_at_limit(
     live: &Arc<TokioMutex<LiveExecution>>,
     pending: &[PendingToolCall],
     last_tool_error: Option<String>,
 ) -> Error {
-    let not_run = format!("not run: the agent reached the limit of {MAX_TOOL_LOOP_ITERATIONS} tool rounds");
+    let not_run = not_run_text();
     {
         let mut live = live.lock().await;
         for call in pending {
@@ -349,13 +397,23 @@ async fn dispatch_all(
     pending: &[PendingToolCall],
     live: &Arc<TokioMutex<LiveExecution>>,
     cancel_rx: &watch::Receiver<bool>,
+    records: &mut Vec<ToolCallRecord>,
 ) -> Option<Vec<ToolExecutionResult>> {
     let mut results = Vec::with_capacity(pending.len());
     for call in pending {
         if *cancel_rx.borrow() {
             return None;
         }
+        let started = Instant::now();
         let result = dispatcher.dispatch(call).await;
+        records.push(ToolCallRecord {
+            id: call.tool_call_id.clone(),
+            name: call.tool_name.clone(),
+            arguments: call.arguments.clone(),
+            result: (!result.is_error).then(|| result.result_text.clone()),
+            error: result.is_error.then(|| result.result_text.clone()),
+            millis: elapsed_millis(started),
+        });
         let (output, error) = if result.is_error {
             (None, Some(result.result_text.clone()))
         } else {
@@ -367,6 +425,25 @@ async fn dispatch_all(
     Some(results)
 }
 
+fn end_of(outcome: &crate::Result<String>) -> End {
+    match outcome {
+        Ok(reply) => End::Reply { reply: reply.clone() },
+        Err(Error::Other(message)) if message == "Cancelled" => End::Cancelled,
+        Err(e) => End::Error { error: e.to_string() },
+    }
+}
+
+fn save_transcript(ctx: &EngineContext, mut transcript: Transcript, outcome: &crate::Result<String>) {
+    let end = transcript.end.take().unwrap_or_else(|| end_of(outcome));
+    let settings = (ctx.settings)();
+    let redactor = secrets::Redactor::new(&ctx.config_dir, &settings);
+    transcript.finish(end, Utc::now(), |text| redactor.redact(text));
+    match transcript::write(&ctx.transcript_dir, &transcript) {
+        Ok(path) => log::debug!("settings agent turn {} saved to {}", transcript.id, path.display()),
+        Err(e) => log::warn!("settings agent turn {}: cannot save the transcript: {e}", transcript.id),
+    }
+}
+
 pub async fn run_turn(
     session: &SharedSession,
     user_text: &str,
@@ -375,7 +452,9 @@ pub async fn run_turn(
 ) -> crate::Result<()> {
     let (mut messages, generation, cancel_rx) = begin(session, user_text)?;
     log::info!("settings agent turn started");
-    let outcome = tool_loop(&mut messages, session, &ctx, &live, cancel_rx).await;
+    let mut transcript = Transcript::start(user_text, Utc::now());
+    let outcome = tool_loop(&mut messages, session, &ctx, &live, cancel_rx, &mut transcript).await;
+    save_transcript(&ctx, transcript, &outcome);
     let mut s = lock(session);
     s.cancel = None;
     if s.generation == generation {

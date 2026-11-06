@@ -21,3 +21,6 @@ mod engine_tests;
 pub mod change_log_read;
 #[cfg(test)]
 mod change_log_read_tests;
+pub mod transcript;
+#[cfg(test)]
+mod transcript_tests;

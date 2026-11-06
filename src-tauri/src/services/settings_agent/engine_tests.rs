@@ -57,12 +57,15 @@ struct SavingFrontend {
     session: SharedSession,
     config_dir: PathBuf,
     events: Mutex<Vec<(String, Value)>>,
+    cancel_on_secret_request: bool,
 }
 
 impl Emit for SavingFrontend {
     fn emit(&self, event: &str, payload: Value) {
         self.events.lock().unwrap().push((event.to_string(), payload.clone()));
-        if event == SECRET_REQUEST_EVENT {
+        if event == SECRET_REQUEST_EVENT && self.cancel_on_secret_request {
+            lock(&self.session).cancel();
+        } else if event == SECRET_REQUEST_EVENT {
             let name = payload["name"].as_str().unwrap();
             crate::services::secrets::save_secret(&self.config_dir, "host", name, "sk-new-444").unwrap();
             let id = payload["request_id"].as_str().unwrap();
@@ -109,6 +112,15 @@ async fn run(chat_model: Option<&str>, script: Vec<MockReply>) -> Run {
 }
 
 async fn run_with(settings: Settings, ai: AiService, requests: Arc<Mutex<Vec<String>>>) -> Run {
+    run_configured(settings, ai, requests, false).await
+}
+
+async fn run_configured(
+    settings: Settings,
+    ai: AiService,
+    requests: Arc<Mutex<Vec<String>>>,
+    cancel_on_secret_request: bool,
+) -> Run {
     let dir = TempDir::new().unwrap();
     std::fs::write(dir.path().join(".env"), "OPENAI_KEY=sk-env-111\n").unwrap();
     std::fs::write(dir.path().join("settings.json"), serde_json::to_string_pretty(&settings).unwrap()).unwrap();
@@ -119,6 +131,7 @@ async fn run_with(settings: Settings, ai: AiService, requests: Arc<Mutex<Vec<Str
         session: session.clone(),
         config_dir: dir.path().to_path_buf(),
         events: Mutex::default(),
+        cancel_on_secret_request,
     });
     let ctx = EngineContext {
         settings: Arc::new(move || settings.clone()),
@@ -135,6 +148,7 @@ async fn run_with(settings: Settings, ai: AiService, requests: Arc<Mutex<Vec<Str
         }),
         placeholders: PlaceholderContext::with_apps("app", "apps"),
         emit: frontend.clone(),
+        transcript_dir: dir.path().join("settings-agent-turns"),
     };
     let live = Arc::new(TokioMutex::new(LiveExecution {
         snapshot: ExecutionSnapshot {
@@ -156,6 +170,16 @@ async fn run_with(settings: Settings, ai: AiService, requests: Arc<Mutex<Vec<Str
     Run { dir, session, frontend, requests, live, outcome }
 }
 
+fn only_transcript(run: &Run) -> (String, Value) {
+    let dir = run.dir.path().join("settings-agent-turns");
+    let mut files: Vec<_> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().path()).collect();
+    assert_eq!(files.len(), 1);
+    let path = files.remove(0);
+    let text = std::fs::read_to_string(path).unwrap();
+    let value = serde_json::from_str(&text).unwrap();
+    (text, value)
+}
+
 fn env_file(run: &Run) -> String {
     std::fs::read_to_string(run.dir.path().join(".env")).unwrap()
 }
@@ -173,6 +197,85 @@ async fn no_secret_reaches_any_provider_request() {
     }
     assert!(requests[4].contains("[redacted]"), "provider error of the update row is redacted");
     assert!(env_file(&run).contains("NEW_KEY=\"sk-new-444\"") || env_file(&run).contains("NEW_KEY=sk-new-444"));
+    let (transcript, _) = only_transcript(&run);
+    for secret in SECRETS {
+        assert!(!transcript.contains(secret), "{secret} leaked in the transcript");
+    }
+}
+
+#[tokio::test]
+async fn provider_error_echoing_a_key_is_redacted_in_the_transcript() {
+    let error = AiError::ApiStatus { status: 401, message: "Incorrect API key provided: sk-env-111".into() };
+
+    let run = run(Some("env-model"), vec![MockReply::Error(error)]).await;
+
+    assert!(run.outcome.is_err());
+    let (text, transcript) = only_transcript(&run);
+    assert!(!text.contains("sk-env-111"), "{text}");
+    assert_eq!(transcript["end"]["kind"], "error");
+    assert!(transcript["end"]["error"].as_str().unwrap().contains("[redacted]"), "{text}");
+}
+
+#[tokio::test]
+async fn successful_turn_writes_a_transcript_with_every_tool_call() {
+    let run = run(Some("env-model"), scripted_turns()).await;
+
+    run.outcome.as_ref().unwrap();
+    let (_, transcript) = only_transcript(&run);
+    assert_eq!(transcript["end"]["kind"], "reply");
+    assert_eq!(transcript["end"]["reply"], "Proposed two changes.");
+    assert_eq!(transcript["model_id"], "env-model");
+    assert_eq!(transcript["user_text"], "add a model with a new key");
+    let iterations = transcript["iterations"].as_array().unwrap();
+    assert_eq!(iterations.len(), 5);
+    let names: Vec<&str> = iterations
+        .iter()
+        .flat_map(|i| i["tool_calls"].as_array().unwrap())
+        .map(|c| c["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["settings_read", "settings_read", "settings_secret", "settings_propose_changes"]);
+    let first = &iterations[0]["tool_calls"][0];
+    assert_eq!(first["id"], "c1");
+    assert_eq!(first["arguments"], json!({"what": "values"}));
+    assert!(first["result"].as_str().is_some());
+    assert!(first["error"].is_null());
+    assert_eq!(iterations[4]["text"], "Proposed two changes.");
+    assert_eq!(iterations[4]["tool_calls"], json!([]));
+}
+
+#[tokio::test]
+async fn provider_error_on_the_first_request_writes_an_error_transcript() {
+    let error = AiError::ApiStatus { status: 500, message: "boom".into() };
+
+    let run = run(Some("env-model"), vec![MockReply::Error(error)]).await;
+
+    assert!(run.outcome.is_err());
+    let (_, transcript) = only_transcript(&run);
+    assert_eq!(transcript["end"]["kind"], "error");
+    assert!(transcript["end"]["error"].as_str().unwrap().contains("boom"));
+    assert_eq!(transcript["iterations"], json!([]));
+}
+
+#[tokio::test]
+async fn missing_model_writes_an_error_transcript_with_a_null_model() {
+    let run = run(None, vec![MockReply::Text("never".into())]).await;
+
+    let (_, transcript) = only_transcript(&run);
+    assert_eq!(transcript["end"]["kind"], "error");
+    assert!(transcript["model_id"].is_null());
+}
+
+#[tokio::test]
+async fn cancelling_during_a_turn_writes_a_cancelled_transcript() {
+    let (provider, requests) = MockProvider::new(scripted_turns());
+    let ai = AiService::with_provider("env-model", Box::new(provider));
+
+    let run = run_configured(fixture_settings(Some("env-model")), ai, requests, true).await;
+
+    assert!(run.outcome.is_err());
+    let (_, transcript) = only_transcript(&run);
+    assert_eq!(transcript["end"]["kind"], "cancelled");
+    assert!(transcript["end"].get("error").is_none());
 }
 
 #[tokio::test]
@@ -386,4 +489,23 @@ async fn reaching_the_tool_round_limit_ends_the_turn_with_the_last_tool_error() 
         last.error.as_deref(),
         Some("not run: the agent reached the limit of 10 tool rounds")
     );
+}
+
+#[tokio::test]
+async fn reaching_the_tool_round_limit_writes_a_loop_limit_transcript() {
+    let bad_row = json!({"operations": [{"op": "delete_model", "id": "ghost-id"}]});
+    let script = (0..=MAX_TOOL_LOOP_ITERATIONS)
+        .map(|n| call(&format!("c{n}"), "settings_propose_changes", bad_row.clone()))
+        .collect();
+
+    let run = run(Some("env-model"), script).await;
+
+    let (_, transcript) = only_transcript(&run);
+    assert_eq!(transcript["end"]["kind"], "loop_limit");
+    assert!(transcript["end"]["error"].as_str().unwrap().contains("Stopped after 10 tool rounds"));
+    let iterations = transcript["iterations"].as_array().unwrap();
+    assert_eq!(iterations.len(), MAX_TOOL_LOOP_ITERATIONS + 1);
+    let last = &iterations[MAX_TOOL_LOOP_ITERATIONS]["tool_calls"][0];
+    assert_eq!(last["error"], "not run: the agent reached the limit of 10 tool rounds");
+    assert!(last["result"].is_null());
 }

@@ -18,6 +18,7 @@ use crate::services::menu_coordinator::MenuCoordinator;
 use crate::services::notification::NotificationService;
 use crate::services::recent_apps::RecentAppsState;
 use crate::services::settings_agent::engine::SharedSession;
+use crate::services::settings_agent::transcript;
 use crate::services::settings_sync::SettingsSync;
 use crate::services::shell_env::get_shell_env;
 use crate::services::skill::SkillService;
@@ -81,6 +82,18 @@ pub fn manage(
         log::info!(
             "change log retention: pruned {} entries older than {} days",
             change_log_pruned,
+            retention_days
+        );
+    }
+    let transcripts_pruned = transcript::prune(
+        &app_data_dir.join("settings-agent-turns"),
+        retention_days,
+        chrono::Utc::now(),
+    );
+    if transcripts_pruned > 0 {
+        log::info!(
+            "settings agent transcripts: pruned {} older than {} days",
+            transcripts_pruned,
             retention_days
         );
     }
