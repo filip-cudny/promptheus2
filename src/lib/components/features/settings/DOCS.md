@@ -49,7 +49,7 @@ The "Ask agent" row (lucide `Sparkles`, no accent colour) directly under the sea
 
 Layout depends only on the width of `.dialog-body` (a CSS container named `settings-body`; `.with-panel` while the panel is open), not on the panel mode:
 
-- At least 1340 px (sidebar 220 + content 740 + panel 380): sidebar | content (`flex: 0 1 1040px`) | panel (`flex: 1 1 380px`, `min-width: 380px`) in one row, so no empty band is left between a width-limited editor and the panel.
+- At least 1340 px (sidebar 220 + content 740 + panel 380): sidebar | content (`flex: 0 1 var(--column-width)`, 1040 px) | panel (`flex: 1 1 380px`, `min-width: 380px`) in one row, so no empty band is left between a width-limited editor and the panel.
 - Narrower: the panel overlays the content's right edge at 380 px.
 
 `settings_agent_panel(open)` still returns a mode (`widened` or `overlay`) that drives only the window widening; the UI does not read it:
@@ -209,6 +209,8 @@ A `PromptEditor` or `SttKeytermsEditor` inside a fixed-height wrapper (Chat 280p
 ### Section shells & tabbed prompts
 
 `SettingsSection.svelte` is a shared scaffold every section can use: optional title + hint header (with a thin `--border-faint` divider) and a scrollable padded body. Use it for sections that have a "page" feel (`SectionPromptBase`, `SectionChat`, `SectionSpeech`); the models section keeps its own list+editor split layout but should still match `SettingsSection`'s padding rhythm where possible.
+
+Content column: every section sits in one column of the same width, `--column-width` (1040 px), centered in `.content`, so the column's left edge does not move between sections and on a wide window the free width is split evenly left and right. Inside the column each section keeps its own form widths, left-aligned; never center a section by its own width. `SettingsContent` defines `--column-gutter` (`max(0px, (100% - var(--column-width)) / 2)`, a percentage, so it resolves against the containing block where it is used and is correct only on an element whose containing block spans the whole `.content` width). Applied as `.head` `margin-inline` (the header divider spans the column, not the window) and added to `.body` `padding-inline` in `SettingsSection`, and in `SectionModels` as the model list's `margin-left` and the editor pane's `padding-right`. The scroll containers (`.body`, the models editor pane) keep the full width, so their scrollbar stays at the right edge of the content area; only the Skills editor pane, a scroller inside `.body`, has it at the column's right edge. With the agent panel beside the content (`.with-panel`, at least 1340 px) `.content` is at most `--column-width` wide, so the gutter is 0; with the panel overlaid the column stays centered under it.
 
 `SectionPromptBase` uses a tab strip in the section header — only one `PromptEditor` is mounted at a time and fills the available height. This replaces the old "stacked card-soup" layout where every prompt rendered a full-bordered card stacked vertically. Tabs are uppercase-tracked labels, active tab uses a 2px bottom border in `--accent` (mirrors the sidebar's left-border marker, single-accent rule).
 

@@ -57,11 +57,13 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    --column-width: 1040px;
+    --column-gutter: max(0px, (100% - var(--column-width)) / 2);
   }
 
   @container settings-body (min-width: 1340px) {
     :global(.with-panel) .content {
-      flex: 0 1 1040px;
+      flex: 0 1 var(--column-width);
     }
   }
 
