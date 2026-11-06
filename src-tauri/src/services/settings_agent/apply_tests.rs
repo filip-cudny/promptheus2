@@ -217,6 +217,24 @@ fn a_stale_row_fails_apply_and_writes_nothing() {
     assert!(log_files(dir.path()).is_empty());
 }
 
+#[test]
+fn a_model_field_plan_applies_to_that_model_only() {
+    let (dir, mut config) = setup();
+    let planned = make_plan(&[set_setting("models[abc].store", json!(false))], &config, dir.path());
+
+    run_apply(&planned, &mut config, dir.path()).unwrap();
+
+    let written: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.path().join("settings.json")).unwrap()).unwrap();
+    let stores: Vec<(&str, &Value)> = written["models"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|m| (m["id"].as_str().unwrap(), &m["store"]))
+        .collect();
+    assert_eq!(stores, vec![("abc", &json!(false)), ("def", &json!(true)), ("stt1", &json!(true))]);
+}
+
 fn every_operation() -> Vec<Operation> {
     vec![
         set_setting("theme", json!("light")),

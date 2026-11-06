@@ -557,6 +557,74 @@ fn set_setting_cannot_touch_env_vars() {
 }
 
 #[test]
+fn set_setting_changes_one_field_of_a_model() {
+    let (settings, dir) = (fixture_settings(), config_dir());
+
+    let planned = plan_all(&[set_setting("models[abc].store", json!(false))], &settings, &dir).unwrap();
+
+    assert_eq!(effects_of(&planned).len(), 1);
+    let effect = setting_effect(&planned, "models[abc].store");
+    assert_eq!((effect.before.clone(), effect.after.clone()), (Some(json!(true)), Some(json!(false))));
+    assert!(!planned.settings.models[0].store);
+    assert!(planned.settings.models[1].store);
+}
+
+#[test]
+fn set_setting_on_a_missing_model_or_web_provider_fails_with_not_found() {
+    let (settings, dir) = (fixture_settings(), config_dir());
+    let ops = vec![
+        set_setting("models[nope].store", json!(false)),
+        set_setting("webview_providers[nope].name", json!("N")),
+    ];
+
+    let errors = plan_all(&ops, &settings, &dir).unwrap_err();
+
+    assert_eq!(errors[0].key.as_deref(), Some("models[nope].store"));
+    assert!(errors[0].message.contains("model 'nope' not found"), "{}", errors[0].message);
+    assert!(errors[1].message.contains("web provider 'nope' not found"), "{}", errors[1].message);
+}
+
+#[test]
+fn set_setting_model_api_key_takes_only_an_env_reference() {
+    let (settings, dir) = (fixture_settings(), config_dir());
+    let literal = plan_all(&[set_setting("models[abc].api_key", json!("sk-x"))], &settings, &dir).unwrap_err();
+    let number = plan_all(&[set_setting("models[abc].api_key", json!(5))], &settings, &dir).unwrap_err();
+
+    assert!(literal[0].message.contains("secrets only through the secret element"), "{}", literal[0].message);
+    assert_eq!(number[0].key.as_deref(), Some("models[abc].api_key"));
+
+    let planned = plan_all(&[set_setting("models[abc].api_key", json!("${NEW_KEY}"))], &settings, &dir).unwrap();
+    assert_eq!(planned.settings.models[0].api_key.as_deref(), Some("${NEW_KEY}"));
+}
+
+#[test]
+fn set_setting_refuses_list_item_ids_and_other_managed_lists() {
+    let (settings, dir) = (fixture_settings(), config_dir());
+    let ops = vec![
+        set_setting("models[abc].id", json!("renamed")),
+        set_setting("webview_providers[claude].id", json!("renamed")),
+        set_setting("mcp_servers.tools.command", json!("other")),
+        set_setting("keymaps[x].bindings", json!({})),
+    ];
+
+    let errors = plan_all(&ops, &settings, &dir).unwrap_err();
+
+    assert_eq!(errors.iter().map(|e| e.row).collect::<Vec<_>>(), vec![0, 1, 2, 3]);
+    assert!(errors.iter().all(|e| e.message.contains("not a settable catalog key")));
+}
+
+#[test]
+fn set_setting_changes_the_name_of_a_web_provider() {
+    let (settings, dir) = (fixture_settings(), config_dir());
+
+    let planned =
+        plan_all(&[set_setting("webview_providers[claude].name", json!("Claude web"))], &settings, &dir).unwrap();
+
+    assert_eq!(planned.settings.webview_providers[0].name, "Claude web");
+    setting_effect(&planned, "webview_providers[claude].name");
+}
+
+#[test]
 fn add_then_update_env_var_leaves_the_new_description_and_flag() {
     let (settings, dir) = (fixture_settings(), config_dir());
     let ops = vec![

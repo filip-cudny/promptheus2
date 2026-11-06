@@ -304,15 +304,49 @@ fn delete_env_var(state: &mut State, name: &str) -> Result<(), Fail> {
     set_env_vars(state, vars)
 }
 
+fn is_live_list_item_key(key: &str, top: &str) -> bool {
+    let catalog_key = catalog::catalog_path(key);
+    matches!(top, "models" | "webview_providers")
+        && catalog::ENTRIES
+            .iter()
+            .any(|entry| entry.key == catalog_key && entry.applies == catalog::Applies::Live)
+}
+
+fn check_list_item_setting(settings: &Settings, key: &str, value: &Value) -> Result<(), Fail> {
+    let segments = parse_path(key);
+    let Some(Segment::Item(id)) = segments.get(1) else {
+        return Err(Fail::at(key, "list item id missing"));
+    };
+    if key.starts_with("webview_providers") {
+        if !settings.webview_providers.iter().any(|p| &p.id == id) {
+            return Err(Fail::at(key, format!("web provider '{id}' not found")));
+        }
+        return Ok(());
+    }
+    find_model(settings, id).map_err(|f| Fail::at(key, f.message))?;
+    if catalog::catalog_path(key) == "models[].api_key" {
+        let api_key = value
+            .as_str()
+            .ok_or_else(|| Fail::at(key, "api_key must be a string"))?;
+        check_api_key(id, Some(api_key))?;
+    }
+    Ok(())
+}
+
 fn set_setting(state: &mut State, current: &Current, key: &str, value: Value) -> Result<(), Fail> {
     let top = key.split(['.', '[']).next().unwrap_or("");
-    let settable = !SETTINGS_MANAGED_BY_OTHER_OPERATIONS.contains(&top)
-        && catalog::ENTRIES.iter().any(|entry| entry.key == key);
+    let list_item = is_live_list_item_key(key, top);
+    let settable = list_item
+        || (!SETTINGS_MANAGED_BY_OTHER_OPERATIONS.contains(&top)
+            && catalog::ENTRIES.iter().any(|entry| entry.key == key));
     if !settable {
         return Err(Fail::at(
             key,
             "not a settable catalog key (models, MCP servers, web providers and shortcuts have their own operations)",
         ));
+    }
+    if list_item {
+        check_list_item_setting(state.settings(), key, &value)?;
     }
     let mut json = serde_json::to_value(state.settings())?;
     set_at(&mut json, &parse_path(key), Some(value)).map_err(|m| Fail::at(key, m))?;

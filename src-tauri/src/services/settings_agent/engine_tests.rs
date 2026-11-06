@@ -228,6 +228,32 @@ async fn apply_stores_request_and_reply_in_the_log_entry() {
 }
 
 #[tokio::test]
+async fn six_model_field_rows_propose_without_errors() {
+    let mut settings = fixture_settings(Some("env-model"));
+    settings.models = (1..=6).map(|n| model(&format!("m{n}"), "M", "${OPENAI_KEY}")).collect();
+    settings.models.push(model("env-model", "Env", "${OPENAI_KEY}"));
+    let rows: Vec<Value> = (1..=6)
+        .map(|n| json!({"op": "set_setting", "key": format!("models[m{n}].store"), "value": false}))
+        .collect();
+    let script = vec![
+        call("c1", "settings_propose_changes", json!({"operations": rows})),
+        MockReply::Text("Proposed.".to_string()),
+    ];
+    let (provider, requests) = MockProvider::new(script);
+    let ai = AiService::with_provider("env-model", Box::new(provider));
+
+    let run = run_with(settings, ai, requests).await;
+
+    run.outcome.as_ref().unwrap();
+    let events = run.frontend.events.lock().unwrap();
+    let proposal = events.iter().find(|(name, _)| name == PROPOSAL_EVENT).unwrap();
+    assert_eq!(proposal.1["rows"].as_array().unwrap().len(), 6);
+    let requests = run.requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    assert!(!requests[1].contains("\\\"errors\\\""), "{}", requests[1]);
+}
+
+#[tokio::test]
 async fn no_chat_model_ends_the_turn_with_an_error_and_no_request() {
     let run = run(None, vec![MockReply::Text("never".into())]).await;
     assert!(run.outcome.is_err());
