@@ -1,4 +1,5 @@
-import type { StreamEvent, ToolCall } from "$lib/types/ai";
+import type { StreamEvent } from "$lib/types/ai";
+import { applyStreamEvent, emptyReply, type AgentReply } from "$lib/utils/agentReply";
 import {
   onSettingsAgentProposal,
   onSettingsAgentSecretRequest,
@@ -20,7 +21,7 @@ import {
 
 export type AgentMessage =
   | { id: number; role: "user"; text: string }
-  | { id: number; role: "assistant"; text: string; toolCalls: ToolCall[] };
+  | ({ id: number; role: "assistant" } & AgentReply);
 
 let nextId = 0;
 let messages = $state<AgentMessage[]>([]);
@@ -55,31 +56,10 @@ function lastAssistant() {
 }
 
 function onEvent(event: StreamEvent) {
-  const reply = lastAssistant();
-  if (!reply) return;
-  switch (event.event) {
-    case "chunk":
-      reply.text = event.data.accumulated;
-      break;
-    case "done":
-      reply.text = event.data.full_text;
-      break;
-    case "error":
-      error = event.data.message;
-      break;
-    case "tool_call_start":
-      reply.toolCalls.push({ ...event.data.tool_call });
-      break;
-    case "tool_call_done": {
-      const call = reply.toolCalls.find((c) => c.tool_call_id === event.data.tool_call_id);
-      if (call) {
-        call.result = event.data.result;
-        call.error = event.data.error;
-        call.status = event.data.error ? "failed" : "completed";
-        call.completed_at = new Date().toISOString();
-      }
-      break;
-    }
+  if (event.event === "error") error = event.data.message;
+  else {
+    const reply = lastAssistant();
+    if (reply) applyStreamEvent(reply, event);
   }
 }
 
@@ -98,7 +78,7 @@ async function send(text: string) {
   if (!message || running) return;
   error = null;
   messages.push({ id: nextId++, role: "user", text: message });
-  messages.push({ id: nextId++, role: "assistant", text: "", toolCalls: [] });
+  messages.push({ id: nextId++, role: "assistant", ...emptyReply() });
   running = true;
   try {
     await settingsAgentSend(message, onEvent);
@@ -106,6 +86,8 @@ async function send(text: string) {
     error = String(e);
   } finally {
     cancelUnfinishedToolCalls();
+    const last = lastAssistant();
+    if (last) last.isThinking = false;
     running = false;
   }
 }

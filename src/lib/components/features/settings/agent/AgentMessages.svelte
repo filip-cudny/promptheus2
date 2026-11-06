@@ -4,9 +4,11 @@
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import ToolCallGroup from "$lib/components/features/conversation-dialog/tool-call/ToolCallGroup.svelte";
+  import ThinkingBlock from "$lib/components/shared/ui/ThinkingBlock.svelte";
   import SecretField from "../SecretField.svelte";
   import ProposalCard from "./ProposalCard.svelte";
   import { parseSettingLink, showSettingLinks } from "$lib/utils/settingLinks";
+  import { thinkingText } from "$lib/utils/agentReply";
   import { parseContentSegments, toRenderBlocks } from "$lib/utils/toolCallMarkers";
   import type { ToolCall } from "$lib/types/ai";
 
@@ -32,7 +34,15 @@
       {#if message.role === "user"}
         <div class="user">{message.text}</div>
       {:else}
+        {@const reasoning = thinkingText(message)}
         <div class="assistant">
+          {#if reasoning || message.isThinking}
+            <ThinkingBlock
+              thinkingContent={reasoning}
+              isThinkingActive={message.isThinking}
+              isStreaming={agent.running && i === agent.messages.length - 1}
+            />
+          {/if}
           {#each toRenderBlocks(parseContentSegments(message.text)) as block}
             {#if block.kind === "text"}
               <MarkdownRenderer
