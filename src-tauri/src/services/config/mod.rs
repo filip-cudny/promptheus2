@@ -16,11 +16,12 @@ use crate::models::settings::{
 };
 use crate::services::hotkeys::{matches_current_os, translate_shortcut};
 
-use path::resolve_config_relative;
+pub(crate) use path::resolve_config_relative;
 
 use crate::services::fs_util::write_atomic;
 
-use defaults::{ensure_surface_defaults, validate};
+pub(crate) use defaults::validate;
+use defaults::ensure_surface_defaults;
 use loader::initialize_defaults;
 use migrator::{
     migrate_explicit_capabilities, migrate_model_params, parse_and_migrate,
@@ -71,7 +72,7 @@ pub enum SurfaceKind {
 
 const MAX_PREFERRED_NAME_LEN: usize = 60;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConfigService {
     settings: Settings,
     config_dir: PathBuf,
@@ -85,6 +86,14 @@ pub struct Mutated<R> {
 }
 
 impl ConfigService {
+    pub(crate) fn detached(settings: Settings, config_dir: &Path) -> Self {
+        ConfigService {
+            settings,
+            config_dir: config_dir.to_path_buf(),
+            baseline: Vec::new(),
+        }
+    }
+
     pub fn load(config_dir: &Path) -> Result<Self, ConfigError> {
         load_env(config_dir);
 
@@ -526,6 +535,13 @@ impl ConfigService {
         })
     }
 
+    pub(crate) fn adopt_keyterms_path(&mut self) {
+        if self.settings.surfaces.speech_to_text.keyterms_file.is_none() {
+            self.settings.surfaces.speech_to_text.keyterms_file =
+                Some(DEFAULT_STT_KEYTERMS_PATH.to_string());
+        }
+    }
+
     pub fn write_stt_keyterms_file(
         &mut self,
         content: &str,
@@ -536,9 +552,7 @@ impl ConfigService {
             std::fs::create_dir_all(parent)?;
         }
         write_atomic(&resolved, content.as_bytes())?;
-        if self.settings.surfaces.speech_to_text.keyterms_file.is_none() {
-            self.settings.surfaces.speech_to_text.keyterms_file = Some(path.clone());
-        }
+        self.adopt_keyterms_path();
         let term_count = parse_keyterms(content).len();
         Ok(KeytermsDoc {
             path,

@@ -7,6 +7,7 @@ pub mod clipboard;
 pub mod env_resolve;
 pub mod missing_env;
 pub mod secrets;
+pub mod settings_agent;
 #[cfg(test)]
 mod secrets_tests;
 pub mod frontmost_app;
