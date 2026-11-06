@@ -1,0 +1,69 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  classifyReference,
+  parseEnvRef,
+  pickerOptions,
+} from "../src/lib/utils/envVarOptions.ts";
+
+const listed = [
+  { name: "OPENAI_API_KEY", set: true },
+  { name: "ANTHROPIC_API_KEY", set: false },
+];
+const NEW = { value: "__new__", label: "New…" };
+
+test("parseEnvRef accepts exactly one token", () => {
+  assert.equal(parseEnvRef("${A_1}"), "A_1");
+  assert.equal(parseEnvRef("${A}/x"), null);
+  assert.equal(parseEnvRef("sk-test"), null);
+  assert.equal(parseEnvRef(""), null);
+});
+
+test("listed reference", () => {
+  assert.deepEqual(classifyReference("${OPENAI_API_KEY}", ["OPENAI_API_KEY"]), {
+    kind: "listed",
+    name: "OPENAI_API_KEY",
+  });
+  const options = pickerOptions(listed, "${OPENAI_API_KEY}", []);
+  assert.deepEqual(options[0], { value: "${OPENAI_API_KEY}", label: "OPENAI_API_KEY" });
+  assert.equal(options.length, 2);
+});
+
+test("listed but missing is labelled", () => {
+  const options = pickerOptions(listed, "${ANTHROPIC_API_KEY}", []);
+  assert.equal(options[1].label, "ANTHROPIC_API_KEY (missing)");
+});
+
+test("unlisted reference", () => {
+  assert.deepEqual(classifyReference("${GEMINI_KEY}", ["OPENAI_API_KEY"]), {
+    kind: "unlisted",
+    name: "GEMINI_KEY",
+  });
+  const options = pickerOptions([], "${OPENAI_API_KEY}", []);
+  assert.deepEqual(options, [
+    { value: "${OPENAI_API_KEY}", label: "OPENAI_API_KEY (not listed)" },
+  ]);
+});
+
+test("literal key", () => {
+  assert.deepEqual(classifyReference("sk-test", []), { kind: "literal" });
+  const options = pickerOptions(listed, "sk-test", []);
+  assert.deepEqual(options.at(-1), { value: "sk-test", label: "Literal key" });
+});
+
+test("a token with text around it is a literal", () => {
+  assert.deepEqual(classifyReference("${A}/x", ["A"]), { kind: "literal" });
+  assert.equal(pickerOptions([], "${A}/x", []).at(-1).label, "Literal key");
+});
+
+test("empty value adds no option", () => {
+  assert.deepEqual(classifyReference("", ["A"]), { kind: "empty" });
+  assert.deepEqual(classifyReference(null, ["A"]), { kind: "empty" });
+  assert.equal(pickerOptions(listed, "", []).length, 2);
+});
+
+test("extras come last", () => {
+  const options = pickerOptions(listed, "sk-test", [NEW]);
+  assert.deepEqual(options.at(-1), NEW);
+  assert.equal(options.at(-2).label, "Literal key");
+});

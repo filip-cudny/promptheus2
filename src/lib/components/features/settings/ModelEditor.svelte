@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from "svelte";
-  import { Eye, EyeOff, Copy, Check } from "lucide-svelte";
+  import { Copy, Check } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { useCopyFeedback } from "$lib/utils/copyFeedback.svelte";
   import { error as logError } from "@tauri-apps/plugin-log";
   import { formatSurfaceList } from "$lib/constants/surfaces";
-  import EnvRefChip, { parseEnvRef } from "./EnvRefChip.svelte";
+  import EnvVarPicker from "./EnvVarPicker.svelte";
   import ParametersKnown from "./ParametersKnown.svelte";
   import CapabilitiesEditor from "./CapabilitiesEditor.svelte";
   import ParametersCustom, {
@@ -27,7 +27,6 @@
     getCachedCapabilities,
   } from "$lib/stores/capabilities.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
-  import { checkEnvVar } from "$lib/services/settingsDialog";
   import { generateId } from "$lib/utils/id";
   import {
     KNOWN_MODEL_PARAMETER_KEYS,
@@ -72,9 +71,6 @@
   );
   let customErrors = $state<Record<string, string>>({});
   let validationErrors = $state<Record<string, string>>({});
-  let envResolved = $state<boolean>(false);
-  let envVarName = $state<string | null>(null);
-  let showApiKey = $state(false);
   const idFeedback = useCopyFeedback<true>();
 
   const tracker = useSaveTracker({ debounceMs: untrack(() => debounceMs) });
@@ -96,23 +92,6 @@
       validationErrors = {};
       suppressCustomEntriesSave = true;
     });
-  });
-
-  $effect(() => {
-    const apiKey = draft.api_key;
-    const name = parseEnvRef(apiKey);
-    envVarName = name;
-    if (!name) {
-      envResolved = false;
-      return;
-    }
-    let cancelled = false;
-    checkEnvVar(name).then((ok) => {
-      if (!cancelled) envResolved = ok;
-    });
-    return () => {
-      cancelled = true;
-    };
   });
 
   onDestroy(() => {
@@ -393,33 +372,13 @@
     <h3>Connection</h3>
 
     <SettingField key="models[].api_key" itemId={model.id}>
-      <div class="api-key-row">
-        <input
-          id="api_key"
-          type={showApiKey ? "text" : "password"}
-          placeholder={'sk-… or ${ENV_VAR}'}
-          value={draft.api_key ?? ""}
-          oninput={(e) => {
-            const v = (e.target as HTMLInputElement).value;
-            draft.api_key = v || null;
-            scheduleSave(false);
-          }}
-        />
-        <button
-          class="icon-btn"
-          title={showApiKey ? "Hide" : "Show"}
-          onclick={() => (showApiKey = !showApiKey)}
-        >
-          {#if showApiKey}
-            <EyeOff size={ICON_SIZE.md} />
-          {:else}
-            <Eye size={ICON_SIZE.md} />
-          {/if}
-        </button>
-      </div>
-      {#if envVarName}
-        <EnvRefChip varName={envVarName} resolved={envResolved} />
-      {/if}
+      <EnvVarPicker
+        value={draft.api_key ?? ""}
+        onchange={(v) => {
+          draft.api_key = v || null;
+          scheduleSave(true);
+        }}
+      />
     </SettingField>
 
     <SettingField key="models[].base_url" itemId={model.id}>
@@ -605,7 +564,6 @@
   }
 
   input[type="text"],
-  input[type="password"],
   input[type="number"],
   select {
     width: 100%;
@@ -655,12 +613,6 @@
   .segmented button.active {
     background: var(--accent-bg-soft);
     color: var(--accent);
-  }
-
-  .api-key-row {
-    display: flex;
-    gap: var(--space-3);
-    align-items: center;
   }
 
   .icon-btn {

@@ -1,9 +1,8 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import Modal from "$lib/components/shared/ui/Modal.svelte";
-  import EnvRefChip, { parseEnvRef } from "./EnvRefChip.svelte";
+  import EnvVarPicker from "./EnvVarPicker.svelte";
   import { addModel } from "$lib/services/settings";
-  import { checkEnvVar } from "$lib/services/settingsDialog";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { generateId } from "$lib/utils/id";
   import { buildNewModel, newModelErrors } from "$lib/utils/newModel";
@@ -39,7 +38,6 @@
   let baseUrl = $state("");
   let touched = $state<Record<string, boolean>>({});
   let submitting = $state(false);
-  let envResolved = $state(false);
   let displayNameEl = $state<HTMLInputElement | undefined>(undefined);
 
   const draft = $derived({
@@ -51,25 +49,9 @@
     base_url: baseUrl,
   });
   const errors = $derived(newModelErrors(draft));
-  const envVarName = $derived(parseEnvRef(apiKey));
 
   onMount(() => {
     displayNameEl?.focus();
-  });
-
-  $effect(() => {
-    const name = envVarName;
-    if (!name) {
-      envResolved = false;
-      return;
-    }
-    let cancelled = false;
-    checkEnvVar(name).then((ok) => {
-      if (!cancelled) envResolved = ok;
-    });
-    return () => {
-      cancelled = true;
-    };
   });
 
   function errorFor(field: string): string | undefined {
@@ -154,18 +136,14 @@
     </div>
 
     <div class="field">
-      <label for="cmd-key">API key</label>
-      <input
-        id="cmd-key"
-        type="password"
-        placeholder={"sk-… or ${ENV_VAR}"}
-        bind:value={apiKey}
-        onblur={() => touch("api_key")}
-        class:error={errorFor("api_key")}
-        spellcheck="false"
-        autocomplete="off"
+      <span class="label">API key</span>
+      <EnvVarPicker
+        value={apiKey}
+        onchange={(v) => {
+          apiKey = v;
+          touch("api_key");
+        }}
       />
-      {#if envVarName}<EnvRefChip varName={envVarName} resolved={envResolved} />{/if}
       {#if errorFor("api_key")}<span class="hint err">{errorFor("api_key")}</span>{/if}
     </div>
 
@@ -215,7 +193,6 @@
   }
 
   input[type="text"],
-  input[type="password"],
   select {
     padding: var(--space-3) var(--space-4);
     background: var(--surface-sunken);

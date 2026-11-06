@@ -18,7 +18,7 @@ The root is `src/windows/settings-dialog/App.svelte` (calls `store.init()` / `st
 
 ### Model creation dialog
 
-"+ model" in `ModelList` opens `CreateModelDialog.svelte` (pattern of `CreateSkillDialog`) with the type preset; nothing is written until the dialog's Create. Fields: Type, Display name, Provider, Model, API key (literal or `${VAR}`, with `EnvRefChip`), optional Base URL. `newModelErrors` (`$lib/utils/newModel.ts`) mirrors the backend `validate` rules; Create is disabled while it returns errors, and an error shows at its field once the field was blurred. A backend rejection shows at the field (`store.fieldError("models[<id>].<field>")`, the id is generated once per dialog) and keeps the dialog open; success closes it and selects the new model.
+"+ model" in `ModelList` opens `CreateModelDialog.svelte` (pattern of `CreateSkillDialog`) with the type preset; nothing is written until the dialog's Create. Fields: Type, Display name, Provider, Model, API key (`EnvVarPicker`, no literal input), optional Base URL. `newModelErrors` (`$lib/utils/newModel.ts`) mirrors the backend `validate` rules; Create is disabled while it returns errors, and an error shows at its field once the field was blurred (the API key: once a value was picked). A backend rejection shows at the field (`store.fieldError("models[<id>].<field>")`, the id is generated once per dialog) and keeps the dialog open; success closes it and selects the new model. A "New…" in the API key picker writes the variable to the list (and its value) at once, before Create; only the model waits for Create.
 
 ### Store toggle
 
@@ -175,7 +175,15 @@ The inherit option and an explicit pin to the same model read almost identically
 
 ### Env var references
 
-API key fields accept literal secrets *or* `${VAR_NAME}` references. `ModelEditor` parses the value with `parseEnvRef()` (exported by `EnvRefChip.svelte` — don't reimplement the regex), calls `checkEnvVar` (`$lib/services/settingsDialog`, backend `check_env_var`) and passes the result to `EnvRefChip`, which shows a green check or red alert chip below the input.
+The model API key (`ModelEditor`, `CreateModelDialog`) is an `EnvVarPicker`: a `SelectDropdown` over the listed variables (`getEnvVars()`, refreshed on `settings-changed`) plus "New…"; there is no input that accepts a literal key (the agent rejects literals too). The stored value is `${NAME}`; a picked name emits `${NAME}` and the editor saves at once. Three states come from `classifyReference` (`$lib/utils/envVarOptions`, tested in `tests/envVarOptions.test.mjs`):
+
+- listed: shown as `NAME`, or `NAME (missing)` when no value is set on this machine;
+- unlisted reference: `NAME (not listed)` with an "Add to list" button (`add_env_var`, secret on, empty description);
+- stored literal: `Literal key` with "Move to a variable": the name/description form, then an empty `SecretField` (the literal is not shown or copied; type the key again); the reference replaces the literal only after the value is saved.
+
+"New…" order: `add_env_var` (inline name/description form, secret on), `SecretField` for the value, then the model write; cancelling the value step still sets `${NAME}`, shown as missing. A rejected operation shows its message under the picker.
+
+`parseEnvRef()` lives in `$lib/utils/envVarOptions` (don't reimplement the regex); `EnvRefChip.svelte` re-exports it for its importers (`SectionMcpServers`). `EnvRefChip` itself (green check or red alert chip, state from `checkEnvVar`) is still used for MCP env rows.
 
 ### Surface references
 

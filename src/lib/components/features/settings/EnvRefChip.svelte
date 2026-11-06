@@ -1,11 +1,5 @@
 <script lang="ts" module>
-  const ENV_REF_RE = /^\$\{([A-Z_][A-Z0-9_]*)\}$/;
-
-  export function parseEnvRef(value: string | null | undefined): string | null {
-    if (!value) return null;
-    const m = value.match(ENV_REF_RE);
-    return m ? m[1] : null;
-  }
+  export { parseEnvRef } from "$lib/utils/envVarOptions";
 </script>
 
 <script lang="ts">
