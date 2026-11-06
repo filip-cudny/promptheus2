@@ -574,7 +574,7 @@ fn run_row(state: &State, current: &Current, op: &Operation) -> Result<(State, L
     diff("", &before, &serde_json::to_value(next.settings())?, &mut effects);
     effects.extend(file_effects);
     let operation = LoggedOperation {
-        label: op.label(),
+        label: op.label(state.settings()),
         op: op.name().to_string(),
         effects,
         test: None,

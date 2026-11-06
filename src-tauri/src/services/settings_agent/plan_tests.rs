@@ -228,6 +228,7 @@ fn delete_model_of_the_chat_default_yields_model_and_surface_effects() {
 
     let planned = plan_all(&[Operation::DeleteModel { id: "abc".into() }], &settings, &dir).unwrap();
 
+    assert_eq!(planned.rows[0].operation.label, "Delete model Model abc");
     let removed = setting_effect(&planned, "models[abc]");
     assert_eq!(removed.after, None);
     assert_eq!(removed.before.as_ref().unwrap()["index"], json!(0));
@@ -325,28 +326,29 @@ fn operation_deserializes_from_its_tagged_form_and_labels_itself() {
         "value": "light"
     }))
     .unwrap();
-    assert_eq!(operation.label(), "Theme");
+    assert_eq!(operation.label(&Settings::default()), "Theme");
 
     let add: Operation = serde_json::from_value(json!({
         "op": "add_model",
         "model": serde_json::to_value(model("x", ModelType::Text, "")).unwrap()
     }))
     .unwrap();
-    assert_eq!(add.label(), "Add model Model x");
+    assert_eq!(add.label(&Settings::default()), "Add model Model x");
 }
 
 #[test]
 fn env_var_operations_deserialize_with_defaults_and_label_themselves() {
     let parse = |value: Value| serde_json::from_value::<Operation>(value).unwrap();
+    let settings = Settings::default();
 
     let add = parse(json!({ "op": "add_env_var", "name": "A" }));
-    assert_eq!((add.name(), add.label().as_str()), ("add_env_var", "Add variable A"));
+    assert_eq!((add.name(), add.label(&settings).as_str()), ("add_env_var", "Add variable A"));
     let update = parse(json!({ "op": "update_env_var", "name": "A", "description": "d", "secret": true }));
-    assert_eq!((update.name(), update.label().as_str()), ("update_env_var", "Update variable A"));
+    assert_eq!((update.name(), update.label(&settings).as_str()), ("update_env_var", "Update variable A"));
     let rename = parse(json!({ "op": "rename_env_var", "name": "A", "new_name": "B" }));
-    assert_eq!((rename.name(), rename.label().as_str()), ("rename_env_var", "Rename variable A to B"));
+    assert_eq!((rename.name(), rename.label(&settings).as_str()), ("rename_env_var", "Rename variable A to B"));
     let delete = parse(json!({ "op": "delete_env_var", "name": "A" }));
-    assert_eq!((delete.name(), delete.label().as_str()), ("delete_env_var", "Delete variable A"));
+    assert_eq!((delete.name(), delete.label(&settings).as_str()), ("delete_env_var", "Delete variable A"));
 }
 
 #[test]
@@ -567,6 +569,28 @@ fn set_setting_changes_one_field_of_a_model() {
     assert_eq!((effect.before.clone(), effect.after.clone()), (Some(json!(true)), Some(json!(false))));
     assert!(!planned.settings.models[0].store);
     assert!(planned.settings.models[1].store);
+}
+
+#[test]
+fn set_setting_row_on_a_list_item_is_labelled_with_the_item_name() {
+    let (settings, dir) = (fixture_settings(), config_dir());
+    let ops = vec![
+        set_setting("models[abc].store", json!(false)),
+        set_setting("webview_providers[claude].url", json!("https://claude.ai/new")),
+    ];
+
+    let planned = plan_all(&ops, &settings, &dir).unwrap();
+
+    let labels: Vec<&str> = planned.rows.iter().map(|row| row.operation.label.as_str()).collect();
+    assert_eq!(labels, vec!["Model abc: Store", "Provider claude: Provider URL"]);
+}
+
+#[test]
+fn list_item_label_falls_back_to_the_id_of_an_unknown_item() {
+    let settings = fixture_settings();
+
+    assert_eq!(set_setting("models[nope].store", json!(false)).label(&settings), "nope: Store");
+    assert_eq!(Operation::DeleteWebviewProvider { id: "nope".into() }.label(&settings), "Delete web provider nope");
 }
 
 #[test]

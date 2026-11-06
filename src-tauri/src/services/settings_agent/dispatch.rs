@@ -241,11 +241,10 @@ impl Dispatcher {
         tests
     }
 
-    fn rows_json(operations: &[Operation], tests: &BTreeMap<usize, TestResult>) -> Vec<Value> {
-        operations
+    fn rows_json(plan: &Plan, tests: &BTreeMap<usize, TestResult>) -> Vec<Value> {
+        plan.rows
             .iter()
-            .enumerate()
-            .map(|(row, op)| json!({"row": row + 1, "label": op.label(), "test": tests.get(&row)}))
+            .map(|r| json!({"row": r.row + 1, "label": r.operation.label, "test": tests.get(&r.row)}))
             .collect()
     }
 
@@ -258,7 +257,7 @@ impl Dispatcher {
             Err(errors) => Ok(row_errors(&errors, NOTHING_TESTED)),
             Ok(planned) => {
                 let tests = self.run_tests(&operations, &planned).await;
-                Ok(json!({"rows": Self::rows_json(&operations, &tests)}))
+                Ok(json!({"rows": Self::rows_json(&planned, &tests)}))
             }
         }
     }
@@ -273,7 +272,7 @@ impl Dispatcher {
             Ok(planned) => planned,
         };
         let tests = self.run_tests(&operations, &planned).await;
-        let rows = Self::rows_json(&operations, &tests);
+        let rows = Self::rows_json(&planned, &tests);
         let proposal = Proposal {
             id: uuid::Uuid::new_v4().simple().to_string(),
             operations,

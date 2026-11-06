@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::settings::{McpServerConfig, ModelConfig, WebviewProvider};
+use crate::models::settings::{McpServerConfig, ModelConfig, Settings, WebviewProvider};
 use crate::models::skill::SkillFrontmatter;
 use crate::services::config::{catalog, PromptKind};
+
+use super::plan::{parse_path, Segment};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -121,15 +123,12 @@ impl Operation {
         }
     }
 
-    pub fn label(&self) -> String {
+    pub fn label(&self, settings: &Settings) -> String {
         match self {
-            Self::SetSetting { key, .. } => catalog::ENTRIES
-                .iter()
-                .find(|entry| entry.key == key)
-                .map_or_else(|| key.clone(), |entry| entry.label.to_string()),
+            Self::SetSetting { key, .. } => setting_label(settings, key),
             Self::AddModel { model } => format!("Add model {}", model.display_name),
             Self::UpdateModel { model, .. } => format!("Update model {}", model.display_name),
-            Self::DeleteModel { id } => format!("Delete model {id}"),
+            Self::DeleteModel { id } => format!("Delete model {}", model_name(settings, id)),
             Self::CreateSkill { slug, .. } => format!("Create skill {slug}"),
             Self::UpdateSkill { slug, .. } => format!("Update skill {slug}"),
             Self::DeleteSkill { slug } => format!("Delete skill {slug}"),
@@ -142,7 +141,9 @@ impl Operation {
             Self::UpdateWebviewProvider { provider, .. } => {
                 format!("Update web provider {}", provider.name)
             }
-            Self::DeleteWebviewProvider { id } => format!("Delete web provider {id}"),
+            Self::DeleteWebviewProvider { id } => {
+                format!("Delete web provider {}", provider_name(settings, id))
+            }
             Self::SetShortcut { action, shortcut: Some(_) } => format!("Set shortcut for {action}"),
             Self::SetShortcut { action, shortcut: None } => format!("Clear shortcut for {action}"),
             Self::AddEnvVar { name, .. } => format!("Add variable {name}"),
@@ -151,4 +152,40 @@ impl Operation {
             Self::DeleteEnvVar { name } => format!("Delete variable {name}"),
         }
     }
+}
+
+fn model_name<'a>(settings: &'a Settings, id: &'a str) -> &'a str {
+    settings
+        .models
+        .iter()
+        .find(|model| model.id == id)
+        .map_or(id, |model| model.display_name.as_str())
+}
+
+fn provider_name<'a>(settings: &'a Settings, id: &'a str) -> &'a str {
+    settings
+        .webview_providers
+        .iter()
+        .find(|provider| provider.id == id)
+        .map_or(id, |provider| provider.name.as_str())
+}
+
+fn setting_label(settings: &Settings, key: &str) -> String {
+    let catalog_key = catalog::catalog_path(key);
+    let Some(entry) = catalog::ENTRIES.iter().find(|entry| entry.key == catalog_key) else {
+        return key.to_string();
+    };
+    if catalog_key == key {
+        return entry.label.to_string();
+    }
+    let item = match parse_path(key).as_slice() {
+        [Segment::Key(list), Segment::Item(id), ..] if list == "models" => {
+            model_name(settings, id).to_string()
+        }
+        [Segment::Key(list), Segment::Item(id), ..] if list == "webview_providers" => {
+            provider_name(settings, id).to_string()
+        }
+        _ => return key.to_string(),
+    };
+    format!("{item}: {}", entry.label)
 }

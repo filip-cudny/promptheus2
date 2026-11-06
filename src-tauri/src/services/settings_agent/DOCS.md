@@ -45,7 +45,7 @@ Pruning: `transcript::prune(dir, retention_days, now)` deletes files whose `star
 
 ## Events and commands
 
-- Event `settings-agent-proposal { proposal_id, rows: [{ row, label, op, effects, test, stale }] }`; `row` is the 0-based operation index.
+- Event `settings-agent-proposal { proposal_id, rows: [{ row, label, op, effects, test, stale }] }`; `row` is the 0-based operation index. `label` is `Operation::label` over the settings before that row (`plan::run_row`; the `settings_test` and `settings_propose_changes` results reuse it): a list-item `set_setting` key reads `<model display_name | provider name>: <catalog label>` (`Model abc: Store`), `delete_model` and `delete_webview_provider` name the item; an item not found shows its id. Stored change-log labels are not recomputed.
 - Event `settings-agent-secret-request { request_id, name, purpose, exists }`; the frontend saves the value with `save_secret`, then calls `settings_agent_secret_result(request_id, "saved" | "cancelled")`.
 - `settings_agent_send(message, on_event)`, `_cancel`, `_reset`, `_secret_result`.
 - `settings_agent_apply(proposal_id, selected)` returns `{ entry_id }`, `{ stale_rows }` or `{ error }` (no rows selected, dependency errors with row numbers, failed write). It plans with the selection, writes through `apply_plan` (097-04) with `last_request`, `last_reply` and the row tests, and clears the proposal.
