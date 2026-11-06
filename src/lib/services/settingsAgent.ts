@@ -46,6 +46,7 @@ export interface ProposalRowData {
   op: string;
   effects: ProposalEffect[];
   test: RowTest | null;
+  sample_input: string | null;
   stale: boolean;
 }
 

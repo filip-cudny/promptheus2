@@ -24,7 +24,10 @@
 
   function show(effect: ProposalEffect) {
     if (effect.target.type === "setting") navigation.navigateTo(effect.target.path);
-    else if (effect.target.path.startsWith("skills/")) navigation.activeSection = "skills";
+    else if (effect.target.path.startsWith("skills/")) {
+      const slug = effect.target.path.split("/")[1];
+      navigation.navigateTo(`skills[${slug}]`);
+    }
     else navigation.activeSection = "prompt_base";
   }
 </script>

@@ -1,17 +1,19 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
+  import { onDestroy, onMount, untrack } from "svelte";
   import SettingsSection from "./SettingsSection.svelte";
   import SkillList from "./SkillList.svelte";
   import SkillEditor from "./SkillEditor.svelte";
   import CreateSkillDialog from "./CreateSkillDialog.svelte";
   import ImportConflictDialog from "./ImportConflictDialog.svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
+  import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
   import { createSkill, importSkillFile } from "$lib/services/skills";
   import { open } from "@tauri-apps/plugin-dialog";
   import { readTextFile } from "@tauri-apps/plugin-fs";
   import type { ImportConflictMode, SkillFrontmatter } from "$lib/types";
 
   const store = getSkillsStore();
+  const navigation = getSettingsNavigation();
 
   let selectedSlug = $state<string | null>(null);
   let createOpen = $state(false);
@@ -31,6 +33,12 @@
     } else if (!selectedSlug && names.length > 0) {
       selectedSlug = names[0];
     }
+  });
+
+  $effect(() => {
+    const item = navigation.selectedItem;
+    if (item?.list !== "skills") return;
+    if (untrack(() => store.full.some((s) => s.name === item.id))) selectedSlug = item.id;
   });
 
   const selected = $derived(

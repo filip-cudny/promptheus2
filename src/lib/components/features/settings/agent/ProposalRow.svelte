@@ -81,6 +81,12 @@
       </details>
     {/if}
   {/if}
+  {#if row.sample_input}
+    <details>
+      <summary>Sample input</summary>
+      <pre class="output">{row.sample_input}</pre>
+    </details>
+  {/if}
   <div class="links">
     {#if TESTABLE_OPS.includes(row.op)}
       <button type="button" disabled={testing} onclick={runTest}>{testing ? "Testing…" : "Test"}</button>

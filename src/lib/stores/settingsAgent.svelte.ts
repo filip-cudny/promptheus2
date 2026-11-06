@@ -126,8 +126,10 @@ async function applyProposal(selected: boolean[]) {
   try {
     const result = await settingsAgentApply(proposal.proposal_id, selected);
     if ("entry_id" in result) proposalOutcome = { kind: "applied", entryId: result.entry_id };
-    else if ("stale_rows" in result)
+    else if ("stale_rows" in result) {
+      for (const row of proposal.rows) if (result.stale_rows.includes(row.row)) row.stale = true;
       proposalOutcome = { kind: "blocked", message: blockedMessage(result.stale_rows) };
+    }
     else proposalOutcome = { kind: "blocked", message: `Nothing was written. ${result.error}` };
   } catch (e) {
     proposalOutcome = { kind: "blocked", message: `Nothing was written. ${e}` };

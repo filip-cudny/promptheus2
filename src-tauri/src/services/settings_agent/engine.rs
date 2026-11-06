@@ -18,6 +18,7 @@ use crate::services::secrets;
 use crate::Error;
 
 use super::dispatch::{Context, Dispatcher, Proposal, ProposalSink, SecretAnswer, SecretPrompt};
+use super::operations::Operation;
 use super::plan::{plan, stale_rows, Current, RowError};
 use super::tools;
 
@@ -145,11 +146,21 @@ pub fn proposal_payload(proposal: &Proposal, current: &Current) -> Value {
                 "op": planned.operation.op,
                 "effects": planned.operation.effects,
                 "test": proposal.tests.get(&planned.row),
+                "sample_input": sample_input(proposal.operations.get(planned.row)),
                 "stale": stale.contains(&planned.row),
             })
         })
         .collect();
     json!({"proposal_id": proposal.id, "rows": rows})
+}
+
+fn sample_input(operation: Option<&Operation>) -> Option<&str> {
+    match operation? {
+        Operation::CreateSkill { sample_input, .. } | Operation::UpdateSkill { sample_input, .. } => {
+            Some(sample_input)
+        }
+        _ => None,
+    }
 }
 
 pub fn refresh(proposal: &Proposal, current: &Current) -> Result<Proposal, Vec<RowError>> {

@@ -34,13 +34,15 @@ export function catalogPath(concrete: string): string {
 }
 
 export interface ListItemRef {
-  list: "models" | "mcp_servers";
+  list: "models" | "mcp_servers" | "skills";
   id: string;
 }
 
 export function listItemOf(concrete: string): ListItemRef | null {
   const model = /^models\[([^\]]*)\]/.exec(concrete);
   if (model) return { list: "models", id: model[1] };
+  const skill = /^skills\[([^\]]*)\]/.exec(concrete);
+  if (skill) return { list: "skills", id: skill[1] };
   const server = /^mcp_servers\.([^.]+)/.exec(concrete);
   if (server) return { list: "mcp_servers", id: server[1] };
   return null;

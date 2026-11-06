@@ -29,6 +29,14 @@ async function waitForElement(id: string): Promise<HTMLElement | null> {
 async function navigateTo(key: string) {
   const path = catalogPath(key);
   const entry = getSettingsCatalogStore().entry(path);
+  const skill = listItemOf(key);
+  if (!entry && skill?.list === "skills") {
+    activeSection = "skills";
+    selectedItem = { ...skill };
+    await tick();
+    selectedItem = null;
+    return;
+  }
   if (!entry) {
     warn(`settings navigation: no catalog entry for ${key}`);
     return;
