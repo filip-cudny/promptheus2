@@ -7,6 +7,8 @@ import type {
   SpeechToTextConfig,
   CatalogEntry,
   MissingEnvRef,
+  EnvVarStatus,
+  EnvVarOperation,
 } from "$lib/types";
 import { invalidateCapabilities } from "$lib/stores/capabilities.svelte";
 import { getSettingsStore } from "$lib/stores/settings.svelte";
@@ -48,6 +50,16 @@ export async function getSettingsCatalog(): Promise<CatalogEntry[]> {
 
 export async function getMissingEnvRefs(): Promise<MissingEnvRef[]> {
   return invoke("get_missing_env_refs");
+}
+
+export async function getEnvVars(): Promise<EnvVarStatus[]> {
+  return invoke("get_env_vars");
+}
+
+export async function applyEnvVarOperation(
+  operation: EnvVarOperation,
+): Promise<string> {
+  return invoke("apply_env_var_operation", { operation });
 }
 
 export async function updateSetting(

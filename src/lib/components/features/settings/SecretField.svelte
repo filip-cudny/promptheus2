@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { Eye, EyeOff } from "lucide-svelte";
   import Button from "$lib/components/shared/ui/Button.svelte";
   import TextInput from "$lib/components/shared/ui/TextInput.svelte";
@@ -10,11 +11,13 @@
     name,
     purpose = "",
     exists = false,
+    masked = true,
     onclose,
   }: {
     name: string;
     purpose?: string;
     exists?: boolean;
+    masked?: boolean;
     onclose: (outcome: SecretOutcome) => void;
   } = $props();
 
@@ -24,9 +27,8 @@
   let saving = $state(false);
   let error = $state<string | null>(null);
 
-  async function toggleReveal() {
-    revealed = !revealed;
-    if (!revealed || !exists || loaded || value) return;
+  async function loadExisting() {
+    if (!exists || loaded || value) return;
     try {
       value = (await getSecretValue(name)) ?? "";
       loaded = true;
@@ -34,6 +36,15 @@
       error = String(e);
     }
   }
+
+  async function toggleReveal() {
+    revealed = !revealed;
+    if (revealed) await loadExisting();
+  }
+
+  onMount(() => {
+    if (!masked) void loadExisting();
+  });
 
   async function save() {
     if (!value || saving) return;
@@ -64,14 +75,16 @@
   <div class="input-row">
     <TextInput
       bind:value
-      type={revealed ? "text" : "password"}
+      type={masked && !revealed ? "password" : "text"}
       placeholder={exists ? "Enter a new value" : "Value"}
       autocomplete="off"
       {onkeydown}
     />
-    <button class="reveal" type="button" title={revealed ? "Hide" : "Show"} onclick={toggleReveal}>
-      {#if revealed}<EyeOff size={ICON_SIZE.md} />{:else}<Eye size={ICON_SIZE.md} />{/if}
-    </button>
+    {#if masked}
+      <button class="reveal" type="button" title={revealed ? "Hide" : "Show"} onclick={toggleReveal}>
+        {#if revealed}<EyeOff size={ICON_SIZE.md} />{:else}<Eye size={ICON_SIZE.md} />{/if}
+      </button>
+    {/if}
   </div>
   {#if error}<div class="error">{error}</div>{/if}
   <div class="actions">

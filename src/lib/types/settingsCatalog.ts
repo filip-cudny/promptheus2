@@ -3,6 +3,7 @@ export type CatalogSection =
   | "notifications"
   | "history"
   | "sync"
+  | "environment"
   | "models"
   | "prompt_base"
   | "skills"

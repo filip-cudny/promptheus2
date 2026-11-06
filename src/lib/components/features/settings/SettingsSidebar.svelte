@@ -4,6 +4,7 @@
     | "notifications"
     | "history"
     | "sync"
+    | "environment"
     | "models"
     | "prompt_base"
     | "skills"
@@ -30,6 +31,7 @@
         { id: "notifications", label: "Notifications" },
         { id: "history", label: "History" },
         { id: "sync", label: "Sync" },
+        { id: "environment", label: "Environment" },
       ],
     },
     {

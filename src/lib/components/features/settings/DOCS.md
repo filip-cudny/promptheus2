@@ -30,7 +30,7 @@ Pure TS modules (no Svelte runes, no `$lib` imports other than `import type`) li
 
 ### Sidebar groups and adding a section
 
-`SIDEBAR_GROUPS` in `SettingsSidebar.svelte` lists three groups, each an ordered array of items: "App" (General, Notifications, History, Sync), "AI" (Models, Prompt Base, Skills, MCP Servers), "Features" (Chat, Context menu, Speech). There is no disabled item; a section appears in the sidebar only once it renders.
+`SIDEBAR_GROUPS` in `SettingsSidebar.svelte` lists three groups, each an ordered array of items: "App" (General, Notifications, History, Sync, Environment), "AI" (Models, Prompt Base, Skills, MCP Servers), "Features" (Chat, Context menu, Speech). There is no disabled item; a section appears in the sidebar only once it renders.
 
 Active item is marked with a 2px left border in `--accent`, never a filled background, so the accent only signals "you are here" (the same single-accent rule as the conversation window: blue ≡ user/marker, never decoration).
 
@@ -67,13 +67,19 @@ Links: the assistant writes `[label](setting:<key>)`. `$lib/utils/settingLinks.t
 
 `MissingEnvList.svelte` sits above sidebar and content in `src/windows/settings-dialog/App.svelte` and renders only when `getMissingEnvRefs()` (backend `get_missing_env_refs`) returns names: each `${VAR}` without a value on this machine with the labels of where it is used, plus an "Add" button that opens `SecretField` inline under the name (no agent involved); closing it refreshes the list. It refreshes on `settings-changed` (`onSettingsChanged`) and window focus. The same set drives the startup/sync toast (`src-tauri/src/services/DOCS.md`).
 
+### Environment section
+
+`SectionEnvironment` (sidebar "Environment", group App) lists `getEnvVars()` (`get_env_vars` in `$lib/services/settings.ts`): per variable the name, a "secret" marker, state "set" / "missing" (colours of `EnvRefChip`) and usage labels or "not used". It refreshes on mount, `settings-changed` and window focus. Every change goes through `applyEnvVarOperation(operation)` (`apply_env_var_operation`, operations `add_env_var`, `update_env_var`, `rename_env_var`, `delete_env_var`; each writes a change-log entry, so Undo is in `ChangeHistory`) and then reloads the list; a rejection shows its message at the row (at the add form for an add; the `row N: ` prefix is cut; delete of a used name lists the usages) and changes nothing locally. Names are checked client-side with `^[A-Za-z_][A-Za-z0-9_]*$` before sending.
+
+Per row: description (debounced by `autosave_debounce_ms`, pending edits flushed on rename and on unmount) and the "Secret" checkbox (immediate) both send `update_env_var` with both fields; "Set value" / "Change value" opens `SecretField` with `exists` = set and `masked` = the secret flag; "Rename" opens an inline name input (Enter confirms, Escape cancels); "Delete" asks with the inline two-step confirm. "Add variable" (secret on by default) opens the value field under the new row. Values are never held by the section.
+
 ### Proposal card
 
 `agent/ProposalCard.svelte` renders the store's `proposal` (event `settings-agent-proposal`, one card; a new proposal replaces it, a refresh keeps the checkbox state because the card is keyed by `proposal_id`) after the secret requests in `AgentMessages`. `ProposalRow` per row: checkbox (checked by default), label, each effect as before → after (setting effects) or a line diff (`lineDiff` in `$lib/utils/lineDiff.ts`, file effects: skill and prompt files), the test result (`OK · <ms> ms` or the exact error; skill output and sample input in collapsed "Output" and "Sample input"; `sample_input` comes from the proposal payload, `null` for other rows), "Test" (only for model, skill and MCP rows; `settings_agent_test_row`) and "show" (`navigateTo` with the setting's concrete key; skill files navigate with `skills[<slug>]`, which `navigateTo` resolves without a catalog entry by switching to Skills and setting `selectedItem`, which `SectionSkills` keeps as the requested slug until the skills store contains it, then selects; prompt files switch to Prompt Base). A stale row shows "changed since proposed"; a `stale_rows` result of Apply marks those rows stale in the held proposal; "Refresh" (`settings_agent_refresh`) is offered and Apply stays disabled until none is stale. Apply sends one boolean per operation index; `stale_rows` or `error` (dependency errors name the dependent rows) show on the card and nothing is written. Success shows "Applied"; the entry id is in `proposalOutcome` of the store for the history view. Reject closes the card.
 
 ### Secret field
 
-`SecretField.svelte` (props `name`, `purpose`, `exists`, `onclose(outcome)`): masked input, reveal toggle (`Eye`/`EyeOff`; for an existing value the reveal loads it with `get_secret_value`), Save (`save_secret`, writes at once as its own change, independent of any card) and Cancel. `onclose` gets `saved` or `cancelled`; the value lives only in the component state, never in a store, log or event. For agent requests the outcome goes to `settings_agent_secret_result`; the backend turns `cancelled` into `exists` when the variable already has a value.
+`SecretField.svelte` (props `name`, `purpose`, `exists`, `masked` (default `true`), `onclose(outcome)`): masked input, reveal toggle (`Eye`/`EyeOff`; for an existing value the reveal loads it with `get_secret_value`), Save (`save_secret`, writes at once as its own change, independent of any card) and Cancel. `masked: false` renders a plain text input without the reveal toggle and loads an existing value on mount (for variables that are not secrets, e.g. a path). `onclose` gets `saved` or `cancelled`; the value lives only in the component state, never in a store, log or event. For agent requests the outcome goes to `settings_agent_secret_result`; the backend turns `cancelled` into `exists` when the variable already has a value.
 
 ### Persistence — auto-save with debounce
 

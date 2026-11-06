@@ -12,6 +12,7 @@
   import SectionSpeech from "./SectionSpeech.svelte";
   import SectionSync from "./SectionSync.svelte";
   import SectionMcpServers from "./SectionMcpServers.svelte";
+  import SectionEnvironment from "./SectionEnvironment.svelte";
 
   const store = getSettingsStore();
   const navigation = getSettingsNavigation();
@@ -47,6 +48,8 @@
     <SectionSpeech />
   {:else if activeSection === "sync"}
     <SectionSync />
+  {:else if activeSection === "environment"}
+    <SectionEnvironment />
   {/if}
 </main>
 

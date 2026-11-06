@@ -27,6 +27,7 @@ export interface Settings {
   menu_digit_select_delay_ms: number;
   skills_order: string[];
   webview_providers: WebviewProvider[];
+  env_vars: EnvVar[];
 }
 
 export interface HistoryStorageStats {
@@ -261,3 +262,24 @@ export interface MissingEnvRef {
   name: string;
   used_in: EnvUse[];
 }
+
+export interface EnvVar {
+  name: string;
+  description: string;
+  secret: boolean;
+  renamed_from: string[];
+}
+
+export interface EnvVarStatus {
+  name: string;
+  description: string;
+  secret: boolean;
+  set: boolean;
+  used_in: EnvUse[];
+}
+
+export type EnvVarOperation =
+  | { op: "add_env_var"; name: string; description: string; secret: boolean }
+  | { op: "update_env_var"; name: string; description: string; secret: boolean }
+  | { op: "rename_env_var"; name: string; new_name: string }
+  | { op: "delete_env_var"; name: string };
