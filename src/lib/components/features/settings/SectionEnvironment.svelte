@@ -64,17 +64,18 @@
     const v = vars.find((x) => x.name === name);
     if (!v) return false;
     delete errors[name];
+    const description = drafts[name] ?? v.description;
     const error = await apply({
       op: "update_env_var",
       name,
-      description: drafts[name] ?? v.description,
+      description,
       secret: secret ?? v.secret,
     });
     if (error) {
       errors[name] = error;
       return false;
     }
-    delete drafts[name];
+    if (drafts[name] === description) delete drafts[name];
     return true;
   }
 
@@ -215,6 +216,7 @@
               </Button>
               <Button onclick={() => startRename(v)}>Rename</Button>
               {#if confirmingDelete === v.name}
+                <span class="confirm-text">Delete <strong>{v.name}</strong>?</span>
                 <Button onclick={() => (confirmingDelete = null)}>Cancel</Button>
                 <Button variant="danger" onclick={() => remove(v)}>Yes, delete</Button>
               {:else}
@@ -361,6 +363,11 @@
 
   .state.missing {
     color: var(--danger);
+  }
+
+  .confirm-text {
+    font-size: var(--font-size-md);
+    color: var(--text-primary);
   }
 
   .check {
