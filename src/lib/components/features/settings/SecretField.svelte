@@ -23,31 +23,27 @@
 
   let value = $state("");
   let revealed = $state(false);
-  let loaded = $state(false);
+  let existing = $state("");
   let saving = $state(false);
   let error = $state<string | null>(null);
+  const canSave = $derived(!!value && value !== existing && !saving);
 
   async function loadExisting() {
-    if (!exists || loaded || value) return;
+    if (!exists) return;
     try {
-      value = (await getSecretValue(name)) ?? "";
-      loaded = true;
+      existing = (await getSecretValue(name)) ?? "";
+      value = existing;
     } catch (e) {
       error = String(e);
     }
   }
 
-  async function toggleReveal() {
-    revealed = !revealed;
-    if (revealed) await loadExisting();
-  }
-
   onMount(() => {
-    if (!masked) void loadExisting();
+    void loadExisting();
   });
 
   async function save() {
-    if (!value || saving) return;
+    if (!canSave) return;
     saving = true;
     error = null;
     try {
@@ -81,7 +77,7 @@
       {onkeydown}
     />
     {#if masked}
-      <button class="reveal" type="button" title={revealed ? "Hide" : "Show"} onclick={toggleReveal}>
+      <button class="reveal" type="button" title={revealed ? "Hide" : "Show"} onclick={() => (revealed = !revealed)}>
         {#if revealed}<EyeOff size={ICON_SIZE.md} />{:else}<Eye size={ICON_SIZE.md} />{/if}
       </button>
     {/if}
@@ -89,7 +85,7 @@
   {#if error}<div class="error">{error}</div>{/if}
   <div class="actions">
     <Button variant="ghost" onclick={() => onclose("cancelled")}>Cancel</Button>
-    <Button variant="primary" disabled={!value || saving} onclick={save}>Save</Button>
+    <Button variant="primary" disabled={!canSave} onclick={save}>Save</Button>
   </div>
 </div>
 
