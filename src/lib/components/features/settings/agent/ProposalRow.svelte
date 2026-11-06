@@ -106,6 +106,10 @@
     border-top: 1px solid var(--border-faint);
   }
 
+  .row:first-child {
+    border-top: none;
+  }
+
   .row.stale {
     opacity: 0.85;
   }
