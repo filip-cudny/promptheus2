@@ -62,6 +62,7 @@ pub(crate) async fn apply_plan(
     let mut config = Arc::clone(&*app.state::<Arc<Mutex<ConfigService>>>()).lock_owned().await;
     let id = tokio::task::spawn_blocking(move || {
         let log_dir = change_log_dir(&config_dir);
+        let _ = config.reload_if_changed();
         let settings = config.settings().clone();
         let mut ctx = Context {
             config: &mut config,
@@ -81,7 +82,15 @@ pub(crate) async fn apply_plan(
     Ok(id)
 }
 
-pub(crate) async fn undo_entry(app: &AppHandle, id: String, force: bool) -> crate::Result<UndoOutcome> {
+async fn finish_write(app: &AppHandle) -> crate::Result<()> {
+    apply_settings_reload(app, "agent").await?;
+    app.emit("change-log-changed", ())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn undo_change(app: AppHandle, id: String, force: bool) -> crate::Result<UndoOutcome> {
+    log::info!("undo_change {id} force={force}");
     let config_dir = app.path().app_config_dir()?;
     let host = app.state::<Arc<SettingsSync>>().host().await;
     let mut config = Arc::clone(&*app.state::<Arc<Mutex<ConfigService>>>()).lock_owned().await;
@@ -102,19 +111,7 @@ pub(crate) async fn undo_entry(app: &AppHandle, id: String, force: bool) -> crat
     .map_err(|e| crate::Error::Other(e.to_string()))?
     .map_err(|e| crate::Error::Other(e.to_string()))?;
     if matches!(outcome, UndoOutcome::Undone { .. }) {
-        finish_write(app).await?;
+        finish_write(&app).await?;
     }
     Ok(outcome)
-}
-
-async fn finish_write(app: &AppHandle) -> crate::Result<()> {
-    apply_settings_reload(app, "agent").await?;
-    app.emit("change-log-changed", ())?;
-    Ok(())
-}
-
-#[tauri::command]
-pub async fn undo_change(app: AppHandle, id: String, force: bool) -> crate::Result<UndoOutcome> {
-    log::info!("undo_change {id} force={force}");
-    undo_entry(&app, id, force).await
 }
