@@ -182,7 +182,7 @@ impl Dispatcher {
     fn prompt(&self, name: &str) -> Handled {
         let kind: PromptFile = serde_json::from_value(json!(name))
             .map_err(|_| format!("unknown prompt '{name}'"))?;
-        let config = ConfigService::load(&self.ctx.config_dir).map_err(|e| e.to_string())?;
+        let config = ConfigService::detached((self.ctx.settings)(), &self.ctx.config_dir);
         let content = match kind.prompt_kind() {
             Some(kind) => config.read_prompt(kind),
             None => config.read_stt_keyterms_file().map_err(|e| e.to_string())?.content,
@@ -228,14 +228,11 @@ impl Dispatcher {
 
     async fn propose(&self, arguments: &Value) -> Handled {
         let args: ProposeArgs = parse(arguments)?;
-        let mut planned = match self.plan_all(&args.operations) {
+        let planned = match self.plan_all(&args.operations) {
             Err(errors) => return Ok(row_errors(&errors)),
             Ok(planned) => planned,
         };
         let tests = self.run_tests(&args.operations, &planned).await;
-        for planned_row in &mut planned.rows {
-            planned_row.operation.test = tests.get(&planned_row.row).cloned();
-        }
         let rows = Self::rows_json(&args.operations, &tests);
         let proposal = Proposal {
             id: uuid::Uuid::new_v4().simple().to_string(),
