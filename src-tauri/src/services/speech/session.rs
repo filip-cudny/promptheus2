@@ -23,7 +23,7 @@ use crate::services::speech::widget::{
 };
 use crate::services::speech::{
     self, claude_desktop, screenshot, selection, webview_provider_of, AudioClipStore, PendingOrigin, PendingPrompt, SpeechError,
-    SpeechService, SttOptions,
+    SpeechService, SttOptions, SETTINGS_AGENT_ID,
 };
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
@@ -35,6 +35,11 @@ struct TranscriptionComplete {
     text: String,
     duration_secs: f64,
     entry_id: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+struct SettingsAgentDictation {
+    text: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -177,6 +182,7 @@ enum TranscriptPlan {
     Chat(ChatRequest),
     Webview { provider_id: String },
     ClaudeDesktop,
+    SettingsAgent,
 }
 
 fn transcript_plan(
@@ -197,6 +203,7 @@ fn transcript_plan(
         })
     };
     match pending {
+        Some(p) if p.id == SETTINGS_AGENT_ID => TranscriptPlan::SettingsAgent,
         Some(p) if p.origin == PendingOrigin::ShiftClick => TranscriptPlan::AlternativeExecute,
         Some(_) if text.trim().is_empty() => TranscriptPlan::NoSpeech,
         _ if stop_chat && stop_chat_target == StopChatTarget::Claude => match claude_target {
@@ -222,7 +229,10 @@ fn speech_output_route(plan: &TranscriptPlan) -> Option<String> {
         TranscriptPlan::Chat(_) => Some(OutputRoute::Chat.as_str().to_string()),
         TranscriptPlan::ClaudeDesktop => Some("claude_desktop".to_string()),
         TranscriptPlan::Webview { provider_id } => Some(format!("webview:{provider_id}")),
-        TranscriptPlan::AlternativeExecute | TranscriptPlan::NoSpeech | TranscriptPlan::SkillRun { .. } => None,
+        TranscriptPlan::AlternativeExecute
+        | TranscriptPlan::NoSpeech
+        | TranscriptPlan::SkillRun { .. }
+        | TranscriptPlan::SettingsAgent => None,
     }
 }
 
@@ -340,6 +350,18 @@ pub async fn toggle_speech_recording(
     app: AppHandle,
     action_id: Option<String>,
 ) -> crate::Result<()> {
+    toggle_recording(app, action_id, false).await
+}
+
+pub async fn start_settings_agent_dictation(app: AppHandle) -> crate::Result<()> {
+    toggle_recording(app, None, true).await
+}
+
+async fn toggle_recording(
+    app: AppHandle,
+    action_id: Option<String>,
+    settings_agent: bool,
+) -> crate::Result<()> {
     let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
     let config_state = app.state::<Arc<Mutex<ConfigService>>>();
     let history_state = app.state::<Arc<Mutex<SqliteHistoryService>>>();
@@ -369,6 +391,10 @@ pub async fn toggle_speech_recording(
 
         was_recording = s.is_recording();
 
+        if settings_agent && was_recording {
+            return Err(SpeechError::AlreadyRecording.into());
+        }
+
         if !was_recording {
             if s.is_debouncing() {
                 log::debug!("toggle_speech_recording: ignored, debounced");
@@ -386,6 +412,9 @@ pub async fn toggle_speech_recording(
         } else {
             raw_audio = None;
             s.start_recording(action_id.clone())?;
+            if settings_agent {
+                s.lock_settings_agent_target();
+            }
             started_action_id = action_id;
             started_session = Some(s.session());
         }
@@ -650,6 +679,18 @@ pub async fn toggle_speech_recording(
                             text.clone(),
                         )
                         .await;
+                    }
+                    TranscriptPlan::SettingsAgent => {
+                        widget_inner.close_if_current(&app_clone, generation).await;
+                        if text.trim().is_empty() {
+                            log::debug!("settings agent dictation: empty transcript, nothing emitted");
+                        } else if let Err(e) = app_clone.emit_to(
+                            "settings-dialog",
+                            "settings-agent-dictation",
+                            SettingsAgentDictation { text: text.clone() },
+                        ) {
+                            log::warn!("settings agent dictation: emit failed: {e}");
+                        }
                     }
                     TranscriptPlan::ClaudeDesktop => {
                         created_entry_id = record_speech_entry(&app_clone, &history_inner, &text, output_route.as_deref()).await;
@@ -1234,6 +1275,10 @@ pub async fn paste_into_recording_widget(app: AppHandle) -> crate::Result<()> {
     if !recording_widget_shown(&app, "paste").await {
         return Ok(());
     }
+    if target_locked(&app).await {
+        log::debug!("recording widget intent paste ignored: target locked");
+        return Ok(());
+    }
     crate::commands::context::paste_item_for_pill(&app).await
 }
 
@@ -1359,6 +1404,26 @@ mod tests {
             auto_send: true,
             source: InvocationSource::Pill,
         })
+    }
+
+    fn settings_agent_target() -> PendingPrompt {
+        PendingPrompt {
+            id: SETTINGS_AGENT_ID.into(),
+            name: "Settings agent".into(),
+            origin: PendingOrigin::Pill,
+        }
+    }
+
+    #[test]
+    fn plan_settings_agent_target_delivers_to_the_agent_with_and_without_stop_chat() {
+        for stop_chat in [true, false] {
+            for stop_chat_target in [StopChatTarget::Chat, StopChatTarget::Claude] {
+                assert_eq!(
+                    transcript_plan(Some(&settings_agent_target()), stop_chat, "hello", None, ClaudeTarget::Webview, stop_chat_target),
+                    TranscriptPlan::SettingsAgent
+                );
+            }
+        }
     }
 
     #[test]

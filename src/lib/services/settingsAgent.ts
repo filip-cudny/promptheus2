@@ -25,6 +25,14 @@ export function settingsAgentPanel(open: boolean): Promise<PanelMode> {
   return invoke("settings_agent_panel", { open });
 }
 
+export function settingsAgentStartDictation(): Promise<void> {
+  return invoke("start_settings_agent_dictation");
+}
+
+export function onSettingsAgentDictation(cb: (text: string) => void): Promise<UnlistenFn> {
+  return listen<{ text: string }>("settings-agent-dictation", (event) => cb(event.payload.text));
+}
+
 export type EffectTarget = { type: "setting"; path: string } | { type: "file"; path: string };
 
 export interface ProposalEffect {

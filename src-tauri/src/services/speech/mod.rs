@@ -32,6 +32,8 @@ const TOGGLE_DEBOUNCE_MS: u128 = 250;
 
 pub const DICTATION_ID: &str = "__dictation__";
 pub const DICTATION_LABEL: &str = "Dictation";
+pub const SETTINGS_AGENT_ID: &str = "__settings_agent__";
+pub const SETTINGS_AGENT_LABEL: &str = "Settings agent";
 pub const WEBVIEW_TARGET_PREFIX: &str = "webview:";
 
 pub fn webview_target_id(provider_id: &str) -> String {
@@ -480,6 +482,17 @@ impl SpeechService {
         Ok(())
     }
 
+    /// Makes the settings agent the destination of the recording just started and locks it.
+    pub fn lock_settings_agent_target(&mut self) {
+        self.pending = Some(PendingPrompt {
+            id: SETTINGS_AGENT_ID.to_string(),
+            name: SETTINGS_AGENT_LABEL.to_string(),
+            origin: PendingOrigin::Pill,
+        });
+        self.taken = self.pending.clone();
+        self.target_locked = true;
+    }
+
     /// Takes the pending skill and locks the target in one step, so a pill
     /// selection cannot slip in between.
     pub fn take_pending_prompt(&mut self) -> (Option<PendingPrompt>, bool) {
@@ -785,6 +798,19 @@ mod tests {
         service.take_pending_prompt();
         assert_eq!(service.select_target("other", "Other"), Err(TargetLocked));
         assert_eq!(service.shown_target().map(|p| p.name.as_str()), Some("Claude"));
+    }
+
+    #[test]
+    fn a_settings_agent_session_is_locked_from_the_start_and_refuses_stop_chat_and_selection() {
+        let mut service = SpeechService::new();
+        service.lock_settings_agent_target();
+        assert!(service.target_locked());
+        assert_eq!(service.shown_target().map(|p| p.id.as_str()), Some(SETTINGS_AGENT_ID));
+        assert_eq!(service.select_target("fix", "Fix"), Err(TargetLocked));
+        assert_eq!(service.request_stop_chat(), Err(TargetLocked));
+        let (taken, stop_chat) = service.take_pending_prompt();
+        assert_eq!(taken.map(|p| p.id), Some(SETTINGS_AGENT_ID.to_string()));
+        assert!(!stop_chat);
     }
 
     #[test]

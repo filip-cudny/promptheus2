@@ -10,6 +10,7 @@ import {
   settingsAgentReset,
   settingsAgentSecretResult,
   settingsAgentSend,
+  settingsAgentStartDictation,
   settingsAgentTestRow,
   type PanelMode,
   type ProposalData,
@@ -100,6 +101,15 @@ async function send(text: string) {
     error = String(e);
   } finally {
     running = false;
+  }
+}
+
+async function dictate() {
+  error = null;
+  try {
+    await settingsAgentStartDictation();
+  } catch (e) {
+    error = String(e);
   }
 }
 
@@ -203,6 +213,7 @@ export function getSettingsAgent() {
     get panelOpen() { return panelOpen; },
     get panelMode() { return panelMode; },
     send,
+    dictate,
     cancel,
     reset,
     setPanelOpen,

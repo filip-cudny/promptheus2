@@ -54,6 +54,7 @@
     selectedId: string;
     selectedLabel: string;
     targetLocked: boolean;
+    minimalIntents: boolean;
     items: PillItem[];
     itemRows: number;
     contextVersion: number;
@@ -124,6 +125,7 @@
     selectedId: "",
     selectedLabel: DEFAULT_TARGET_LABEL,
     targetLocked: false,
+    minimalIntents: false,
     items: [],
     itemRows: 0,
     contextVersion: 0,
@@ -154,7 +156,7 @@
     return `${Math.floor(totalSeconds / 60)}:${seconds}`;
   });
 
-  const interactive = $derived(!model.targetLocked && widgetState !== "done");
+  const interactive = $derived(!model.targetLocked && !model.minimalIntents && widgetState !== "done");
   const hasItems = $derived(model.items.length > 0);
   const pillHeight = $derived(PILL_HEIGHT + itemsHeight(model.itemRows));
   const separatorIndex = $derived(dropdownSeparatorIndex(model.targets));

@@ -1,6 +1,8 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
-  import { ArrowUp, Square } from "lucide-svelte";
+  import { onMount, tick, type Snippet } from "svelte";
+  import { ArrowUp, Mic, Square } from "lucide-svelte";
+  import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
+  import { onSettingsAgentDictation } from "$lib/services/settingsAgent";
 
   let {
     running,
@@ -14,7 +16,21 @@
     beforeSend?: Snippet;
   } = $props();
 
+  const agent = getSettingsAgent();
+
   let text = $state("");
+  let input = $state<HTMLTextAreaElement>();
+
+  onMount(() => {
+    const unlisten = onSettingsAgentDictation(async (dictated) => {
+      text = text ? `${text} ${dictated}` : dictated;
+      await tick();
+      input?.focus();
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  });
 
   function submit() {
     if (!text.trim() || running) return;
@@ -32,6 +48,7 @@
 
 <div class="composer">
   <textarea
+    bind:this={input}
     bind:value={text}
     onkeydown={handleKeydown}
     rows="2"
@@ -39,6 +56,9 @@
   ></textarea>
   <div class="actions">
     {@render beforeSend?.()}
+    <button class="action" title="Dictate" disabled={running} onclick={() => agent.dictate()}>
+      <Mic size={14} />
+    </button>
     {#if running}
       <button class="action" title="Stop" onclick={oncancel}><Square size={14} /></button>
     {:else}

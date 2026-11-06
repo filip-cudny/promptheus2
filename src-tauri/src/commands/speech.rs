@@ -21,6 +21,11 @@ pub async fn toggle_speech_recording(
 }
 
 #[tauri::command]
+pub async fn start_settings_agent_dictation(app: AppHandle) -> crate::Result<()> {
+    session::start_settings_agent_dictation(app).await
+}
+
+#[tauri::command]
 pub async fn retry_transcription(app: AppHandle, entry_id: String) -> crate::Result<()> {
     session::retry_transcription(app, entry_id).await
 }

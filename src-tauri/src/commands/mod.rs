@@ -177,6 +177,7 @@ macro_rules! handlers {
             $crate::commands::skills::preview_skill_message,
             // === speech ===
             $crate::commands::speech::toggle_speech_recording,
+            $crate::commands::speech::start_settings_agent_dictation,
             $crate::commands::speech::pause_speech_recording,
             $crate::commands::speech::resume_speech_recording,
             $crate::commands::speech::cancel_speech_recording,
