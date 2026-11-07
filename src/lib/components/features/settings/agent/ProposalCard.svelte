@@ -1,10 +1,11 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import { Undo2 } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import Button from "$lib/components/shared/ui/Button.svelte";
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
-  import type { ProposalData, ProposalEffect } from "$lib/services/settingsAgent";
+  import type { ProposalData, ProposalEffect, ProposalRowData } from "$lib/services/settingsAgent";
   import ProposalRow from "./ProposalRow.svelte";
   import UndoConflicts from "../UndoConflicts.svelte";
 
@@ -13,7 +14,13 @@
 
   let { proposal }: { proposal: ProposalData } = $props();
 
+  const RETEST_DEBOUNCE_MS = 500;
+
   let unchecked = $state<Record<number, boolean>>({});
+  let values = $state<Record<string, string>>({});
+  const retestTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+
+  onDestroy(() => Object.values(retestTimers).forEach(clearTimeout));
 
   const outcome = $derived(agent.proposalOutcome);
   const done = $derived(outcome?.kind === "applied" || outcome?.kind === "undone");
@@ -25,24 +32,62 @@
     return Array.from({ length: size }, (_, i) => proposal.rows.some((r) => r.row === i) && !unchecked[i]);
   }
 
-  function show(effect: ProposalEffect) {
-    if (effect.target.type === "setting") navigation.navigateTo(effect.target.path);
-    else if (effect.target.path.startsWith("skills/")) {
-      const slug = effect.target.path.split("/")[1];
-      navigation.navigateTo(`skills[${slug}]`);
+  function stagedValues(selectedOnly: boolean): Record<string, string> {
+    const staged: Record<string, string> = {};
+    for (const r of proposal.rows) {
+      const name = r.env_value?.name;
+      if (name && values[name] && (!selectedOnly || !unchecked[r.row])) staged[name] = values[name];
     }
-    else navigation.activeSection = "prompt_base";
+    return staged;
+  }
+
+  function missingValues(row: ProposalRowData): string[] {
+    return row.waits_for.filter((name) => !values[name]);
+  }
+
+  function retestWaiting(name: string) {
+    for (const r of proposal.rows) {
+      if (r.waits_for.includes(name) && r.new_destination === null && missingValues(r).length === 0) {
+        void agent.testRow(r.row, stagedValues(false));
+      }
+    }
+  }
+
+  function scheduleRetest(name: string) {
+    clearTimeout(retestTimers[name]);
+    retestTimers[name] = setTimeout(() => flushRetest(name), RETEST_DEBOUNCE_MS);
+  }
+
+  function flushRetest(name: string) {
+    if (!(name in retestTimers)) return;
+    clearTimeout(retestTimers[name]);
+    delete retestTimers[name];
+    retestWaiting(name);
+  }
+
+  function show(effect: ProposalEffect) {
+    const { target } = effect;
+    if (target.type === "setting") navigation.navigateTo(target.path);
+    else if (target.type === "file") {
+      if (target.path.startsWith("skills/")) navigation.navigateTo(`skills[${target.path.split("/")[1]}]`);
+      else navigation.activeSection = "prompt_base";
+    }
   }
 </script>
 
 <div class="card">
   {#each proposal.rows as row (row.row)}
+    {@const name = row.env_value?.name ?? ""}
     <ProposalRow
       {row}
       bind:checked={() => !unchecked[row.row], (v) => (unchecked[row.row] = !v)}
+      bind:value={() => values[name] ?? "", (v) => (values[name] = v)}
+      missing={missingValues(row)}
       disabled={done}
       onshow={show}
-      ontest={() => agent.testRow(row.row)}
+      ontest={() => agent.testRow(row.row, stagedValues(false))}
+      onvalueinput={() => scheduleRetest(name)}
+      onvalueblur={() => flushRetest(name)}
     />
   {/each}
   {#if outcome && "message" in outcome && outcome.message}
@@ -72,7 +117,7 @@
       <Button
         variant="primary"
         disabled={hasStale || !anySelected || agent.applying}
-        onclick={() => agent.applyProposal(selection())}>Apply</Button
+        onclick={() => agent.applyProposal(selection(), stagedValues(true))}>Apply</Button
       >
     {/if}
   </div>

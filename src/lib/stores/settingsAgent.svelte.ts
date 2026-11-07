@@ -116,11 +116,11 @@ function blockedMessage(rows: number[]): string {
   return `Nothing was written. Rows changed since proposed: ${rows.map((r) => r + 1).join(", ")}. Refresh first.`;
 }
 
-async function applyProposal(selected: boolean[]) {
+async function applyProposal(selected: boolean[], values: Record<string, string>) {
   if (!proposal || applying) return;
   applying = true;
   try {
-    const result = await settingsAgentApply(proposal.proposal_id, selected);
+    const result = await settingsAgentApply(proposal.proposal_id, selected, values);
     if ("entry_id" in result) proposalOutcome = { kind: "applied", entryId: result.entry_id };
     else if ("stale_rows" in result) {
       for (const row of proposal.rows) if (result.stale_rows.includes(row.row)) row.stale = true;
@@ -179,10 +179,10 @@ async function refreshProposal() {
   }
 }
 
-async function testRow(row: number) {
+async function testRow(row: number, values: Record<string, string>) {
   if (!proposal) return;
   try {
-    const result = await settingsAgentTestRow(proposal.proposal_id, row);
+    const result = await settingsAgentTestRow(proposal.proposal_id, row, values);
     const target = proposal.rows.find((r) => r.row === row);
     if (target) target.test = result;
   } catch (e) {

@@ -3,7 +3,7 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import Button from "$lib/components/shared/ui/Button.svelte";
   import { lineDiff } from "$lib/utils/lineDiff";
-  import { entryTitle, formatEntryTime, formatValue } from "$lib/utils/changeLog";
+  import { entryTitle, formatEntryTime, formatValue, targetLabel } from "$lib/utils/changeLog";
   import {
     listChangeLog,
     onChangeLogChanged,
@@ -102,11 +102,11 @@
             <div class="op-label">{op.label}</div>
             {#each op.effects as effect, i (i)}
               <div class="effect">
-                <code class="path">{effect.target.path}</code>
+                <code class="path">{targetLabel(effect.target)}</code>
                 {#if effect.target.type === "file"}
                   <pre class="diff">{#each lineDiff(String(effect.before ?? ""), String(effect.after ?? "")) as line}<span class="line {line.kind}">{line.kind === "added" ? "+ " : line.kind === "removed" ? "- " : "  "}{line.text}
 </span>{/each}</pre>
-                {:else}
+                {:else if effect.target.type === "setting"}
                   <div class="values">
                     <span class="before">{formatValue(effect.before)}</span>
                     <span>→</span>

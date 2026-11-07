@@ -33,7 +33,10 @@ export function onSettingsAgentDictation(cb: (text: string) => void): Promise<Un
   return listen<{ text: string }>("settings-agent-dictation", (event) => cb(event.payload.text));
 }
 
-export type EffectTarget = { type: "setting"; path: string } | { type: "file"; path: string };
+export type EffectTarget =
+  | { type: "setting"; path: string }
+  | { type: "file"; path: string }
+  | { type: "secret"; name: string };
 
 export interface ProposalEffect {
   target: EffectTarget;
@@ -56,6 +59,9 @@ export interface ProposalRowData {
   test: RowTest | null;
   sample_input: string | null;
   stale: boolean;
+  env_value: { name: string; secret: boolean; set: boolean } | null;
+  waits_for: string[];
+  new_destination: string | null;
 }
 
 export interface ProposalData {
@@ -76,8 +82,12 @@ export function onSettingsAgentSecretView(cb: (name: string) => void): Promise<U
   return listen<{ name: string }>("settings-agent-secret-view", (e) => cb(e.payload.name));
 }
 
-export function settingsAgentApply(proposalId: string, selected: boolean[]): Promise<ApplyResult> {
-  return invoke("settings_agent_apply", { proposalId, selected });
+export function settingsAgentApply(
+  proposalId: string,
+  selected: boolean[],
+  values: Record<string, string>,
+): Promise<ApplyResult> {
+  return invoke("settings_agent_apply", { proposalId, selected, values });
 }
 
 export function settingsAgentReject(proposalId: string): Promise<void> {
@@ -88,6 +98,10 @@ export function settingsAgentRefresh(proposalId: string): Promise<void> {
   return invoke("settings_agent_refresh", { proposalId });
 }
 
-export function settingsAgentTestRow(proposalId: string, row: number): Promise<RowTest> {
-  return invoke("settings_agent_test_row", { proposalId, row });
+export function settingsAgentTestRow(
+  proposalId: string,
+  row: number,
+  values: Record<string, string>,
+): Promise<RowTest> {
+  return invoke("settings_agent_test_row", { proposalId, row, values });
 }

@@ -1,4 +1,9 @@
 import type { ChangeLogEntry, UndoConflict } from "$lib/services/changeLog";
+import type { EffectTarget } from "$lib/services/settingsAgent";
+
+export function targetLabel(target: EffectTarget): string {
+  return target.type === "secret" ? target.name : target.path;
+}
 
 export function formatValue(value: unknown): string {
   if (value === null || value === undefined) return "(none)";
@@ -23,7 +28,9 @@ export function entryTitle(
 }
 
 export function conflictLines(conflicts: UndoConflict[]): string[] {
-  return conflicts.map(
-    (c) => `${c.target.path}: current ${formatValue(c.current)}, expected ${formatValue(c.expected_after)}`,
+  return conflicts.map((c) =>
+    c.target.type === "secret"
+      ? `${c.target.name}: changed since this entry`
+      : `${c.target.path}: current ${formatValue(c.current)}, expected ${formatValue(c.expected_after)}`,
   );
 }
