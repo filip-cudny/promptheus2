@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Plus, ChevronDown } from "lucide-svelte";
+  import { Plus, ChevronDown, ArrowLeftRight } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { formatSurfaceList } from "$lib/constants/surfaces";
   import type { ModelConfig, ModelType, SurfaceKind } from "$lib/types";
@@ -8,14 +8,18 @@
   let {
     models,
     selectedId,
+    assignmentsSelected,
     surfacesByModel,
     onSelect,
+    onSelectAssignments,
     onAdd,
   }: {
     models: ModelConfig[];
     selectedId: string | null;
+    assignmentsSelected: boolean;
     surfacesByModel: Map<string, SurfaceKind[]>;
     onSelect: (id: string) => void;
+    onSelectAssignments: () => void;
     onAdd: (type: ModelType) => void;
   } = $props();
 
@@ -79,6 +83,13 @@
   </header>
 
   <div class="scroll">
+    <button class="row assignments" class:active={assignmentsSelected} onclick={onSelectAssignments}>
+      <span class="assignments-icon"><ArrowLeftRight size={ICON_SIZE.md} /></span>
+      <div class="row-main">
+        <div class="row-name">Assignments</div>
+        <div class="row-model assignments-sub">Which model each feature uses</div>
+      </div>
+    </button>
     {#if models.length === 0}
       <div class="empty">
         <p>No models configured.</p>
@@ -94,7 +105,7 @@
           {@const surfaces = surfacesByModel.get(model.id) ?? []}
           <button
             class="row"
-            class:active={model.id === selectedId}
+            class:active={!assignmentsSelected && model.id === selectedId}
             onclick={() => onSelect(model.id)}
           >
             <div class="row-main">
@@ -251,6 +262,29 @@
 
   .row.active {
     background: var(--accent-bg-soft);
+  }
+
+  .assignments {
+    align-items: center;
+    justify-content: flex-start;
+    border-bottom: 1px solid var(--border-faint);
+    margin-bottom: var(--space-2);
+  }
+
+  .assignments-icon {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    border-radius: var(--radius-md);
+    background: var(--surface-elevated);
+    border: 1px solid var(--border-hard);
+    color: var(--accent);
+  }
+
+  .assignments-sub {
+    margin-top: 0;
   }
 
   .row-main {

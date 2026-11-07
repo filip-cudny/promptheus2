@@ -9,11 +9,11 @@ export const SURFACE_ORDER: SurfaceKind[] = [
 ];
 
 export const SURFACE_LABELS: Record<SurfaceKind, string> = {
-  chat: "chat",
-  quick_actions: "quick actions",
-  title_generation: "title generation",
-  settings_agent: "settings agent",
-  speech_to_text: "speech to text",
+  chat: "Chat",
+  quick_actions: "Quick actions",
+  title_generation: "Title generation",
+  settings_agent: "Settings agent",
+  speech_to_text: "Speech to text",
 };
 
 export function formatSurfaceList(surfaces: SurfaceKind[]): string {

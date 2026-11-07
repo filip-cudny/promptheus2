@@ -24,6 +24,16 @@ The root is `src/windows/settings-dialog/App.svelte` (calls `store.init()` / `st
 
 `ModelEditor` hides "Store" when `draft.api_mode === "completions"`: the flag has no effect on Chat Completions. The stored value is kept, so switching back to Responses shows it unchanged.
 
+### Models section — Assignments
+
+`ModelList` pins an "Assignments" row (lucide `ArrowLeftRight`) above the groups and the empty state; it is always shown. `SectionModels` selects either Assignments (`selectedId === null`, the default on first open and after a delete) or a model id; an id that is no longer in `store.models` falls back to Assignments, and a `navigateTo` key naming a model (`models[<id>]…`) still selects that model. The editor pane shows `ModelAssignments` for Assignments, else `ModelEditor`. `SectionModels` calls `getSkillsStore().init()` on mount (idempotent), so skill pins are known when Settings opens straight into Models.
+
+`ModelAssignments` has three cards: "Text features" (Chat, Quick actions, Title generation, Settings agent: model select, reasoning effort select, "Open in <section> ›"), "Speech" (Speech to text, STT model select) and "Pinned in skills" (rendered only when a skill in `getSkillsStore().full` has a non-empty `model`; read-only rows with the model name or the stored id, link "Open skill ›" → `navigateTo("skills[<name>]")`). Each surface row has the element id `assignment-<surface>`. Model selects write like the sections do (`updateSurfaceModel`, `setSpeechToTextModel`); the empty option is "Not set" for Chat and Speech, `sameAsChatLabel` for the others. The effort select of Chat, Quick actions and Settings agent takes its options from the capabilities of the effective model (`chat` id, `quickActionsModelId`, `agentModelId`); Title generation and Speech have no effort cell.
+
+"Open in" calls `navigateTo` with `surfaces.chat.generation.model_id` (Chat), `surfaces.quick_actions.generation.model_id` (Context menu), `surfaces.title_generation.generation.model_id` and `surfaces.settings_agent.generation.model_id` (Chat), `surfaces.speech_to_text.model_id` (Speech). The view uses no `SettingField`: `navigateTo` finds a field by `setting-<catalog path>`, which must stay unique to the field's own section.
+
+`SURFACE_LABELS` (`$lib/constants/surfaces`) is sentence case (`Chat`, `Quick actions`, …): these are the row labels here and the labels of `formatSurfaceList`.
+
 ### Tests of pure modules
 
 Pure TS modules (no Svelte runes, no `$lib` imports other than `import type`) live in `src/lib/utils`. Their tests are `tests/*.test.mjs` (`node:test`, `node:assert`), importing the `.ts` file directly through Node type stripping; run `node --test "tests/*.test.mjs"` from the root. There is no test runner dependency; `node --test tests/` does not work on Node 25, which treats the directory as a module.
@@ -209,8 +219,8 @@ The model API key (`ModelEditor`, `CreateModelDialog`) is an `EnvVarPicker`: a `
 
 A model "in use by" a surface (chat / quick_actions / title_generation / speech_to_text) is surfaced in three places, all sharing the same accent-coloured visual language:
 
-1. Accent-coloured caption line in `ModelList` rows: `in use by chat, title generation`, rendered below the model id at `font-size-xs` in `var(--accent)`. Same phrasing as the editor header pill so the two views speak the same vocabulary.
-2. Pill badge in the editor header (`in use by chat, title generation`), `--accent-bg-soft` / `--accent` / `--accent-border` tokens. Header uses `align-items: center` so the pill is vertically centred against the heading.
+1. Accent-coloured caption line in `ModelList` rows: `in use by Chat, Title generation`, rendered below the model id at `font-size-xs` in `var(--accent)`. Same phrasing as the editor header pill so the two views speak the same vocabulary.
+2. Pill badge in the editor header (`in use by Chat, Title generation`), `--accent-bg-soft` / `--accent` / `--accent-border` tokens. Header uses `align-items: center` so the pill is vertically centred against the heading.
 3. Warning sentence in the delete-confirm. This one keeps the `.warn` colour — destructive intent justifies the warning palette.
 
 Sources of truth:
