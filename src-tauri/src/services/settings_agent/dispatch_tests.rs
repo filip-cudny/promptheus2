@@ -453,6 +453,7 @@ async fn a_row_using_an_unvalued_staged_variable_waits_and_is_not_tested() {
         {"op": "add_env_var", "name": NAME, "description": "new key", "secret": true},
         {"op": "set_env_value", "name": NAME},
         add_model_row("staged-model", BASE_URL_A, &format!("${{{NAME}}}")),
+        json!({"op": "add_model", "model": model("default-model", &format!("${{{NAME}}}"))}),
     ]);
 
     let (text, is_error) =
@@ -463,7 +464,11 @@ async fn a_row_using_an_unvalued_staged_variable_waits_and_is_not_tested() {
     let rows = &result["rows"];
     assert_eq!(rows[2]["waits_for"], json!([NAME]));
     assert!(rows[2]["test"].is_null());
-    assert!(rows[2]["new_destination"].is_null());
+    let note = rows[2]["new_destination"].as_str().unwrap();
+    assert!(note.contains(NAME) && note.contains(BASE_URL_A), "{note}");
+    assert_eq!(rows[3]["waits_for"], json!([NAME]));
+    assert!(rows[3]["test"].is_null());
+    assert!(rows[3]["new_destination"].is_null());
     assert_eq!(rows[0]["waits_for"], json!([]));
     assert_eq!(factory_calls.load(Ordering::SeqCst), 0);
     let proposal = sink.proposals.lock().unwrap()[0].clone();
@@ -471,7 +476,9 @@ async fn a_row_using_an_unvalued_staged_variable_waits_and_is_not_tested() {
     let payload = proposal_payload(&proposal, &Current { settings: &settings, config_dir: dir.path() });
     assert_eq!(payload["rows"][2]["waits_for"], json!([NAME]));
     assert_eq!(payload["rows"][1]["waits_for"], json!([]));
-    assert!(payload["rows"][2]["new_destination"].is_null());
+    assert_eq!(payload["rows"][2]["new_destination"], note);
+    assert_eq!(payload["rows"][3]["waits_for"], json!([NAME]));
+    assert!(payload["rows"][3]["new_destination"].is_null());
 }
 
 #[tokio::test]

@@ -265,8 +265,11 @@ impl Dispatcher {
             };
             match run_row_test(&request).await {
                 RowTest::NotTestable => {}
-                RowTest::Waits(names) => {
+                RowTest::Waits { names, new_destination } => {
                     outcomes.waits.insert(row, names);
+                    if let Some(text) = new_destination {
+                        outcomes.new_destinations.insert(row, text);
+                    }
                 }
                 RowTest::NewDestination(text) => {
                     outcomes.new_destinations.insert(row, text);

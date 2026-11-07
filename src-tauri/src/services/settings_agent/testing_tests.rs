@@ -305,7 +305,7 @@ async fn row_waits_for_every_unvalued_name_once_sorted_and_runs_nothing() {
     let one_left = Case::new(operations, settings).values(&[(a, "v")]).run(&factory).await;
 
     let waits = |result: RowTest| match result {
-        RowTest::Waits(names) => names,
+        RowTest::Waits { names, .. } => names,
         other => panic!("{other:?}"),
     };
     assert_eq!(waits(nothing), [a, b]);
@@ -329,7 +329,7 @@ async fn skill_waits_for_and_receives_staged_values_of_its_model() {
     let waiting = Case::new(operations.clone(), settings.clone()).run(&factory).await;
     let tested = Case::new(operations, settings).values(&[(KEY, "sk-skill-777")]).run(&factory).await;
 
-    assert!(matches!(waiting, RowTest::Waits(ref names) if names == &[KEY]), "{waiting:?}");
+    assert!(matches!(waiting, RowTest::Waits { ref names, .. } if names == &[KEY]), "{waiting:?}");
     assert!(matches!(tested, RowTest::Tested(ref result) if result.ok), "{tested:?}");
     assert_eq!(*seen.lock().unwrap(), vec![Some("sk-skill-777".to_string())]);
 }
@@ -342,6 +342,7 @@ async fn new_model_destination_is_not_tested_unless_allowed() {
     let moved = with_key("moved", &reference, Some("https://beta.example/api"));
     let same = with_key("same", &reference, Some("https://alpha.example/api"));
     let default_endpoint = with_key("default", &reference, None);
+    let empty_base_url = with_key("empty", &reference, Some(""));
     let calls = AtomicUsize::new(0);
     let ai = echoing_ai("moved", "OK");
     let factory = |_: &Settings| {
@@ -354,26 +355,57 @@ async fn new_model_destination_is_not_tested_unless_allowed() {
     };
 
     let blocked = case(&moved).on_click_only().run(&factory).await;
-    let default_blocked = case(&default_endpoint).on_click_only().run(&factory).await;
     assert_eq!(calls.load(Ordering::SeqCst), 0);
     let allowed = case(&moved).run(&factory).await;
     let known = case(&same).on_click_only().run(&factory).await;
+    let default_tested = case(&default_endpoint).on_click_only().run(&factory).await;
+    let empty_tested = case(&empty_base_url).on_click_only().run(&factory).await;
 
-    let text = |result: RowTest| match result {
-        RowTest::NewDestination(text) => text,
-        other => panic!("{other:?}"),
-    };
-    assert_eq!(
-        text(blocked),
-        "test on click: PHX_TEST_DEST_KEY goes to new destination https://beta.example/api"
-    );
-    assert_eq!(
-        text(default_blocked),
-        "test on click: PHX_TEST_DEST_KEY goes to new destination openai default endpoint"
-    );
+    let RowTest::NewDestination(text) = blocked else { panic!("{blocked:?}") };
+    assert_eq!(text, "test on click: PHX_TEST_DEST_KEY goes to new destination https://beta.example/api");
     assert!(matches!(allowed, RowTest::Tested(_)), "{allowed:?}");
     assert!(matches!(known, RowTest::Tested(_)), "{known:?}");
-    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert!(matches!(default_tested, RowTest::Tested(_)), "{default_tested:?}");
+    assert!(matches!(empty_tested, RowTest::Tested(_)), "{empty_tested:?}");
+    assert_eq!(calls.load(Ordering::SeqCst), 4);
+}
+
+#[tokio::test]
+async fn waiting_row_reports_its_new_destination_and_default_endpoint_is_known() {
+    const KEY: &str = "PHX_TEST_WAIT_DEST_KEY";
+    let reference = format!("${{{KEY}}}");
+    let custom = with_key("custom", &reference, Some("https://beta.example/api"));
+    let default_endpoint = with_key("default", &reference, None);
+    let operations = |model: &ModelConfig| vec![set_value(KEY), Operation::AddModel { model: model.clone() }];
+    let calls = AtomicUsize::new(0);
+    let seen = Mutex::new(Vec::new());
+    let ai = echoing_ai("default", "OK");
+    let factory = |settings: &Settings| {
+        calls.fetch_add(1, Ordering::SeqCst);
+        seen.lock().unwrap().push(settings.models[0].resolved_api_key());
+        ai.clone()
+    };
+    let case = |model: &ModelConfig| Case::new(operations(model), settings_of(vec![model.clone()]));
+
+    let waiting_custom = case(&custom).on_click_only().run(&factory).await;
+    let waiting_default = case(&default_endpoint).on_click_only().run(&factory).await;
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    let staged_custom = case(&custom).values(&[(KEY, "sk-dest-1")]).on_click_only().run(&factory).await;
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    let staged_default = case(&default_endpoint).values(&[(KEY, "sk-dest-2")]).on_click_only().run(&factory).await;
+
+    let RowTest::Waits { names, new_destination } = waiting_custom else { panic!("{waiting_custom:?}") };
+    assert_eq!(names, [KEY]);
+    assert_eq!(
+        new_destination.as_deref(),
+        Some("test on click: PHX_TEST_WAIT_DEST_KEY goes to new destination https://beta.example/api")
+    );
+    let RowTest::Waits { names, new_destination } = waiting_default else { panic!("{waiting_default:?}") };
+    assert_eq!(names, [KEY]);
+    assert_eq!(new_destination, None);
+    assert!(matches!(staged_custom, RowTest::NewDestination(_)), "{staged_custom:?}");
+    assert!(matches!(staged_default, RowTest::Tested(ref result) if result.ok), "{staged_default:?}");
+    assert_eq!(*seen.lock().unwrap(), vec![Some("sk-dest-2".to_string())]);
 }
 
 #[tokio::test]

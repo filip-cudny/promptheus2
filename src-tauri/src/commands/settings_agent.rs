@@ -214,7 +214,7 @@ pub async fn settings_agent_test_row(
     let result = match run_row_test(&request).await {
         RowTest::Tested(result) => result,
         RowTest::NotTestable => return Err(crate::Error::Other(format!("row {row} has no test"))),
-        RowTest::Waits(names) => {
+        RowTest::Waits { names, .. } => {
             return Err(crate::Error::Other(format!(
                 "row {row} waits for a value of {}",
                 names.join(", ")

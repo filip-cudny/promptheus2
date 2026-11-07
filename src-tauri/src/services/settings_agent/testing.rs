@@ -39,7 +39,7 @@ pub struct RowTestRequest<'a> {
 #[derive(Debug)]
 pub enum RowTest {
     NotTestable,
-    Waits(Vec<String>),
+    Waits { names: Vec<String>, new_destination: Option<String> },
     NewDestination(String),
     Tested(TestResult),
 }
@@ -48,7 +48,7 @@ impl RowTest {
     fn kind(&self) -> &'static str {
         match self {
             Self::NotTestable => "not testable",
-            Self::Waits(_) => "waits",
+            Self::Waits { .. } => "waits",
             Self::NewDestination(_) => "new destination",
             Self::Tested(_) => "tested",
         }
@@ -134,6 +134,7 @@ impl Binding<'_> {
 
     fn is_known_in(&self, before: &Settings, variable: &str) -> bool {
         match self {
+            Self::Model(model) if has_default_endpoint(model) => true,
             Self::Model(model) => {
                 let destination = model_destination(model);
                 before.models.iter().any(|other| {
@@ -147,6 +148,10 @@ impl Binding<'_> {
             }),
         }
     }
+}
+
+fn has_default_endpoint(model: &ModelConfig) -> bool {
+    model.base_url.as_deref().is_none_or(str::is_empty)
 }
 
 fn model_destination(model: &ModelConfig) -> String {
@@ -224,13 +229,13 @@ async fn row_test(request: &RowTestRequest<'_>) -> RowTest {
     let binding = subject.binding();
     let variables = binding.as_ref().map(Binding::variables).unwrap_or_default();
     let waits = waiting_names(&variables, request.operations, request.values);
+    let new_destination = binding
+        .as_ref()
+        .and_then(|binding| new_destination_text(binding, &variables, request.before));
     if !waits.is_empty() {
-        return RowTest::Waits(waits);
+        return RowTest::Waits { names: waits, new_destination };
     }
     if !request.allow_new_destinations {
-        let new_destination = binding
-            .as_ref()
-            .and_then(|binding| new_destination_text(binding, &variables, request.before));
         if let Some(text) = new_destination {
             return RowTest::NewDestination(text);
         }
