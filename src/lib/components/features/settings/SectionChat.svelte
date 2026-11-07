@@ -6,6 +6,7 @@
   import { updateSurfaceModel, updateSurfaceReasoningEffort } from "$lib/services/settings";
   import { effortOptions } from "$lib/utils/effortOptions";
   import { agentModelId } from "$lib/utils/agentModel";
+  import { sameAsChatLabel } from "$lib/utils/modelUses";
   import SettingsSection from "./SettingsSection.svelte";
   import SettingField from "./SettingField.svelte";
   import PromptEditor from "./PromptEditor.svelte";
@@ -29,7 +30,13 @@
       .map((m) => ({ value: m.id, label: m.display_name || m.model })),
   );
   const chatModelOptions = $derived([{ value: "", label: "Not set" }, ...textModels]);
-  const titleModelOptions = $derived([{ value: "", label: "Chat model" }, ...textModels]);
+  const inheritingModelOptions = $derived([
+    {
+      value: "",
+      label: store.settings ? sameAsChatLabel(store.settings.surfaces, store.models) : "Same as Chat",
+    },
+    ...textModels,
+  ]);
 
   const chatEffortOptions = $derived(
     effortOptions(
@@ -90,7 +97,7 @@
         <SettingField key="surfaces.title_generation.generation.model_id">
           <SelectDropdown
             value={titleModelId ?? ""}
-            options={titleModelOptions}
+            options={inheritingModelOptions}
             ariaLabel="Title model"
             onchange={(id) =>
               run("update_surface_model title_generation", () =>
@@ -103,7 +110,7 @@
           <SettingField key="surfaces.settings_agent.generation.model_id">
             <SelectDropdown
               value={agent.model_id ?? ""}
-              options={titleModelOptions}
+              options={inheritingModelOptions}
               ariaLabel="Settings agent model"
               onchange={(id) =>
                 run("update_surface_model settings_agent", () =>

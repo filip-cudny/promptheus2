@@ -1,7 +1,11 @@
 import { onSettingsChanged } from "$lib/services/events";
 import { getSettings, parseSettingError } from "$lib/services/settings";
 import { SURFACE_ORDER } from "$lib/constants/surfaces";
+import { getSkillsStore } from "$lib/stores/skills.svelte";
+import { modelUses, type ModelUse } from "$lib/utils/modelUses";
 import type { Settings, ModelConfig, SurfaceKind } from "$lib/types";
+
+const skills = getSkillsStore();
 
 let settings = $state.raw<Settings | null>(null);
 let loading = $state(false);
@@ -44,6 +48,10 @@ const surfacesByModel = $derived.by<Map<string, SurfaceKind[]>>(() => {
   }
   return map;
 });
+
+const usesByModel = $derived.by<Map<string, ModelUse[]>>(() =>
+  settings ? modelUses(settings.surfaces, skills.full) : new Map(),
+);
 
 async function refresh() {
   if (refreshInFlight) return refreshInFlight;
@@ -108,6 +116,10 @@ function getSurfacesForModel(modelId: string): SurfaceKind[] {
   return surfacesByModel.get(modelId) ?? [];
 }
 
+function getUsesForModel(id: string): ModelUse[] {
+  return usesByModel.get(id) ?? [];
+}
+
 export function getSettingsStore() {
   return {
     get settings() {
@@ -128,6 +140,9 @@ export function getSettingsStore() {
     get surfacesByModel() {
       return surfacesByModel;
     },
+    get usesByModel() {
+      return usesByModel;
+    },
     get fieldErrors() {
       return fieldErrors;
     },
@@ -143,5 +158,6 @@ export function getSettingsStore() {
     destroy,
     getModel,
     getSurfacesForModel,
+    getUsesForModel,
   };
 }

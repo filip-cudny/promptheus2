@@ -13,6 +13,7 @@
     updateSurfaceReasoningEffort,
   } from "$lib/services/settings";
   import { effortOptions } from "$lib/utils/effortOptions";
+  import { quickActionsModelId, sameAsChatLabel } from "$lib/utils/modelUses";
   import SettingsSection from "./SettingsSection.svelte";
   import SettingField from "./SettingField.svelte";
   import ShortcutField from "./ShortcutField.svelte";
@@ -44,20 +45,27 @@
   const quick = $derived(store.settings?.surfaces.quick_actions.generation ?? null);
   const order = $derived(store.settings?.menu_section_order ?? []);
 
+  const effectiveQuickModelId = $derived(
+    store.settings ? quickActionsModelId(store.settings.surfaces) : null,
+  );
+
   const modelOptions = $derived([
-    { value: "", label: "Not set" },
+    {
+      value: "",
+      label: store.settings ? sameAsChatLabel(store.settings.surfaces, store.models) : "Same as Chat",
+    },
     ...store.models
       .filter((m) => m.type === "text")
       .map((m) => ({ value: m.id, label: m.display_name || m.model })),
   ]);
   const quickEffortOptions = $derived(
     effortOptions(
-      getCachedCapabilities(quick?.model_id ?? null)?.reasoning,
+      getCachedCapabilities(effectiveQuickModelId)?.reasoning,
       quick?.parameters.reasoning_effort,
     ),
   );
 
-  $effect(() => prefetchCapabilities(quick?.model_id ?? null));
+  $effect(() => prefetchCapabilities(effectiveQuickModelId));
 
   async function run(label: string, write: () => Promise<void>) {
     try {

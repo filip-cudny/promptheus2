@@ -217,6 +217,7 @@ Sources of truth:
 
 - `store.surfacesByModel` — `Map<modelId, SurfaceKind[]>`, ordered per `SURFACE_ORDER`. Use this when iterating models (e.g. `ModelList`).
 - `store.getSurfacesForModel(id)` — `SurfaceKind[]` for a single model. Use this when you have one id (e.g. `ModelEditor` props).
+- `store.usesByModel` / `store.getUsesForModel(id)` — `Map<modelId, ModelUse[]>` / `ModelUse[]` from `modelUses` in `$lib/utils/modelUses.ts`: stored and inherited-from-Chat surface uses, then skill pins.
 - `formatSurfaceList(surfaces)` from `$lib/constants/surfaces` — the canonical comma-joined human label.
 
 Never recompute the mapping ad hoc; both consumers must read from the store so the list, the editor badge, and the delete confirm stay in lockstep.
@@ -258,7 +259,7 @@ Save flow goes through `$lib/services/prompts.ts` → backend `save_prompt` Taur
 
 ### Chat and Speech sections
 
-`SectionChat` shows the default chat model, reasoning effort (as the model editor's effort select: "None" first, all levels when the model does not advertise effort, a saved value the model does not accept shown as "not accepted by this model"; plus "Default" = `null`), the chat's MCP tools (`SurfaceToolsPicker`), the title generation model, the settings agent model ("Chat model" = fall back to the chat model), its reasoning effort (options gated by the capabilities of the effective model, as for chat; an empty value falls back to the chat's reasoning effort) and its MCP tools (`SurfaceToolsPicker`, "Settings agent tools"), the title generation prompt (`PromptEditor` kind `title_generation`), and `WebviewProvidersEditor`.
+`SectionChat` shows the default chat model, reasoning effort (as the model editor's effort select: "None" first, all levels when the model does not advertise effort, a saved value the model does not accept shown as "not accepted by this model"; plus "Default" = `null`), the chat's MCP tools (`SurfaceToolsPicker`), the title generation model and the settings agent model (the empty option of both is "Same as Chat (<chat model name>)" from `sameAsChatLabel` in `$lib/utils/modelUses.ts`, = fall back to the chat model), its reasoning effort (options gated by the capabilities of the effective model, as for chat; an empty value falls back to the chat's reasoning effort) and its MCP tools (`SurfaceToolsPicker`, "Settings agent tools"), the title generation prompt (`PromptEditor` kind `title_generation`), and `WebviewProvidersEditor`.
 
 `SectionSpeech` shows STT model, language (empty = `null`), `no_verbatim`, the STT prompt (`PromptEditor` kind `speech_to_text`), keyterms (`SttKeytermsEditor`) and the `speech_to_text_toggle` shortcut, then the recording and failure-handling cards.
 
@@ -268,7 +269,7 @@ Save flow goes through `$lib/services/prompts.ts` → backend `save_prompt` Taur
 
 `SurfaceToolsPicker` (props `surface`: `"chat" | "settings_agent"` and `enabled`: the surface's list) renders the checkboxes of qualified `server.tool` names from `list_mcp_tools` (empty state "No MCP tools available.") and writes the whole next list with `updateSurfaceEnabledTools(surface, next)`; a failed write is logged with `logError`.
 
-`SectionContextMenu` shows the quick actions model and reasoning effort (`effortOptions` from `$lib/utils/effortOptions.ts`, shared with `SectionChat`), `menu_section_order`, `recent_apps_count` (`NumberInput`, min 0, saved after `autosave_debounce_ms`) and `ShortcutField` for `open_context_menu`, `execute_active_prompt`, `set_context_value`, `append_context_value`, `clear_context`. The order list shows the ids present in the setting, named (`chat` Chat; `skills`, `prompts`, `SkillProvider` Skills; `models` Models; `settings` Settings; `speech`, `SpeechMenuProvider` Speech; `lastInteraction`, `LastInteractionMenuProvider` Last interaction; `context`, `ContextMenuProvider` Context; an unknown id as is). HTML5 drag-and-drop with a grip handle moves an item; a drop saves the whole list with every id exactly as stored, so legacy aliases are never rewritten to canonical ids and no section is added or removed.
+`SectionContextMenu` shows the quick actions model (the empty option is "Same as Chat (<chat model name>)") and reasoning effort (options follow the effective model, `quickActionsModelId`; `effortOptions` from `$lib/utils/effortOptions.ts`, shared with `SectionChat`), `menu_section_order`, `recent_apps_count` (`NumberInput`, min 0, saved after `autosave_debounce_ms`) and `ShortcutField` for `open_context_menu`, `execute_active_prompt`, `set_context_value`, `append_context_value`, `clear_context`. The order list shows the ids present in the setting, named (`chat` Chat; `skills`, `prompts`, `SkillProvider` Skills; `models` Models; `settings` Settings; `speech`, `SpeechMenuProvider` Speech; `lastInteraction`, `LastInteractionMenuProvider` Last interaction; `context`, `ContextMenuProvider` Context; an unknown id as is). HTML5 drag-and-drop with a grip handle moves an item; a drop saves the whole list with every id exactly as stored, so legacy aliases are never rewritten to canonical ids and no section is added or removed.
 
 ### MCP Servers section
 
