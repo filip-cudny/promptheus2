@@ -14,7 +14,9 @@ use crate::services::change_log::TestResult;
 use crate::services::config::ConfigService;
 use crate::services::execution::PromptExecutionService;
 use crate::services::placeholder_registry::PlaceholderContext;
+use crate::services::mcp::McpRegistry;
 use crate::services::recent_apps::RecentAppsState;
+use crate::services::settings_agent::mcp::RegistrySource;
 use crate::services::settings_agent::dispatch::Proposal;
 use crate::services::settings_agent::engine::{
     self, describe, lock, proposal_payload, EngineContext, Emit, SharedSession,
@@ -78,6 +80,7 @@ pub async fn settings_agent_send(
         placeholders: placeholders(&app).await,
         emit: Arc::new(TauriEmit(app.clone())),
         transcript_dir: app.path().app_data_dir()?.join("settings-agent-turns"),
+        mcp: Arc::new(RegistrySource(Arc::clone(&*app.state::<Arc<McpRegistry>>()))),
     };
     let (live, _cancel) = PromptExecutionService::new().start_live(
         &uuid::Uuid::new_v4().to_string(),

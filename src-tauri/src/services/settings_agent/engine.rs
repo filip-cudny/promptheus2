@@ -20,6 +20,7 @@ use crate::services::secrets;
 use crate::Error;
 
 use super::dispatch::{Context, Dispatcher, Proposal, ProposalSink, SecretViewSink};
+use super::mcp::{select_enabled, McpSource};
 use super::operations::Operation;
 use super::plan::{plan, stale_rows, Current, RowError};
 use super::tools;
@@ -78,6 +79,7 @@ pub struct EngineContext {
     pub placeholders: PlaceholderContext,
     pub emit: Arc<dyn Emit>,
     pub transcript_dir: PathBuf,
+    pub mcp: Arc<dyn McpSource>,
 }
 
 struct SessionSink {
@@ -239,6 +241,9 @@ async fn tool_loop(
         config_dir: ctx.config_dir.clone(),
         emit: Arc::clone(&ctx.emit),
     });
+    let settings = (ctx.settings)();
+    let enabled = select_enabled(&*ctx.mcp, &settings.surfaces.settings_agent.generation.enabled_tools);
+    let request_tools: Vec<_> = tools::definitions().into_iter().chain(enabled.definitions).collect();
     let settings_source = Arc::clone(&ctx.settings);
     let factory = Arc::clone(&ctx.ai_factory);
     let dispatcher = Dispatcher::new(Context {
@@ -249,8 +254,9 @@ async fn tool_loop(
         placeholders: ctx.placeholders.clone(),
         proposals: sink.clone(),
         secret_views: sink,
+        mcp: Arc::clone(&ctx.mcp),
+        mcp_tools: enabled.qualified_by_raw,
     });
-    let settings = (ctx.settings)();
     let parameters = settings
         .surfaces
         .chat
@@ -277,7 +283,7 @@ async fn tool_loop(
                 messages.clone(),
                 Some(parameters.clone()),
                 None,
-                tools::definitions(),
+                request_tools.clone(),
             )
             .await
         {

@@ -139,6 +139,20 @@ fn settings_agent_model_and_reasoning_effort_plan_as_settings() {
 }
 
 #[test]
+fn settings_agent_tools_cannot_be_set_by_the_agent() {
+    let (settings, dir) = (fixture_settings(), config_dir());
+    let key = "surfaces.settings_agent.generation.enabled_tools";
+    let ops = vec![set_setting(key, json!(["srv.web_search"]))];
+
+    let errors = plan_all(&ops, &settings, &dir).unwrap_err();
+
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].row, 0);
+    assert_eq!(errors[0].key.as_deref(), Some(key));
+    assert!(errors[0].message.contains("in Settings"), "{}", errors[0].message);
+}
+
+#[test]
 fn row_needing_two_unchecked_rows_names_both() {
     let (settings, dir) = (fixture_settings(), config_dir());
     let ops = vec![

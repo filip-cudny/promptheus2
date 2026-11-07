@@ -19,6 +19,8 @@ use super::operations::Operation;
 const SETTINGS_MANAGED_BY_OTHER_OPERATIONS: [&str; 5] =
     ["models", "mcp_servers", "webview_providers", "keymaps", "env_vars"];
 
+const AGENT_TOOLS_KEY: &str = "surfaces.settings_agent.generation.enabled_tools";
+
 const OPAQUE_PATHS: [&str; 5] = [
     "models[].parameters",
     "models[].capabilities",
@@ -346,6 +348,12 @@ fn check_list_item_setting(settings: &Settings, key: &str, value: &Value) -> Res
 }
 
 fn set_setting(state: &mut State, current: &Current, key: &str, value: Value) -> Result<(), Fail> {
+    if key == AGENT_TOOLS_KEY {
+        return Err(Fail::at(
+            key,
+            "the user picks the settings agent's tools in Settings; the agent cannot enable tools for itself",
+        ));
+    }
     let top = key.split(['.', '[']).next().unwrap_or("");
     let list_item = is_live_list_item_key(key, top);
     let settable = list_item

@@ -16,6 +16,7 @@ use crate::services::secrets::{self, Redactor};
 use crate::services::skill::SkillService;
 
 use super::change_log_read::{self, Filters};
+use super::mcp::McpSource;
 use super::operations::{Operation, PromptFile};
 use super::plan::{plan, Current, Plan, RowError};
 use super::testing::{run_row_test, RowTest, RowTestRequest};
@@ -54,6 +55,8 @@ pub struct Context {
     pub placeholders: PlaceholderContext,
     pub proposals: Arc<dyn ProposalSink>,
     pub secret_views: Arc<dyn SecretViewSink>,
+    pub mcp: Arc<dyn McpSource>,
+    pub mcp_tools: BTreeMap<String, String>,
 }
 
 pub struct Dispatcher {
@@ -149,22 +152,33 @@ impl Dispatcher {
 
     pub async fn dispatch(&self, call: &PendingToolCall) -> ToolExecutionResult {
         log::debug!("settings agent tool call: {}", call.tool_name);
-        let handled = match call.tool_name.as_str() {
-            tools::READ => self.read(&call.arguments),
-            tools::TEST => self.test(&call.arguments).await,
-            tools::PROPOSE_CHANGES => self.propose(&call.arguments).await,
-            tools::SECRET => self.secret(&call.arguments),
-            other => Err(format!("unknown tool '{other}'; a request outside the settings tools cannot be done")),
-        };
-        let (text, is_error) = match handled {
-            Ok(value) => (value.to_string(), false),
-            Err(message) => (message, true),
+        let (text, is_error) = match call.tool_name.as_str() {
+            tools::READ => Self::text_of(self.read(&call.arguments)),
+            tools::TEST => Self::text_of(self.test(&call.arguments).await),
+            tools::PROPOSE_CHANGES => Self::text_of(self.propose(&call.arguments).await),
+            tools::SECRET => Self::text_of(self.secret(&call.arguments)),
+            other => match self.ctx.mcp_tools.get(other) {
+                Some(qualified) => {
+                    let result = self.ctx.mcp.call(qualified, call.arguments.clone()).await;
+                    (result.text, result.is_error)
+                }
+                None => Self::text_of(Err(format!(
+                    "unknown tool '{other}'; a request outside the settings tools cannot be done"
+                ))),
+            },
         };
         let settings = (self.ctx.settings)();
         ToolExecutionResult {
             tool_call_id: call.tool_call_id.clone(),
             result_text: Redactor::new(&self.ctx.config_dir, &settings).redact(&text),
             is_error,
+        }
+    }
+
+    fn text_of(handled: Handled) -> (String, bool) {
+        match handled {
+            Ok(value) => (value.to_string(), false),
+            Err(message) => (message, true),
         }
     }
 

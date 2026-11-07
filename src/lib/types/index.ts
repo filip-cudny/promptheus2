@@ -75,8 +75,14 @@ export interface QuickActionsConfig {
   generation: QuickActionsGeneration;
 }
 
+export interface SettingsAgentGeneration {
+  model_id: string | null;
+  parameters: ModelParameters;
+  enabled_tools: string[];
+}
+
 export interface SettingsAgentConfig {
-  generation: QuickActionsGeneration;
+  generation: SettingsAgentGeneration;
 }
 
 export interface TitleGeneration {

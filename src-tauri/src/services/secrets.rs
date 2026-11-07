@@ -408,6 +408,14 @@ fn candidate_names(settings: &Settings, env_pairs: &[(String, String)], referenc
         .collect()
 }
 
+fn literal_mcp_env_values(settings: &Settings) -> impl Iterator<Item = &String> {
+    settings
+        .mcp_servers
+        .values()
+        .flat_map(|server| server.env.values())
+        .filter(|value| env_ref_names(value).is_empty())
+}
+
 impl Redactor {
     /// A value is exempt from redaction only when every source of it is a variable listed in
     /// `settings.env_vars` with `secret: false`.
@@ -444,6 +452,9 @@ impl Redactor {
         {
             sources.add(key, None);
         }
+        for value in literal_mcp_env_values(settings) {
+            sources.add(value.clone(), None);
+        }
         let plain_names: BTreeSet<&str> = settings
             .env_vars
             .iter()
@@ -473,6 +484,15 @@ impl Redactor {
                     .is_some_and(|k| env_ref_names(k).is_empty());
                 if literal {
                     model["api_key"] = serde_json::Value::String(REDACTED.to_string());
+                }
+            }
+        }
+        if let Some(servers) = json.get_mut("mcp_servers").and_then(|m| m.as_object_mut()) {
+            for env in servers.values_mut().filter_map(|server| server.get_mut("env")?.as_object_mut()) {
+                for value in env.values_mut().filter(|value| {
+                    value.as_str().is_some_and(|text| env_ref_names(text).is_empty())
+                }) {
+                    *value = serde_json::Value::String(REDACTED.to_string());
                 }
             }
         }

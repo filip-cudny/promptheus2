@@ -1,21 +1,16 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
   import { error as logError } from "@tauri-apps/plugin-log";
   import SelectDropdown from "$lib/components/shared/ui/SelectDropdown.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { getCachedCapabilities, prefetchCapabilities } from "$lib/stores/capabilities.svelte";
-  import {
-    updateSurfaceEnabledTools,
-    updateSurfaceModel,
-    updateSurfaceReasoningEffort,
-  } from "$lib/services/settings";
+  import { updateSurfaceModel, updateSurfaceReasoningEffort } from "$lib/services/settings";
   import { effortOptions } from "$lib/utils/effortOptions";
   import { agentModelId } from "$lib/utils/agentModel";
   import SettingsSection from "./SettingsSection.svelte";
   import SettingField from "./SettingField.svelte";
   import PromptEditor from "./PromptEditor.svelte";
   import WebviewProvidersEditor from "./WebviewProvidersEditor.svelte";
+  import SurfaceToolsPicker from "./SurfaceToolsPicker.svelte";
 
   const store = getSettingsStore();
   const chat = $derived(store.settings?.surfaces.chat.generation ?? null);
@@ -50,16 +45,8 @@
     ),
   );
 
-  let tools = $state<string[]>([]);
-
   $effect(() => prefetchCapabilities(chat?.model_id ?? null));
   $effect(() => prefetchCapabilities(effectiveAgentModelId));
-
-  onMount(() => {
-    invoke<{ name: string; server: string }[]>("list_mcp_tools")
-      .then((list) => (tools = list.map((t) => `${t.server}.${t.name}`)))
-      .catch((e) => logError(`list_mcp_tools failed: ${e}`));
-  });
 
   async function run(label: string, write: () => Promise<void>) {
     try {
@@ -67,14 +54,6 @@
     } catch (e) {
       logError(`${label} failed: ${e}`);
     }
-  }
-
-  function toggleTool(tool: string, on: boolean) {
-    if (!chat) return;
-    const next = on
-      ? [...chat.enabled_tools, tool]
-      : chat.enabled_tools.filter((t) => t !== tool);
-    void run("update_surface_enabled_tools", () => updateSurfaceEnabledTools("chat", next));
   }
 </script>
 
@@ -105,22 +84,7 @@
         </SettingField>
 
         <SettingField key="surfaces.chat.generation.enabled_tools">
-          {#if tools.length === 0}
-            <p class="muted">No MCP tools available.</p>
-          {:else}
-            <div class="tools">
-              {#each tools as tool (tool)}
-                <label class="check">
-                  <input
-                    type="checkbox"
-                    checked={chat.enabled_tools.includes(tool)}
-                    onchange={(e) => toggleTool(tool, e.currentTarget.checked)}
-                  />
-                  <span>{tool}</span>
-                </label>
-              {/each}
-            </div>
-          {/if}
+          <SurfaceToolsPicker surface="chat" enabled={chat.enabled_tools} />
         </SettingField>
 
         <SettingField key="surfaces.title_generation.generation.model_id">
@@ -159,6 +123,10 @@
                 )}
             />
           </SettingField>
+
+          <SettingField key="surfaces.settings_agent.generation.enabled_tools">
+            <SurfaceToolsPicker surface="settings_agent" enabled={agent.enabled_tools} />
+          </SettingField>
         {/if}
 
         <div class="prompt">
@@ -187,30 +155,5 @@
     display: flex;
     flex-direction: column;
     height: 280px;
-  }
-
-  .tools {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-
-  .check {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--font-size-md);
-    color: var(--text-primary);
-    cursor: pointer;
-  }
-
-  .check input {
-    cursor: pointer;
-  }
-
-  .muted {
-    margin: 0;
-    font-size: var(--font-size-sm);
-    color: var(--text-muted);
   }
 </style>

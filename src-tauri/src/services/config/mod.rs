@@ -379,10 +379,10 @@ impl ConfigService {
     pub fn update_surface_enabled_tools(&mut self, surface: SurfaceKind, tools: Vec<String>) {
         match surface {
             SurfaceKind::Chat => self.settings.surfaces.chat.generation.enabled_tools = tools,
-            SurfaceKind::QuickActions
-            | SurfaceKind::TitleGeneration
-            | SurfaceKind::SpeechToText
-            | SurfaceKind::SettingsAgent => {
+            SurfaceKind::SettingsAgent => {
+                self.settings.surfaces.settings_agent.generation.enabled_tools = tools
+            }
+            SurfaceKind::QuickActions | SurfaceKind::TitleGeneration | SurfaceKind::SpeechToText => {
                 log::warn!("update_surface_enabled_tools: {surface:?} has no tools");
             }
         }

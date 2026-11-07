@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -9,6 +9,7 @@ use super::operations::Operation;
 use super::engine::proposal_payload;
 use super::plan::Current;
 use super::dispatch::{Context, Dispatcher, Proposal, ProposalSink, SecretViewSink};
+use super::mcp::ScriptedMcp;
 use crate::models::settings::{EnvVar, McpServerConfig, ModelConfig, ModelType, Provider, Settings};
 use crate::services::ai::mock::{MockProvider, MockReply};
 use crate::services::ai::{AiError, AiService};
@@ -18,7 +19,7 @@ use crate::services::placeholder_registry::PlaceholderContext;
 const BASE_URL_A: &str = "https://alpha.example/api";
 const BASE_URL_B: &str = "https://beta.example/api";
 
-const SECRETS: [&str; 3] = ["sk-env-111", "tok-222", "sk-literal-333"];
+const SECRETS: [&str; 4] = ["sk-env-111", "tok-222", "sk-literal-333", "mcp-literal-555"];
 
 fn model(id: &str, api_key: &str) -> ModelConfig {
     ModelConfig {
@@ -44,16 +45,28 @@ fn fixture_settings() -> Settings {
         ModelConfig { base_url: Some(BASE_URL_A.into()), ..model("env-model", "${OPENAI_KEY}") },
         model("literal-model", "sk-literal-333"),
     ];
-    settings.mcp_servers = HashMap::from([(
-        "tools".to_string(),
-        McpServerConfig {
-            command: "run-tools".into(),
-            args: vec![],
-            env: HashMap::from([("TOKEN".to_string(), "${MCP_TOKEN}".to_string())]),
-            timeout_secs: 30,
-            tool_timeouts: HashMap::new(),
-        },
-    )]);
+    settings.mcp_servers = HashMap::from([
+        (
+            "tools".to_string(),
+            McpServerConfig {
+                command: "run-tools".into(),
+                args: vec![],
+                env: HashMap::from([("TOKEN".to_string(), "${MCP_TOKEN}".to_string())]),
+                timeout_secs: 30,
+                tool_timeouts: HashMap::new(),
+            },
+        ),
+        (
+            "srv".to_string(),
+            McpServerConfig {
+                command: "run-srv".into(),
+                args: vec![],
+                env: HashMap::from([("API_KEY".to_string(), "mcp-literal-555".to_string())]),
+                timeout_secs: 30,
+                tool_timeouts: HashMap::new(),
+            },
+        ),
+    ]);
     settings.surfaces.chat.generation.model_id = Some("env-model".into());
     settings.env_vars = vec![
         EnvVar {
@@ -130,6 +143,8 @@ fn fixture_counting_factory() -> (TempDir, Dispatcher, Arc<Sink>, Arc<AtomicUsiz
         placeholders: PlaceholderContext::with_apps("app", "apps"),
         proposals: sink.clone(),
         secret_views: sink.clone(),
+        mcp: Arc::new(ScriptedMcp::offering(&["srv.web_search"], "found it with key mcp-literal-555")),
+        mcp_tools: BTreeMap::from([("web_search".to_string(), "srv.web_search".to_string())]),
     };
     (dir, Dispatcher::new(ctx), sink, factory_calls)
 }
@@ -174,6 +189,38 @@ async fn every_read_variant_is_free_of_secrets() {
         assert!(!is_error, "{arguments}: {text}");
         assert_clean(&text);
     }
+}
+
+#[tokio::test]
+async fn an_mcp_result_echoing_a_literal_mcp_env_value_is_redacted() {
+    let (_dir, dispatcher, _) = fixture();
+
+    let (text, is_error) = call(&dispatcher, "web_search", json!({"query": "model ids"})).await;
+
+    assert!(!is_error, "{text}");
+    assert_eq!(text, "found it with key [redacted]");
+}
+
+#[tokio::test]
+async fn a_tool_that_is_not_enabled_is_an_unknown_tool() {
+    let (_dir, dispatcher, _) = fixture();
+
+    let (text, is_error) = call(&dispatcher, "fetch_page", json!({})).await;
+
+    assert!(is_error);
+    assert!(text.contains("unknown tool 'fetch_page'"), "{text}");
+}
+
+#[tokio::test]
+async fn values_read_masks_a_literal_mcp_env_value_and_keeps_a_reference() {
+    let (_dir, dispatcher, _) = fixture();
+
+    let (text, is_error) = call(&dispatcher, "settings_read", json!({"what": "values"})).await;
+
+    assert!(!is_error, "{text}");
+    let values: Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(values["mcp_servers"]["srv"]["env"]["API_KEY"], "[redacted]");
+    assert_eq!(values["mcp_servers"]["tools"]["env"]["TOKEN"], "${MCP_TOKEN}");
 }
 
 #[tokio::test]

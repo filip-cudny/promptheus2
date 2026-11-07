@@ -18,7 +18,7 @@ Maps in `Settings` serialize sorted by key (`serialize_sorted`, `BTreeMap` for `
 
 `Settings.menu_digit_select_delay_ms` (`u32`, default 200, catalog range 100–1000, live) is how long the context menu waits for a second digit when a two-digit number is still possible.
 
-`Settings.surfaces.settings_agent` (`SettingsAgentConfig`, `#[serde(default)]`) holds `generation: QuickActionsGeneration` (`model_id`, `parameters`); an empty `model_id` falls back to the chat model at run time (`settings_agent/engine.rs`), `defaults.rs` does not fill it.
+`Settings.surfaces.settings_agent` (`SettingsAgentConfig`, `#[serde(default)]`) holds `generation: SettingsAgentGeneration` (`model_id`, `parameters`, `enabled_tools`: qualified `server.tool` names of the MCP tools the agent may call, `#[serde(default)]` empty, set only by the user through `update_surface_enabled_tools`; `quick_actions` keeps `QuickActionsGeneration`, which has no tools); an empty `model_id` falls back to the chat model at run time (`settings_agent/engine.rs`), `defaults.rs` does not fill it.
 
 ### Removed settings keys
 

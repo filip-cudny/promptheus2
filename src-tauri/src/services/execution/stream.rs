@@ -200,6 +200,17 @@ fn extract_mcp_result_text(result: &rmcp::model::CallToolResult) -> String {
         .join("\n")
 }
 
+pub(crate) async fn call_mcp_tool(
+    mcp: &McpRegistry,
+    tool_name: &str,
+    arguments: serde_json::Value,
+) -> (String, bool) {
+    match mcp.call_tool(tool_name, arguments).await {
+        Ok(result) => (extract_mcp_result_text(&result), result.is_error.unwrap_or(false)),
+        Err(e) => (format!("Error executing tool '{}': {}", tool_name, e), true),
+    }
+}
+
 pub async fn execute_tool_calls(
     mcp: &Arc<McpRegistry>,
     pending: &[PendingToolCall],
@@ -214,23 +225,11 @@ pub async fn execute_tool_calls(
             let mcp = Arc::clone(mcp);
             let live = Arc::clone(live);
             async move {
-                let result = mcp.call_tool(&tool_name, arguments).await;
-
-                let execution_result = match result {
-                    Ok(result) => {
-                        let is_error = result.is_error.unwrap_or(false);
-                        let text = extract_mcp_result_text(&result);
-                        ToolExecutionResult {
-                            tool_call_id,
-                            result_text: text,
-                            is_error,
-                        }
-                    }
-                    Err(e) => ToolExecutionResult {
-                        tool_call_id,
-                        result_text: format!("Error executing tool '{}': {}", tool_name, e),
-                        is_error: true,
-                    },
+                let (result_text, is_error) = call_mcp_tool(&mcp, &tool_name, arguments).await;
+                let execution_result = ToolExecutionResult {
+                    tool_call_id,
+                    result_text,
+                    is_error,
                 };
 
                 let (result, error) = if execution_result.is_error {

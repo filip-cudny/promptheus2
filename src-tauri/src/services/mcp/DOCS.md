@@ -6,6 +6,8 @@ MCP (Model Context Protocol) client module. Thin wrapper around the `rmcp` crate
 
 **Server states**: a server that fails to start is dropped from `servers`, but `start_all` records the error's `Display` text (no env values, no resolved secrets) in `start_errors`. `server_states()` returns one `McpServerState` per server the registry tried (`name`, `state` `running` | `error`, `error`, `tools` = raw tool names), sorted by name. The command `list_mcp_servers` returns it; the registry is built once at startup, so the states reflect that start, not later config edits.
 
+The registry has two callers: the chat (`ConversationExecutor`, tools from the chat's `enabled_tools`) and the settings agent (`settings_agent::mcp::RegistrySource`, tools from `surfaces.settings_agent.generation.enabled_tools`; see `services/settings_agent/DOCS.md`). Both call through `execution::stream::call_mcp_tool` and send tools under their raw name; the agent drops a raw name that clashes (with a settings tool or another enabled tool) instead of resolving it through `resolve_raw_name`. The agent never starts or restarts servers.
+
 ## McpClient
 
 Wraps `rmcp::RunningService<RoleClient, ()>`. Each instance manages one MCP server child process. Tool calls go through a cloned `Peer`; the service sits behind a `tokio::sync::Mutex` that only `close` takes, so a running tool call never blocks closing.

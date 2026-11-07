@@ -10,6 +10,7 @@ use super::engine::{
     lock, proposal_payload, run_turn, Emit, EngineContext, SharedSession, PROPOSAL_EVENT,
     SECRET_VIEW_EVENT,
 };
+use super::mcp::{McpSource, ScriptedMcp};
 use super::operations::Operation;
 use super::plan::{plan, Current};
 use crate::models::ai::ToolCallStatus;
@@ -107,7 +108,7 @@ async fn run(chat_model: Option<&str>, script: Vec<MockReply>) -> Run {
 }
 
 async fn run_with(settings: Settings, ai: AiService, requests: Arc<Mutex<Vec<String>>>) -> Run {
-    run_configured(settings, ai, requests, false).await
+    run_configured(settings, ai, requests, false, Arc::new(ScriptedMcp::offering(&[], ""))).await
 }
 
 async fn run_configured(
@@ -115,6 +116,7 @@ async fn run_configured(
     ai: AiService,
     requests: Arc<Mutex<Vec<String>>>,
     cancel_on_secret_view: bool,
+    mcp: Arc<dyn McpSource>,
 ) -> Run {
     let dir = TempDir::new().unwrap();
     std::fs::write(dir.path().join(".env"), "OPENAI_KEY=sk-env-111\n").unwrap();
@@ -143,6 +145,7 @@ async fn run_configured(
         placeholders: PlaceholderContext::with_apps("app", "apps"),
         emit: frontend.clone(),
         transcript_dir: dir.path().join("settings-agent-turns"),
+        mcp,
     };
     let live = Arc::new(TokioMutex::new(LiveExecution {
         snapshot: ExecutionSnapshot {
@@ -266,7 +269,8 @@ async fn cancelling_during_a_turn_writes_a_cancelled_transcript() {
     let (provider, requests) = MockProvider::new(scripted_turns());
     let ai = AiService::with_provider("env-model", Box::new(provider));
 
-    let run = run_configured(fixture_settings(Some("env-model")), ai, requests, true).await;
+    let no_tools = Arc::new(ScriptedMcp::offering(&[], ""));
+    let run = run_configured(fixture_settings(Some("env-model")), ai, requests, true, no_tools).await;
 
     assert!(run.outcome.is_err());
     let (_, transcript) = only_transcript(&run);
@@ -548,4 +552,113 @@ async fn reaching_the_tool_round_limit_writes_a_loop_limit_transcript() {
     let last = &iterations[MAX_TOOL_LOOP_ITERATIONS]["tool_calls"][0];
     assert_eq!(last["error"], "not run: the agent reached the limit of 10 tool rounds");
     assert!(last["result"].is_null());
+}
+
+const AGENT_TOOL_NAMES: [&str; 4] =
+    ["settings_read", "settings_test", "settings_propose_changes", "settings_secret"];
+
+fn payload_names(request: &str) -> Vec<String> {
+    let request: Value = serde_json::from_str(request).unwrap();
+    request["tool_payloads"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|payload| {
+            payload["function"]["name"].as_str().or(payload["name"].as_str()).unwrap().to_string()
+        })
+        .collect()
+}
+
+async fn run_with_mcp_tools(
+    enabled: &[&str],
+    offered: &[&str],
+    script: Vec<MockReply>,
+) -> (Run, Arc<ScriptedMcp>) {
+    let (provider, requests) = MockProvider::new(script);
+    let ai = AiService::with_provider("env-model", Box::new(provider));
+    let mut settings = fixture_settings(Some("env-model"));
+    settings.surfaces.settings_agent.generation.enabled_tools =
+        enabled.iter().map(|name| name.to_string()).collect();
+    let mcp = Arc::new(ScriptedMcp::offering(offered, "gpt-9 is the current model id"));
+    let run = run_configured(settings, ai, requests, false, mcp.clone()).await;
+    (run, mcp)
+}
+
+#[tokio::test]
+async fn an_enabled_mcp_tool_is_sent_in_every_request_next_to_the_agent_tools() {
+    let script = vec![
+        call("c1", "web_search", json!({"query": "current model ids"})),
+        MockReply::Text("done".into()),
+    ];
+
+    let (run, _) = run_with_mcp_tools(&["srv.web_search"], &["srv.web_search"], script).await;
+
+    run.outcome.as_ref().unwrap();
+    let requests = run.requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    for request in requests.iter() {
+        let names = payload_names(request);
+        assert_eq!(names.len(), 5, "{names:?}");
+        for agent_tool in AGENT_TOOL_NAMES {
+            assert!(names.contains(&agent_tool.to_string()), "{agent_tool} missing in {names:?}");
+        }
+        assert!(names.contains(&"web_search".to_string()), "{names:?}");
+    }
+}
+
+#[tokio::test]
+async fn a_call_by_raw_name_reaches_the_source_qualified_and_its_result_goes_back() {
+    let script = vec![
+        call("c1", "web_search", json!({"query": "current model ids"})),
+        MockReply::Text("done".into()),
+    ];
+
+    let (run, mcp) = run_with_mcp_tools(&["srv.web_search"], &["srv.web_search"], script).await;
+
+    run.outcome.as_ref().unwrap();
+    assert_eq!(
+        *mcp.calls.lock().unwrap(),
+        vec![("srv.web_search".to_string(), json!({"query": "current model ids"}))]
+    );
+    let requests = run.requests.lock().unwrap();
+    assert!(requests[1].contains("gpt-9 is the current model id"), "{}", requests[1]);
+}
+
+#[tokio::test]
+async fn a_call_to_a_tool_that_is_not_enabled_is_an_error_result() {
+    let script = vec![call("c1", "fetch_page", json!({})), MockReply::Text("done".into())];
+
+    let (run, mcp) = run_with_mcp_tools(&["srv.web_search"], &["srv.web_search", "srv.fetch_page"], script).await;
+
+    run.outcome.as_ref().unwrap();
+    assert!(mcp.calls.lock().unwrap().is_empty());
+    let live = run.live.lock().await;
+    let failed = &live.snapshot.tool_calls[0];
+    assert!(matches!(failed.status, ToolCallStatus::Failed));
+    assert!(failed.error.as_deref().unwrap().contains("unknown tool 'fetch_page'"));
+}
+
+#[tokio::test]
+async fn an_enabled_tool_named_like_an_agent_tool_is_not_sent() {
+    let script = vec![MockReply::Text("done".into())];
+
+    let (run, _) = run_with_mcp_tools(&["srv.settings_read"], &["srv.settings_read"], script).await;
+
+    run.outcome.as_ref().unwrap();
+    let names = payload_names(&run.requests.lock().unwrap()[0]);
+    assert_eq!(names.iter().filter(|name| *name == "settings_read").count(), 1, "{names:?}");
+    assert_eq!(names.len(), 4, "{names:?}");
+}
+
+#[tokio::test]
+async fn enabled_tools_sharing_a_raw_name_are_all_dropped() {
+    let script = vec![MockReply::Text("done".into())];
+    let enabled = ["a.dup", "b.dup", "srv.web_search"];
+
+    let (run, _) = run_with_mcp_tools(&enabled, &enabled, script).await;
+
+    run.outcome.as_ref().unwrap();
+    let names = payload_names(&run.requests.lock().unwrap()[0]);
+    assert!(!names.contains(&"dup".to_string()), "{names:?}");
+    assert!(names.contains(&"web_search".to_string()), "{names:?}");
 }

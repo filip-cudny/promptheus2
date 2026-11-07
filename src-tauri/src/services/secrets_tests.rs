@@ -176,6 +176,42 @@ fn redactor_removes_every_source_and_keeps_names() {
 }
 
 #[test]
+fn redactor_knows_the_literal_mcp_env_values_and_not_their_references() {
+    let dir = config_dir();
+    let server = |env: &[(&str, &str)]| {
+        serde_json::from_value(serde_json::json!({
+            "command": "run",
+            "env": env.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect::<BTreeMap<_, _>>()
+        }))
+        .unwrap()
+    };
+    let mut settings = Settings::default();
+    settings.mcp_servers.insert("a".into(), server(&[("KEY", "mcp-literal-1"), ("REF", "${SEC_MCP_REF}")]));
+
+    let redactor = Redactor::new(dir.path(), &settings);
+
+    assert_eq!(redactor.redact("mcp-literal-1 ${SEC_MCP_REF}"), "[redacted] ${SEC_MCP_REF}");
+    let env = &redactor.redact_settings(&settings)["mcp_servers"]["a"]["env"];
+    assert_eq!(env["KEY"], "[redacted]");
+    assert_eq!(env["REF"], "${SEC_MCP_REF}");
+}
+
+#[test]
+fn a_literal_mcp_env_value_stays_redacted_when_a_non_secret_variable_holds_it_too() {
+    let dir = config_dir();
+    std::fs::write(dir.path().join(".env"), "SEC_MCP_PLAIN=\"shared-value-2\"\n").unwrap();
+    let mut settings = plain_settings(&[("SEC_MCP_PLAIN", false)]);
+    settings.mcp_servers.insert(
+        "a".into(),
+        serde_json::from_value(serde_json::json!({"command": "run", "env": {"KEY": "shared-value-2"}})).unwrap(),
+    );
+
+    let redactor = Redactor::new(dir.path(), &settings);
+
+    assert_eq!(redactor.redact("shared-value-2"), "[redacted]");
+}
+
+#[test]
 fn redactor_knows_every_value_held_in_the_secret_backups() {
     let dir = config_dir();
     let before = NameValues::from([("SEC_BK__NAME".to_string(), Some("bk-before-1".to_string()))]);

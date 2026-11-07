@@ -12,6 +12,7 @@ mod testing_tests;
 pub mod dispatch;
 #[cfg(test)]
 mod dispatch_tests;
+pub mod mcp;
 pub mod tools;
 #[cfg(test)]
 mod tools_tests;

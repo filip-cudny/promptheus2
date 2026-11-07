@@ -254,7 +254,19 @@ pub struct QuickActionsConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SettingsAgentConfig {
     #[serde(default)]
-    pub generation: QuickActionsGeneration,
+    pub generation: SettingsAgentGeneration,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SettingsAgentGeneration {
+    #[serde(default)]
+    pub model_id: Option<String>,
+
+    #[serde(default)]
+    pub parameters: ModelParameters,
+
+    #[serde(default)]
+    pub enabled_tools: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

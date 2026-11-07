@@ -121,6 +121,18 @@ fn test_delete_model_clears_settings_agent_model() {
 }
 
 #[test]
+fn test_update_surface_enabled_tools_stores_settings_agent_list() {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+
+    service.update_surface_enabled_tools(SurfaceKind::SettingsAgent, vec!["srv.web_search".to_string()]);
+
+    let surfaces = &service.settings().surfaces;
+    assert_eq!(surfaces.settings_agent.generation.enabled_tools, vec!["srv.web_search"]);
+    assert!(surfaces.chat.generation.enabled_tools.is_empty());
+}
+
+#[test]
 fn test_direct_api_key_preserved_on_save() {
     let dir = setup_test_dir();
     let mut service = ConfigService::load(dir.path()).expect("load");
