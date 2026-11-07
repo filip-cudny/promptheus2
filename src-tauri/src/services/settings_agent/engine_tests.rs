@@ -201,8 +201,7 @@ impl McpSource for EchoingMcp {
         self.offered.tools(qualified_names)
     }
 
-    async fn call(&self, qualified_name: &str, arguments: Value) -> McpCallResult {
-        self.offered.call(qualified_name, arguments).await;
+    async fn call(&self, _qualified_name: &str, _arguments: Value) -> McpCallResult {
         let text = self.replies.lock().unwrap().pop_front().unwrap();
         McpCallResult { text, is_error: false }
     }
