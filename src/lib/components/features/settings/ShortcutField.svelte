@@ -2,14 +2,16 @@
   import { error as logError } from "@tauri-apps/plugin-log";
   import Button from "$lib/components/shared/ui/Button.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
-  import { setShortcut } from "$lib/services/settings";
+  import { X } from "lucide-svelte";
+  import { addShortcut, removeShortcut } from "$lib/services/settings";
+  import { ICON_SIZE } from "$lib/constants/ui";
+  import { actionShortcuts, formatShortcut } from "$lib/utils/keymapShortcuts";
   import { isMac } from "$lib/utils/platform";
   import SettingField from "./SettingField.svelte";
 
   let { action }: { action: string } = $props();
 
   const store = getSettingsStore();
-  const osContext = isMac ? "os==macos" : "os==linux";
 
   const KEY_NAMES: Record<string, string> = {
     Space: "space",
@@ -27,11 +29,8 @@
     PageDown: "page_down",
   };
 
-  const binding = $derived(
-    store.settings?.keymaps
-      .filter((group) => group.context.replace(/\s+/g, "") === osContext)
-      .flatMap((group) => Object.entries(group.bindings))
-      .find(([, bound]) => bound === action)?.[0] ?? null,
+  const shortcuts = $derived(
+    actionShortcuts(store.settings?.keymaps ?? [], action, isMac ? "macos" : "linux"),
   );
 
   let capturing = $state(false);
@@ -54,11 +53,19 @@
     ].filter((m): m is string => !!m);
   }
 
-  async function save(shortcut: string | null) {
+  async function add(shortcut: string) {
     try {
-      await setShortcut(action, shortcut);
+      await addShortcut(action, shortcut);
     } catch (e) {
-      logError(`set_shortcut ${action} failed: ${e}`);
+      logError(`add_shortcut ${action} failed: ${e}`);
+    }
+  }
+
+  async function remove(shortcut: string) {
+    try {
+      await removeShortcut(action, shortcut);
+    } catch (e) {
+      logError(`remove_shortcut ${action} failed: ${e}`);
     }
   }
 
@@ -79,12 +86,27 @@
     const mods = modifiers(e);
     if (!key || mods.length === 0) return;
     capturing = false;
-    void save([...mods, key].join("+"));
+    void add([...mods, key].join("+"));
   }
 </script>
 
 <SettingField key={`keymaps.${action}`}>
-  <div class="shortcut">
+  <div class="shortcuts">
+    {#each shortcuts as shortcut (shortcut)}
+      <kbd class="chip">
+        {formatShortcut(shortcut)}
+        <button
+          type="button"
+          title="Remove"
+          aria-label={`Remove ${formatShortcut(shortcut)}`}
+          onclick={() => remove(shortcut)}
+        >
+          <X size={ICON_SIZE.sm} />
+        </button>
+      </kbd>
+    {:else}
+      <span class="none">Not set</span>
+    {/each}
     {#if capturing}
       <span
         class="capture"
@@ -98,31 +120,55 @@
         Press a shortcut… (Esc cancels)
       </span>
     {:else}
-      <kbd class="binding">{binding ?? "Not set"}</kbd>
-      <Button onclick={startCapture}>Change</Button>
-      {#if binding}
-        <Button onclick={() => save(null)}>Clear</Button>
-      {/if}
+      <Button onclick={startCapture}>+ Add</Button>
     {/if}
   </div>
 </SettingField>
 
 <style>
-  .shortcut {
+  .shortcuts {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: var(--space-3);
+    gap: var(--space-2);
   }
 
-  .binding,
+  .chip,
   .capture {
-    padding: var(--space-2) var(--space-3);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-3);
     background: var(--surface-sunken);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-md);
     font-family: var(--font-mono);
     font-size: var(--font-size-md);
     color: var(--text-primary);
+  }
+
+  .chip {
+    padding-right: var(--space-2);
+  }
+
+  .chip button {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 var(--space-1);
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .chip button:hover {
+    color: var(--danger);
+  }
+
+  .none {
+    font-family: var(--font-mono);
+    font-size: var(--font-size-md);
+    color: var(--text-muted);
   }
 
   .capture {

@@ -69,11 +69,18 @@ export async function updateSetting(
   return invokeWrite("update_setting", { key, value });
 }
 
-export async function setShortcut(
+export async function addShortcut(
   action: string,
-  shortcut: string | null,
+  shortcut: string,
 ): Promise<void> {
-  return invokeWrite("set_shortcut", { action, shortcut });
+  return invokeWrite("add_shortcut", { action, shortcut });
+}
+
+export async function removeShortcut(
+  action: string,
+  shortcut: string,
+): Promise<void> {
+  return invokeWrite("remove_shortcut", { action, shortcut });
 }
 
 export async function updateSurfaceModel(
