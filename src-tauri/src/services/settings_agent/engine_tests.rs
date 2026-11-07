@@ -1,5 +1,8 @@
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
+use async_trait::async_trait;
+use rmcp::model::Tool;
 use serde_json::{json, Value};
 use tempfile::TempDir;
 use tokio::sync::Mutex as TokioMutex;
@@ -10,9 +13,10 @@ use super::engine::{
     lock, proposal_payload, run_turn, Emit, EngineContext, SharedSession, PROPOSAL_EVENT,
     SECRET_VIEW_EVENT,
 };
-use super::mcp::{McpSource, ScriptedMcp};
+use super::mcp::{McpCallResult, McpSource, ScriptedMcp};
 use super::operations::Operation;
 use super::plan::{plan, Current};
+use super::testing::{run_row_test, RowTest, RowTestRequest};
 use crate::models::ai::ToolCallStatus;
 use crate::models::capabilities::{Effort, ModelCapabilities, ReasoningMode};
 use crate::models::settings::{EnvVar, ModelConfig, ModelType, Provider, Settings};
@@ -25,7 +29,8 @@ use crate::services::execution::lifecycle::{ExecutionSnapshot, LiveExecution};
 use crate::services::execution::types::MAX_TOOL_LOOP_ITERATIONS;
 use crate::services::placeholder_registry::PlaceholderContext;
 
-const SECRETS: [&str; 2] = ["sk-env-111", "sk-literal-333"];
+const SECRETS: [&str; 4] = ["sk-env-111", "sk-literal-333", "sk-new-444", "mcp-literal-666"];
+const STAGED_VALUE: &str = "sk-new-444";
 
 fn model(id: &str, display_name: &str, api_key: &str) -> ModelConfig {
     ModelConfig {
@@ -52,6 +57,10 @@ fn fixture_settings(chat_model: Option<&str>) -> Settings {
         model("literal-model", "Literal", "sk-literal-333"),
     ];
     settings.surfaces.chat.generation.model_id = chat_model.map(str::to_string);
+    settings.mcp_servers.insert(
+        "srv".to_string(),
+        serde_json::from_value(json!({"command": "run", "env": {"TOKEN": "mcp-literal-666"}})).unwrap(),
+    );
     settings
 }
 
@@ -181,25 +190,161 @@ fn env_file(run: &Run) -> String {
     std::fs::read_to_string(run.dir.path().join(".env")).unwrap()
 }
 
+struct EchoingMcp {
+    offered: ScriptedMcp,
+    replies: Mutex<VecDeque<String>>,
+}
+
+#[async_trait]
+impl McpSource for EchoingMcp {
+    fn tools(&self, qualified_names: &[String]) -> Vec<(String, Tool)> {
+        self.offered.tools(qualified_names)
+    }
+
+    async fn call(&self, qualified_name: &str, arguments: Value) -> McpCallResult {
+        self.offered.call(qualified_name, arguments).await;
+        let text = self.replies.lock().unwrap().pop_front().unwrap();
+        McpCallResult { text, is_error: false }
+    }
+}
+
+fn every_secret_path_turn() -> Vec<MockReply> {
+    let update_row = json!([
+        {"op": "update_model", "id": "literal-model", "model": model("literal-model", "Literal renamed", "")},
+    ]);
+    let card_rows = json!([
+        {"op": "add_env_var", "name": "NEW_KEY", "description": "new key", "secret": true},
+        {"op": "set_env_value", "name": "NEW_KEY"},
+        {"op": "add_model", "model": model("new-model", "New", "${NEW_KEY}")},
+    ]);
+    vec![
+        call("c1", "settings_read", json!({"what": "values"})),
+        call("c2", "settings_secret", json!({"name": "OPENAI_KEY"})),
+        call("c3", "settings_propose_changes", json!({"operations": update_row})),
+        call("c4", "settings_propose_changes", json!({"operations": card_rows})),
+        call("c5", "web_search", json!({"query": "first"})),
+        call("c6", "web_search", json!({"query": "second"})),
+        MockReply::Text("Proposed the card.".to_string()),
+    ]
+}
+
+fn read_files(dir: &std::path::Path) -> String {
+    std::fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.is_file())
+        .map(|path| std::fs::read_to_string(path).unwrap())
+        .collect()
+}
+
+fn assert_no_secret(place: &str, text: &str) {
+    for secret in SECRETS {
+        assert!(!text.contains(secret), "{secret} leaked in {place}: {text}");
+    }
+}
+
 #[tokio::test]
 async fn no_secret_reaches_any_provider_request() {
-    let run = run(Some("env-model"), scripted_turns()).await;
+    let mut settings = fixture_settings(Some("env-model"));
+    settings.surfaces.settings_agent.generation.enabled_tools = vec!["srv.web_search".to_string()];
+    let mcp = Arc::new(EchoingMcp {
+        offered: ScriptedMcp::offering(&["srv.web_search"], ""),
+        replies: Mutex::new(VecDeque::from([
+            "token is sk-env-111 end".to_string(),
+            "token is mcp-literal-666 end".to_string(),
+        ])),
+    });
+    let (provider, requests) = MockProvider::new(every_secret_path_turn());
+    let ai = AiService::with_provider("env-model", Box::new(provider));
+
+    let run = run_configured(settings.clone(), ai, requests, false, mcp).await;
+
     run.outcome.as_ref().unwrap();
     let requests = run.requests.lock().unwrap();
-    assert_eq!(requests.len(), 5);
+    assert_eq!(requests.len(), 7);
     for request in requests.iter() {
-        for secret in SECRETS {
-            assert!(!request.contains(secret), "{secret} leaked in {request}");
+        assert_no_secret("a provider request", request);
+    }
+    assert!(requests[3].contains("[redacted]"), "provider error of the update row is redacted");
+    assert!(requests[5].contains("token is [redacted] end"), "MCP result with a .env value is redacted");
+    assert!(requests[6].contains("token is [redacted] end"), "MCP result with a literal MCP env value is redacted");
+    {
+        let events = run.frontend.events.lock().unwrap();
+        let views: Vec<_> = events.iter().filter(|(name, _)| name == SECRET_VIEW_EVENT).collect();
+        assert_eq!(views.len(), 1);
+        assert_eq!(views[0].1, json!({"name": "OPENAI_KEY"}));
+        for (name, payload) in events.iter() {
+            assert_no_secret(&format!("event {name}"), &payload.to_string());
         }
     }
-    assert!(requests[4].contains("[redacted]"), "provider error of the update row is redacted");
-    let events = run.frontend.events.lock().unwrap();
-    let view = events.iter().find(|(name, _)| name == SECRET_VIEW_EVENT).unwrap();
-    assert_eq!(view.1, json!({"name": "OPENAI_KEY"}));
     let (transcript, _) = only_transcript(&run);
-    for secret in SECRETS {
-        assert!(!transcript.contains(secret), "{secret} leaked in the transcript");
-    }
+    assert_no_secret("the transcript", &transcript);
+
+    let proposal = lock(&run.session).proposal.clone().unwrap();
+    assert_eq!(proposal.operations.len(), 3);
+    let dir = run.dir.path();
+    let handed_keys = Mutex::new(Vec::new());
+    let factory = |handed: &Settings| {
+        let key = handed.models.iter().find(|m| m.id == "new-model").and_then(ModelConfig::resolved_api_key);
+        handed_keys.lock().unwrap().push(key);
+        let message = format!("Incorrect API key provided: {STAGED_VALUE}");
+        let (provider, _) = MockProvider::new(vec![MockReply::Error(AiError::ApiStatus { status: 401, message })]);
+        AiService::with_provider("new-model", Box::new(provider))
+    };
+    let values = BTreeMap::from([("NEW_KEY".to_string(), STAGED_VALUE.to_string())]);
+    let placeholders = PlaceholderContext::with_apps("app", "apps");
+    let row_request = RowTestRequest {
+        row: 2,
+        operations: &proposal.operations,
+        plan: &proposal.plan,
+        before: &settings,
+        values: &values,
+        ai_factory: &factory,
+        placeholders: &placeholders,
+        config_dir: dir,
+        allow_new_destinations: true,
+    };
+    let RowTest::Tested(tested) = run_row_test(&row_request).await else {
+        panic!("the add_model row is tested once its value is typed");
+    };
+    assert!(!tested.ok);
+    let error = tested.error.clone().unwrap();
+    assert!(error.contains("[redacted]"), "{error}");
+    assert!(!error.contains(STAGED_VALUE), "{error}");
+    assert_eq!(*handed_keys.lock().unwrap(), vec![Some(STAGED_VALUE.to_string())]);
+
+    let mut config = ConfigService::load(dir).unwrap();
+    let current_settings = config.settings().clone();
+    let current = Current { settings: &current_settings, config_dir: dir };
+    let planned = plan(&proposal.operations, &[true; 3], &current).unwrap();
+    let log_dir = change_log_dir(dir);
+    let (request, reply) = {
+        let s = lock(&run.session);
+        (s.last_request.clone(), s.last_reply.clone())
+    };
+    let mut ctx = ApplyContext {
+        config: &mut config,
+        config_dir: dir,
+        log_dir: &log_dir,
+        host: "host",
+        request,
+        reply,
+        tests: BTreeMap::from([(2, tested)]),
+        values,
+    };
+    let applied = apply(&planned, &current, &mut ctx);
+    set_override("NEW_KEY", None);
+    applied.unwrap();
+
+    assert!(env_file(&run).contains("NEW_KEY="), "{}", env_file(&run));
+    let held = format!(
+        "{:?} {:?} {:?} {:?} {:?}",
+        proposal.operations, proposal.plan.rows, proposal.tests, proposal.waits, proposal.new_destinations
+    );
+    assert_no_secret("the proposal held by the session", &held);
+    let log = read_files(&log_dir);
+    assert!(log.contains("NEW_KEY"), "{log}");
+    assert_no_secret("the change-log entry", &log);
 }
 
 #[tokio::test]
