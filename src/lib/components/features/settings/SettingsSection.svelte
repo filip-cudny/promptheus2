@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
 
   let {
     title,
@@ -11,6 +12,12 @@
     body: Snippet;
   } = $props();
 
+  const navigation = getSettingsNavigation();
+  const highlighted = $derived(
+    navigation.highlightedSection !== null &&
+      navigation.highlightedSection === navigation.activeSection,
+  );
+
   const hasHeader = $derived(Boolean(title || hint));
 </script>
 
@@ -19,7 +26,7 @@
     <header class="head">
       <div class="head-text">
         {#if title}
-          <h2>{title}</h2>
+          <h2 class:highlighted>{title}</h2>
         {/if}
         {#if hint}
           <p class="hint">{hint}</p>
@@ -64,6 +71,13 @@
     font-size: var(--font-size-lg);
     font-weight: var(--font-weight-semibold);
     color: var(--text-primary);
+  }
+
+  h2.highlighted {
+    border-radius: var(--radius-md);
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+    background: var(--accent-bg-soft);
   }
 
   .hint {

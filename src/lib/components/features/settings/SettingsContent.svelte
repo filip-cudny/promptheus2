@@ -19,7 +19,7 @@
   const activeSection = $derived(navigation.activeSection);
 </script>
 
-<main class="content">
+<main class="content" data-settings-content>
   {#if !store.settings}
     {#if store.error}
       <div class="error">Failed to load settings: {store.error}</div>

@@ -93,6 +93,7 @@
           <button
             class="sidebar-item"
             class:active={navigation.activeSection === item.id}
+            class:highlighted={navigation.highlightedSection === item.id}
             onclick={() => (navigation.activeSection = item.id)}
           >
             {item.label}
@@ -153,6 +154,12 @@
     background: var(--surface-overlay-faint);
     color: var(--text-primary);
     border-left-color: var(--accent);
+  }
+
+  .sidebar-item.highlighted {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    background: var(--accent-bg-soft);
   }
 
   .ask-agent {
