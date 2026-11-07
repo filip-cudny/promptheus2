@@ -7,10 +7,11 @@ export interface AgentReply {
   thinking: string | null;
   isThinking: boolean;
   iterationText: string;
+  secretViews: string[];
 }
 
 export function emptyReply(): AgentReply {
-  return { text: "", toolCalls: [], thinkingParts: [], thinking: null, isThinking: false, iterationText: "" };
+  return { text: "", toolCalls: [], thinkingParts: [], thinking: null, isThinking: false, iterationText: "", secretViews: [] };
 }
 
 export function applyStreamEvent(reply: AgentReply, event: StreamEvent) {

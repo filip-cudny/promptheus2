@@ -137,7 +137,6 @@ macro_rules! handlers {
             $crate::commands::settings_agent::settings_agent_send,
             $crate::commands::settings_agent::settings_agent_cancel,
             $crate::commands::settings_agent::settings_agent_reset,
-            $crate::commands::settings_agent::settings_agent_secret_result,
             $crate::commands::settings_agent::settings_agent_apply,
             $crate::commands::settings_agent::settings_agent_reject,
             $crate::commands::settings_agent::settings_agent_refresh,

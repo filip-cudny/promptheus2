@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::Mutex;
@@ -15,7 +15,7 @@ use crate::services::config::ConfigService;
 use crate::services::execution::PromptExecutionService;
 use crate::services::placeholder_registry::PlaceholderContext;
 use crate::services::recent_apps::RecentAppsState;
-use crate::services::settings_agent::dispatch::{Proposal, SecretAnswer};
+use crate::services::settings_agent::dispatch::Proposal;
 use crate::services::settings_agent::engine::{
     self, describe, lock, proposal_payload, EngineContext, Emit, SharedSession,
 };
@@ -96,29 +96,6 @@ pub async fn settings_agent_cancel(session: State<'_, SharedSession>) -> crate::
 #[tauri::command]
 pub async fn settings_agent_reset(session: State<'_, SharedSession>) -> crate::Result<()> {
     lock(&session).reset();
-    Ok(())
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum SecretOutcome {
-    Saved,
-    Cancelled,
-}
-
-#[tauri::command]
-pub async fn settings_agent_secret_result(
-    session: State<'_, SharedSession>,
-    request_id: String,
-    outcome: SecretOutcome,
-) -> crate::Result<()> {
-    let answer = match outcome {
-        SecretOutcome::Saved => SecretAnswer::Saved,
-        SecretOutcome::Cancelled => SecretAnswer::Cancelled,
-    };
-    if !lock(&session).resolve_secret(&request_id, answer) {
-        log::debug!("settings agent: no pending secret request {request_id}");
-    }
     Ok(())
 }
 

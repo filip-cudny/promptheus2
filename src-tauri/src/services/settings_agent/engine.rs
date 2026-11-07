@@ -1,12 +1,10 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Instant;
 
-use async_trait::async_trait;
 use chrono::Utc;
 use serde_json::{json, Value};
-use tokio::sync::{oneshot, watch, Mutex as TokioMutex};
+use tokio::sync::{watch, Mutex as TokioMutex};
 
 use crate::models::message::ProcessedMessage;
 use crate::models::settings::Settings;
@@ -21,14 +19,14 @@ use crate::services::placeholder_registry::PlaceholderContext;
 use crate::services::secrets;
 use crate::Error;
 
-use super::dispatch::{Context, Dispatcher, Proposal, ProposalSink, SecretAnswer, SecretPrompt};
+use super::dispatch::{Context, Dispatcher, Proposal, ProposalSink, SecretViewSink};
 use super::operations::Operation;
 use super::plan::{plan, stale_rows, Current, RowError};
 use super::tools;
 use super::transcript::{self, End, Iteration, ToolCallRecord, Transcript};
 
 pub const PROPOSAL_EVENT: &str = "settings-agent-proposal";
-pub const SECRET_REQUEST_EVENT: &str = "settings-agent-secret-request";
+pub const SECRET_VIEW_EVENT: &str = "settings-agent-secret-view";
 
 pub trait Emit: Send + Sync {
     fn emit(&self, event: &str, payload: Value);
@@ -40,7 +38,6 @@ pub struct Session {
     pub last_request: Option<String>,
     pub last_reply: Option<String>,
     pub proposal: Option<Proposal>,
-    pending_secrets: HashMap<String, oneshot::Sender<SecretAnswer>>,
     cancel: Option<watch::Sender<bool>>,
     generation: u64,
 }
@@ -52,14 +49,7 @@ pub fn lock(session: &SharedSession) -> MutexGuard<'_, Session> {
 }
 
 impl Session {
-    fn answer_pending(&mut self, answer: SecretAnswer) {
-        for (_, sender) in self.pending_secrets.drain() {
-            let _ = sender.send(answer);
-        }
-    }
-
     pub fn cancel(&mut self) {
-        self.answer_pending(SecretAnswer::Cancelled);
         if let Some(cancel) = &self.cancel {
             let _ = cancel.send(true);
         }
@@ -76,12 +66,6 @@ impl Session {
 
     fn is_cancelled(&self) -> bool {
         self.cancel.as_ref().is_some_and(|cancel| *cancel.borrow())
-    }
-
-    pub fn resolve_secret(&mut self, request_id: &str, answer: SecretAnswer) -> bool {
-        self.pending_secrets
-            .remove(request_id)
-            .is_some_and(|sender| sender.send(answer).is_ok())
     }
 }
 
@@ -118,24 +102,12 @@ impl ProposalSink for SessionSink {
     }
 }
 
-#[async_trait]
-impl SecretPrompt for SessionSink {
-    async fn ask(&self, name: &str, purpose: &str) -> SecretAnswer {
-        let request_id = uuid::Uuid::new_v4().simple().to_string();
-        let (sender, receiver) = oneshot::channel();
-        {
-            let mut s = lock(&self.session);
-            if s.is_cancelled() {
-                return SecretAnswer::Cancelled;
-            }
-            s.pending_secrets.insert(request_id.clone(), sender);
+impl SecretViewSink for SessionSink {
+    fn shown(&self, name: &str) {
+        if lock(&self.session).is_cancelled() {
+            return;
         }
-        let exists = secrets::current_value(&self.config_dir, name).is_some();
-        self.emit.emit(
-            SECRET_REQUEST_EVENT,
-            json!({"request_id": request_id, "name": name, "purpose": purpose, "exists": exists}),
-        );
-        receiver.await.unwrap_or(SecretAnswer::Cancelled)
+        self.emit.emit(SECRET_VIEW_EVENT, json!({"name": name}));
     }
 }
 
@@ -276,7 +248,7 @@ async fn tool_loop(
         ai_factory: Box::new(move |settings| factory(settings)),
         placeholders: ctx.placeholders.clone(),
         proposals: sink.clone(),
-        secrets: sink,
+        secret_views: sink,
     });
     let settings = (ctx.settings)();
     let parameters = settings

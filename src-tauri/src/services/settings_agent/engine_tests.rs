@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use serde_json::{json, Value};
@@ -6,10 +5,10 @@ use tempfile::TempDir;
 use tokio::sync::Mutex as TokioMutex;
 
 use super::apply::{apply, Context as ApplyContext};
-use super::dispatch::{Proposal, SecretAnswer};
+use super::dispatch::Proposal;
 use super::engine::{
     lock, proposal_payload, run_turn, Emit, EngineContext, SharedSession, PROPOSAL_EVENT,
-    SECRET_REQUEST_EVENT,
+    SECRET_VIEW_EVENT,
 };
 use super::operations::Operation;
 use super::plan::{plan, Current};
@@ -25,7 +24,7 @@ use crate::services::execution::lifecycle::{ExecutionSnapshot, LiveExecution};
 use crate::services::execution::types::MAX_TOOL_LOOP_ITERATIONS;
 use crate::services::placeholder_registry::PlaceholderContext;
 
-const SECRETS: [&str; 3] = ["sk-env-111", "sk-literal-333", "sk-new-444"];
+const SECRETS: [&str; 2] = ["sk-env-111", "sk-literal-333"];
 
 fn model(id: &str, display_name: &str, api_key: &str) -> ModelConfig {
     ModelConfig {
@@ -55,23 +54,17 @@ fn fixture_settings(chat_model: Option<&str>) -> Settings {
     settings
 }
 
-struct SavingFrontend {
+struct Frontend {
     session: SharedSession,
-    config_dir: PathBuf,
     events: Mutex<Vec<(String, Value)>>,
-    cancel_on_secret_request: bool,
+    cancel_on_secret_view: bool,
 }
 
-impl Emit for SavingFrontend {
+impl Emit for Frontend {
     fn emit(&self, event: &str, payload: Value) {
-        self.events.lock().unwrap().push((event.to_string(), payload.clone()));
-        if event == SECRET_REQUEST_EVENT && self.cancel_on_secret_request {
+        self.events.lock().unwrap().push((event.to_string(), payload));
+        if event == SECRET_VIEW_EVENT && self.cancel_on_secret_view {
             lock(&self.session).cancel();
-        } else if event == SECRET_REQUEST_EVENT {
-            let name = payload["name"].as_str().unwrap();
-            crate::services::secrets::save_secret(&self.config_dir, "host", name, "sk-new-444").unwrap();
-            let id = payload["request_id"].as_str().unwrap();
-            assert!(lock(&self.session).resolve_secret(id, SecretAnswer::Saved));
         }
     }
 }
@@ -79,7 +72,7 @@ impl Emit for SavingFrontend {
 struct Run {
     dir: TempDir,
     session: SharedSession,
-    frontend: Arc<SavingFrontend>,
+    frontend: Arc<Frontend>,
     requests: Arc<Mutex<Vec<String>>>,
     live: Arc<TokioMutex<LiveExecution>>,
     outcome: crate::Result<()>,
@@ -97,7 +90,7 @@ fn scripted_turns() -> Vec<MockReply> {
     vec![
         call("c1", "settings_read", json!({"what": "values"})),
         call("c2", "settings_read", json!({"what": "models"})),
-        call("c3", "settings_secret", json!({"name": "NEW_KEY", "purpose": "new model"})),
+        call("c3", "settings_secret", json!({"name": "OPENAI_KEY"})),
         call(
             "c4",
             "settings_propose_changes",
@@ -121,7 +114,7 @@ async fn run_configured(
     settings: Settings,
     ai: AiService,
     requests: Arc<Mutex<Vec<String>>>,
-    cancel_on_secret_request: bool,
+    cancel_on_secret_view: bool,
 ) -> Run {
     let dir = TempDir::new().unwrap();
     std::fs::write(dir.path().join(".env"), "OPENAI_KEY=sk-env-111\n").unwrap();
@@ -129,11 +122,10 @@ async fn run_configured(
     std::fs::create_dir_all(dir.path().join("skills")).unwrap();
 
     let session = SharedSession::default();
-    let frontend = Arc::new(SavingFrontend {
+    let frontend = Arc::new(Frontend {
         session: session.clone(),
-        config_dir: dir.path().to_path_buf(),
         events: Mutex::default(),
-        cancel_on_secret_request,
+        cancel_on_secret_view,
     });
     let ctx = EngineContext {
         settings: Arc::new(move || settings.clone()),
@@ -198,7 +190,9 @@ async fn no_secret_reaches_any_provider_request() {
         }
     }
     assert!(requests[4].contains("[redacted]"), "provider error of the update row is redacted");
-    assert!(env_file(&run).contains("NEW_KEY=\"sk-new-444\"") || env_file(&run).contains("NEW_KEY=sk-new-444"));
+    let events = run.frontend.events.lock().unwrap();
+    let view = events.iter().find(|(name, _)| name == SECRET_VIEW_EVENT).unwrap();
+    assert_eq!(view.1, json!({"name": "OPENAI_KEY"}));
     let (transcript, _) = only_transcript(&run);
     for secret in SECRETS {
         assert!(!transcript.contains(secret), "{secret} leaked in the transcript");
@@ -281,18 +275,19 @@ async fn cancelling_during_a_turn_writes_a_cancelled_transcript() {
 }
 
 #[tokio::test]
-async fn proposal_and_secret_request_reach_the_frontend() {
+async fn proposal_and_secret_view_reach_the_frontend() {
     let run = run(Some("env-model"), scripted_turns()).await;
     let events = run.frontend.events.lock().unwrap();
-    let secret = events.iter().find(|(name, _)| name == SECRET_REQUEST_EVENT).unwrap();
-    assert_eq!(secret.1["name"], "NEW_KEY");
-    assert!(secret.1["exists"].is_boolean());
+    let view = events.iter().find(|(name, _)| name == SECRET_VIEW_EVENT).unwrap();
+    assert_eq!(view.1, json!({"name": "OPENAI_KEY"}));
     let proposal = events.iter().find(|(name, _)| name == PROPOSAL_EVENT).unwrap();
     assert_eq!(proposal.1["rows"].as_array().unwrap().len(), 2);
     assert_eq!(proposal.1["rows"][1]["test"]["ok"], false);
     assert_eq!(proposal.1["rows"][0]["stale"], false);
     assert_eq!(lock(&run.session).last_reply.as_deref(), Some("Proposed two changes."));
-    assert!(!proposal.1.to_string().contains("sk-new-444"));
+    for secret in SECRETS {
+        assert!(!proposal.1.to_string().contains(secret), "{secret} leaked in the proposal");
+    }
 }
 
 #[test]
@@ -327,13 +322,24 @@ fn a_set_env_value_row_carries_its_flags_and_never_a_value() {
 }
 
 #[tokio::test]
-async fn rejecting_the_proposal_keeps_the_saved_secret() {
-    let run = run(Some("env-model"), scripted_turns()).await;
-    assert!(lock(&run.session).proposal.take().is_some());
-    let env = env_file(&run);
-    assert!(env.contains("sk-new-444"), "{env}");
+async fn rejecting_writes_no_value() {
+    let operations = json!([
+        {"op": "add_env_var", "name": "NEW_KEY", "description": "new key", "secret": true},
+        {"op": "set_env_value", "name": "NEW_KEY"},
+    ]);
+    let script = vec![
+        call("c1", "settings_propose_changes", json!({"operations": operations})),
+        MockReply::Text("Proposed.".to_string()),
+    ];
+
+    let run = run(Some("env-model"), script).await;
+
+    run.outcome.as_ref().unwrap();
+    let proposal = lock(&run.session).proposal.take().unwrap();
+    assert_eq!(proposal.operations.len(), 2);
+    assert!(!env_file(&run).contains("NEW_KEY"), "{}", env_file(&run));
     let settings = std::fs::read_to_string(run.dir.path().join("settings.json")).unwrap();
-    assert!(!settings.contains("new-model"));
+    assert!(!settings.contains("NEW_KEY"));
 }
 
 #[tokio::test]

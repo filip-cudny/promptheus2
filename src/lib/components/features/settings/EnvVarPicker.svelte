@@ -8,7 +8,7 @@
   import { applyEnvVarOperation, getEnvVars } from "$lib/services/settings";
   import { classifyReference, pickerOptions } from "$lib/utils/envVarOptions";
   import type { EnvVarStatus } from "$lib/types";
-  import SecretField from "./SecretField.svelte";
+  import SecretField, { type SecretOutcome } from "./SecretField.svelte";
 
   const NEW_ACTION = "__new_env_var__";
   const ROW_PREFIX = /^row \d+: /;
@@ -93,7 +93,7 @@
     }
   }
 
-  function finishValue(outcome: "saved" | "cancelled") {
+  function finishValue(outcome: SecretOutcome) {
     if (step?.kind !== "value") return;
     const { name, moving } = step;
     step = null;

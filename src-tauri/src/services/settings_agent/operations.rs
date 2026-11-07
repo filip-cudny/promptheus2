@@ -150,12 +150,19 @@ impl Operation {
             Self::SetShortcut { action, shortcut: Some(_) } => format!("Set shortcut for {action}"),
             Self::SetShortcut { action, shortcut: None } => format!("Clear shortcut for {action}"),
             Self::AddEnvVar { name, .. } => format!("Add variable {name}"),
+            Self::UpdateEnvVar { name, secret: false, .. } if is_secret_variable(settings, name) => {
+                format!("Update variable {name} (value becomes visible to the agent)")
+            }
             Self::UpdateEnvVar { name, .. } => format!("Update variable {name}"),
             Self::RenameEnvVar { name, new_name } => format!("Rename variable {name} to {new_name}"),
             Self::DeleteEnvVar { name } => format!("Delete variable {name}"),
             Self::SetEnvValue { name } => format!("Set value of {name}"),
         }
     }
+}
+
+fn is_secret_variable(settings: &Settings, name: &str) -> bool {
+    settings.env_vars.iter().any(|var| var.name == name && var.secret)
 }
 
 fn model_name<'a>(settings: &'a Settings, id: &'a str) -> &'a str {

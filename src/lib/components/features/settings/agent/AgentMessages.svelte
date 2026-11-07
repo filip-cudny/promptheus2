@@ -58,19 +58,14 @@
               {/if}
             {/if}
           {/each}
+          {#each message.secretViews as name, view (view)}
+            <SecretField {name} readonly />
+          {/each}
           {#if i === agent.messages.length - 1 && showsProcessing(message, agent.running)}
             <ProcessingIndicator />
           {/if}
         </div>
       {/if}
-    {/each}
-    {#each agent.secretRequests as request (request.request_id)}
-      <SecretField
-        name={request.name}
-        purpose={request.purpose}
-        exists={request.exists}
-        onclose={(outcome) => agent.resolveSecret(request.request_id, outcome)}
-      />
     {/each}
     {#if agent.proposal}
       {#key agent.proposal.proposal_id}

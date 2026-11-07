@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -43,15 +42,8 @@ pub trait ProposalSink: Send + Sync {
     fn proposed(&self, proposal: &Proposal);
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SecretAnswer {
-    Saved,
-    Cancelled,
-}
-
-#[async_trait]
-pub trait SecretPrompt: Send + Sync {
-    async fn ask(&self, name: &str, purpose: &str) -> SecretAnswer;
+pub trait SecretViewSink: Send + Sync {
+    fn shown(&self, name: &str);
 }
 
 pub struct Context {
@@ -61,7 +53,7 @@ pub struct Context {
     pub ai_factory: Box<dyn Fn(&Settings) -> AiService + Send + Sync>,
     pub placeholders: PlaceholderContext,
     pub proposals: Arc<dyn ProposalSink>,
-    pub secrets: Arc<dyn SecretPrompt>,
+    pub secret_views: Arc<dyn SecretViewSink>,
 }
 
 pub struct Dispatcher {
@@ -94,9 +86,9 @@ struct OperationsArgs {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SecretArgs {
     name: String,
-    purpose: String,
 }
 
 type Handled = Result<Value, String>;
@@ -161,7 +153,7 @@ impl Dispatcher {
             tools::READ => self.read(&call.arguments),
             tools::TEST => self.test(&call.arguments).await,
             tools::PROPOSE_CHANGES => self.propose(&call.arguments).await,
-            tools::SECRET => self.secret(&call.arguments).await,
+            tools::SECRET => self.secret(&call.arguments),
             other => Err(format!("unknown tool '{other}'; a request outside the settings tools cannot be done")),
         };
         let (text, is_error) = match handled {
@@ -210,7 +202,9 @@ impl Dispatcher {
                 serde_json::to_value(collect_missing(&settings, env_is_set)).map_err(|e| e.to_string())
             }
             What::EnvVars => {
-                serde_json::to_value(env_var_overview(&settings, env_is_set)).map_err(|e| e.to_string())
+                let overview =
+                    env_var_overview(&settings, env_is_set, |name| secrets::current_value(&self.ctx.config_dir, name));
+                serde_json::to_value(overview).map_err(|e| e.to_string())
             }
             What::ChangeLog => {
                 change_log_read::read(&load_all(&change_log_dir(&self.ctx.config_dir)), &args.filters)
@@ -325,19 +319,17 @@ impl Dispatcher {
         Ok(json!({"proposal_id": id, "rows": rows}))
     }
 
-    async fn secret(&self, arguments: &Value) -> Handled {
+    fn secret(&self, arguments: &Value) -> Handled {
         let args: SecretArgs = parse(arguments)?;
         if !secrets::validate_name(&args.name) {
             return Err(format!("invalid variable name '{}'", args.name));
         }
-        let outcome = match self.ctx.secrets.ask(&args.name, &args.purpose).await {
-            SecretAnswer::Saved => "saved",
-            SecretAnswer::Cancelled
-                if secrets::current_value(&self.ctx.config_dir, &args.name).is_some() =>
-            {
-                "exists"
-            }
-            SecretAnswer::Cancelled => "cancelled",
+        let is_set = secrets::current_value(&self.ctx.config_dir, &args.name).is_some_and(|value| !value.is_empty());
+        let outcome = if is_set {
+            self.ctx.secret_views.shown(&args.name);
+            "shown"
+        } else {
+            "not_set"
         };
         log::info!("settings agent secret '{}': {outcome}", args.name);
         Ok(json!({"name": args.name, "outcome": outcome}))

@@ -63,26 +63,17 @@ export interface ProposalData {
   rows: ProposalRowData[];
 }
 
-export interface SecretRequest {
-  request_id: string;
-  name: string;
-  purpose: string;
-  exists: boolean;
-}
-
 export type ApplyResult =
   | { entry_id: string }
   | { stale_rows: number[] }
   | { error: string };
 
-export type SecretOutcome = "saved" | "cancelled";
-
 export function onSettingsAgentProposal(cb: (proposal: ProposalData) => void): Promise<UnlistenFn> {
   return listen<ProposalData>("settings-agent-proposal", (e) => cb(e.payload));
 }
 
-export function onSettingsAgentSecretRequest(cb: (request: SecretRequest) => void): Promise<UnlistenFn> {
-  return listen<SecretRequest>("settings-agent-secret-request", (e) => cb(e.payload));
+export function onSettingsAgentSecretView(cb: (name: string) => void): Promise<UnlistenFn> {
+  return listen<{ name: string }>("settings-agent-secret-view", (e) => cb(e.payload.name));
 }
 
 export function settingsAgentApply(proposalId: string, selected: boolean[]): Promise<ApplyResult> {
@@ -99,8 +90,4 @@ export function settingsAgentRefresh(proposalId: string): Promise<void> {
 
 export function settingsAgentTestRow(proposalId: string, row: number): Promise<RowTest> {
   return invoke("settings_agent_test_row", { proposalId, row });
-}
-
-export function settingsAgentSecretResult(requestId: string, outcome: SecretOutcome): Promise<void> {
-  return invoke("settings_agent_secret_result", { requestId, outcome });
 }

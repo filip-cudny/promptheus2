@@ -2,20 +2,18 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::{json, Value};
 use tempfile::TempDir;
 
 use super::operations::Operation;
 use super::engine::proposal_payload;
 use super::plan::Current;
-use super::dispatch::{Context, Dispatcher, Proposal, ProposalSink, SecretAnswer, SecretPrompt};
+use super::dispatch::{Context, Dispatcher, Proposal, ProposalSink, SecretViewSink};
 use crate::models::settings::{EnvVar, McpServerConfig, ModelConfig, ModelType, Provider, Settings};
 use crate::services::ai::mock::{MockProvider, MockReply};
 use crate::services::ai::{AiError, AiService};
 use crate::services::execution::types::PendingToolCall;
 use crate::services::placeholder_registry::PlaceholderContext;
-use crate::services::secrets;
 
 const BASE_URL_A: &str = "https://alpha.example/api";
 const BASE_URL_B: &str = "https://beta.example/api";
@@ -74,47 +72,38 @@ fn fixture_settings() -> Settings {
     settings
 }
 
-struct Sink(std::sync::Mutex<Vec<Proposal>>);
+#[derive(Default)]
+struct Sink {
+    proposals: std::sync::Mutex<Vec<Proposal>>,
+    views: std::sync::Mutex<Vec<String>>,
+}
 
 impl ProposalSink for Sink {
     fn proposed(&self, proposal: &Proposal) {
-        self.0.lock().unwrap().push(proposal.clone());
+        self.proposals.lock().unwrap().push(proposal.clone());
     }
 }
 
-struct SavingPrompt {
-    config_dir: std::path::PathBuf,
-}
-
-#[async_trait]
-impl SecretPrompt for SavingPrompt {
-    async fn ask(&self, name: &str, _purpose: &str) -> SecretAnswer {
-        secrets::save_secret(&self.config_dir, "host", name, "sk-new-444").unwrap();
-        SecretAnswer::Saved
+impl SecretViewSink for Sink {
+    fn shown(&self, name: &str) {
+        self.views.lock().unwrap().push(name.to_string());
     }
 }
 
-struct CancellingPrompt;
-
-#[async_trait]
-impl SecretPrompt for CancellingPrompt {
-    async fn ask(&self, _name: &str, _purpose: &str) -> SecretAnswer {
-        SecretAnswer::Cancelled
-    }
-}
-
-fn fixture(prompt: impl FnOnce(&std::path::Path) -> Arc<dyn SecretPrompt>) -> (TempDir, Dispatcher, Arc<Sink>) {
-    let (dir, dispatcher, sink, _) = fixture_counting_factory(prompt);
+fn fixture() -> (TempDir, Dispatcher, Arc<Sink>) {
+    let (dir, dispatcher, sink, _) = fixture_counting_factory();
     (dir, dispatcher, sink)
 }
 
-fn fixture_counting_factory(
-    prompt: impl FnOnce(&std::path::Path) -> Arc<dyn SecretPrompt>,
-) -> (TempDir, Dispatcher, Arc<Sink>, Arc<AtomicUsize>) {
+fn fixture_counting_factory() -> (TempDir, Dispatcher, Arc<Sink>, Arc<AtomicUsize>) {
     let factory_calls = Arc::new(AtomicUsize::new(0));
     let counted = factory_calls.clone();
     let dir = TempDir::new().unwrap();
-    std::fs::write(dir.path().join(".env"), "OPENAI_KEY=sk-env-111\nMCP_TOKEN=tok-222\n").unwrap();
+    std::fs::write(
+        dir.path().join(".env"),
+        "OPENAI_KEY=sk-env-111\nMCP_TOKEN=tok-222\nTOOLS_DIR=/opt/promptheus-tools\n",
+    )
+    .unwrap();
     let skill_dir = dir.path().join("skills/old-skill");
     std::fs::create_dir_all(&skill_dir).unwrap();
     std::fs::write(
@@ -124,7 +113,7 @@ fn fixture_counting_factory(
     .unwrap();
     let settings = fixture_settings();
     std::fs::write(dir.path().join("settings.json"), serde_json::to_string_pretty(&settings).unwrap()).unwrap();
-    let sink = Arc::new(Sink(Default::default()));
+    let sink = Arc::new(Sink::default());
     let ctx = Context {
         settings: Box::new(move || settings.clone()),
         config_dir: dir.path().to_path_buf(),
@@ -140,7 +129,7 @@ fn fixture_counting_factory(
         }),
         placeholders: PlaceholderContext::with_apps("app", "apps"),
         proposals: sink.clone(),
-        secrets: prompt(dir.path()),
+        secret_views: sink.clone(),
     };
     (dir, Dispatcher::new(ctx), sink, factory_calls)
 }
@@ -169,7 +158,7 @@ fn update_model_row() -> Value {
 
 #[tokio::test]
 async fn every_read_variant_is_free_of_secrets() {
-    let (_dir, dispatcher, _) = fixture(|_| Arc::new(CancellingPrompt));
+    let (_dir, dispatcher, _) = fixture();
     let reads = [
         json!({"what": "values"}),
         json!({"what": "models"}),
@@ -188,8 +177,8 @@ async fn every_read_variant_is_free_of_secrets() {
 }
 
 #[tokio::test]
-async fn env_vars_read_lists_state_and_usages_without_values() {
-    let (_dir, dispatcher, _) = fixture(|_| Arc::new(CancellingPrompt));
+async fn env_vars_read_lists_state_usages_and_the_value_of_plain_variables_only() {
+    let (_dir, dispatcher, _) = fixture();
     let (text, is_error) = call(&dispatcher, "settings_read", json!({"what": "env_vars"})).await;
     assert!(!is_error, "{text}");
     assert_clean(&text);
@@ -207,11 +196,13 @@ async fn env_vars_read_lists_state_and_usages_without_values() {
     assert_eq!(rows[1]["name"], "TOOLS_DIR");
     assert_eq!(rows[1]["secret"], false);
     assert_eq!(rows[1]["used_in"], json!([]));
+    assert_eq!(rows[1]["value"], "/opt/promptheus-tools");
+    assert!(rows[0].get("value").is_none(), "{}", rows[0]);
 }
 
 #[tokio::test]
 async fn values_read_keeps_env_references_and_hides_literal_keys() {
-    let (_dir, dispatcher, _) = fixture(|_| Arc::new(CancellingPrompt));
+    let (_dir, dispatcher, _) = fixture();
     let (text, _) = call(&dispatcher, "settings_read", json!({"what": "values"})).await;
     assert!(text.contains("${OPENAI_KEY}"));
     assert!(text.contains("[redacted]"));
@@ -219,7 +210,7 @@ async fn values_read_keeps_env_references_and_hides_literal_keys() {
 
 #[tokio::test]
 async fn test_tool_redacts_provider_error() {
-    let (_dir, dispatcher, _) = fixture(|_| Arc::new(CancellingPrompt));
+    let (_dir, dispatcher, _) = fixture();
     let (text, is_error) =
         call(&dispatcher, "settings_test", json!({"operations": [update_model_row()]})).await;
     assert!(!is_error);
@@ -229,7 +220,7 @@ async fn test_tool_redacts_provider_error() {
 
 #[tokio::test]
 async fn propose_tool_redacts_provider_error_and_hands_proposal_to_sink() {
-    let (_dir, dispatcher, sink) = fixture(|_| Arc::new(CancellingPrompt));
+    let (_dir, dispatcher, sink) = fixture();
     let (text, is_error) = call(
         &dispatcher,
         "settings_propose_changes",
@@ -239,7 +230,7 @@ async fn propose_tool_redacts_provider_error_and_hands_proposal_to_sink() {
     assert!(!is_error);
     assert!(text.contains("[redacted]"), "{text}");
     assert_clean(&text);
-    let proposals = sink.0.lock().unwrap();
+    let proposals = sink.proposals.lock().unwrap();
     assert_eq!(proposals.len(), 1);
     let proposal = &proposals[0];
     assert!(text.contains(&proposal.id));
@@ -248,7 +239,7 @@ async fn propose_tool_redacts_provider_error_and_hands_proposal_to_sink() {
 
 #[tokio::test]
 async fn propose_with_row_errors_shows_no_card() {
-    let (_dir, dispatcher, sink) = fixture(|_| Arc::new(CancellingPrompt));
+    let (_dir, dispatcher, sink) = fixture();
     let bad = json!({"op": "delete_model", "id": "missing"});
     let (text, is_error) = call(
         &dispatcher,
@@ -258,12 +249,12 @@ async fn propose_with_row_errors_shows_no_card() {
     .await;
     assert!(!is_error);
     assert!(text.contains("\"errors\""), "{text}");
-    assert!(sink.0.lock().unwrap().is_empty());
+    assert!(sink.proposals.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
 async fn propose_reports_every_bad_row_of_the_arguments_and_shows_no_card() {
-    let (_dir, dispatcher, sink) = fixture(|_| Arc::new(CancellingPrompt));
+    let (_dir, dispatcher, sink) = fixture();
     let valid = json!({"op": "set_setting", "key": "theme", "value": "light"});
     let wrong_op = json!({"op": "update_model next"});
     let no_id = json!({"op": "update_model", "model": model("env-model", "${OPENAI_KEY}")});
@@ -285,40 +276,46 @@ async fn propose_reports_every_bad_row_of_the_arguments_and_shows_no_card() {
     let missing = errors[1]["message"].as_str().unwrap();
     assert!(missing.contains("id") && missing.contains("model"), "{missing}");
     assert!(result["note"].as_str().unwrap().contains("Nothing was proposed"), "{text}");
-    assert!(sink.0.lock().unwrap().is_empty());
+    assert!(sink.proposals.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
-async fn secret_tool_returns_name_and_outcome_only() {
-    let (_dir, dispatcher, _) = fixture(|dir| Arc::new(SavingPrompt { config_dir: dir.to_path_buf() }));
-    let (text, is_error) = call(
-        &dispatcher,
-        "settings_secret",
-        json!({"name": "OPENAI_KEY", "purpose": "OpenAI"}),
-    )
-    .await;
-    crate::services::env_resolve::set_override("OPENAI_KEY", None);
-    assert!(!is_error);
-    assert!(text.contains("OPENAI_KEY") && text.contains("outcome"), "{text}");
+async fn secret_tool_shows_a_set_variable_at_once_and_returns_no_value() {
+    let (_dir, dispatcher, sink) = fixture();
+    let (text, is_error) = call(&dispatcher, "settings_secret", json!({"name": "OPENAI_KEY"})).await;
+    assert!(!is_error, "{text}");
+    assert_eq!(serde_json::from_str::<Value>(&text).unwrap(), json!({"name": "OPENAI_KEY", "outcome": "shown"}));
     assert_clean(&text);
+    assert_eq!(*sink.views.lock().unwrap(), ["OPENAI_KEY"]);
 }
 
 #[tokio::test]
-async fn secret_tool_reports_exists_and_cancelled() {
-    let (_dir, dispatcher, _) = fixture(|_| Arc::new(CancellingPrompt));
-    let (existing, _) = call(&dispatcher, "settings_secret", json!({"name": "MCP_TOKEN", "purpose": "p"})).await;
-    assert!(existing.contains("MCP_TOKEN") && existing.contains("outcome"), "{existing}");
-    let (fresh, _) =
-        call(&dispatcher, "settings_secret", json!({"name": "BRAND_NEW_UNSET_VAR_097", "purpose": "p"})).await;
-    assert!(fresh.contains("BRAND_NEW_UNSET_VAR_097"), "{fresh}");
-    assert_ne!(existing.replace("MCP_TOKEN", ""), fresh.replace("BRAND_NEW_UNSET_VAR_097", ""));
-    let (invalid, is_error) = call(&dispatcher, "settings_secret", json!({"name": "1 bad", "purpose": "p"})).await;
+async fn secret_tool_reports_not_set_and_shows_nothing() {
+    let (_dir, dispatcher, sink) = fixture();
+    let (text, is_error) = call(&dispatcher, "settings_secret", json!({"name": "BRAND_NEW_UNSET_VAR_097"})).await;
+    assert!(!is_error, "{text}");
+    assert_eq!(
+        serde_json::from_str::<Value>(&text).unwrap(),
+        json!({"name": "BRAND_NEW_UNSET_VAR_097", "outcome": "not_set"})
+    );
+    assert!(sink.views.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn secret_tool_rejects_an_invalid_name_and_unknown_fields() {
+    let (_dir, dispatcher, sink) = fixture();
+    let (invalid, is_error) = call(&dispatcher, "settings_secret", json!({"name": "1 bad"})).await;
     assert!(is_error, "{invalid}");
+    let (extra, is_error) =
+        call(&dispatcher, "settings_secret", json!({"name": "OPENAI_KEY", "purpose": "p"})).await;
+    assert!(is_error);
+    assert!(extra.starts_with("invalid arguments"), "{extra}");
+    assert!(sink.views.lock().unwrap().is_empty());
 }
 
 #[tokio::test]
 async fn unknown_tool_and_bad_arguments_are_errors() {
-    let (_dir, dispatcher, _) = fixture(|_| Arc::new(CancellingPrompt));
+    let (_dir, dispatcher, _) = fixture();
     let (_, unknown) = call(&dispatcher, "settings_delete_everything", json!({})).await;
     assert!(unknown);
     let (_, bad) = call(&dispatcher, "settings_read", json!({"what": "nonsense"})).await;
@@ -365,7 +362,7 @@ fn apply_delete_of_literal_key_model(dir: &std::path::Path) -> String {
 
 #[tokio::test]
 async fn change_log_reads_never_return_the_literal_key_of_a_deleted_model() {
-    let (dir, dispatcher, _) = fixture(|_| Arc::new(CancellingPrompt));
+    let (dir, dispatcher, _) = fixture();
     let entry_id = apply_delete_of_literal_key_model(dir.path());
     let reads = [
         json!({"what": "change_log"}),
@@ -383,7 +380,7 @@ async fn change_log_reads_never_return_the_literal_key_of_a_deleted_model() {
 
 #[tokio::test]
 async fn change_log_read_with_strict_nulls_and_an_unknown_name() {
-    let (_dir, dispatcher, _) = fixture(|_| Arc::new(CancellingPrompt));
+    let (_dir, dispatcher, _) = fixture();
     let all_null = json!({
         "what": "change_log", "name": null, "since": null, "until": null,
         "key": null, "op": null, "text": null, "host": null, "limit": null
@@ -404,7 +401,7 @@ fn add_model_row(id: &str, base_url: &str, api_key: &str) -> Value {
 #[tokio::test]
 async fn a_row_using_an_unvalued_staged_variable_waits_and_is_not_tested() {
     const NAME: &str = "PHX_DISPATCH_NEW_KEY";
-    let (dir, dispatcher, sink, factory_calls) = fixture_counting_factory(|_| Arc::new(CancellingPrompt));
+    let (dir, dispatcher, sink, factory_calls) = fixture_counting_factory();
     let operations = json!([
         {"op": "add_env_var", "name": NAME, "description": "new key", "secret": true},
         {"op": "set_env_value", "name": NAME},
@@ -422,7 +419,7 @@ async fn a_row_using_an_unvalued_staged_variable_waits_and_is_not_tested() {
     assert!(rows[2]["new_destination"].is_null());
     assert_eq!(rows[0]["waits_for"], json!([]));
     assert_eq!(factory_calls.load(Ordering::SeqCst), 0);
-    let proposal = sink.0.lock().unwrap()[0].clone();
+    let proposal = sink.proposals.lock().unwrap()[0].clone();
     let settings = fixture_settings();
     let payload = proposal_payload(&proposal, &Current { settings: &settings, config_dir: dir.path() });
     assert_eq!(payload["rows"][2]["waits_for"], json!([NAME]));
@@ -432,7 +429,7 @@ async fn a_row_using_an_unvalued_staged_variable_waits_and_is_not_tested() {
 
 #[tokio::test]
 async fn a_key_going_to_a_new_base_url_is_not_tested_automatically() {
-    let (dir, dispatcher, sink, factory_calls) = fixture_counting_factory(|_| Arc::new(CancellingPrompt));
+    let (dir, dispatcher, sink, factory_calls) = fixture_counting_factory();
     let operations = json!({"operations": [add_model_row("moved-model", BASE_URL_B, "${OPENAI_KEY}")]});
 
     let (text, is_error) = call(&dispatcher, "settings_test", operations.clone()).await;
@@ -446,7 +443,7 @@ async fn a_key_going_to_a_new_base_url_is_not_tested_automatically() {
     assert_eq!(factory_calls.load(Ordering::SeqCst), 0);
 
     call(&dispatcher, "settings_propose_changes", operations).await;
-    let proposal = sink.0.lock().unwrap()[0].clone();
+    let proposal = sink.proposals.lock().unwrap()[0].clone();
     let settings = fixture_settings();
     let payload = proposal_payload(&proposal, &Current { settings: &settings, config_dir: dir.path() });
     assert_eq!(payload["rows"][0]["new_destination"], note);
@@ -455,7 +452,7 @@ async fn a_key_going_to_a_new_base_url_is_not_tested_automatically() {
 
 #[tokio::test]
 async fn a_key_going_to_its_known_base_url_is_tested() {
-    let (_dir, dispatcher, _, factory_calls) = fixture_counting_factory(|_| Arc::new(CancellingPrompt));
+    let (_dir, dispatcher, _, factory_calls) = fixture_counting_factory();
     let operations = json!({"operations": [add_model_row("same-url-model", BASE_URL_A, "${OPENAI_KEY}")]});
 
     let (text, is_error) = call(&dispatcher, "settings_test", operations).await;

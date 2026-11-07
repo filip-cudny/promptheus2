@@ -146,10 +146,16 @@ pub struct EnvVarStatus {
     pub description: String,
     pub secret: bool,
     pub set: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
     pub used_in: Vec<EnvUse>,
 }
 
-pub fn env_var_overview(settings: &Settings, is_set: impl Fn(&str) -> bool) -> Vec<EnvVarStatus> {
+pub fn env_var_overview(
+    settings: &Settings,
+    is_set: impl Fn(&str) -> bool,
+    value_of: impl Fn(&str) -> Option<String>,
+) -> Vec<EnvVarStatus> {
     let mut uses: BTreeMap<String, Vec<EnvUse>> = collect_missing(settings, |_| false)
         .into_iter()
         .map(|m| (m.name, m.used_in))
@@ -162,6 +168,7 @@ pub fn env_var_overview(settings: &Settings, is_set: impl Fn(&str) -> bool) -> V
             description: var.description.clone(),
             secret: var.secret,
             set: is_set(&var.name),
+            value: if var.secret { None } else { value_of(&var.name).filter(|value| !value.is_empty()) },
             used_in: uses.remove(&var.name).unwrap_or_default(),
         })
         .collect()

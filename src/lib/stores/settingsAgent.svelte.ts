@@ -3,21 +3,18 @@ import { applyStreamEvent, emptyReply, type AgentReply } from "$lib/utils/agentR
 import { undoChange, type UndoConflict } from "$lib/services/changeLog";
 import {
   onSettingsAgentProposal,
-  onSettingsAgentSecretRequest,
+  onSettingsAgentSecretView,
   settingsAgentApply,
   settingsAgentCancel,
   settingsAgentPanel,
   settingsAgentRefresh,
   settingsAgentReject,
   settingsAgentReset,
-  settingsAgentSecretResult,
   settingsAgentSend,
   settingsAgentStartDictation,
   settingsAgentTestRow,
   type PanelMode,
   type ProposalData,
-  type SecretOutcome,
-  type SecretRequest,
 } from "$lib/services/settingsAgent";
 
 export type AgentMessage =
@@ -40,7 +37,6 @@ let proposal = $state<ProposalData | null>(null);
 let proposalOutcome = $state<ProposalOutcome | null>(null);
 let applying = $state(false);
 let undoing = $state(false);
-let secretRequests = $state<SecretRequest[]>([]);
 
 settingsAgentReset().catch((e) => (error = String(e)));
 
@@ -49,14 +45,14 @@ onSettingsAgentProposal((incoming) => {
   proposal = incoming;
 }).catch((e) => (error = String(e)));
 
-onSettingsAgentSecretRequest((request) => {
-  secretRequests.push(request);
-}).catch((e) => (error = String(e)));
-
 function lastAssistant() {
   const last = messages[messages.length - 1];
   return last?.role === "assistant" ? last : null;
 }
+
+onSettingsAgentSecretView((name) => {
+  lastAssistant()?.secretViews.push(name);
+}).catch((e) => (error = String(e)));
 
 function onEvent(event: StreamEvent) {
   if (event.event === "error") error = event.data.message;
@@ -114,7 +110,6 @@ async function reset() {
   error = null;
   proposal = null;
   proposalOutcome = null;
-  secretRequests = [];
 }
 
 function blockedMessage(rows: number[]): string {
@@ -195,15 +190,6 @@ async function testRow(row: number) {
   }
 }
 
-async function resolveSecret(requestId: string, outcome: SecretOutcome) {
-  secretRequests = secretRequests.filter((r) => r.request_id !== requestId);
-  try {
-    await settingsAgentSecretResult(requestId, outcome);
-  } catch (e) {
-    error = String(e);
-  }
-}
-
 async function setPanelOpen(open: boolean) {
   panelOpen = open;
   panelMode = open ? await settingsAgentPanel(true) : "overlay";
@@ -219,14 +205,12 @@ export function getSettingsAgent() {
     get proposalOutcome() { return proposalOutcome; },
     get applying() { return applying; },
     get undoing() { return undoing; },
-    get secretRequests() { return secretRequests; },
     applyProposal,
     undoProposal,
     dismissUndoConflicts,
     rejectProposal,
     refreshProposal,
     testRow,
-    resolveSecret,
     get panelOpen() { return panelOpen; },
     get panelMode() { return panelMode; },
     send,

@@ -289,7 +289,7 @@ pub fn definitions() -> Vec<Tool> {
     vec![
         strict(tool(
             READ,
-            "Reads the live settings and returns them as JSON. `what` picks the part: `values` all settings; `models` the models (api_key shown as a ${VAR} reference or [redacted]); `skills` name, description, model and offered_in per skill; `skill` one skill's frontmatter and body (needs `name`); `prompt` one prompt (needs `name`: system, about_you, environment, input_format, title_generation, speech_to_text, stt_keyterms). `missing_env` lists the ${VAR} references without a value; `env_vars` lists the environment variables with description, secret flag, whether set on this machine and where used. `change_log` lists the earlier changes (cards, secret changes, undos), newest first, with request, reply, state (applied or undone) and the before and after of every setting; narrow it with `since`, `until`, `key`, `op`, `text`, `host` and `limit`, or read one whole entry, file contents included, with `name` set to its id. It never returns a secret value and changes nothing.",
+            "Reads the live settings and returns them as JSON. `what` picks the part: `values` all settings; `models` the models (api_key shown as a ${VAR} reference or [redacted]); `skills` name, description, model and offered_in per skill; `skill` one skill's frontmatter and body (needs `name`); `prompt` one prompt (needs `name`: system, about_you, environment, input_format, title_generation, speech_to_text, stt_keyterms). `missing_env` lists the ${VAR} references without a value; `env_vars` lists the environment variables with description, secret flag, whether set on this machine, where used, and the `value` of a variable whose secret flag is false. `change_log` lists the earlier changes (cards, secret changes, undos), newest first, with request, reply, state (applied or undone) and the before and after of every setting; narrow it with `since`, `until`, `key`, `op`, `text`, `host` and `limit`, or read one whole entry, file contents included, with `name` set to its id. It never returns a secret value and changes nothing.",
             json!({
                 "type": "object",
                 "properties": {
@@ -327,14 +327,13 @@ pub fn definitions() -> Vec<Tool> {
         ),
         strict(tool(
             SECRET,
-            "Shows the user a masked input for the secret (API key, token) of the environment variable `name`, which must first be listed with `add_env_var` in an applied proposal. Call it to ask for a value, and also when the user wants to see or change the current value of a listed variable: when the variable has a value, the app shows the user the current value masked, with a toggle that reveals it, and the user may replace it. The value is shown only to the user and never reaches you. It returns the outcome: saved, cancelled, or exists (the variable already has a value and the user closed without saving). Reference the variable as ${NAME} in operations.",
+            "Shows the user the current value of the listed environment variable `name` as a read-only masked field with a reveal toggle in the conversation. You never see the value. It returns `shown` when the variable has a value, or `not_set` when it has none and nothing is shown. To change a value propose a `set_env_value` row; this tool never changes one.",
             json!({
                 "type": "object",
                 "properties": {
-                    "name": {"type": "string", "description": "Environment variable name, letters, digits and underscores."},
-                    "purpose": {"type": "string", "description": "What the secret is for, shown to the user."}
+                    "name": {"type": "string", "description": "Environment variable name, letters, digits and underscores."}
                 },
-                "required": ["name", "purpose"],
+                "required": ["name"],
                 "additionalProperties": false
             }),
         )),

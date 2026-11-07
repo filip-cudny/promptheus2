@@ -725,3 +725,36 @@ fn set_env_value_needs_a_listed_variable_and_plans_only_a_secret_effect() {
     let current = Current { settings: &settings, config_dir: dir.path() };
     assert!(stale_rows(&listed, &current).is_empty());
 }
+
+#[test]
+fn update_env_var_switching_secret_off_says_the_value_becomes_visible_to_the_agent() {
+    let (mut settings, dir) = (fixture_settings(), config_dir());
+    settings.env_vars = vec![env_var("PHX_PLAN_VALUE")];
+    settings.env_vars[0].secret = true;
+    let update = |secret: bool| Operation::UpdateEnvVar {
+        name: "PHX_PLAN_VALUE".into(),
+        description: String::new(),
+        secret,
+    };
+
+    let off = plan_all(&[update(false)], &settings, &dir).unwrap();
+    let on = plan_all(&[update(true)], &settings, &dir).unwrap();
+
+    assert_eq!(off.rows[0].operation.label, "Update variable PHX_PLAN_VALUE (value becomes visible to the agent)");
+    assert_eq!(on.rows[0].operation.label, "Update variable PHX_PLAN_VALUE");
+}
+
+#[test]
+fn update_env_var_of_a_variable_that_is_already_plain_keeps_the_plain_label() {
+    let (mut settings, dir) = (fixture_settings(), config_dir());
+    settings.env_vars = vec![env_var("PHX_PLAN_VALUE")];
+
+    let planned = plan_all(
+        &[Operation::UpdateEnvVar { name: "PHX_PLAN_VALUE".into(), description: "d".into(), secret: false }],
+        &settings,
+        &dir,
+    )
+    .unwrap();
+
+    assert_eq!(planned.rows[0].operation.label, "Update variable PHX_PLAN_VALUE");
+}

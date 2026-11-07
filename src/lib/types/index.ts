@@ -280,6 +280,7 @@ export interface EnvVarStatus {
   description: string;
   secret: boolean;
   set: boolean;
+  value?: string;
   used_in: EnvUse[];
 }
 

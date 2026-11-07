@@ -1,3 +1,7 @@
+<script lang="ts" module>
+  export type SecretOutcome = "saved" | "cancelled";
+</script>
+
 <script lang="ts">
   import { onMount } from "svelte";
   import { Eye, EyeOff } from "lucide-svelte";
@@ -5,34 +9,39 @@
   import TextInput from "$lib/components/shared/ui/TextInput.svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { getSecretValue, saveSecret } from "$lib/services/settingsDialog";
-  import type { SecretOutcome } from "$lib/services/settingsAgent";
 
   let {
     name,
     purpose = "",
     exists = false,
     masked = true,
+    readonly = false,
     onclose,
   }: {
     name: string;
     purpose?: string;
     exists?: boolean;
     masked?: boolean;
-    onclose: (outcome: SecretOutcome) => void;
+    readonly?: boolean;
+    onclose?: (outcome: SecretOutcome) => void;
   } = $props();
+
+  const MASK = "••••••••••••";
 
   let value = $state("");
   let revealed = $state(false);
   let existing = $state("");
+  let loaded = $state(false);
   let saving = $state(false);
   let error = $state<string | null>(null);
   const canSave = $derived(!!value && value !== existing && !saving);
 
   async function loadExisting() {
-    if (!exists) return;
+    if (!readonly && !exists) return;
     try {
       existing = (await getSecretValue(name)) ?? "";
       value = existing;
+      loaded = true;
     } catch (e) {
       error = String(e);
     }
@@ -48,7 +57,7 @@
     error = null;
     try {
       await saveSecret(name, value);
-      onclose("saved");
+      onclose?.("saved");
     } catch (e) {
       error = String(e);
     } finally {
@@ -60,33 +69,49 @@
     if (e.key === "Enter") save();
     else if (e.key === "Escape") {
       e.stopPropagation();
-      onclose("cancelled");
+      onclose?.("cancelled");
     }
   }
 </script>
 
+{#snippet revealToggle()}
+  <button class="reveal" type="button" title={revealed ? "Hide" : "Show"} onclick={() => (revealed = !revealed)}>
+    {#if revealed}<EyeOff size={ICON_SIZE.md} />{:else}<Eye size={ICON_SIZE.md} />{/if}
+  </button>
+{/snippet}
+
 <div class="secret">
-  <div class="title"><code>{name}</code>{#if exists}<span class="note">has a value</span>{/if}</div>
+  <div class="title"><code>{name}</code>{#if exists && !readonly}<span class="note">has a value</span>{/if}</div>
   {#if purpose}<p class="purpose">{purpose}</p>{/if}
-  <div class="input-row">
-    <TextInput
-      bind:value
-      type={masked && !revealed ? "password" : "text"}
-      placeholder={exists ? "Enter a new value" : "Value"}
-      autocomplete="off"
-      {onkeydown}
-    />
-    {#if masked}
-      <button class="reveal" type="button" title={revealed ? "Hide" : "Show"} onclick={() => (revealed = !revealed)}>
-        {#if revealed}<EyeOff size={ICON_SIZE.md} />{:else}<Eye size={ICON_SIZE.md} />{/if}
-      </button>
-    {/if}
-  </div>
-  {#if error}<div class="error">{error}</div>{/if}
-  <div class="actions">
-    <Button variant="ghost" onclick={() => onclose("cancelled")}>Cancel</Button>
-    <Button variant="primary" disabled={!canSave} onclick={save}>Save</Button>
-  </div>
+  {#if readonly}
+    <div class="input-row">
+      {#if loaded && existing}
+        <code class="read-value">{revealed ? existing : MASK}</code>
+        {@render revealToggle()}
+      {:else if loaded}
+        <span class="note">not set</span>
+      {/if}
+    </div>
+    {#if error}<div class="error">{error}</div>{/if}
+  {:else}
+    <div class="input-row">
+      <TextInput
+        bind:value
+        type={masked && !revealed ? "password" : "text"}
+        placeholder={exists ? "Enter a new value" : "Value"}
+        autocomplete="off"
+        {onkeydown}
+      />
+      {#if masked}
+        {@render revealToggle()}
+      {/if}
+    </div>
+    {#if error}<div class="error">{error}</div>{/if}
+    <div class="actions">
+      <Button variant="ghost" onclick={() => onclose?.("cancelled")}>Cancel</Button>
+      <Button variant="primary" disabled={!canSave} onclick={save}>Save</Button>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -126,6 +151,12 @@
   .input-row :global(.text-input) {
     flex: 1;
     min-width: 0;
+  }
+
+  .read-value {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .reveal {

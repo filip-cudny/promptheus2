@@ -8,6 +8,7 @@ use crate::commands::change_log::apply_plan;
 use crate::models::settings::Settings;
 use crate::services::config::ConfigService;
 use crate::services::missing_env::{env_is_set, env_var_overview, EnvVarStatus};
+use crate::services::secrets;
 use crate::services::settings_agent::operations::Operation;
 use crate::services::settings_agent::plan::{plan_single, Current};
 
@@ -21,7 +22,8 @@ async fn fresh_settings(app: &AppHandle) -> Settings {
 #[tauri::command]
 pub async fn get_env_vars(app: AppHandle) -> crate::Result<Vec<EnvVarStatus>> {
     let settings = fresh_settings(&app).await;
-    Ok(env_var_overview(&settings, env_is_set))
+    let config_dir = app.path().app_config_dir()?;
+    Ok(env_var_overview(&settings, env_is_set, |name| secrets::current_value(&config_dir, name)))
 }
 
 #[tauri::command]

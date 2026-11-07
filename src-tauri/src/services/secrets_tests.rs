@@ -311,3 +311,73 @@ fn redactor_with_values_redacts_the_longer_value_first() {
 
     assert_eq!(redactor.redact("a sk-extra-long b sk-extra"), "a [redacted] b [redacted]");
 }
+
+fn listed_var(name: &str, secret: bool) -> crate::models::settings::EnvVar {
+    crate::models::settings::EnvVar { secret, ..env_var(name, &[]) }
+}
+
+fn plain_settings(vars: &[(&str, bool)]) -> Settings {
+    settings_with(vars.iter().map(|(name, secret)| listed_var(name, *secret)).collect())
+}
+
+#[test]
+fn a_non_secret_variable_value_is_not_redacted() {
+    let dir = config_dir();
+    std::fs::write(dir.path().join(".env"), "SEC_PLAIN_DIR=\"/opt/plain-dir-1\"\nSEC_PLAIN_KEY=\"plain-key-2\"\n").unwrap();
+    let settings = plain_settings(&[("SEC_PLAIN_DIR", false), ("SEC_PLAIN_KEY", true)]);
+    let redactor = Redactor::new(dir.path(), &settings);
+
+    let text = redactor.redact("/opt/plain-dir-1 plain-key-2");
+
+    assert_eq!(text, "/opt/plain-dir-1 [redacted]");
+}
+
+#[test]
+fn a_non_secret_override_is_not_redacted_but_the_override_of_another_name_is() {
+    let dir = config_dir();
+    crate::services::env_resolve::set_override("SEC_PLAIN_OVR", Some("/opt/override-3".into()));
+    crate::services::env_resolve::set_override("SEC_UNLISTED_OVR", Some("unlisted-override-4".into()));
+    let settings = plain_settings(&[("SEC_PLAIN_OVR", false)]);
+    let redactor = Redactor::new(dir.path(), &settings);
+
+    let text = redactor.redact("/opt/override-3 unlisted-override-4");
+
+    crate::services::env_resolve::clear_override("SEC_PLAIN_OVR");
+    crate::services::env_resolve::clear_override("SEC_UNLISTED_OVR");
+    assert_eq!(text, "/opt/override-3 [redacted]");
+}
+
+#[test]
+fn a_non_secret_value_also_held_elsewhere_stays_redacted() {
+    let dir = config_dir();
+    std::fs::write(
+        dir.path().join(".env"),
+        "SEC_SHARED_PLAIN=\"shared-5\"\nSEC_SHARED_SECRET=\"shared-5\"\nSEC_UNLISTED_FILE=\"unlisted-6\"\nSEC_PLAIN_TWIN=\"unlisted-6\"\nSEC_PLAIN_LITERAL=\"literal-7\"\n",
+    )
+    .unwrap();
+    let mut settings = plain_settings(&[
+        ("SEC_SHARED_PLAIN", false),
+        ("SEC_SHARED_SECRET", true),
+        ("SEC_PLAIN_TWIN", false),
+        ("SEC_PLAIN_LITERAL", false),
+    ]);
+    settings.models.push(model("literal", "literal-7"));
+    let redactor = Redactor::new(dir.path(), &settings);
+
+    let text = redactor.redact("shared-5 unlisted-6 literal-7");
+
+    assert_eq!(text, "[redacted] [redacted] [redacted]");
+    let json = redactor.redact_settings(&settings).to_string();
+    assert!(!json.contains("literal-7"));
+}
+
+#[test]
+fn staged_values_stay_redacted_even_when_they_equal_a_non_secret_value() {
+    let dir = config_dir();
+    std::fs::write(dir.path().join(".env"), "SEC_PLAIN_STAGED=\"staged-8\"\n").unwrap();
+    let settings = plain_settings(&[("SEC_PLAIN_STAGED", false)]);
+
+    let redactor = Redactor::new(dir.path(), &settings).with_values(["staged-8".to_string()]);
+
+    assert_eq!(redactor.redact("staged-8"), "[redacted]");
+}

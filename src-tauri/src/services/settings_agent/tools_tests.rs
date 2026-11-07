@@ -161,12 +161,17 @@ fn only_read_and_secret_carry_the_strict_marker() {
 }
 
 #[test]
-fn secret_tool_and_system_prompt_offer_showing_and_changing_a_current_value() {
+fn secret_tool_takes_only_a_name_and_points_to_a_card_row_for_changes() {
     let tool = definitions().into_iter().find(|tool| tool.name == "settings_secret").unwrap();
+    let schema = Value::Object((*tool.input_schema).clone());
+    assert_eq!(schema["properties"].as_object().unwrap().keys().collect::<Vec<_>>(), ["name"]);
+    assert_eq!(required(&schema), ["name"]);
     let description = tool.description.unwrap();
     let prompt = include_str!("system_prompt.md");
     for text in [description.as_ref(), prompt] {
-        assert!(text.contains("see or change the current value"), "{text}");
-        assert!(text.contains("toggle that reveals it"), "{text}");
+        assert!(text.contains("reveal toggle") || text.contains("toggle that reveals it"), "{text}");
+        assert!(text.contains("set_env_value"), "{text}");
     }
+    assert!(description.contains("shown") && description.contains("not_set"), "{description}");
+    assert!(prompt.contains("`secret: false`") && prompt.contains("`value`"), "{prompt}");
 }

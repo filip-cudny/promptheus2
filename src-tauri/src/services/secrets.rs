@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -378,25 +378,79 @@ fn longest_first(mut values: Vec<String>) -> Vec<String> {
     values
 }
 
-impl Redactor {
-    pub fn new(config_dir: &Path, settings: &Settings) -> Self {
-        let mut values: Vec<String> = env_file_pairs(&env_path(config_dir))
+#[derive(Default)]
+struct ValueSources(BTreeMap<String, Vec<Option<String>>>);
+
+impl ValueSources {
+    fn add(&mut self, value: String, name: Option<&str>) {
+        self.0.entry(value).or_default().push(name.map(str::to_string));
+    }
+
+    fn secret_values(self, plain_names: &BTreeSet<&str>) -> Vec<String> {
+        self.0
             .into_iter()
-            .map(|(_, value)| value)
-            .collect();
-        values.extend(override_values());
-        values.extend(backup_values(config_dir));
-        for reference in collect_missing(settings, |_| false) {
-            values.extend(env_value(&reference.name));
+            .filter(|(_, sources)| {
+                !sources
+                    .iter()
+                    .all(|source| source.as_deref().is_some_and(|name| plain_names.contains(name)))
+            })
+            .map(|(value, _)| value)
+            .collect()
+    }
+}
+
+fn candidate_names(settings: &Settings, env_pairs: &[(String, String)], referenced: &[String]) -> BTreeSet<String> {
+    env_pairs
+        .iter()
+        .map(|(name, _)| name.clone())
+        .chain(settings.env_vars.iter().map(|var| var.name.clone()))
+        .chain(referenced.iter().cloned())
+        .collect()
+}
+
+impl Redactor {
+    /// A value is exempt from redaction only when every source of it is a variable listed in
+    /// `settings.env_vars` with `secret: false`.
+    pub fn new(config_dir: &Path, settings: &Settings) -> Self {
+        let env_pairs = env_file_pairs(&env_path(config_dir));
+        let referenced: Vec<String> =
+            collect_missing(settings, |_| false).into_iter().map(|reference| reference.name).collect();
+        let mut sources = ValueSources::default();
+        for (name, value) in &env_pairs {
+            sources.add(value.clone(), Some(name));
         }
-        values.extend(
-            settings
-                .models
-                .iter()
-                .filter_map(|model| model.api_key.clone())
-                .filter(|key| env_ref_names(key).is_empty()),
-        );
-        Self { values: longest_first(values) }
+        let mut unattributed = override_values();
+        for name in candidate_names(settings, &env_pairs, &referenced) {
+            if let Some(Some(value)) = override_for(&name) {
+                if let Some(at) = unattributed.iter().position(|held| *held == value) {
+                    unattributed.swap_remove(at);
+                }
+                sources.add(value, Some(&name));
+            }
+        }
+        for value in unattributed.into_iter().chain(backup_values(config_dir)) {
+            sources.add(value, None);
+        }
+        for name in &referenced {
+            if let Some(value) = env_value(name) {
+                sources.add(value, Some(name));
+            }
+        }
+        for key in settings
+            .models
+            .iter()
+            .filter_map(|model| model.api_key.clone())
+            .filter(|key| env_ref_names(key).is_empty())
+        {
+            sources.add(key, None);
+        }
+        let plain_names: BTreeSet<&str> = settings
+            .env_vars
+            .iter()
+            .filter(|var| !var.secret)
+            .map(|var| var.name.as_str())
+            .collect();
+        Self { values: longest_first(sources.secret_values(&plain_names)) }
     }
 
     pub fn with_values(self, extra: impl IntoIterator<Item = String>) -> Self {
