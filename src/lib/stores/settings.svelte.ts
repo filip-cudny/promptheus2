@@ -1,9 +1,8 @@
 import { onSettingsChanged } from "$lib/services/events";
 import { getSettings, parseSettingError } from "$lib/services/settings";
-import { SURFACE_ORDER } from "$lib/constants/surfaces";
 import { getSkillsStore } from "$lib/stores/skills.svelte";
 import { modelUses, type ModelUse } from "$lib/utils/modelUses";
-import type { Settings, ModelConfig, SurfaceKind } from "$lib/types";
+import type { Settings, ModelConfig } from "$lib/types";
 
 const skills = getSkillsStore();
 
@@ -16,38 +15,6 @@ let unlisten: (() => void) | null = null;
 let refreshInFlight: Promise<void> | null = null;
 
 const models = $derived<ModelConfig[]>(settings?.models ?? []);
-
-const surfaceModelIds = $derived.by<Record<SurfaceKind, string | null>>(() => {
-  const s = settings;
-  if (!s) {
-    return {
-      chat: null,
-      quick_actions: null,
-      title_generation: null,
-      settings_agent: null,
-      speech_to_text: null,
-    };
-  }
-  return {
-    chat: s.surfaces.chat.generation.model_id,
-    quick_actions: s.surfaces.quick_actions.generation.model_id,
-    title_generation: s.surfaces.title_generation.generation.model_id,
-    settings_agent: s.surfaces.settings_agent.generation.model_id,
-    speech_to_text: s.surfaces.speech_to_text.model_id,
-  };
-});
-
-const surfacesByModel = $derived.by<Map<string, SurfaceKind[]>>(() => {
-  const map = new Map<string, SurfaceKind[]>();
-  for (const surface of SURFACE_ORDER) {
-    const modelId = surfaceModelIds[surface];
-    if (!modelId) continue;
-    const list = map.get(modelId) ?? [];
-    list.push(surface);
-    map.set(modelId, list);
-  }
-  return map;
-});
 
 const usesByModel = $derived.by<Map<string, ModelUse[]>>(() =>
   settings ? modelUses(settings.surfaces, skills.full) : new Map(),
@@ -112,10 +79,6 @@ function getModel(id: string | null): ModelConfig | null {
   return models.find((m) => m.id === id) ?? null;
 }
 
-function getSurfacesForModel(modelId: string): SurfaceKind[] {
-  return surfacesByModel.get(modelId) ?? [];
-}
-
 function getUsesForModel(id: string): ModelUse[] {
   return usesByModel.get(id) ?? [];
 }
@@ -134,12 +97,6 @@ export function getSettingsStore() {
     get error() {
       return error;
     },
-    get surfaceModelIds() {
-      return surfaceModelIds;
-    },
-    get surfacesByModel() {
-      return surfacesByModel;
-    },
     get usesByModel() {
       return usesByModel;
     },
@@ -157,7 +114,6 @@ export function getSettingsStore() {
     refresh,
     destroy,
     getModel,
-    getSurfacesForModel,
     getUsesForModel,
   };
 }

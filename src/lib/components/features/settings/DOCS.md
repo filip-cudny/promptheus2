@@ -32,7 +32,7 @@ The root is `src/windows/settings-dialog/App.svelte` (calls `store.init()` / `st
 
 "Open in" calls `navigateTo` with `surfaces.chat.generation.model_id` (Chat), `surfaces.quick_actions.generation.model_id` (Context menu), `surfaces.title_generation.generation.model_id` and `surfaces.settings_agent.generation.model_id` (Chat), `surfaces.speech_to_text.model_id` (Speech). The view uses no `SettingField`: `navigateTo` finds a field by `setting-<catalog path>`, which must stay unique to the field's own section.
 
-`SURFACE_LABELS` (`$lib/constants/surfaces`) is sentence case (`Chat`, `Quick actions`, …): these are the row labels here and the labels of `formatSurfaceList`.
+`SURFACE_LABELS` (`$lib/constants/surfaces`) is sentence case (`Chat`, `Quick actions`, …): these are the row labels here and the texts of the surface tags (`modelUseLabel`).
 
 ### Tests of pure modules
 
@@ -217,24 +217,23 @@ The model API key (`ModelEditor`, `CreateModelDialog`) is an `EnvVarPicker`: a `
 
 ### Surface references
 
-A model "in use by" a surface (chat / quick_actions / title_generation / speech_to_text) is surfaced in three places, all sharing the same accent-coloured visual language:
+Where a model is used shows as "Used by" tags (`ModelUseTags.svelte`) in three places:
 
-1. Accent-coloured caption line in `ModelList` rows: `in use by Chat, Title generation`, rendered below the model id at `font-size-xs` in `var(--accent)`. Same phrasing as the editor header pill so the two views speak the same vocabulary.
-2. Pill badge in the editor header (`in use by Chat, Title generation`), `--accent-bg-soft` / `--accent` / `--accent-border` tokens. Header uses `align-items: center` so the pill is vertically centred against the heading.
-3. Warning sentence in the delete-confirm. This one keeps the `.warn` colour — destructive intent justifies the warning palette.
+1. `ModelList` rows: tags under the model id and chips, none for an unused model. The row is a `div` holding a selecting `<button>` (name, model id, chips) and the tags, since a button may not contain buttons; hover and active styles sit on the whole row.
+2. `ModelEditor` header: a "Used by" line followed by the tags; with no uses, "nothing — " and a link "assign in Assignments ›" (`onShowAssignments`).
+3. Delete warning (`DangerZone` `warning` snippet, only with uses): "It is used by <list>." with the same texts as the tags, comma-separated, same order. The warning keeps the `.warn` colour — destructive intent justifies the warning palette.
 
-Sources of truth:
+Tag kinds and texts (`modelUseLabel` in `$lib/constants/surfaces`, shared by tags and warning):
 
-- `store.surfacesByModel` — `Map<modelId, SurfaceKind[]>`, ordered per `SURFACE_ORDER`. Use this when iterating models (e.g. `ModelList`).
-- `store.getSurfacesForModel(id)` — `SurfaceKind[]` for a single model. Use this when you have one id (e.g. `ModelEditor` props).
-- `store.usesByModel` / `store.getUsesForModel(id)` — `Map<modelId, ModelUse[]>` / `ModelUse[]` from `modelUses` in `$lib/utils/modelUses.ts`: stored and inherited-from-Chat surface uses, then skill pins.
-- `formatSurfaceList(surfaces)` from `$lib/constants/surfaces` — the canonical comma-joined human label.
+- surface, stored on the surface: solid tag `SURFACE_LABELS[surface]`;
+- surface inheriting the Chat model (empty model of Quick actions, Title generation, Settings agent): dashed tag `<label> (same as Chat)`;
+- skill pin: tag `skill: <name>`.
 
-Never recompute the mapping ad hoc; both consumers must read from the store so the list, the editor badge, and the delete confirm stay in lockstep.
+Click: a surface tag calls `onShowUse(surface)`; `SectionModels` selects Assignments, sets the local `highlightedSurface` for 2000 ms (a new click restarts the timer), scrolls `#assignment-<surface>` into view and `ModelAssignments` draws the `SettingField` highlight style on that row. The highlight is local state of `SectionModels` because `navigateTo` selects only model ids. A skill tag calls `navigateTo("skills[<name>]")`. A tag click calls `stopPropagation()`, so it never selects the row.
 
-The caption/pill replaced an earlier yellow star (in the list) and `--warning`-coloured pill (in the editor). Star semantics ("favorite / user preference") and warning amber ("issue / attention required") both clashed with the actual meaning here ("system binding"). `--warning` is reserved for issue states only.
+Single source: `store.usesByModel` (`Map<modelId, ModelUse[]>`) and `store.getUsesForModel(id)` (`ModelUse[]`), both from `modelUses` in `$lib/utils/modelUses.ts`: stored and inherited-from-Chat surface uses in the order chat, quick_actions, title_generation, settings_agent, speech_to_text, then skill pins. Never recompute the mapping ad hoc; list, editor header and delete warning must read from the store so they stay in lockstep.
 
-The list caption replaced a 7 px accent dot before the row name. The dot collided with the auto-save status dot in `SaveStatusIndicator` — same glyph, same colour, two different meanings. Filled circles are reserved for transient state (save indicator); persistent structural facts ("model is bound to surface X") get a textual caption.
+`--warning` is reserved for issue states only ("issue / attention required"); a binding to a surface is not one. Filled circles are reserved for transient state (the save indicator in `SaveStatusIndicator`); persistent structural facts get text.
 
 ### Reactivity gotchas (Svelte 5)
 

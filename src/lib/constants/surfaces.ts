@@ -1,12 +1,5 @@
 import type { SurfaceKind } from "$lib/types";
-
-export const SURFACE_ORDER: SurfaceKind[] = [
-  "chat",
-  "quick_actions",
-  "title_generation",
-  "settings_agent",
-  "speech_to_text",
-];
+import type { ModelUse } from "$lib/utils/modelUses";
 
 export const SURFACE_LABELS: Record<SurfaceKind, string> = {
   chat: "Chat",
@@ -16,6 +9,8 @@ export const SURFACE_LABELS: Record<SurfaceKind, string> = {
   speech_to_text: "Speech to text",
 };
 
-export function formatSurfaceList(surfaces: SurfaceKind[]): string {
-  return surfaces.map((s) => SURFACE_LABELS[s]).join(", ");
+export function modelUseLabel(use: ModelUse): string {
+  if (use.kind === "skill") return `skill: ${use.skill}`;
+  const label = SURFACE_LABELS[use.surface];
+  return use.inherited ? `${label} (same as Chat)` : label;
 }

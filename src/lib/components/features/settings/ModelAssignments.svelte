@@ -16,6 +16,8 @@
   import { quickActionsModelId, sameAsChatLabel } from "$lib/utils/modelUses";
   import type { ModelConfig, SurfaceKind } from "$lib/types";
 
+  let { highlighted }: { highlighted: SurfaceKind | null } = $props();
+
   type TextSurface = Exclude<SurfaceKind, "speech_to_text">;
 
   const TEXT_ROWS: ReadonlyArray<{
@@ -148,7 +150,7 @@
         </thead>
         <tbody>
           {#each TEXT_ROWS as row (row.surface)}
-            <tr id="assignment-{row.surface}">
+            <tr id="assignment-{row.surface}" class:highlighted={highlighted === row.surface}>
               <td class="feature">
                 {SURFACE_LABELS[row.surface]}
                 <small>{row.note}</small>
@@ -193,7 +195,7 @@
       <h3>Speech</h3>
       <table>
         <tbody>
-          <tr id="assignment-speech_to_text">
+          <tr id="assignment-speech_to_text" class:highlighted={highlighted === "speech_to_text"}>
             <td class="feature feature-col">
               {SURFACE_LABELS.speech_to_text}
               <small>Recording pill</small>
@@ -315,6 +317,12 @@
     padding: var(--space-3) var(--space-4) var(--space-3) var(--space-0);
     border-top: 1px solid var(--border-faint);
     vertical-align: middle;
+  }
+
+  tr.highlighted {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    background: var(--accent-bg-soft);
   }
 
   .feature-col {

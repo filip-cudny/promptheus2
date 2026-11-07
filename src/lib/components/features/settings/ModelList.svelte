@@ -1,25 +1,28 @@
 <script lang="ts">
   import { Plus, ChevronDown, ArrowLeftRight } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import { formatSurfaceList } from "$lib/constants/surfaces";
   import type { ModelConfig, ModelType, SurfaceKind } from "$lib/types";
+  import type { ModelUse } from "$lib/utils/modelUses";
   import Button from "$lib/components/shared/ui/Button.svelte";
+  import ModelUseTags from "./ModelUseTags.svelte";
 
   let {
     models,
     selectedId,
     assignmentsSelected,
-    surfacesByModel,
+    usesByModel,
     onSelect,
     onSelectAssignments,
+    onShowUse,
     onAdd,
   }: {
     models: ModelConfig[];
     selectedId: string | null;
     assignmentsSelected: boolean;
-    surfacesByModel: Map<string, SurfaceKind[]>;
+    usesByModel: Map<string, ModelUse[]>;
     onSelect: (id: string) => void;
     onSelectAssignments: () => void;
+    onShowUse: (surface: SurfaceKind) => void;
     onAdd: (type: ModelType) => void;
   } = $props();
 
@@ -83,7 +86,7 @@
   </header>
 
   <div class="scroll">
-    <button class="row assignments" class:active={assignmentsSelected} onclick={onSelectAssignments}>
+    <button class="row row-select assignments" class:active={assignmentsSelected} onclick={onSelectAssignments}>
       <span class="assignments-icon"><ArrowLeftRight size={ICON_SIZE.md} /></span>
       <div class="row-main">
         <div class="row-name">Assignments</div>
@@ -102,28 +105,28 @@
       {#each groups as [groupName, groupModels] (groupName)}
         <div class="group-label">{groupName}</div>
         {#each groupModels as model (model.id)}
-          {@const surfaces = surfacesByModel.get(model.id) ?? []}
-          <button
-            class="row"
-            class:active={!assignmentsSelected && model.id === selectedId}
-            onclick={() => onSelect(model.id)}
-          >
-            <div class="row-main">
-              <div class="row-name">{model.display_name || "(unnamed)"}</div>
-              <div class="row-model">{model.model || "—"}</div>
-              {#if surfaces.length > 0}
-                <div class="row-surfaces">in use by {formatSurfaceList(surfaces)}</div>
-              {/if}
-            </div>
-            <div class="row-chips">
-              <span class="chip type-chip" data-type={model.type}>
-                {model.type === "stt" ? "STT" : "Text"}
-              </span>
-              {#if model.provider}
-                <span class="chip provider-chip">{model.provider}</span>
-              {/if}
-            </div>
-          </button>
+          {@const uses = usesByModel.get(model.id) ?? []}
+          <div class="row" class:active={!assignmentsSelected && model.id === selectedId}>
+            <button class="row-select" onclick={() => onSelect(model.id)}>
+              <div class="row-main">
+                <div class="row-name">{model.display_name || "(unnamed)"}</div>
+                <div class="row-model">{model.model || "—"}</div>
+              </div>
+              <div class="row-chips">
+                <span class="chip type-chip" data-type={model.type}>
+                  {model.type === "stt" ? "STT" : "Text"}
+                </span>
+                {#if model.provider}
+                  <span class="chip provider-chip">{model.provider}</span>
+                {/if}
+              </div>
+            </button>
+            {#if uses.length > 0}
+              <div class="row-uses">
+                <ModelUseTags {uses} {onShowUse} />
+              </div>
+            {/if}
+          </div>
         {/each}
       {/each}
     {/if}
@@ -243,6 +246,10 @@
   }
 
   .row {
+    width: 100%;
+  }
+
+  .row-select {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
@@ -254,6 +261,11 @@
     text-align: left;
     cursor: pointer;
     gap: var(--space-4);
+  }
+
+  .row-uses {
+    padding: var(--space-0) var(--space-7) var(--space-4);
+    margin-top: calc(-1 * var(--space-2));
   }
 
   .row:hover:not(.active) {
@@ -305,15 +317,6 @@
     font-size: var(--font-size-sm);
     color: var(--text-muted);
     margin-top: 1px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .row-surfaces {
-    font-size: var(--font-size-xs);
-    color: var(--accent);
-    margin-top: 2px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

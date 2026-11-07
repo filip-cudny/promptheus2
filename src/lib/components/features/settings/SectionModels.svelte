@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from "svelte";
+  import { onDestroy, onMount, tick, untrack } from "svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
@@ -7,7 +7,9 @@
   import ModelEditor from "./ModelEditor.svelte";
   import ModelAssignments from "./ModelAssignments.svelte";
   import CreateModelDialog from "./CreateModelDialog.svelte";
-  import type { ModelType } from "$lib/types";
+  import type { ModelType, SurfaceKind } from "$lib/types";
+
+  const HIGHLIGHT_MS = 2000;
 
   const store = getSettingsStore();
   const navigation = getSettingsNavigation();
@@ -32,8 +34,27 @@
 
   let creatingType = $state<ModelType | null>(null);
 
+  let highlightedSurface = $state<SurfaceKind | null>(null);
+  let highlightTimer: ReturnType<typeof setTimeout> | null = null;
+
+  onDestroy(() => {
+    if (highlightTimer) clearTimeout(highlightTimer);
+  });
+
   function handleSelect(id: string) {
     selectedId = id;
+  }
+
+  async function showUse(surface: SurfaceKind) {
+    selectedId = null;
+    if (highlightTimer) clearTimeout(highlightTimer);
+    highlightedSurface = surface;
+    highlightTimer = setTimeout(() => {
+      highlightedSurface = null;
+      highlightTimer = null;
+    }, HIGHLIGHT_MS);
+    await tick();
+    document.getElementById(`assignment-${surface}`)?.scrollIntoView({ block: "center" });
   }
 </script>
 
@@ -42,9 +63,10 @@
     models={store.models}
     selectedId={selectedId}
     assignmentsSelected={selectedId === null}
-    surfacesByModel={store.surfacesByModel}
+    usesByModel={store.usesByModel}
     onSelect={handleSelect}
     onSelectAssignments={() => (selectedId = null)}
+    onShowUse={showUse}
     onAdd={(type) => (creatingType = type)}
   />
   <div class="editor-pane">
@@ -52,7 +74,9 @@
       {#key selectedModel.id}
         <ModelEditor
           model={selectedModel}
-          surfaces={store.getSurfacesForModel(selectedModel.id)}
+          uses={store.getUsesForModel(selectedModel.id)}
+          onShowUse={showUse}
+          onShowAssignments={() => (selectedId = null)}
           debounceMs={store.settings?.autosave_debounce_ms ?? 1000}
           onDeleted={() => {
             selectedId = null;
@@ -63,7 +87,7 @@
         />
       {/key}
     {:else}
-      <ModelAssignments />
+      <ModelAssignments highlighted={highlightedSurface} />
     {/if}
   </div>
 </div>

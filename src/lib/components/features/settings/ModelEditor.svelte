@@ -4,7 +4,8 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import { useCopyFeedback } from "$lib/utils/copyFeedback.svelte";
   import { error as logError } from "@tauri-apps/plugin-log";
-  import { formatSurfaceList } from "$lib/constants/surfaces";
+  import { modelUseLabel } from "$lib/constants/surfaces";
+  import type { ModelUse } from "$lib/utils/modelUses";
   import EnvVarPicker from "./EnvVarPicker.svelte";
   import ParametersKnown from "./ParametersKnown.svelte";
   import CapabilitiesEditor from "./CapabilitiesEditor.svelte";
@@ -15,6 +16,7 @@
   } from "./ParametersCustom.svelte";
   import SettingField from "./SettingField.svelte";
   import DangerZone from "./DangerZone.svelte";
+  import ModelUseTags from "./ModelUseTags.svelte";
   import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
   import {
@@ -42,13 +44,17 @@
 
   let {
     model,
-    surfaces,
+    uses,
+    onShowUse,
+    onShowAssignments,
     debounceMs,
     onDeleted,
     onDuplicated,
   }: {
     model: ModelConfig;
-    surfaces: SurfaceKind[];
+    uses: ModelUse[];
+    onShowUse: (surface: SurfaceKind) => void;
+    onShowAssignments: () => void;
     debounceMs: number;
     onDeleted: () => void;
     onDuplicated: (id: string) => void;
@@ -63,7 +69,7 @@
     );
   }
 
-  const surfacesLabel = $derived(formatSurfaceList(surfaces));
+  const usesLabel = $derived(uses.map(modelUseLabel).join(", "));
 
   let draft = $state<ModelConfig>(untrack(() => structuredClone(model)));
   let customEntries = $state<CustomParamEntry[]>(
@@ -270,19 +276,26 @@
 </script>
 
 {#snippet inUseWarning()}
-  It is currently in use by
-  {surfaces.length === 1 ? "surface" : "surfaces"}
-  "{surfacesLabel}".
+  It is used by {usesLabel}.
 {/snippet}
 
 <div class="model-editor">
   <header class="editor-header">
     <h1>{draft.display_name || "Untitled model"}</h1>
-    {#if surfaces.length > 0}
-      <span class="badge">in use by {surfacesLabel}</span>
-    {/if}
     <SaveStatusIndicator {tracker} />
   </header>
+
+  <div class="used-by">
+    <span class="used-by-label">Used by</span>
+    {#if uses.length > 0}
+      <ModelUseTags {uses} {onShowUse} />
+    {:else}
+      <span class="used-by-label">
+        nothing —
+        <button class="link" onclick={onShowAssignments}>assign in Assignments ›</button>
+      </span>
+    {/if}
+  </div>
 
   <section class="card">
     <h3>Basic</h3>
@@ -480,7 +493,7 @@
   <DangerZone
     noun="model"
     name={draft.display_name || "this model"}
-    warning={surfaces.length > 0 ? inUseWarning : undefined}
+    warning={uses.length > 0 ? inUseWarning : undefined}
     onDuplicate={handleDuplicate}
     onDelete={handleDelete}
   />
@@ -517,16 +530,30 @@
     line-height: 1.2;
   }
 
-  .badge {
-    font-size: var(--font-size-xs);
-    padding: var(--space-1) var(--space-3);
-    background: var(--accent-bg-soft);
+  .used-by {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    margin-top: calc(-1 * var(--space-4));
+  }
+
+  .used-by-label {
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+  }
+
+  .link {
+    background: none;
+    border: none;
+    padding: var(--space-0);
+    font: inherit;
     color: var(--accent);
-    border: 1px solid var(--accent-border);
-    border-radius: var(--radius-xl);
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    line-height: 1.4;
+    cursor: pointer;
+  }
+
+  .link:hover {
+    text-decoration: underline;
   }
 
   .card {
