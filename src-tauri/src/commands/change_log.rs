@@ -56,6 +56,7 @@ pub(crate) async fn apply_plan(
     request: Option<String>,
     reply: Option<String>,
     tests: BTreeMap<usize, TestResult>,
+    values: BTreeMap<String, String>,
 ) -> crate::Result<String> {
     let config_dir = app.path().app_config_dir()?;
     let host = app.state::<Arc<SettingsSync>>().host().await;
@@ -72,6 +73,7 @@ pub(crate) async fn apply_plan(
             request,
             reply,
             tests,
+            values,
         };
         apply::apply(&plan, &Current { settings: &settings, config_dir: &config_dir }, &mut ctx)
     })
@@ -104,6 +106,7 @@ pub async fn undo_change(app: AppHandle, id: String, force: bool) -> crate::Resu
             request: None,
             reply: None,
             tests: BTreeMap::new(),
+            values: BTreeMap::new(),
         };
         apply::undo(&id, force, &mut ctx)
     })

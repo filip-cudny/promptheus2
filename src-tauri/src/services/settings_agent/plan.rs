@@ -526,6 +526,10 @@ fn apply(state: &mut State, current: &Current, op: &Operation) -> Result<Vec<Eff
         }
         Operation::RenameEnvVar { name, new_name } => rename_env_var(state, current, name, new_name)?,
         Operation::DeleteEnvVar { name } => delete_env_var(state, name)?,
+        Operation::SetEnvValue { name } => {
+            env_var_position(state.settings(), name)?;
+            effects.push(Effect { target: Target::Secret { name: name.clone() }, before: None, after: None });
+        }
     }
     Ok(effects)
 }
@@ -703,6 +707,7 @@ pub(super) fn mismatches<'a>(rows: &'a [PlannedRow], current: &Current) -> Vec<M
                     *working = effect.after.as_ref().and_then(Value::as_str).map(str::to_string);
                     (effect.before.clone(), actual)
                 }
+                Target::Secret { .. } => continue,
             };
             let is_setting = matches!(effect.target, Target::Setting { .. });
             let as_absent = |value: &Option<Value>| match value {

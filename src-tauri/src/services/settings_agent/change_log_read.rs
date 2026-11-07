@@ -132,6 +132,7 @@ fn effect_json(effect: &Effect, with_file_content: bool) -> Value {
             "after": redacted_value(path, &effect.after),
         }),
         Target::File { path } => json!({"target": "file", "path": path}),
+        Target::Secret { name } => json!({"target": "secret", "name": name}),
     }
 }
 

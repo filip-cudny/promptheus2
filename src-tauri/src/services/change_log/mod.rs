@@ -33,6 +33,7 @@ pub enum EntryKind {
 pub enum Target {
     Setting { path: String },
     File { path: String },
+    Secret { name: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -100,6 +101,10 @@ pub fn change_log_dir(config_dir: &Path) -> PathBuf {
 
 pub fn secret_backup_dir(config_dir: &Path) -> PathBuf {
     config_dir.join(SECRET_BACKUP_DIR_NAME)
+}
+
+pub fn card_backup_path(backup_dir: &Path, entry_id: &str) -> PathBuf {
+    backup_dir.join(format!("{entry_id}.env"))
 }
 
 pub fn new_id(now: DateTime<Utc>, host: &str) -> String {
@@ -196,6 +201,7 @@ pub fn prune(dir: &Path, backup_dir: &Path, retention_days: u32, now: DateTime<U
         if let Some(backup) = entry.secret.as_ref().and_then(|s| s.backup.as_deref()) {
             remove_file(&backup_path(backup_dir, backup));
         }
+        remove_file(&card_backup_path(backup_dir, &entry.id));
         remove_file(&dir.join(format!("{}.json", entry.id)));
         pruned += 1;
     }

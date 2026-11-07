@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -134,6 +135,7 @@ async fn apply(
     session: &SharedSession,
     proposal_id: &str,
     selected: Vec<bool>,
+    values: BTreeMap<String, String>,
 ) -> Result<ApplyResult, String> {
     let proposal = proposal_of(session, proposal_id)?;
     if !selected.iter().any(|s| *s) {
@@ -155,7 +157,7 @@ async fn apply(
         let s = lock(session);
         (s.last_request.clone(), s.last_reply.clone())
     };
-    let entry_id = apply_plan(app, planned, request, reply, proposal.tests)
+    let entry_id = apply_plan(app, planned, request, reply, proposal.tests, values)
         .await
         .map_err(|e| e.to_string())?;
     drop_proposal(session, proposal_id);
@@ -168,9 +170,10 @@ pub async fn settings_agent_apply(
     session: State<'_, SharedSession>,
     proposal_id: String,
     selected: Vec<bool>,
+    values: BTreeMap<String, String>,
 ) -> crate::Result<ApplyResult> {
     log::info!("settings agent apply of proposal {proposal_id}");
-    Ok(apply(&app, &session, &proposal_id, selected)
+    Ok(apply(&app, &session, &proposal_id, selected, values)
         .await
         .unwrap_or_else(|error| ApplyResult::Failed { error }))
 }

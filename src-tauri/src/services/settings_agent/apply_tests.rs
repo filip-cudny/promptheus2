@@ -13,9 +13,10 @@ use crate::models::settings::{
 };
 use crate::models::skill::SkillFrontmatter;
 use crate::services::ai::AiService;
-use crate::services::change_log::{change_log_dir, load_all, EntryKind, Target};
+use crate::services::change_log::{change_log_dir, load_all, secret_backup_dir, Effect, EntryKind, Target};
 use crate::services::config::ConfigService;
-use crate::services::env_resolve::set_override;
+use crate::services::env_resolve::{override_for, set_override};
+use crate::services::secrets::{current_value, read_card_backup};
 
 const OLD_SKILL: &str = "---\nname: old-skill\n---\n\nOld body.\n";
 const HOST: &str = "test-host";
@@ -117,7 +118,7 @@ fn tree(dir: &Path) -> BTreeMap<String, Vec<u8>> {
     }
     let mut out = BTreeMap::new();
     walk(dir, dir, &mut out);
-    out.retain(|name, _| !name.starts_with("change-log"));
+    out.retain(|name, _| !name.starts_with("change-log") && !name.starts_with("secret-backups"));
     out
 }
 
@@ -138,6 +139,15 @@ fn make_plan(ops: &[Operation], config: &ConfigService, dir: &Path) -> Plan {
 }
 
 fn run_apply(plan: &Plan, config: &mut ConfigService, dir: &Path) -> Result<String, ApplyError> {
+    run_apply_with(plan, config, dir, &[])
+}
+
+fn run_apply_with(
+    plan: &Plan,
+    config: &mut ConfigService,
+    dir: &Path,
+    values: &[(&str, &str)],
+) -> Result<String, ApplyError> {
     let settings = config.settings().clone();
     let log_dir = change_log_dir(dir);
     let mut ctx = Context {
@@ -148,6 +158,7 @@ fn run_apply(plan: &Plan, config: &mut ConfigService, dir: &Path) -> Result<Stri
         request: Some("request".into()),
         reply: Some("reply".into()),
         tests: BTreeMap::new(),
+        values: values.iter().map(|(name, value)| (name.to_string(), value.to_string())).collect(),
     };
     apply(plan, &Current { settings: &settings, config_dir: dir }, &mut ctx)
 }
@@ -162,6 +173,7 @@ fn run_undo(id: &str, force: bool, config: &mut ConfigService, dir: &Path) -> Un
         request: None,
         reply: None,
         tests: BTreeMap::new(),
+        values: BTreeMap::new(),
     };
     undo(id, force, &mut ctx).unwrap()
 }
@@ -321,7 +333,7 @@ fn a_whole_card_of_every_operation_type_round_trips() {
 
 #[test]
 fn an_added_model_set_as_chat_default_resolves_in_the_ai_service() {
-    set_override("PHX_APPLY_TEST_KEY", Some("value".into()));
+    set_override("PHX_APPLY_TEST_KEY", Some("sk-apply-test-1".into()));
     let (dir, mut config) = setup();
     let ops = vec![
         Operation::AddModel { model: model("x", ModelType::Text, "${PHX_APPLY_TEST_KEY}") },
@@ -496,4 +508,201 @@ fn add_update_and_delete_env_var_each_round_trip_through_undo() {
 
         assert_eq!(tree(dir.path()), start, "{name}");
     }
+}
+
+fn secret_effect(name: &str) -> Effect {
+    Effect { target: Target::Secret { name: name.into() }, before: None, after: None }
+}
+
+fn card_operations(name: &str) -> Vec<Operation> {
+    vec![
+        Operation::AddEnvVar { name: name.into(), description: "d".into(), secret: true },
+        Operation::SetEnvValue { name: name.into() },
+        Operation::AddModel { model: model("card-model", ModelType::Text, &format!("${{{name}}}")) },
+    ]
+}
+
+fn env_text(dir: &Path) -> String {
+    std::fs::read_to_string(dir.join(".env")).unwrap()
+}
+
+fn backup_files(dir: &Path) -> usize {
+    std::fs::read_dir(secret_backup_dir(dir)).map(|read| read.count()).unwrap_or(0)
+}
+
+#[test]
+fn a_card_with_a_secret_row_writes_the_typed_value_with_the_settings() {
+    let (dir, mut config) = setup();
+    let planned = make_plan(&card_operations("PHX_CARD_NEW"), &config, dir.path());
+
+    let id = run_apply_with(&planned, &mut config, dir.path(), &[("PHX_CARD_NEW", "sk-new-444")]).unwrap();
+
+    assert_eq!(env_text(dir.path()), "PHX_CARD_NEW=\"sk-new-444\"\n");
+    assert_eq!(current_value(dir.path(), "PHX_CARD_NEW").as_deref(), Some("sk-new-444"));
+    assert!(config.settings().models.iter().any(|m| m.id == "card-model"));
+    let entries = load_all(&change_log_dir(dir.path()));
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].kind, EntryKind::Card);
+    assert_eq!(entries[0].operations[1].effects, vec![secret_effect("PHX_CARD_NEW")]);
+    let effect_json = serde_json::to_value(&entries[0].operations[1].effects[0]).unwrap();
+    assert!(effect_json["before"].is_null() && effect_json["after"].is_null());
+    let backup = std::fs::read_to_string(secret_backup_dir(dir.path()).join(format!("{id}.env"))).unwrap();
+    assert_eq!(backup, "after__PHX_CARD_NEW=\"sk-new-444\"\n");
+    let entry_file = std::fs::read_to_string(change_log_dir(dir.path()).join(format!("{id}.json"))).unwrap();
+    assert!(!entry_file.contains("sk-new-444"));
+}
+
+#[test]
+fn a_card_without_a_secret_row_writes_an_empty_backup() {
+    let (dir, mut config) = setup();
+    let planned = make_plan(&[set_setting("theme", json!("light"))], &config, dir.path());
+
+    let id = run_apply(&planned, &mut config, dir.path()).unwrap();
+
+    let backup = secret_backup_dir(dir.path()).join(format!("{id}.env"));
+    assert_eq!(std::fs::read(backup).unwrap(), Vec::<u8>::new());
+    assert!(!dir.path().join(".env").exists());
+}
+
+#[test]
+fn a_value_without_a_selected_secret_row_is_never_written() {
+    let (dir, mut config) = setup();
+    let planned = make_plan(&card_operations("PHX_CARD_SELECTED"), &config, dir.path());
+    let values = [("PHX_CARD_SELECTED", "sk-new-444"), ("PHX_CARD_UNSELECTED", "sk-other-555")];
+
+    run_apply_with(&planned, &mut config, dir.path(), &values).unwrap();
+
+    let env = env_text(dir.path());
+    assert!(env.contains("PHX_CARD_SELECTED") && !env.contains("PHX_CARD_UNSELECTED"));
+    assert_eq!(current_value(dir.path(), "PHX_CARD_UNSELECTED"), None);
+}
+
+#[test]
+fn a_secret_row_without_a_value_fails_naming_the_variable_and_writes_nothing() {
+    let (dir, mut config) = setup();
+    let planned = make_plan(&card_operations("PHX_CARD_EMPTY"), &config, dir.path());
+    let start = tree(dir.path());
+
+    for values in [&[][..], &[("PHX_CARD_EMPTY", "")][..]] {
+        let error = run_apply_with(&planned, &mut config, dir.path(), values).unwrap_err();
+
+        assert!(matches!(&error, ApplyError::NoValue(name) if name == "PHX_CARD_EMPTY"), "{error}");
+        assert!(error.to_string().contains("PHX_CARD_EMPTY"));
+        assert_eq!(tree(dir.path()), start);
+        assert!(log_files(dir.path()).is_empty());
+        assert_eq!(backup_files(dir.path()), 0);
+    }
+}
+
+#[test]
+fn undo_restores_a_previous_value_removes_a_new_one_and_restores_the_settings() {
+    let mut settings = fixture_settings();
+    settings.env_vars = vec![env_var("PHX_CARD_OLD")];
+    let (dir, mut config) = setup_with(settings);
+    std::fs::write(dir.path().join(".env"), "KEEP=1\nPHX_CARD_OLD=\"old-value\"\n").unwrap();
+    let start = tree(dir.path());
+    let mut operations = card_operations("PHX_CARD_BOTH");
+    operations.insert(2, Operation::SetEnvValue { name: "PHX_CARD_OLD".into() });
+    let planned = make_plan(&operations, &config, dir.path());
+    let values = [("PHX_CARD_BOTH", "sk-new-444"), ("PHX_CARD_OLD", "sk-changed-666")];
+    let card_id = run_apply_with(&planned, &mut config, dir.path(), &values).unwrap();
+    assert_eq!(current_value(dir.path(), "PHX_CARD_OLD").as_deref(), Some("sk-changed-666"));
+
+    let undo_id = undone_id(run_undo(&card_id, false, &mut config, dir.path()));
+
+    assert_eq!(tree(dir.path()), start);
+    assert_eq!(current_value(dir.path(), "PHX_CARD_OLD").as_deref(), Some("old-value"));
+    assert_eq!(current_value(dir.path(), "PHX_CARD_BOTH"), None);
+    let backup = read_card_backup(dir.path(), &undo_id).unwrap();
+    assert_eq!(backup.before.get("PHX_CARD_BOTH").map(String::as_str), Some("sk-new-444"));
+    assert_eq!(backup.before.get("PHX_CARD_OLD").map(String::as_str), Some("sk-changed-666"));
+    assert_eq!(backup.after, BTreeMap::from([("PHX_CARD_OLD".to_string(), "old-value".to_string())]));
+}
+
+#[test]
+fn the_undo_of_a_card_with_a_secret_row_can_be_undone() {
+    let (dir, mut config) = setup();
+    let planned = make_plan(&card_operations("PHX_CARD_REDO"), &config, dir.path());
+    let card_id = run_apply_with(&planned, &mut config, dir.path(), &[("PHX_CARD_REDO", "sk-new-444")]).unwrap();
+    let applied = tree(dir.path());
+    let undo_id = undone_id(run_undo(&card_id, false, &mut config, dir.path()));
+    assert_eq!(current_value(dir.path(), "PHX_CARD_REDO"), None);
+
+    undone_id(run_undo(&undo_id, false, &mut config, dir.path()));
+
+    assert_eq!(tree(dir.path()), applied);
+    assert_eq!(current_value(dir.path(), "PHX_CARD_REDO").as_deref(), Some("sk-new-444"));
+}
+
+#[test]
+fn undo_after_the_value_changed_elsewhere_conflicts_without_a_value_and_force_restores() {
+    let (dir, mut config) = setup();
+    let planned = make_plan(&card_operations("PHX_CARD_DRIFT"), &config, dir.path());
+    let card_id = run_apply_with(&planned, &mut config, dir.path(), &[("PHX_CARD_DRIFT", "sk-new-444")]).unwrap();
+    set_override("PHX_CARD_DRIFT", Some("sk-drift-777".into()));
+    let changed = tree(dir.path());
+
+    let outcome = run_undo(&card_id, false, &mut config, dir.path());
+
+    let UndoOutcome::Conflicts { conflicts } = outcome else {
+        panic!("expected conflicts");
+    };
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(conflicts[0].target, Target::Secret { name: "PHX_CARD_DRIFT".into() });
+    assert_eq!((conflicts[0].expected_after.clone(), conflicts[0].current.clone()), (None, None));
+    assert_eq!(tree(dir.path()), changed);
+    assert_eq!(log_files(dir.path()).len(), 1);
+
+    undone_id(run_undo(&card_id, true, &mut config, dir.path()));
+
+    assert_eq!(current_value(dir.path(), "PHX_CARD_DRIFT"), None);
+    assert!(config.settings().models.iter().all(|m| m.id != "card-model"));
+}
+
+#[test]
+fn undo_without_the_backup_is_skipped_and_writes_nothing() {
+    let (dir, mut config) = setup();
+    let planned = make_plan(&card_operations("PHX_CARD_FOREIGN"), &config, dir.path());
+    let card_id = run_apply_with(&planned, &mut config, dir.path(), &[("PHX_CARD_FOREIGN", "sk-new-444")]).unwrap();
+    std::fs::remove_dir_all(secret_backup_dir(dir.path())).unwrap();
+    let applied = tree(dir.path());
+
+    let outcome = run_undo(&card_id, true, &mut config, dir.path());
+
+    assert_eq!(outcome, UndoOutcome::Skipped { held_by: HOST.into() });
+    assert_eq!(tree(dir.path()), applied);
+    assert_eq!(log_files(dir.path()).len(), 1);
+    assert_eq!(current_value(dir.path(), "PHX_CARD_FOREIGN").as_deref(), Some("sk-new-444"));
+}
+
+#[test]
+fn a_failing_settings_write_after_the_secret_write_restores_env_overrides_and_backup() {
+    let mut settings = fixture_settings();
+    settings.env_vars = vec![env_var("PHX_FAIL_KEPT"), env_var("PHX_FAIL_NEW")];
+    let (dir, mut config) = setup_with(settings);
+    std::fs::write(dir.path().join(".env"), "PHX_FAIL_KEPT=\"prev\"\n").unwrap();
+    set_override("PHX_FAIL_KEPT", Some("prev".into()));
+    let operations = vec![
+        Operation::SetEnvValue { name: "PHX_FAIL_KEPT".into() },
+        Operation::SetEnvValue { name: "PHX_FAIL_NEW".into() },
+        Operation::CreateSkill {
+            slug: "blocked".into(),
+            frontmatter: frontmatter("blocked"),
+            body: "Body".into(),
+            sample_input: "x".into(),
+        },
+    ];
+    let planned = make_plan(&operations, &config, dir.path());
+    std::fs::write(dir.path().join("skills/blocked"), "in the way").unwrap();
+    let start = tree(dir.path());
+    let values = [("PHX_FAIL_KEPT", "sk-a-111"), ("PHX_FAIL_NEW", "sk-b-222")];
+
+    let error = run_apply_with(&planned, &mut config, dir.path(), &values).unwrap_err();
+
+    assert!(matches!(error, ApplyError::WriteFailed { row: 2, .. }), "{error}");
+    assert_eq!(tree(dir.path()), start);
+    assert_eq!(override_for("PHX_FAIL_KEPT"), Some(Some("prev".to_string())));
+    assert_eq!(override_for("PHX_FAIL_NEW"), None);
+    assert_eq!(backup_files(dir.path()), 0);
+    assert!(log_files(dir.path()).is_empty());
 }

@@ -43,5 +43,5 @@ pub async fn apply_env_var_operation(app: AppHandle, operation: Operation) -> cr
     let config_dir = app.path().app_config_dir()?;
     let current = Current { settings: &settings, config_dir: &config_dir };
     let planned = plan_single(operation, &current).map_err(crate::Error::Other)?;
-    apply_plan(&app, planned, None, None, BTreeMap::new()).await
+    apply_plan(&app, planned, None, None, BTreeMap::new(), BTreeMap::new()).await
 }

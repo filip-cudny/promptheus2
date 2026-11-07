@@ -1,5 +1,7 @@
 use std::os::unix::fs::PermissionsExt;
 
+use std::collections::BTreeMap;
+
 use tempfile::TempDir;
 
 use super::env_resolve::resolve_env_refs;
@@ -171,6 +173,68 @@ fn redactor_removes_every_source_and_keeps_names() {
     assert!(!json.contains("ref-secret-2"));
     assert!(!json.contains("literal-secret-3"));
     assert!(json.contains("${SEC_RED_REF}"));
+}
+
+#[test]
+fn redactor_knows_every_value_held_in_the_secret_backups() {
+    let dir = config_dir();
+    let before = NameValues::from([("SEC_BK__NAME".to_string(), Some("bk-before-1".to_string()))]);
+    let after = NameValues::from([
+        ("SEC_BK__NAME".to_string(), Some("bk-after-2".to_string())),
+        ("SEC_BK_GONE".to_string(), None),
+    ]);
+    write_card_backup(dir.path(), "card-id", &before, &after).unwrap();
+    std::fs::write(secret_backup_dir(dir.path()).join("old.env"), "SEC_BK_OLD=\"bk-old-3\"\n").unwrap();
+    let redactor = Redactor::new(dir.path(), &Settings::default());
+
+    let text = redactor.redact("bk-before-1 bk-after-2 bk-old-3");
+
+    assert!(!text.contains("bk-"), "{text}");
+}
+
+#[test]
+fn a_card_backup_reads_back_by_fixed_prefix_and_is_private() {
+    let dir = config_dir();
+    let before = NameValues::from([
+        ("A__B".to_string(), Some("v\"1\"".to_string())),
+        ("C".to_string(), None),
+    ]);
+    let after = NameValues::from([
+        ("A__B".to_string(), Some("v2".to_string())),
+        ("C".to_string(), Some("v3".to_string())),
+    ]);
+
+    write_card_backup(dir.path(), "card-id", &before, &after).unwrap();
+
+    let backup = read_card_backup(dir.path(), "card-id").unwrap();
+    assert_eq!(backup.before, BTreeMap::from([("A__B".to_string(), "v\"1\"".to_string())]));
+    assert_eq!(
+        backup.after,
+        BTreeMap::from([("A__B".to_string(), "v2".to_string()), ("C".to_string(), "v3".to_string())])
+    );
+    let file = secret_backup_dir(dir.path()).join("card-id.env");
+    assert_eq!(std::fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
+    let backup_dir = secret_backup_dir(dir.path());
+    assert_eq!(std::fs::metadata(backup_dir).unwrap().permissions().mode() & 0o777, 0o700);
+    assert_eq!(read_card_backup(dir.path(), "other-id"), None);
+}
+
+#[test]
+fn restoring_env_bytes_recreates_or_removes_the_file() {
+    let dir = config_dir();
+    std::fs::write(dir.path().join(".env"), "A=\"1\"\n").unwrap();
+    let saved = read_env_bytes(dir.path()).unwrap();
+    set_env_value(dir.path(), "SEC_RESTORE", Some("v")).unwrap();
+
+    restore_env_bytes(dir.path(), saved.as_deref()).unwrap();
+
+    assert_eq!(env_file_text(&dir), "A=\"1\"\n");
+    std::fs::remove_file(dir.path().join(".env")).unwrap();
+    assert_eq!(read_env_bytes(dir.path()).unwrap(), None);
+    set_env_value(dir.path(), "SEC_RESTORE", Some("v")).unwrap();
+    restore_env_bytes(dir.path(), None).unwrap();
+    assert!(!dir.path().join(".env").exists());
+    crate::services::env_resolve::clear_override("SEC_RESTORE");
 }
 
 fn env_var(name: &str, renamed_from: &[&str]) -> crate::models::settings::EnvVar {

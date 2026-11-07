@@ -245,3 +245,22 @@ fn literal_api_keys_are_redacted_at_any_depth_and_references_are_kept() {
     assert_eq!(effects[1]["before"][2]["api_key"], "");
     assert_eq!(effects[2]["before"], "[redacted]");
 }
+
+#[test]
+fn a_secret_effect_reads_as_target_and_name_only_in_the_list_and_by_id() {
+    let card = ChangeLogEntry {
+        operations: vec![operation(
+            "Set value of OPENAI_KEY",
+            "set_env_value",
+            vec![Effect { target: Target::Secret { name: "OPENAI_KEY".into() }, before: None, after: None }],
+        )],
+        ..entry(CARD_ID, "2026-11-06T10:00:00Z", "laptop", EntryKind::Card)
+    };
+    let expected = json!({"target": "secret", "name": "OPENAI_KEY"});
+
+    let listed = read(&[card.clone()], &Filters::default()).unwrap();
+    let whole = read(&[card], &Filters { name: Some(CARD_ID.into()), ..Default::default() }).unwrap();
+
+    assert_eq!(listed["entries"][0]["operations"][0]["effects"][0], expected);
+    assert_eq!(whole["operations"][0]["effects"][0], expected);
+}

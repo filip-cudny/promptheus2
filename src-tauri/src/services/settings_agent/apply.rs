@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -11,7 +11,8 @@ use crate::services::change_log::{
     EntryState, LoggedOperation, Target, TestResult,
 };
 use crate::services::config::ConfigService;
-use crate::services::secrets::{self, SecretError};
+use crate::services::env_resolve::{clear_override, override_for, set_override};
+use crate::services::secrets::{self, CardBackup, NameValues, SecretError};
 
 use super::plan::{mismatches, parse_path, put_at, stale_rows, Current, Plan, PlannedRow};
 
@@ -26,6 +27,7 @@ pub struct Context<'a> {
     pub request: Option<String>,
     pub reply: Option<String>,
     pub tests: BTreeMap<usize, TestResult>,
+    pub values: BTreeMap<String, String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -36,6 +38,10 @@ pub enum ApplyError {
     WriteFailed { row: usize, message: String },
     #[error("change log entry '{0}' not found")]
     NotFound(String),
+    #[error("no value entered for {0}")]
+    NoValue(String),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
     #[error(transparent)]
     ChangeLog(#[from] ChangeLogError),
     #[error(transparent)]
@@ -202,12 +208,12 @@ fn write_rows(ctx: &mut Context, rows: &[PlannedRow]) -> Result<(), ApplyError> 
 
 fn write_log_entry(
     ctx: &Context,
+    id: String,
+    now: DateTime<Utc>,
     kind: EntryKind,
     undoes: Option<String>,
     operations: Vec<LoggedOperation>,
 ) -> Result<String, ApplyError> {
-    let now = Utc::now();
-    let id = new_id(now, ctx.host);
     let entry = ChangeLogEntry {
         id: id.clone(),
         created_at: now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
@@ -223,12 +229,111 @@ fn write_log_entry(
     Ok(id)
 }
 
+fn secret_rows(rows: &[PlannedRow]) -> Vec<(usize, String)> {
+    let mut found: Vec<(usize, String)> = Vec::new();
+    for planned in rows {
+        for effect in &planned.operation.effects {
+            let Target::Secret { name } = &effect.target else {
+                continue;
+            };
+            if !found.iter().any(|(_, known)| known == name) {
+                found.push((planned.row, name.clone()));
+            }
+        }
+    }
+    found
+}
+
+fn typed_values(
+    secrets_in_card: &[(usize, String)],
+    values: &BTreeMap<String, String>,
+) -> Result<Vec<(String, Option<String>)>, ApplyError> {
+    secrets_in_card
+        .iter()
+        .map(|(_, name)| {
+            if !secrets::validate_name(name) {
+                return Err(SecretError::InvalidName(name.clone()).into());
+            }
+            match values.get(name).filter(|value| !value.is_empty()) {
+                Some(value) => Ok((name.clone(), Some(value.clone()))),
+                None => Err(ApplyError::NoValue(name.clone())),
+            }
+        })
+        .collect()
+}
+
+struct EnvSnapshot {
+    bytes: Option<Vec<u8>>,
+    overrides: Vec<(String, Option<Option<String>>)>,
+}
+
+impl EnvSnapshot {
+    fn take(config_dir: &Path, writes: &[(String, Option<String>)]) -> Result<Self, ApplyError> {
+        Ok(Self {
+            bytes: secrets::read_env_bytes(config_dir)?,
+            overrides: writes.iter().map(|(name, _)| (name.clone(), override_for(name))).collect(),
+        })
+    }
+
+    fn restore(self, config_dir: &Path) {
+        if let Err(e) = secrets::restore_env_bytes(config_dir, self.bytes.as_deref()) {
+            log::error!("restore of .env failed: {e}");
+        }
+        for (name, previous) in self.overrides {
+            match previous {
+                Some(value) => set_override(&name, value),
+                None => clear_override(&name),
+            }
+        }
+    }
+}
+
+fn write_env_values(config_dir: &Path, writes: &[(String, Option<String>)]) -> Result<(), ApplyError> {
+    for (name, value) in writes {
+        secrets::set_env_value(config_dir, name, value.as_deref())?;
+    }
+    Ok(())
+}
+
+fn write_with_secrets(
+    ctx: &mut Context,
+    entry_id: &str,
+    writes: &[(String, Option<String>)],
+    rows: &[PlannedRow],
+) -> Result<(), ApplyError> {
+    let _guard = secrets::lock_env_writes();
+    let before: NameValues = writes
+        .iter()
+        .map(|(name, _)| (name.clone(), secrets::current_value(ctx.config_dir, name)))
+        .collect();
+    let after: NameValues = writes.iter().cloned().collect();
+    let snapshot = (!writes.is_empty())
+        .then(|| EnvSnapshot::take(ctx.config_dir, writes))
+        .transpose()?;
+    let written = secrets::write_card_backup(ctx.config_dir, entry_id, &before, &after)
+        .map_err(ApplyError::from)
+        .and_then(|()| write_env_values(ctx.config_dir, writes))
+        .and_then(|()| write_rows(ctx, rows));
+    if let Err(error) = written {
+        if let Some(snapshot) = snapshot {
+            snapshot.restore(ctx.config_dir);
+        }
+        secrets::remove_card_backup(ctx.config_dir, entry_id);
+        return Err(error);
+    }
+    Ok(())
+}
+
 pub fn apply(plan: &Plan, current: &Current, ctx: &mut Context) -> Result<String, ApplyError> {
     let stale = stale_rows(plan, current);
     if !stale.is_empty() {
         return Err(ApplyError::Stale(stale));
     }
-    write_rows(ctx, &plan.rows)?;
+    let secrets_in_card = secret_rows(&plan.rows);
+    let writes = typed_values(&secrets_in_card, &ctx.values)?;
+    let now = Utc::now();
+    let id = new_id(now, ctx.host);
+    write_with_secrets(ctx, &id, &writes, &plan.rows)?;
     let operations = plan
         .rows
         .iter()
@@ -237,9 +342,17 @@ pub fn apply(plan: &Plan, current: &Current, ctx: &mut Context) -> Result<String
             ..planned.operation.clone()
         })
         .collect();
-    let id = write_log_entry(ctx, EntryKind::Card, None, operations)?;
-    log::info!("applied {} rows as entry {id}", plan.rows.len());
+    let id = write_log_entry(ctx, id, now, EntryKind::Card, None, operations)?;
+    log::info!("applied {} rows as entry {id}{}", plan.rows.len(), variables_note(&secrets_in_card));
     Ok(id)
+}
+
+fn variables_note(secrets_in_card: &[(usize, String)]) -> String {
+    if secrets_in_card.is_empty() {
+        return String::new();
+    }
+    let names: Vec<&str> = secrets_in_card.iter().map(|(_, name)| name.as_str()).collect();
+    format!(", values set for {}", names.join(", "))
 }
 
 fn invert(operations: &[LoggedOperation]) -> Vec<PlannedRow> {
@@ -268,6 +381,23 @@ fn invert(operations: &[LoggedOperation]) -> Vec<PlannedRow> {
         .collect()
 }
 
+fn secret_conflicts(
+    config_dir: &Path,
+    secrets_in_card: &[(usize, String)],
+    backup: &CardBackup,
+) -> Vec<Conflict> {
+    secrets_in_card
+        .iter()
+        .filter(|(_, name)| secrets::current_value(config_dir, name) != backup.after.get(name).cloned())
+        .map(|(row, name)| Conflict {
+            row: *row,
+            target: Target::Secret { name: name.clone() },
+            expected_after: None,
+            current: None,
+        })
+        .collect()
+}
+
 pub fn undo(entry_id: &str, force: bool, ctx: &mut Context) -> Result<UndoOutcome, ApplyError> {
     let entries = load_all(ctx.log_dir);
     let entry = entries
@@ -284,10 +414,19 @@ pub fn undo(entry_id: &str, force: bool, ctx: &mut Context) -> Result<UndoOutcom
         log::debug!("undo of entry {entry_id} that is already undone");
     }
     let rows = invert(&entry.operations);
+    let secrets_in_card = secret_rows(&rows);
+    let backup = match secrets::read_card_backup(ctx.config_dir, entry_id) {
+        Some(backup) => backup,
+        None if secrets_in_card.is_empty() => CardBackup::default(),
+        None => {
+            log::info!("undo of {entry_id} skipped: the secret backup is held by {}", entry.host);
+            return Ok(UndoOutcome::Skipped { held_by: entry.host.clone() });
+        }
+    };
     let _ = ctx.config.reload_if_changed();
     let settings = ctx.config.settings().clone();
     let current = Current { settings: &settings, config_dir: ctx.config_dir };
-    let conflicts: Vec<Conflict> = mismatches(&rows, &current)
+    let mut conflicts: Vec<Conflict> = mismatches(&rows, &current)
         .into_iter()
         .map(|m| Conflict {
             row: m.row,
@@ -296,13 +435,20 @@ pub fn undo(entry_id: &str, force: bool, ctx: &mut Context) -> Result<UndoOutcom
             current: m.current,
         })
         .collect();
+    conflicts.extend(secret_conflicts(ctx.config_dir, &secrets_in_card, &backup));
     if !conflicts.is_empty() && !force {
         log::info!("undo of {entry_id} blocked by {} conflicts", conflicts.len());
         return Ok(UndoOutcome::Conflicts { conflicts });
     }
-    write_rows(ctx, &rows)?;
+    let writes: Vec<(String, Option<String>)> = secrets_in_card
+        .iter()
+        .map(|(_, name)| (name.clone(), backup.before.get(name).cloned()))
+        .collect();
+    let now = Utc::now();
+    let id = new_id(now, ctx.host);
+    write_with_secrets(ctx, &id, &writes, &rows)?;
     let operations = rows.into_iter().map(|planned| planned.operation).collect();
-    let id = write_log_entry(ctx, EntryKind::Undo, Some(entry_id.to_string()), operations)?;
-    log::info!("undid entry {entry_id} as {id}");
+    let id = write_log_entry(ctx, id, now, EntryKind::Undo, Some(entry_id.to_string()), operations)?;
+    log::info!("undid entry {entry_id} as {id}{}", variables_note(&secrets_in_card));
     Ok(UndoOutcome::Undone { entry_id: id })
 }

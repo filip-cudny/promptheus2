@@ -6,14 +6,16 @@ use tempfile::TempDir;
 use tokio::sync::Mutex as TokioMutex;
 
 use super::apply::{apply, Context as ApplyContext};
-use super::dispatch::SecretAnswer;
+use super::dispatch::{Proposal, SecretAnswer};
 use super::engine::{
-    lock, run_turn, Emit, EngineContext, SharedSession, PROPOSAL_EVENT, SECRET_REQUEST_EVENT,
+    lock, proposal_payload, run_turn, Emit, EngineContext, SharedSession, PROPOSAL_EVENT,
+    SECRET_REQUEST_EVENT,
 };
+use super::operations::Operation;
 use super::plan::{plan, Current};
 use crate::models::ai::ToolCallStatus;
 use crate::models::capabilities::{Effort, ModelCapabilities, ReasoningMode};
-use crate::models::settings::{ModelConfig, ModelType, Provider, Settings};
+use crate::models::settings::{EnvVar, ModelConfig, ModelType, Provider, Settings};
 use crate::services::ai::mock::{MockProvider, MockReply};
 use crate::services::ai::{AiError, AiService};
 use crate::services::change_log::{change_log_dir, load_all};
@@ -293,6 +295,37 @@ async fn proposal_and_secret_request_reach_the_frontend() {
     assert!(!proposal.1.to_string().contains("sk-new-444"));
 }
 
+#[test]
+fn a_set_env_value_row_carries_its_flags_and_never_a_value() {
+    set_override("PHX_ENGINE_SET_VAR", Some("sk-engine-555".into()));
+    let dir = TempDir::new().unwrap();
+    let var = |name: &str, secret: bool| EnvVar {
+        name: name.into(),
+        description: String::new(),
+        secret,
+        renamed_from: vec![],
+    };
+    let mut settings = fixture_settings(Some("env-model"));
+    settings.env_vars = vec![var("PHX_ENGINE_SET_VAR", true), var("PHX_ENGINE_UNSET_VAR", false)];
+    let operations = vec![
+        Operation::SetEnvValue { name: "PHX_ENGINE_SET_VAR".into() },
+        Operation::SetEnvValue { name: "PHX_ENGINE_UNSET_VAR".into() },
+        Operation::SetSetting { key: "theme".into(), value: json!("light") },
+    ];
+    let current = Current { settings: &settings, config_dir: dir.path() };
+    let planned = plan(&operations, &[true, true, true], &current).unwrap();
+    let proposal = Proposal { id: "p".into(), operations, plan: planned, tests: Default::default() };
+
+    let payload = proposal_payload(&proposal, &current);
+
+    let rows = &payload["rows"];
+    assert_eq!(rows[0]["env_value"], json!({"name": "PHX_ENGINE_SET_VAR", "secret": true, "set": true}));
+    assert_eq!(rows[1]["env_value"], json!({"name": "PHX_ENGINE_UNSET_VAR", "secret": false, "set": false}));
+    assert!(rows[2]["env_value"].is_null());
+    assert_eq!(rows[0]["effects"][0]["target"], json!({"type": "secret", "name": "PHX_ENGINE_SET_VAR"}));
+    assert!(!payload.to_string().contains("sk-engine-555"));
+}
+
 #[tokio::test]
 async fn rejecting_the_proposal_keeps_the_saved_secret() {
     let run = run(Some("env-model"), scripted_turns()).await;
@@ -324,6 +357,7 @@ async fn apply_stores_request_and_reply_in_the_log_entry() {
         request,
         reply,
         tests: proposal.tests.clone(),
+        values: Default::default(),
     };
     let id = apply(&planned, &current, &mut ctx).unwrap();
     let entry = load_all(&log_dir).into_iter().find(|e| e.id == id).unwrap();

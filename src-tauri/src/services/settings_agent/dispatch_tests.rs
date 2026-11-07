@@ -338,6 +338,7 @@ fn apply_delete_of_literal_key_model(dir: &std::path::Path) -> String {
         request: Some("delete the model".into()),
         reply: None,
         tests: Default::default(),
+        values: Default::default(),
     };
     apply(&planned, &current, &mut ctx).unwrap()
 }

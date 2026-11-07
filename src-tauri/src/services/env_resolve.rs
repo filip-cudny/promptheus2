@@ -15,6 +15,13 @@ pub fn set_override(name: &str, value: Option<String>) {
         .insert(name.to_string(), value);
 }
 
+pub fn clear_override(name: &str) {
+    OVERRIDES
+        .write()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(name);
+}
+
 pub fn override_for(name: &str) -> Option<Option<String>> {
     OVERRIDES
         .read()
@@ -119,6 +126,16 @@ mod tests {
     fn env_ref_names_lists_every_reference() {
         assert_eq!(env_ref_names("${A}/x/${B}"), vec!["A", "B"]);
         assert!(env_ref_names("no refs $A").is_empty());
+    }
+
+    #[test]
+    fn clear_override_removes_the_entry_instead_of_setting_it_to_none() {
+        set_override("TEST_ENV_RESOLVE_CLEAR", Some("v".into()));
+        assert_eq!(override_for("TEST_ENV_RESOLVE_CLEAR"), Some(Some("v".to_string())));
+
+        clear_override("TEST_ENV_RESOLVE_CLEAR");
+
+        assert_eq!(override_for("TEST_ENV_RESOLVE_CLEAR"), None);
     }
 
     #[test]

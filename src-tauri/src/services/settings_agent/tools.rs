@@ -220,7 +220,7 @@ fn operation_branches() -> Vec<Value> {
         ),
         branch(
             "add_env_var",
-            "Lists a new environment variable `name` so that settings can reference it as `${NAME}`; set `secret` to true for keys and tokens. Its value is entered with `settings_secret`.",
+            "Lists a new environment variable `name` so that settings can reference it as `${NAME}`; set `secret` to true for keys and tokens. Its value is entered with a `set_env_value` row.",
             env_var_properties(),
             &["name"],
         ),
@@ -239,6 +239,12 @@ fn operation_branches() -> Vec<Value> {
         branch(
             "delete_env_var",
             "Removes the listed variable `name`; fails while a setting still references it.",
+            vec![("name", string())],
+            &["name"],
+        ),
+        branch(
+            "set_env_value",
+            "Asks the user for the value of the variable `name` in the card. The user types the value in the card; the operation carries no value. `name` must be listed in `env_vars`; an earlier `add_env_var` row of the same proposal counts.",
             vec![("name", string())],
             &["name"],
         ),

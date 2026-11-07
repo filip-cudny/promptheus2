@@ -72,10 +72,11 @@ pub enum Operation {
     },
     RenameEnvVar { name: String, new_name: String },
     DeleteEnvVar { name: String },
+    SetEnvValue { name: String },
 }
 
 impl Operation {
-    pub const NAMES: [&'static str; 20] = [
+    pub const NAMES: [&'static str; 21] = [
         "set_setting",
         "add_model",
         "update_model",
@@ -96,6 +97,7 @@ impl Operation {
         "update_env_var",
         "rename_env_var",
         "delete_env_var",
+        "set_env_value",
     ];
 
     pub fn name(&self) -> &'static str {
@@ -120,6 +122,7 @@ impl Operation {
             Self::UpdateEnvVar { .. } => "update_env_var",
             Self::RenameEnvVar { .. } => "rename_env_var",
             Self::DeleteEnvVar { .. } => "delete_env_var",
+            Self::SetEnvValue { .. } => "set_env_value",
         }
     }
 
@@ -150,6 +153,7 @@ impl Operation {
             Self::UpdateEnvVar { name, .. } => format!("Update variable {name}"),
             Self::RenameEnvVar { name, new_name } => format!("Rename variable {name} to {new_name}"),
             Self::DeleteEnvVar { name } => format!("Delete variable {name}"),
+            Self::SetEnvValue { name } => format!("Set value of {name}"),
         }
     }
 }

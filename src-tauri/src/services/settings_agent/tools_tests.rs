@@ -57,6 +57,7 @@ fn index_of(operation: &Operation) -> usize {
         Operation::UpdateEnvVar { .. } => 17,
         Operation::RenameEnvVar { .. } => 18,
         Operation::DeleteEnvVar { .. } => 19,
+        Operation::SetEnvValue { .. } => 20,
     }
 }
 

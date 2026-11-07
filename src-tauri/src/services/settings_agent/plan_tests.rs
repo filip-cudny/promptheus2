@@ -700,3 +700,28 @@ fn delete_model_of_an_unknown_id_lists_the_existing_ids() {
 
     assert_eq!(errors[0].message, "model 'nope' not found; models: abc, def, stt1");
 }
+
+#[test]
+fn set_env_value_needs_a_listed_variable_and_plans_only_a_secret_effect() {
+    let (mut settings, dir) = (fixture_settings(), config_dir());
+    let set_value = || Operation::SetEnvValue { name: "PHX_PLAN_VALUE".into() };
+
+    let errors = plan_all(&[set_value()], &settings, &dir).unwrap_err();
+
+    assert_eq!(errors[0].key.as_deref(), Some("env_vars[PHX_PLAN_VALUE]"));
+    assert!(errors[0].message.contains("variables:"), "{}", errors[0].message);
+
+    let add = Operation::AddEnvVar { name: "PHX_PLAN_VALUE".into(), description: String::new(), secret: true };
+    let planned = plan_all(&[add, set_value()], &settings, &dir).unwrap();
+    let row = &planned.rows[1].operation;
+    assert_eq!((row.op.as_str(), row.label.as_str()), ("set_env_value", "Set value of PHX_PLAN_VALUE"));
+    assert_eq!(
+        row.effects,
+        vec![Effect { target: Target::Secret { name: "PHX_PLAN_VALUE".into() }, before: None, after: None }]
+    );
+
+    settings.env_vars = vec![env_var("PHX_PLAN_VALUE")];
+    let listed = plan_all(&[set_value()], &settings, &dir).unwrap();
+    let current = Current { settings: &settings, config_dir: dir.path() };
+    assert!(stale_rows(&listed, &current).is_empty());
+}

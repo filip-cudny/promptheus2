@@ -108,6 +108,28 @@ fn prune_deletes_old_entry_with_its_backup_and_keeps_recent() {
 }
 
 #[test]
+fn prune_deletes_the_card_backup_of_a_pruned_entry_and_keeps_the_others() {
+    let dir = TempDir::new().unwrap();
+    let backups = TempDir::new().unwrap();
+    write_entry(dir.path(), &aged(10, "old-card")).unwrap();
+    write_entry(dir.path(), &aged(1, "recent-card")).unwrap();
+    std::fs::write(backups.path().join("old-card.env"), "before__KEY=\"v\"\n").unwrap();
+    std::fs::write(backups.path().join("recent-card.env"), "").unwrap();
+
+    assert_eq!(prune(dir.path(), backups.path(), 7, Utc::now()), 1);
+
+    assert!(!backups.path().join("old-card.env").exists());
+    assert!(backups.path().join("recent-card.env").exists());
+}
+
+#[test]
+fn a_secret_target_serializes_with_its_name() {
+    let target = Target::Secret { name: "KEY".to_string() };
+
+    assert_eq!(serde_json::to_value(&target).unwrap(), serde_json::json!({"type": "secret", "name": "KEY"}));
+}
+
+#[test]
 fn prune_with_zero_retention_deletes_nothing() {
     let dir = TempDir::new().unwrap();
     write_entry(dir.path(), &aged(400, "old")).unwrap();

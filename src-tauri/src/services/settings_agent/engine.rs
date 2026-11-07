@@ -154,10 +154,26 @@ pub fn proposal_payload(proposal: &Proposal, current: &Current) -> Value {
                 "test": proposal.tests.get(&planned.row),
                 "sample_input": sample_input(proposal.operations.get(planned.row)),
                 "stale": stale.contains(&planned.row),
+                "env_value": env_value_of(proposal, planned.row, current),
             })
         })
         .collect();
     json!({"proposal_id": proposal.id, "rows": rows})
+}
+
+fn env_value_of(proposal: &Proposal, row: usize, current: &Current) -> Value {
+    let Some(Operation::SetEnvValue { name }) = proposal.operations.get(row) else {
+        return Value::Null;
+    };
+    let secret = proposal
+        .plan
+        .settings
+        .env_vars
+        .iter()
+        .find(|var| &var.name == name)
+        .is_some_and(|var| var.secret);
+    let set = secrets::current_value(current.config_dir, name).is_some_and(|value| !value.is_empty());
+    json!({"name": name, "secret": secret, "set": set})
 }
 
 fn sample_input(operation: Option<&Operation>) -> Option<&str> {

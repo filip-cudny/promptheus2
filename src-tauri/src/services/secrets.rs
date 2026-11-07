@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
@@ -8,8 +9,8 @@ use chrono::Utc;
 
 use crate::models::settings::Settings;
 use crate::services::change_log::{
-    change_log_dir, new_id, secret_backup_dir, write_entry, ChangeLogEntry, ChangeLogError,
-    EntryKind, SecretChange,
+    card_backup_path, change_log_dir, new_id, secret_backup_dir, write_entry, ChangeLogEntry,
+    ChangeLogError, EntryKind, SecretChange,
 };
 use crate::services::env_resolve::{
     env_ref_names, env_value, override_for, override_values, set_override,
@@ -17,11 +18,13 @@ use crate::services::env_resolve::{
 use crate::services::missing_env::collect_missing;
 
 const ENV_FILE_NAME: &str = ".env";
+const BEFORE_PREFIX: &str = "before__";
+const AFTER_PREFIX: &str = "after__";
 pub(crate) const REDACTED: &str = "[redacted]";
 
 static ENV_WRITE_LOCK: Mutex<()> = Mutex::new(());
 
-fn lock_env_writes() -> MutexGuard<'static, ()> {
+pub(crate) fn lock_env_writes() -> MutexGuard<'static, ()> {
     ENV_WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -79,14 +82,14 @@ fn line_defines(line: &str, name: &str) -> bool {
         .is_some_and(|rest| rest.trim_start().starts_with('='))
 }
 
-fn write_private(path: &Path, content: &str) -> std::io::Result<()> {
+fn write_private(path: &Path, content: impl AsRef<[u8]>) -> std::io::Result<()> {
     let mut file = OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
         .mode(0o600)
         .open(path)?;
-    file.write_all(content.as_bytes())
+    file.write_all(content.as_ref())
 }
 
 fn write_env_var(config_dir: &Path, name: &str, value: Option<&str>) -> std::io::Result<()> {
@@ -167,13 +170,16 @@ pub(crate) fn copy_renamed_values(config_dir: &Path, settings: &Settings) -> Vec
     filled
 }
 
-fn write_backup(config_dir: &Path, entry_id: &str, name: &str, value: &str) -> std::io::Result<String> {
+fn write_backup_file(config_dir: &Path, entry_id: &str, content: &str) -> std::io::Result<String> {
     let dir = secret_backup_dir(config_dir);
     std::fs::create_dir_all(&dir)?;
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
-    let file_name = format!("{entry_id}.env");
-    write_private(&dir.join(&file_name), &format!("{name}={}\n", quote(value)))?;
-    Ok(file_name)
+    write_private(&card_backup_path(&dir, entry_id), content)?;
+    Ok(format!("{entry_id}.env"))
+}
+
+fn write_backup(config_dir: &Path, entry_id: &str, name: &str, value: &str) -> std::io::Result<String> {
+    write_backup_file(config_dir, entry_id, &format!("{name}={}\n", quote(value)))
 }
 
 fn read_backup(config_dir: &Path, backup: &str, name: &str) -> Option<String> {
@@ -183,6 +189,98 @@ fn read_backup(config_dir: &Path, backup: &str, name: &str) -> Option<String> {
         .into_iter()
         .find(|(key, _)| key == name)
         .map(|(_, value)| value)
+}
+
+pub(crate) type NameValues = BTreeMap<String, Option<String>>;
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct CardBackup {
+    pub before: BTreeMap<String, String>,
+    pub after: BTreeMap<String, String>,
+}
+
+pub(crate) fn set_env_value(config_dir: &Path, name: &str, value: Option<&str>) -> std::io::Result<()> {
+    write_env_var(config_dir, name, value)?;
+    set_override(name, value.map(str::to_string));
+    Ok(())
+}
+
+pub(crate) fn read_env_bytes(config_dir: &Path) -> std::io::Result<Option<Vec<u8>>> {
+    match std::fs::read(env_path(config_dir)) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+pub(crate) fn restore_env_bytes(config_dir: &Path, bytes: Option<&[u8]>) -> std::io::Result<()> {
+    match bytes {
+        Some(bytes) => write_private(&env_path(config_dir), bytes),
+        None => match std::fs::remove_file(env_path(config_dir)) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+            _ => Ok(()),
+        },
+    }
+}
+
+fn backup_lines<'a>(prefix: &'a str, values: &'a NameValues) -> impl Iterator<Item = String> + 'a {
+    values
+        .iter()
+        .filter_map(move |(name, value)| value.as_ref().map(|value| format!("{prefix}{name}={}\n", quote(value))))
+}
+
+pub(crate) fn write_card_backup(
+    config_dir: &Path,
+    entry_id: &str,
+    before: &NameValues,
+    after: &NameValues,
+) -> std::io::Result<()> {
+    let content: String = backup_lines(BEFORE_PREFIX, before)
+        .chain(backup_lines(AFTER_PREFIX, after))
+        .collect();
+    write_backup_file(config_dir, entry_id, &content).map(|_| ())
+}
+
+pub(crate) fn read_card_backup(config_dir: &Path, entry_id: &str) -> Option<CardBackup> {
+    let path = card_backup_path(&secret_backup_dir(config_dir), entry_id);
+    if !path.is_file() {
+        return None;
+    }
+    let mut backup = CardBackup::default();
+    for (key, value) in env_file_pairs(&path) {
+        if let Some(name) = key.strip_prefix(BEFORE_PREFIX) {
+            backup.before.insert(name.to_string(), value);
+        } else if let Some(name) = key.strip_prefix(AFTER_PREFIX) {
+            backup.after.insert(name.to_string(), value);
+        }
+    }
+    Some(backup)
+}
+
+pub(crate) fn remove_card_backup(config_dir: &Path, entry_id: &str) {
+    let path = card_backup_path(&secret_backup_dir(config_dir), entry_id);
+    match std::fs::remove_file(&path) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => log::warn!("cannot delete {}: {e}", path.display()),
+    }
+}
+
+fn backup_values(config_dir: &Path) -> Vec<String> {
+    let dir = secret_backup_dir(config_dir);
+    let read_dir = match std::fs::read_dir(&dir) {
+        Ok(read_dir) => read_dir,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
+        Err(e) => {
+            log::warn!("cannot read {}: {e}", dir.display());
+            return Vec::new();
+        }
+    };
+    read_dir
+        .flatten()
+        .flat_map(|item| env_file_pairs(&item.path()))
+        .map(|(_, value)| value)
+        .collect()
 }
 
 fn apply_secret(
@@ -280,6 +378,7 @@ impl Redactor {
             .map(|(_, value)| value)
             .collect();
         values.extend(override_values());
+        values.extend(backup_values(config_dir));
         for reference in collect_missing(settings, |_| false) {
             values.extend(env_value(&reference.name));
         }
