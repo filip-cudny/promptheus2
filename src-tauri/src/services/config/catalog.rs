@@ -137,7 +137,7 @@ pub const ENTRIES: &[CatalogEntry] = &[
     live("surfaces.title_generation.generation.model_id", Chat, "Title model", "Model used to name conversations. Falls back to the chat model when empty.", TEXT_MODEL),
     live("surfaces.settings_agent.generation.model_id", Chat, "Settings agent model", "Model used by the settings agent. Falls back to the chat model when empty.", TEXT_MODEL),
     live("surfaces.settings_agent.generation.parameters.reasoning_effort", Chat, "Settings agent reasoning effort", "How much reasoning the settings agent model spends on a reply, where the model supports it. Falls back to the chat's value when empty.", TEXT),
-    live("surfaces.settings_agent.generation.enabled_tools", Chat, "Settings agent tools", "MCP tools the settings agent may call, e.g. to check current model ids.", Kind::List),
+    live("surfaces.settings_agent.generation.enabled_tools", Chat, "Settings agent tools", "Tools the settings agent may call: MCP tools as `server.tool`, and `web_search` for the provider's built-in web search (OpenAI Responses models), e.g. to check current model ids.", Kind::List),
     live("webview_providers[].name", Chat, "Provider name", "Name of a web chat provider shown in the app.", TEXT),
     live("webview_providers[].url", Chat, "Provider URL", "Address of a web chat provider. Must use http or https.", TEXT),
     live("surfaces.quick_actions.generation.model_id", ContextMenu, "Quick actions model", "Model used for prompts run from the context menu. Falls back to the chat model when empty.", TEXT_MODEL),

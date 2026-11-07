@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use tokio::sync::{watch, Mutex as TokioMutex};
 
 use crate::models::message::ProcessedMessage;
-use crate::models::settings::Settings;
+use crate::models::settings::{ApiMode, Provider, Settings};
 use crate::services::ai::AiService;
 use crate::services::config::catalog;
 use crate::services::execution::lifecycle::LiveExecution;
@@ -28,6 +28,7 @@ use super::transcript::{self, End, Iteration, ToolCallRecord, Transcript};
 
 pub const PROPOSAL_EVENT: &str = "settings-agent-proposal";
 pub const SECRET_VIEW_EVENT: &str = "settings-agent-secret-view";
+const BUILT_IN_SEARCH: &str = "web_search";
 
 pub trait Emit: Send + Sync {
     fn emit(&self, event: &str, payload: Value);
@@ -242,7 +243,15 @@ async fn tool_loop(
         emit: Arc::clone(&ctx.emit),
     });
     let settings = (ctx.settings)();
-    let enabled = select_enabled(&*ctx.mcp, &settings.surfaces.settings_agent.generation.enabled_tools);
+    let (mcp_names, built_in_names): (Vec<String>, Vec<String>) = settings
+        .surfaces
+        .settings_agent
+        .generation
+        .enabled_tools
+        .iter()
+        .cloned()
+        .partition(|name| name.contains('.'));
+    let enabled = select_enabled(&*ctx.mcp, &mcp_names);
     let request_tools: Vec<_> = tools::definitions().into_iter().chain(enabled.definitions).collect();
     let settings_source = Arc::clone(&ctx.settings);
     let factory = Arc::clone(&ctx.ai_factory);
@@ -267,6 +276,7 @@ async fn tool_loop(
     let model_id = agent_model(&settings, &ctx.ai, live).await?;
     transcript.model_id = Some(model_id.clone());
     log::debug!("settings agent turn starts on model '{model_id}'");
+    let tools_override = built_in_tools(&built_in_names, &settings, &model_id);
 
     let mut prefix = String::new();
     let mut last_tool_error: Option<String> = None;
@@ -282,7 +292,7 @@ async fn tool_loop(
                 &model_id,
                 messages.clone(),
                 Some(parameters.clone()),
-                None,
+                tools_override.clone(),
                 request_tools.clone(),
             )
             .await
@@ -290,14 +300,16 @@ async fn tool_loop(
             Ok(stream) => stream,
             Err(e) => return Err(fail(live, e.to_string()).await),
         };
+        let snapshot_calls_before = live.lock().await.snapshot.tool_calls.len();
         let result = run_stream_loop(stream, Arc::clone(live), Some(cancel_rx.clone()), &prefix).await?;
+        let built_in_records = built_in_search_records(live, snapshot_calls_before, &result.pending_tool_calls).await;
         let mut round = Iteration {
             started_at: transcript::timestamp(round_started_at),
             millis: elapsed_millis(round_started),
             text: result.full_text.strip_prefix(prefix.as_str()).unwrap_or(&result.full_text).to_string(),
             thinking: result.full_thinking.clone(),
             reasoning_items: result.reasoning_items.len(),
-            tool_calls: Vec::new(),
+            tool_calls: built_in_records,
         };
         if result.pending_tool_calls.is_empty() {
             transcript.iterations.push(round);
@@ -309,7 +321,7 @@ async fn tool_loop(
         if iteration == MAX_TOOL_LOOP_ITERATIONS {
             log::warn!("settings agent tool loop reached {MAX_TOOL_LOOP_ITERATIONS} iterations");
             let error = stop_at_limit(live, &result.pending_tool_calls, last_tool_error).await;
-            round.tool_calls = result.pending_tool_calls.iter().map(not_run_record).collect();
+            round.tool_calls.extend(result.pending_tool_calls.iter().map(not_run_record));
             transcript.iterations.push(round);
             transcript.end = Some(End::LoopLimit { error: error.to_string() });
             return Err(error);
@@ -339,6 +351,47 @@ async fn tool_loop(
         ));
     }
     unreachable!("the loop returns at its last iteration")
+}
+
+fn is_built_in_search_model(settings: &Settings, model_id: &str) -> bool {
+    settings.models.iter().find(|model| model.id == model_id).is_some_and(|model| {
+        matches!(model.provider, None | Some(Provider::Openai))
+            && matches!(model.api_mode, None | Some(ApiMode::Responses))
+    })
+}
+
+fn built_in_tools(built_in_names: &[String], settings: &Settings, model_id: &str) -> Option<Vec<String>> {
+    if !built_in_names.iter().any(|name| name == BUILT_IN_SEARCH) {
+        return None;
+    }
+    if !is_built_in_search_model(settings, model_id) {
+        log::debug!("settings agent: built-in web search is not sent, model '{model_id}' is not an OpenAI Responses model");
+        return None;
+    }
+    Some(vec![BUILT_IN_SEARCH.to_string()])
+}
+
+async fn built_in_search_records(
+    live: &Arc<TokioMutex<LiveExecution>>,
+    snapshot_calls_before: usize,
+    pending: &[PendingToolCall],
+) -> Vec<ToolCallRecord> {
+    live.lock()
+        .await
+        .snapshot
+        .tool_calls
+        .iter()
+        .skip(snapshot_calls_before)
+        .filter(|call| !pending.iter().any(|p| p.tool_call_id == call.tool_call_id))
+        .map(|call| ToolCallRecord {
+            id: call.tool_call_id.clone(),
+            name: call.tool_name.clone(),
+            arguments: call.arguments.clone(),
+            result: call.result.clone(),
+            error: call.error.clone(),
+            millis: 0,
+        })
+        .collect()
 }
 
 fn tool_error(result: &ToolExecutionResult) -> Option<String> {

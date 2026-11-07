@@ -19,7 +19,7 @@ use super::plan::{plan, Current};
 use super::testing::{run_row_test, RowTest, RowTestRequest};
 use crate::models::ai::ToolCallStatus;
 use crate::models::capabilities::{Effort, ModelCapabilities, ReasoningMode};
-use crate::models::settings::{EnvVar, ModelConfig, ModelType, Provider, Settings};
+use crate::models::settings::{ApiMode, EnvVar, ModelConfig, ModelType, Provider, Settings};
 use crate::services::ai::mock::{MockProvider, MockReply};
 use crate::services::ai::{AiError, AiService};
 use crate::services::change_log::{change_log_dir, load_all};
@@ -707,10 +707,20 @@ fn payload_names(request: &str) -> Vec<String> {
         .as_array()
         .unwrap()
         .iter()
-        .map(|payload| {
-            payload["function"]["name"].as_str().or(payload["name"].as_str()).unwrap().to_string()
+        .filter_map(|payload| {
+            payload["function"]["name"].as_str().or(payload["name"].as_str()).map(str::to_string)
         })
         .collect()
+}
+
+fn built_in_payload_count(request: &str) -> usize {
+    let request: Value = serde_json::from_str(request).unwrap();
+    request["tool_payloads"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|payload| **payload == json!({"type": "web_search_preview"}))
+        .count()
 }
 
 async fn run_with_mcp_tools(
@@ -718,11 +728,19 @@ async fn run_with_mcp_tools(
     offered: &[&str],
     script: Vec<MockReply>,
 ) -> (Run, Arc<ScriptedMcp>) {
-    let (provider, requests) = MockProvider::new(script);
-    let ai = AiService::with_provider("env-model", Box::new(provider));
     let mut settings = fixture_settings(Some("env-model"));
     settings.surfaces.settings_agent.generation.enabled_tools =
         enabled.iter().map(|name| name.to_string()).collect();
+    run_with_settings(settings, offered, script).await
+}
+
+async fn run_with_settings(
+    settings: Settings,
+    offered: &[&str],
+    script: Vec<MockReply>,
+) -> (Run, Arc<ScriptedMcp>) {
+    let (provider, requests) = MockProvider::new(script);
+    let ai = AiService::with_provider("env-model", Box::new(provider));
     let mcp = Arc::new(ScriptedMcp::offering(offered, "gpt-9 is the current model id"));
     let run = run_configured(settings, ai, requests, false, mcp.clone()).await;
     (run, mcp)
@@ -805,4 +823,148 @@ async fn enabled_tools_sharing_a_raw_name_are_all_dropped() {
     let names = payload_names(&run.requests.lock().unwrap()[0]);
     assert!(!names.contains(&"dup".to_string()), "{names:?}");
     assert!(names.contains(&"web_search".to_string()), "{names:?}");
+}
+
+fn settings_with_agent_search(agent_model: Option<&str>, enabled: &[&str]) -> Settings {
+    let mut settings = fixture_settings(Some("env-model"));
+    settings.surfaces.settings_agent.generation.model_id = agent_model.map(str::to_string);
+    settings.surfaces.settings_agent.generation.enabled_tools =
+        enabled.iter().map(|name| name.to_string()).collect();
+    settings
+}
+
+fn assert_search_and_settings_tools(request: &str) {
+    let names = payload_names(request);
+    assert_eq!(built_in_payload_count(request), 1, "{request}");
+    assert_eq!(names.len(), 4, "{names:?}");
+    for agent_tool in AGENT_TOOL_NAMES {
+        assert!(names.contains(&agent_tool.to_string()), "{agent_tool} missing in {names:?}");
+    }
+    assert!(!names.contains(&"web_search".to_string()), "{names:?}");
+}
+
+#[tokio::test]
+async fn the_built_in_search_is_sent_for_an_openai_responses_agent_model_and_never_reaches_the_mcp_selection() {
+    let settings = settings_with_agent_search(Some("env-model"), &["web_search"]);
+
+    let (run, _) = run_with_settings(settings, &["web_search"], vec![MockReply::Text("done".into())]).await;
+
+    run.outcome.as_ref().unwrap();
+    assert_search_and_settings_tools(&run.requests.lock().unwrap()[0]);
+}
+
+#[tokio::test]
+async fn the_built_in_search_is_sent_for_a_model_without_a_provider() {
+    let mut settings = settings_with_agent_search(Some("env-model"), &["web_search"]);
+    settings.models[0].provider = None;
+
+    let (run, _) = run_with_settings(settings, &[], vec![MockReply::Text("done".into())]).await;
+
+    run.outcome.as_ref().unwrap();
+    assert_search_and_settings_tools(&run.requests.lock().unwrap()[0]);
+}
+
+#[tokio::test]
+async fn the_built_in_search_is_not_sent_in_completions_mode() {
+    let mut settings = settings_with_agent_search(Some("env-model"), &["web_search"]);
+    settings.models[0].api_mode = Some(ApiMode::Completions);
+
+    let (run, _) = run_with_settings(settings, &[], vec![MockReply::Text("done".into())]).await;
+
+    run.outcome.as_ref().unwrap();
+    let request = &run.requests.lock().unwrap()[0];
+    assert_eq!(built_in_payload_count(request), 0, "{request}");
+    assert_eq!(payload_names(request).len(), 4);
+}
+
+#[tokio::test]
+async fn the_built_in_and_an_mcp_web_search_are_sent_together() {
+    let settings = settings_with_agent_search(Some("env-model"), &["web_search", "srv.web_search"]);
+
+    let (run, _) = run_with_settings(settings, &["srv.web_search"], vec![MockReply::Text("done".into())]).await;
+
+    run.outcome.as_ref().unwrap();
+    let request = &run.requests.lock().unwrap()[0];
+    let names = payload_names(request);
+    assert_eq!(built_in_payload_count(request), 1, "{request}");
+    assert_eq!(names.len(), 5, "{names:?}");
+    assert_eq!(names.iter().filter(|name| *name == "web_search").count(), 1, "{names:?}");
+}
+
+#[tokio::test]
+async fn the_built_in_search_follows_the_chat_model_when_the_agent_has_none() {
+    let settings = settings_with_agent_search(None, &["web_search"]);
+
+    let (run, _) = run_with_settings(settings, &[], vec![MockReply::Text("done".into())]).await;
+
+    run.outcome.as_ref().unwrap();
+    assert_search_and_settings_tools(&run.requests.lock().unwrap()[0]);
+}
+
+#[tokio::test]
+async fn a_built_in_search_is_recorded_in_the_snapshot_and_the_transcript_without_a_dispatch() {
+    let settings = settings_with_agent_search(Some("env-model"), &["web_search"]);
+    let script = vec![MockReply::WebSearchThen {
+        id: "ws_1".into(),
+        queries: vec!["latest openai model".into()],
+        then: Box::new(MockReply::Text("done".into())),
+    }];
+
+    let (run, mcp) = run_with_settings(settings, &[], script).await;
+
+    run.outcome.as_ref().unwrap();
+    assert_eq!(run.requests.lock().unwrap().len(), 1);
+    assert!(mcp.calls.lock().unwrap().is_empty());
+    {
+        let live = run.live.lock().await;
+        assert_eq!(live.snapshot.tool_calls.len(), 1);
+        let search = &live.snapshot.tool_calls[0];
+        assert_eq!(search.tool_name, "web_search");
+        assert!(matches!(search.status, ToolCallStatus::Completed));
+        assert_eq!(search.result.as_deref(), Some("latest openai model"));
+    }
+    let (_, transcript) = only_transcript(&run);
+    let iterations = transcript["iterations"].as_array().unwrap();
+    assert_eq!(iterations.len(), 1);
+    let calls = iterations[0]["tool_calls"].as_array().unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0]["id"], "ws_1");
+    assert_eq!(calls[0]["name"], "web_search");
+    assert_eq!(calls[0]["result"], "latest openai model");
+    assert!(calls[0]["error"].is_null());
+    assert_eq!(calls[0]["millis"], 0);
+}
+
+#[tokio::test]
+async fn a_built_in_search_item_is_replayed_and_recorded_before_the_dispatched_calls() {
+    let settings = settings_with_agent_search(Some("env-model"), &["web_search"]);
+    let script = vec![
+        MockReply::WebSearchThen {
+            id: "ws_1".into(),
+            queries: vec!["latest openai model".into()],
+            then: Box::new(call("c1", "settings_read", json!({}))),
+        },
+        MockReply::Text("done".into()),
+    ];
+
+    let (run, _) = run_with_settings(settings, &[], script).await;
+
+    run.outcome.as_ref().unwrap();
+    let requests = run.requests.lock().unwrap();
+    assert_eq!(requests.len(), 2);
+    let second: Value = serde_json::from_str(&requests[1]).unwrap();
+    let assistant = second["messages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|message| message["tool_calls"].is_array())
+        .unwrap();
+    let items = assistant["reasoning_items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["type"], "web_search_call");
+    assert_eq!(items[0]["id"], "ws_1");
+    let (_, transcript) = only_transcript(&run);
+    let calls = transcript["iterations"][0]["tool_calls"].as_array().unwrap();
+    let names: Vec<_> = calls.iter().map(|call| call["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["web_search", "settings_read"]);
 }
