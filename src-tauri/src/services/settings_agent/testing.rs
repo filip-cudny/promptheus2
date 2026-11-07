@@ -1,11 +1,17 @@
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use crate::models::message::ProcessedMessage;
-use crate::models::settings::{McpServerConfig, ModelConfig, Settings};
+use crate::models::settings::{McpServerConfig, ModelConfig, Provider, Settings};
+use crate::models::skill::SkillFrontmatter;
 use crate::services::ai::AiService;
 use crate::services::change_log::TestResult;
+use crate::services::env_resolve::env_ref_names;
 use crate::services::mcp::client::McpClient;
+use crate::services::missing_env::{visit_refs, visit_refs_mut};
 use crate::services::placeholder_registry::{substitute, PlaceholderContext};
+use crate::services::secrets::Redactor;
 use crate::services::skill_message::wrap_skill;
 use crate::services::speech::{transcribe, SttOptions};
 
@@ -16,38 +22,246 @@ const TEXT_PROBE: &str = "Reply with the single word OK.";
 const STT_SAMPLE: &[u8] = include_bytes!("../../../resources/stt-sample.wav");
 const MCP_CLOSE_TIMEOUT: Duration = Duration::from_secs(4);
 
-pub async fn test_row(
-    operation: &Operation,
-    plan: &Plan,
-    ai: &AiService,
-    placeholders: &PlaceholderContext,
-) -> Option<TestResult> {
-    let start = Instant::now();
-    let outcome = match operation {
+pub type AiFactory<'a> = &'a (dyn Fn(&Settings) -> AiService + Sync);
+
+pub struct RowTestRequest<'a> {
+    pub row: usize,
+    pub operations: &'a [Operation],
+    pub plan: &'a Plan,
+    pub before: &'a Settings,
+    pub values: &'a BTreeMap<String, String>,
+    pub ai_factory: AiFactory<'a>,
+    pub placeholders: &'a PlaceholderContext,
+    pub config_dir: &'a Path,
+    pub allow_new_destinations: bool,
+}
+
+#[derive(Debug)]
+pub enum RowTest {
+    NotTestable,
+    Waits(Vec<String>),
+    NewDestination(String),
+    Tested(TestResult),
+}
+
+impl RowTest {
+    fn kind(&self) -> &'static str {
+        match self {
+            Self::NotTestable => "not testable",
+            Self::Waits(_) => "waits",
+            Self::NewDestination(_) => "new destination",
+            Self::Tested(_) => "tested",
+        }
+    }
+}
+
+enum Subject<'a> {
+    Model(&'a ModelConfig),
+    Skill {
+        frontmatter: &'a SkillFrontmatter,
+        body: &'a str,
+        sample_input: &'a str,
+        model_id: String,
+        model: Option<&'a ModelConfig>,
+    },
+    Mcp {
+        name: &'a str,
+        config: &'a McpServerConfig,
+    },
+}
+
+fn subject<'a>(operation: &'a Operation, settings: &'a Settings) -> Option<Subject<'a>> {
+    match operation {
         Operation::AddModel { model } | Operation::UpdateModel { model, .. } => {
-            let model = plan.settings.models.iter().find(|m| m.id == model.id).unwrap_or(model);
-            test_model(model, ai).await
+            Some(Subject::Model(settings.models.iter().find(|m| m.id == model.id).unwrap_or(model)))
         }
         Operation::CreateSkill { frontmatter, body, sample_input, .. }
         | Operation::UpdateSkill { frontmatter, body, sample_input, .. } => {
-            let model_id = skill_model_id(frontmatter.model.as_deref(), &plan.settings);
-            let message = wrap_skill(
-                &frontmatter.name,
-                &substitute(body, placeholders),
-                sample_input,
-            );
-            complete_text(ai, &model_id, &message).await
+            let model_id = skill_model_id(frontmatter.model.as_deref(), settings);
+            let model = settings.models.iter().find(|m| m.id == model_id);
+            Some(Subject::Skill { frontmatter, body, sample_input, model_id, model })
         }
         Operation::AddMcpServer { name, config } | Operation::UpdateMcpServer { name, config } => {
-            let config = plan.settings.mcp_servers.get(name).unwrap_or(config);
-            test_mcp(name, config).await
+            Some(Subject::Mcp { name, config: settings.mcp_servers.get(name).unwrap_or(config) })
         }
-        _ => return None,
+        _ => None,
+    }
+}
+
+impl<'a> Subject<'a> {
+    fn binding(&self) -> Option<Binding<'a>> {
+        match self {
+            Self::Model(model) => Some(Binding::Model(model)),
+            Self::Skill { model, .. } => model.map(Binding::Model),
+            Self::Mcp { name, config } => Some(Binding::Mcp { name, config }),
+        }
+    }
+}
+
+enum Binding<'a> {
+    Model(&'a ModelConfig),
+    Mcp { name: &'a str, config: &'a McpServerConfig },
+}
+
+impl Binding<'_> {
+    fn variables(&self) -> BTreeSet<String> {
+        let mut alone = Settings::default();
+        let prefix = match self {
+            Self::Model(model) => {
+                alone.models.push((*model).clone());
+                format!("models[{}].", model.id)
+            }
+            Self::Mcp { name, config } => {
+                alone.mcp_servers.insert((*name).to_string(), (*config).clone());
+                format!("mcp_servers.{name}.")
+            }
+        };
+        let mut names = BTreeSet::new();
+        visit_refs(&alone, |value, key, _| {
+            if key.starts_with(&prefix) {
+                names.extend(env_ref_names(value));
+            }
+        });
+        names
+    }
+
+    fn destination(&self) -> String {
+        match self {
+            Self::Model(model) => model_destination(model),
+            Self::Mcp { config, .. } => config.command.clone(),
+        }
+    }
+
+    fn is_known_in(&self, before: &Settings, variable: &str) -> bool {
+        match self {
+            Self::Model(model) => {
+                let destination = model_destination(model);
+                before.models.iter().any(|other| {
+                    model_destination(other) == destination
+                        && Binding::Model(other).variables().contains(variable)
+                })
+            }
+            Self::Mcp { config, .. } => before.mcp_servers.iter().any(|(name, other)| {
+                other.command == config.command
+                    && Binding::Mcp { name, config: other }.variables().contains(variable)
+            }),
+        }
+    }
+}
+
+fn model_destination(model: &ModelConfig) -> String {
+    match model.base_url.as_deref().filter(|url| !url.is_empty()) {
+        Some(url) => url.to_string(),
+        None => format!("{} default endpoint", provider_name(&model.provider.clone().unwrap_or_default())),
+    }
+}
+
+fn provider_name(provider: &Provider) -> String {
+    serde_json::to_value(provider)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_default()
+}
+
+fn staged(values: &BTreeMap<String, String>) -> impl Iterator<Item = (&String, &String)> {
+    values.iter().filter(|(_, value)| !value.is_empty())
+}
+
+fn waiting_names(
+    variables: &BTreeSet<String>,
+    operations: &[Operation],
+    values: &BTreeMap<String, String>,
+) -> Vec<String> {
+    variables
+        .iter()
+        .filter(|name| {
+            operations.iter().any(|op| matches!(op, Operation::SetEnvValue { name: set } if set == *name))
+                && values.get(*name).is_none_or(String::is_empty)
+        })
+        .cloned()
+        .collect()
+}
+
+fn new_destination_text(
+    binding: &Binding,
+    variables: &BTreeSet<String>,
+    before: &Settings,
+) -> Option<String> {
+    let destination = binding.destination();
+    let unknown: Vec<String> = variables
+        .iter()
+        .filter(|variable| !binding.is_known_in(before, variable))
+        .map(|variable| format!("test on click: {variable} goes to new destination {destination}"))
+        .collect();
+    (!unknown.is_empty()).then(|| unknown.join("; "))
+}
+
+fn with_staged_values(settings: &Settings, values: &BTreeMap<String, String>) -> Settings {
+    let tokens: Vec<(String, &String)> =
+        staged(values).map(|(name, value)| (format!("${{{name}}}"), value)).collect();
+    let mut substituted = settings.clone();
+    visit_refs_mut(&mut substituted, |field| {
+        for (token, value) in &tokens {
+            *field = field.replace(token.as_str(), value);
+        }
+    });
+    substituted
+}
+
+pub async fn run_row_test(request: &RowTestRequest<'_>) -> RowTest {
+    let outcome = row_test(request).await;
+    log::debug!("settings agent row {}: {}", request.row, outcome.kind());
+    outcome
+}
+
+async fn row_test(request: &RowTestRequest<'_>) -> RowTest {
+    let Some(operation) = request.operations.get(request.row) else {
+        return RowTest::NotTestable;
+    };
+    let Some(subject) = subject(operation, &request.plan.settings) else {
+        return RowTest::NotTestable;
+    };
+    let binding = subject.binding();
+    let variables = binding.as_ref().map(Binding::variables).unwrap_or_default();
+    let waits = waiting_names(&variables, request.operations, request.values);
+    if !waits.is_empty() {
+        return RowTest::Waits(waits);
+    }
+    if !request.allow_new_destinations {
+        let new_destination = binding
+            .as_ref()
+            .and_then(|binding| new_destination_text(binding, &variables, request.before));
+        if let Some(text) = new_destination {
+            return RowTest::NewDestination(text);
+        }
+    }
+    run_subject(request, operation).await
+}
+
+async fn run_subject(request: &RowTestRequest<'_>, operation: &Operation) -> RowTest {
+    let settings = with_staged_values(&request.plan.settings, request.values);
+    let Some(subject) = subject(operation, &settings) else {
+        return RowTest::NotTestable;
+    };
+    let start = Instant::now();
+    let outcome = match subject {
+        Subject::Model(model) => test_model(model, &settings, request.ai_factory).await,
+        Subject::Skill { frontmatter, body, sample_input, model_id, .. } => {
+            let message = wrap_skill(
+                &frontmatter.name,
+                &substitute(body, request.placeholders),
+                sample_input,
+            );
+            complete_text(&(request.ai_factory)(&settings), &model_id, &message).await
+        }
+        Subject::Mcp { name, config } => test_mcp(name, config).await,
     };
     let millis = Some(start.elapsed().as_millis() as u64);
-    Some(match outcome {
-        Ok(output) => TestResult { ok: true, millis, error: None, output: Some(output) },
-        Err(error) => TestResult { ok: false, millis, error: Some(error), output: None },
+    let redactor = Redactor::new(request.config_dir, &request.plan.settings)
+        .with_values(staged(request.values).map(|(_, value)| value.clone()));
+    RowTest::Tested(match outcome {
+        Ok(output) => TestResult { ok: true, millis, error: None, output: Some(redactor.redact(&output)) },
+        Err(error) => TestResult { ok: false, millis, error: Some(redactor.redact(&error)), output: None },
     })
 }
 
@@ -66,13 +280,17 @@ async fn complete_text(ai: &AiService, model_id: &str, message: &str) -> Result<
         .map_err(|e| e.to_string())
 }
 
-async fn test_model(model: &ModelConfig, ai: &AiService) -> Result<String, String> {
+async fn test_model(
+    model: &ModelConfig,
+    settings: &Settings,
+    ai_factory: AiFactory<'_>,
+) -> Result<String, String> {
     if model.is_stt() {
         transcribe(STT_SAMPLE.to_vec(), model, &SttOptions::default())
             .await
             .map_err(|e| e.to_string())
     } else {
-        complete_text(ai, &model.id, TEXT_PROBE).await
+        complete_text(&ai_factory(settings), &model.id, TEXT_PROBE).await
     }
 }
 

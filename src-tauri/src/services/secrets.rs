@@ -371,6 +371,13 @@ pub struct Redactor {
     values: Vec<String>,
 }
 
+fn longest_first(mut values: Vec<String>) -> Vec<String> {
+    values.retain(|value| !value.is_empty());
+    values.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+    values.dedup();
+    values
+}
+
 impl Redactor {
     pub fn new(config_dir: &Path, settings: &Settings) -> Self {
         let mut values: Vec<String> = env_file_pairs(&env_path(config_dir))
@@ -389,10 +396,11 @@ impl Redactor {
                 .filter_map(|model| model.api_key.clone())
                 .filter(|key| env_ref_names(key).is_empty()),
         );
-        values.retain(|value| !value.is_empty());
-        values.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
-        values.dedup();
-        Self { values }
+        Self { values: longest_first(values) }
+    }
+
+    pub fn with_values(self, extra: impl IntoIterator<Item = String>) -> Self {
+        Self { values: longest_first(self.values.into_iter().chain(extra).collect()) }
     }
 
     pub fn redact(&self, text: &str) -> String {

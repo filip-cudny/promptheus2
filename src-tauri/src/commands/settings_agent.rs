@@ -20,7 +20,7 @@ use crate::services::settings_agent::engine::{
     self, describe, lock, proposal_payload, EngineContext, Emit, SharedSession,
 };
 use crate::services::settings_agent::plan::{plan, stale_rows, Current};
-use crate::services::settings_agent::testing::test_row;
+use crate::services::settings_agent::testing::{run_row_test, RowTest, RowTestRequest};
 
 struct TauriEmit(AppHandle);
 
@@ -212,19 +212,41 @@ pub async fn settings_agent_test_row(
     session: State<'_, SharedSession>,
     proposal_id: String,
     row: usize,
+    values: BTreeMap<String, String>,
 ) -> crate::Result<TestResult> {
     let proposal = proposal_of(&session, &proposal_id).map_err(crate::Error::Other)?;
-    let operation = proposal
-        .operations
-        .get(row)
-        .ok_or_else(|| crate::Error::Other(format!("row {row} does not exist")))?;
-    let ai = AiService::new(&proposal.plan.settings.models);
-    let result = test_row(operation, &proposal.plan, &ai, &placeholders(&app).await)
-        .await
-        .ok_or_else(|| crate::Error::Other(format!("row {row} has no test")))?;
+    if row >= proposal.operations.len() {
+        return Err(crate::Error::Other(format!("row {row} does not exist")));
+    }
+    let before = fresh_settings(&app).await;
+    let config_dir = app.path().app_config_dir()?;
+    let request = RowTestRequest {
+        row,
+        operations: &proposal.operations,
+        plan: &proposal.plan,
+        before: &before,
+        values: &values,
+        ai_factory: &|settings: &Settings| AiService::new(&settings.models),
+        placeholders: &placeholders(&app).await,
+        config_dir: &config_dir,
+        allow_new_destinations: true,
+    };
+    let result = match run_row_test(&request).await {
+        RowTest::Tested(result) => result,
+        RowTest::NotTestable => return Err(crate::Error::Other(format!("row {row} has no test"))),
+        RowTest::Waits(names) => {
+            return Err(crate::Error::Other(format!(
+                "row {row} waits for a value of {}",
+                names.join(", ")
+            )))
+        }
+        RowTest::NewDestination(text) => return Err(crate::Error::Other(text)),
+    };
     let mut s = lock(&session);
     if let Some(held) = s.proposal.as_mut().filter(|p| p.id == proposal_id) {
         held.tests.insert(row, result.clone());
+        held.waits.remove(&row);
+        held.new_destinations.remove(&row);
     }
     Ok(result)
 }

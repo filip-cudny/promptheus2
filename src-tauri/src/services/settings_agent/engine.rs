@@ -152,6 +152,8 @@ pub fn proposal_payload(proposal: &Proposal, current: &Current) -> Value {
                 "op": planned.operation.op,
                 "effects": planned.operation.effects,
                 "test": proposal.tests.get(&planned.row),
+                "waits_for": proposal.waits.get(&planned.row).cloned().unwrap_or_default(),
+                "new_destination": proposal.new_destinations.get(&planned.row),
                 "sample_input": sample_input(proposal.operations.get(planned.row)),
                 "stale": stale.contains(&planned.row),
                 "env_value": env_value_of(proposal, planned.row, current),

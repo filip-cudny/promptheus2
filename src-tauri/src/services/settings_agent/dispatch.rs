@@ -19,7 +19,7 @@ use crate::services::skill::SkillService;
 use super::change_log_read::{self, Filters};
 use super::operations::{Operation, PromptFile};
 use super::plan::{plan, Current, Plan, RowError};
-use super::testing::test_row;
+use super::testing::{run_row_test, RowTest, RowTestRequest};
 use super::tools;
 
 #[derive(Debug, Clone)]
@@ -28,6 +28,15 @@ pub struct Proposal {
     pub operations: Vec<Operation>,
     pub plan: Plan,
     pub tests: BTreeMap<usize, TestResult>,
+    pub waits: BTreeMap<usize, Vec<String>>,
+    pub new_destinations: BTreeMap<usize, String>,
+}
+
+#[derive(Default)]
+struct RowOutcomes {
+    tests: BTreeMap<usize, TestResult>,
+    waits: BTreeMap<usize, Vec<String>>,
+    new_destinations: BTreeMap<usize, String>,
 }
 
 pub trait ProposalSink: Send + Sync {
@@ -230,21 +239,50 @@ impl Dispatcher {
         plan(operations, &vec![true; operations.len()], &current)
     }
 
-    async fn run_tests(&self, operations: &[Operation], plan: &Plan) -> BTreeMap<usize, TestResult> {
-        let ai = (self.ctx.ai_factory)(&plan.settings);
-        let mut tests = BTreeMap::new();
-        for (row, operation) in operations.iter().enumerate() {
-            if let Some(result) = test_row(operation, plan, &ai, &self.ctx.placeholders).await {
-                tests.insert(row, result);
+    async fn run_tests(&self, operations: &[Operation], plan: &Plan) -> RowOutcomes {
+        let before = (self.ctx.settings)();
+        let values = BTreeMap::new();
+        let mut outcomes = RowOutcomes::default();
+        for row in 0..operations.len() {
+            let request = RowTestRequest {
+                row,
+                operations,
+                plan,
+                before: &before,
+                values: &values,
+                ai_factory: &*self.ctx.ai_factory,
+                placeholders: &self.ctx.placeholders,
+                config_dir: &self.ctx.config_dir,
+                allow_new_destinations: false,
+            };
+            match run_row_test(&request).await {
+                RowTest::NotTestable => {}
+                RowTest::Waits(names) => {
+                    outcomes.waits.insert(row, names);
+                }
+                RowTest::NewDestination(text) => {
+                    outcomes.new_destinations.insert(row, text);
+                }
+                RowTest::Tested(result) => {
+                    outcomes.tests.insert(row, result);
+                }
             }
         }
-        tests
+        outcomes
     }
 
-    fn rows_json(plan: &Plan, tests: &BTreeMap<usize, TestResult>) -> Vec<Value> {
+    fn rows_json(plan: &Plan, outcomes: &RowOutcomes) -> Vec<Value> {
         plan.rows
             .iter()
-            .map(|r| json!({"row": r.row + 1, "label": r.operation.label, "test": tests.get(&r.row)}))
+            .map(|r| {
+                json!({
+                    "row": r.row + 1,
+                    "label": r.operation.label,
+                    "test": outcomes.tests.get(&r.row),
+                    "waits_for": outcomes.waits.get(&r.row).cloned().unwrap_or_default(),
+                    "new_destination": outcomes.new_destinations.get(&r.row),
+                })
+            })
             .collect()
     }
 
@@ -256,8 +294,8 @@ impl Dispatcher {
         match self.plan_all(&operations) {
             Err(errors) => Ok(row_errors(&errors, NOTHING_TESTED)),
             Ok(planned) => {
-                let tests = self.run_tests(&operations, &planned).await;
-                Ok(json!({"rows": Self::rows_json(&planned, &tests)}))
+                let outcomes = self.run_tests(&operations, &planned).await;
+                Ok(json!({"rows": Self::rows_json(&planned, &outcomes)}))
             }
         }
     }
@@ -271,13 +309,15 @@ impl Dispatcher {
             Err(errors) => return Ok(row_errors(&errors, NOTHING_PROPOSED)),
             Ok(planned) => planned,
         };
-        let tests = self.run_tests(&operations, &planned).await;
-        let rows = Self::rows_json(&planned, &tests);
+        let outcomes = self.run_tests(&operations, &planned).await;
+        let rows = Self::rows_json(&planned, &outcomes);
         let proposal = Proposal {
             id: uuid::Uuid::new_v4().simple().to_string(),
             operations,
             plan: planned,
-            tests,
+            tests: outcomes.tests,
+            waits: outcomes.waits,
+            new_destinations: outcomes.new_destinations,
         };
         log::info!("settings agent proposal {} with {} rows", proposal.id, rows.len());
         let id = proposal.id.clone();

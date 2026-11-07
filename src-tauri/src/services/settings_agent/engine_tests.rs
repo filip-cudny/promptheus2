@@ -314,7 +314,7 @@ fn a_set_env_value_row_carries_its_flags_and_never_a_value() {
     ];
     let current = Current { settings: &settings, config_dir: dir.path() };
     let planned = plan(&operations, &[true, true, true], &current).unwrap();
-    let proposal = Proposal { id: "p".into(), operations, plan: planned, tests: Default::default() };
+    let proposal = Proposal { id: "p".into(), operations, plan: planned, tests: Default::default(), waits: Default::default(), new_destinations: Default::default() };
 
     let payload = proposal_payload(&proposal, &current);
 

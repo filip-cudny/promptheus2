@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -6,6 +7,8 @@ use serde_json::{json, Value};
 use tempfile::TempDir;
 
 use super::operations::Operation;
+use super::engine::proposal_payload;
+use super::plan::Current;
 use super::dispatch::{Context, Dispatcher, Proposal, ProposalSink, SecretAnswer, SecretPrompt};
 use crate::models::settings::{EnvVar, McpServerConfig, ModelConfig, ModelType, Provider, Settings};
 use crate::services::ai::mock::{MockProvider, MockReply};
@@ -13,6 +16,9 @@ use crate::services::ai::{AiError, AiService};
 use crate::services::execution::types::PendingToolCall;
 use crate::services::placeholder_registry::PlaceholderContext;
 use crate::services::secrets;
+
+const BASE_URL_A: &str = "https://alpha.example/api";
+const BASE_URL_B: &str = "https://beta.example/api";
 
 const SECRETS: [&str; 3] = ["sk-env-111", "tok-222", "sk-literal-333"];
 
@@ -36,7 +42,10 @@ fn model(id: &str, api_key: &str) -> ModelConfig {
 
 fn fixture_settings() -> Settings {
     let mut settings = Settings::default();
-    settings.models = vec![model("env-model", "${OPENAI_KEY}"), model("literal-model", "sk-literal-333")];
+    settings.models = vec![
+        ModelConfig { base_url: Some(BASE_URL_A.into()), ..model("env-model", "${OPENAI_KEY}") },
+        model("literal-model", "sk-literal-333"),
+    ];
     settings.mcp_servers = HashMap::from([(
         "tools".to_string(),
         McpServerConfig {
@@ -95,6 +104,15 @@ impl SecretPrompt for CancellingPrompt {
 }
 
 fn fixture(prompt: impl FnOnce(&std::path::Path) -> Arc<dyn SecretPrompt>) -> (TempDir, Dispatcher, Arc<Sink>) {
+    let (dir, dispatcher, sink, _) = fixture_counting_factory(prompt);
+    (dir, dispatcher, sink)
+}
+
+fn fixture_counting_factory(
+    prompt: impl FnOnce(&std::path::Path) -> Arc<dyn SecretPrompt>,
+) -> (TempDir, Dispatcher, Arc<Sink>, Arc<AtomicUsize>) {
+    let factory_calls = Arc::new(AtomicUsize::new(0));
+    let counted = factory_calls.clone();
     let dir = TempDir::new().unwrap();
     std::fs::write(dir.path().join(".env"), "OPENAI_KEY=sk-env-111\nMCP_TOKEN=tok-222\n").unwrap();
     let skill_dir = dir.path().join("skills/old-skill");
@@ -111,7 +129,8 @@ fn fixture(prompt: impl FnOnce(&std::path::Path) -> Arc<dyn SecretPrompt>) -> (T
         settings: Box::new(move || settings.clone()),
         config_dir: dir.path().to_path_buf(),
         skills_dir: dir.path().join("skills"),
-        ai_factory: Box::new(|_| {
+        ai_factory: Box::new(move |_| {
+            counted.fetch_add(1, Ordering::SeqCst);
             let error = AiError::ApiStatus {
                 status: 401,
                 message: "Incorrect API key provided: sk-env-111".into(),
@@ -123,7 +142,7 @@ fn fixture(prompt: impl FnOnce(&std::path::Path) -> Arc<dyn SecretPrompt>) -> (T
         proposals: sink.clone(),
         secrets: prompt(dir.path()),
     };
-    (dir, Dispatcher::new(ctx), sink)
+    (dir, Dispatcher::new(ctx), sink, factory_calls)
 }
 
 async fn call(dispatcher: &Dispatcher, tool: &str, arguments: Value) -> (String, bool) {
@@ -144,7 +163,8 @@ fn assert_clean(text: &str) {
 }
 
 fn update_model_row() -> Value {
-    json!({"op": "update_model", "id": "env-model", "model": model("env-model", "${OPENAI_KEY}")})
+    let model = ModelConfig { base_url: Some(BASE_URL_A.into()), ..model("env-model", "${OPENAI_KEY}") };
+    json!({"op": "update_model", "id": "env-model", "model": model})
 }
 
 #[tokio::test]
@@ -374,4 +394,75 @@ async fn change_log_read_with_strict_nulls_and_an_unknown_name() {
     let (text, is_error) = call(&dispatcher, "settings_read", json!({"what": "change_log", "name": "nope"})).await;
     assert!(is_error);
     assert_eq!(text, "change log entry 'nope' not found");
+}
+
+fn add_model_row(id: &str, base_url: &str, api_key: &str) -> Value {
+    let model = ModelConfig { base_url: Some(base_url.into()), ..model(id, api_key) };
+    json!({"op": "add_model", "model": model})
+}
+
+#[tokio::test]
+async fn a_row_using_an_unvalued_staged_variable_waits_and_is_not_tested() {
+    const NAME: &str = "PHX_DISPATCH_NEW_KEY";
+    let (dir, dispatcher, sink, factory_calls) = fixture_counting_factory(|_| Arc::new(CancellingPrompt));
+    let operations = json!([
+        {"op": "add_env_var", "name": NAME, "description": "new key", "secret": true},
+        {"op": "set_env_value", "name": NAME},
+        add_model_row("staged-model", BASE_URL_A, &format!("${{{NAME}}}")),
+    ]);
+
+    let (text, is_error) =
+        call(&dispatcher, "settings_propose_changes", json!({"operations": operations})).await;
+
+    assert!(!is_error, "{text}");
+    let result: Value = serde_json::from_str(&text).unwrap();
+    let rows = &result["rows"];
+    assert_eq!(rows[2]["waits_for"], json!([NAME]));
+    assert!(rows[2]["test"].is_null());
+    assert!(rows[2]["new_destination"].is_null());
+    assert_eq!(rows[0]["waits_for"], json!([]));
+    assert_eq!(factory_calls.load(Ordering::SeqCst), 0);
+    let proposal = sink.0.lock().unwrap()[0].clone();
+    let settings = fixture_settings();
+    let payload = proposal_payload(&proposal, &Current { settings: &settings, config_dir: dir.path() });
+    assert_eq!(payload["rows"][2]["waits_for"], json!([NAME]));
+    assert_eq!(payload["rows"][1]["waits_for"], json!([]));
+    assert!(payload["rows"][2]["new_destination"].is_null());
+}
+
+#[tokio::test]
+async fn a_key_going_to_a_new_base_url_is_not_tested_automatically() {
+    let (dir, dispatcher, sink, factory_calls) = fixture_counting_factory(|_| Arc::new(CancellingPrompt));
+    let operations = json!({"operations": [add_model_row("moved-model", BASE_URL_B, "${OPENAI_KEY}")]});
+
+    let (text, is_error) = call(&dispatcher, "settings_test", operations.clone()).await;
+
+    assert!(!is_error, "{text}");
+    assert_clean(&text);
+    let row = &serde_json::from_str::<Value>(&text).unwrap()["rows"][0];
+    let note = row["new_destination"].as_str().unwrap();
+    assert!(note.contains("OPENAI_KEY") && note.contains(BASE_URL_B), "{note}");
+    assert!(row["test"].is_null());
+    assert_eq!(factory_calls.load(Ordering::SeqCst), 0);
+
+    call(&dispatcher, "settings_propose_changes", operations).await;
+    let proposal = sink.0.lock().unwrap()[0].clone();
+    let settings = fixture_settings();
+    let payload = proposal_payload(&proposal, &Current { settings: &settings, config_dir: dir.path() });
+    assert_eq!(payload["rows"][0]["new_destination"], note);
+    assert_eq!(factory_calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn a_key_going_to_its_known_base_url_is_tested() {
+    let (_dir, dispatcher, _, factory_calls) = fixture_counting_factory(|_| Arc::new(CancellingPrompt));
+    let operations = json!({"operations": [add_model_row("same-url-model", BASE_URL_A, "${OPENAI_KEY}")]});
+
+    let (text, is_error) = call(&dispatcher, "settings_test", operations).await;
+
+    assert!(!is_error, "{text}");
+    let row = &serde_json::from_str::<Value>(&text).unwrap()["rows"][0];
+    assert_eq!(row["test"]["ok"], false);
+    assert!(row["new_destination"].is_null());
+    assert_eq!(factory_calls.load(Ordering::SeqCst), 1);
 }

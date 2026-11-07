@@ -302,3 +302,12 @@ fn second_copy_returns_empty() {
     assert_eq!(copy_renamed_values(dir.path(), &settings).len(), 1);
     assert!(copy_renamed_values(dir.path(), &settings).is_empty());
 }
+
+#[test]
+fn redactor_with_values_redacts_the_longer_value_first() {
+    let dir = config_dir();
+    let redactor = Redactor::new(dir.path(), &Settings::default())
+        .with_values(["sk-extra".to_string(), "sk-extra-long".to_string(), String::new()]);
+
+    assert_eq!(redactor.redact("a sk-extra-long b sk-extra"), "a [redacted] b [redacted]");
+}
