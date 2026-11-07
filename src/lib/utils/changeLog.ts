@@ -30,7 +30,7 @@ export function entryTitle(
 export function conflictLines(conflicts: UndoConflict[]): string[] {
   return conflicts.map((c) =>
     c.target.type === "secret"
-      ? `${c.target.name}: changed since this entry`
-      : `${c.target.path}: current ${formatValue(c.current)}, expected ${formatValue(c.expected_after)}`,
+      ? `${targetLabel(c.target)}: changed since this entry`
+      : `${targetLabel(c.target)}: current ${formatValue(c.current)}, expected ${formatValue(c.expected_after)}`,
   );
 }
