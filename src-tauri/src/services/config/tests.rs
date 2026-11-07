@@ -1112,6 +1112,28 @@ fn add_shortcut_of_the_same_action_with_other_case_changes_nothing() {
 }
 
 #[test]
+fn add_shortcut_reports_another_action_even_when_the_same_action_also_matches() {
+    let (_dir, mut service) = service_with_linux_ctrl_f1();
+    service
+        .try_mutate(|c| {
+            c.settings.keymaps = vec![keymap_group(
+                "os == linux",
+                &[("ctrl+f1", "open_context_menu"), ("CTRL+F1", "clear_context")],
+            )];
+            Ok(())
+        })
+        .expect("seed");
+
+    let err = service
+        .try_mutate(|c| c.add_shortcut_for_os("linux", "open_context_menu", "ctrl+f1"))
+        .unwrap_err();
+
+    let (key, message) = invalid_key_and_message(err);
+    assert_eq!(key.as_deref(), Some("keymaps.open_context_menu"));
+    assert_eq!(message, "ctrl+f1 is already used by clear_context");
+}
+
+#[test]
 fn add_shortcut_rejects_an_invalid_shortcut() {
     let (_dir, mut service) = service_with_linux_ctrl_f1();
 

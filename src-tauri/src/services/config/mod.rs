@@ -274,21 +274,21 @@ impl ConfigService {
             return Err(ConfigError::invalid_at(key, format!("{shortcut} is not a valid shortcut")));
         }
         let keymaps = &mut self.settings.keymaps;
-        let bound_to = keymaps
+        let bound_actions: Vec<&str> = keymaps
             .iter()
             .filter(|g| matches_current_os(&g.context, os))
             .flat_map(|g| g.bindings.iter())
-            .find(|(bound, _)| bound.eq_ignore_ascii_case(shortcut))
-            .map(|(_, bound_action)| bound_action.as_str());
-        match bound_to {
-            Some(bound_action) if bound_action == action => return Ok(()),
-            Some(other) => {
-                return Err(ConfigError::invalid_at(
-                    key,
-                    format!("{shortcut} is already used by {other}"),
-                ));
-            }
-            None => {}
+            .filter(|(bound, _)| bound.eq_ignore_ascii_case(shortcut))
+            .map(|(_, bound_action)| bound_action.as_str())
+            .collect();
+        if let Some(other) = bound_actions.iter().find(|bound_action| **bound_action != action) {
+            return Err(ConfigError::invalid_at(
+                key,
+                format!("{shortcut} is already used by {other}"),
+            ));
+        }
+        if !bound_actions.is_empty() {
+            return Ok(());
         }
         let index = match keymaps.iter().position(|g| matches_current_os(&g.context, os)) {
             Some(index) => index,
