@@ -64,12 +64,6 @@
     --column-gutter: max(0px, (100% - var(--column-width)) / 2);
   }
 
-  @container settings-body (min-width: 1340px) {
-    :global(.with-panel) .content {
-      flex: 0 1 var(--column-width);
-    }
-  }
-
   .loading,
   .error {
     margin: auto;

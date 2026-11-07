@@ -9,11 +9,19 @@
   import AgentPanel from "$lib/components/features/settings/agent/AgentPanel.svelte";
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import SettingsErrorToast from "$lib/components/features/settings/SettingsErrorToast.svelte";
+  import {
+    CONTENT_MIN_WIDTH,
+    agentPanelLayout,
+    clampPanelWidth,
+  } from "$lib/utils/agentPanelLayout";
 
   const store = getSettingsStore();
 
   const navigation = getSettingsNavigation();
   const agent = getSettingsAgent();
+
+  let bodyWidth = $state(0);
+  const panelLayout = $derived(agentPanelLayout(bodyWidth, agent.panelWidth));
 
   onMount(async () => {
     const initial = (window as unknown as { __settingsInitialSection?: string })
@@ -31,11 +39,20 @@
 
 <div class="dialog-shell">
   <MissingEnvList />
-  <div class="dialog-body" class:with-panel={agent.panelOpen}>
+  <div
+    class="dialog-body"
+    bind:clientWidth={bodyWidth}
+    style:--content-min-width="{CONTENT_MIN_WIDTH}px"
+  >
     <SettingsSidebar />
     <SettingsContent />
     {#if agent.panelOpen}
-      <AgentPanel />
+      <AgentPanel
+        docked={panelLayout.docked}
+        width={panelLayout.width}
+        onresize={(width) => agent.resizePanel(clampPanelWidth(bodyWidth, width))}
+        onresizeend={agent.savePanelWidth}
+      />
     {/if}
   </div>
   <SettingsErrorToast />
@@ -58,6 +75,5 @@
     flex: 1;
     min-height: 0;
     position: relative;
-    container: settings-body / inline-size;
   }
 </style>

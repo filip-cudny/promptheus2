@@ -1,6 +1,8 @@
 import type { StreamEvent } from "$lib/types/ai";
 import { applyStreamEvent, emptyReply, type AgentReply } from "$lib/utils/agentReply";
+import { DEFAULT_PANEL_WIDTH } from "$lib/utils/agentPanelLayout";
 import { undoChange, type UndoConflict } from "$lib/services/changeLog";
+import { getUiState, setUiState } from "$lib/services/uiState";
 import {
   onSettingsAgentProposal,
   onSettingsAgentSecretView,
@@ -27,6 +29,9 @@ let running = $state(false);
 let error = $state<string | null>(null);
 let panelOpen = $state(false);
 let panelMode = $state<PanelMode>("overlay");
+let panelWidth = $state(DEFAULT_PANEL_WIDTH);
+
+const PANEL_WIDTH_KEY = "settings-dialog.agent_panel_width";
 
 export type ProposalOutcome =
   | { kind: "applied"; entryId: string; conflicts?: UndoConflict[]; message?: string }
@@ -190,7 +195,29 @@ async function testRow(row: number, values: Record<string, string>) {
   }
 }
 
+async function loadPanelWidth() {
+  try {
+    const saved = await getUiState<unknown>(PANEL_WIDTH_KEY);
+    panelWidth = typeof saved === "number" && Number.isFinite(saved) ? saved : DEFAULT_PANEL_WIDTH;
+  } catch (e) {
+    error = String(e);
+  }
+}
+
+function resizePanel(width: number) {
+  panelWidth = Math.round(width);
+}
+
+async function savePanelWidth() {
+  try {
+    await setUiState(PANEL_WIDTH_KEY, panelWidth);
+  } catch (e) {
+    error = String(e);
+  }
+}
+
 async function setPanelOpen(open: boolean) {
+  if (open) await loadPanelWidth();
   panelOpen = open;
   panelMode = open ? await settingsAgentPanel(true) : "overlay";
   if (!open) await settingsAgentPanel(false);
@@ -213,6 +240,9 @@ export function getSettingsAgent() {
     testRow,
     get panelOpen() { return panelOpen; },
     get panelMode() { return panelMode; },
+    get panelWidth() { return panelWidth; },
+    resizePanel,
+    savePanelWidth,
     send,
     dictate,
     cancel,

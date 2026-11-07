@@ -6,14 +6,53 @@
   import AgentMessages from "./AgentMessages.svelte";
   import AgentComposer from "./AgentComposer.svelte";
 
+  let {
+    docked,
+    width,
+    onresize,
+    onresizeend,
+  }: {
+    docked: boolean;
+    width: number;
+    onresize: (width: number) => void;
+    onresizeend: () => void;
+  } = $props();
+
   const agent = getSettingsAgent();
+  let panel: HTMLElement;
+  let dragging = $state(false);
   const store = getSettingsStore();
   const modelName = $derived(
     store.settings ? agentModelName(store.settings.surfaces, store.models) : null,
   );
+
+  function startResize(e: PointerEvent) {
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragging = true;
+  }
+
+  function resize(e: PointerEvent) {
+    if (dragging) onresize(panel.getBoundingClientRect().right - e.clientX);
+  }
+
+  function endResize() {
+    if (!dragging) return;
+    dragging = false;
+    onresizeend();
+  }
 </script>
 
-<aside class="panel">
+<aside class="panel" class:docked style:width="{width}px" bind:this={panel}>
+  <div
+    class="resize-handle"
+    class:dragging
+    role="separator"
+    aria-orientation="vertical"
+    onpointerdown={startResize}
+    onpointermove={resize}
+    onpointerup={endResize}
+    onpointercancel={endResize}
+  ></div>
   <header>
     <span class="title"><Sparkles size={14} />Settings agent{#if modelName}<span class="model" title={modelName}>{modelName}</span>{/if}</span>
     <button title="New conversation" disabled={agent.running} onclick={() => agent.reset()}>
@@ -31,8 +70,8 @@
   .panel {
     display: flex;
     flex-direction: column;
-    width: 380px;
     flex-shrink: 0;
+    max-width: 100%;
     position: absolute;
     top: 0;
     right: 0;
@@ -43,15 +82,27 @@
     z-index: 10;
   }
 
-  @container settings-body (min-width: 1340px) {
-    .panel {
-      position: static;
-      width: auto;
-      flex: 1 1 380px;
-      min-width: 380px;
-      box-shadow: none;
-      z-index: auto;
-    }
+  .panel.docked {
+    position: relative;
+    max-width: calc(100% - var(--content-min-width));
+    box-shadow: none;
+    z-index: auto;
+  }
+
+  .resize-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -3px;
+    width: 6px;
+    cursor: col-resize;
+    z-index: 1;
+    touch-action: none;
+  }
+
+  .resize-handle:hover,
+  .resize-handle.dragging {
+    background: var(--accent-bg-soft);
   }
 
   header {
