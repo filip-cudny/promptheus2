@@ -2,12 +2,13 @@ import type { KeymapGroup } from "../types";
 
 function groupMatchesOs(context: string, os: string): boolean {
   const trimmed = context.trim();
-  const rest = trimmed.startsWith("os ==")
-    ? trimmed.slice("os ==".length)
-    : trimmed.startsWith("os==")
-      ? trimmed.slice("os==".length)
-      : trimmed;
-  return rest.trim() === os;
+  if (trimmed.startsWith("os ==")) {
+    return trimmed.slice("os ==".length).trim() === os;
+  }
+  if (trimmed.startsWith("os==")) {
+    return trimmed.slice("os==".length).trim() === os;
+  }
+  return false;
 }
 
 export function actionShortcuts(

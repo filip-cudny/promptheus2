@@ -32,6 +32,11 @@ test("groups of the current OS are merged, other OS groups ignored", () => {
   assert.deepStrictEqual(actionShortcuts(keymaps, "speech_to_text_toggle", "macos"), ["cmd+f2"]);
 });
 
+test("a context without an os prefix matches no OS", () => {
+  const keymaps = [{ context: "linux", bindings: { "ctrl+f2": "speech_to_text_toggle" } }];
+  assert.deepStrictEqual(actionShortcuts(keymaps, "speech_to_text_toggle", "linux"), []);
+});
+
 test("an action without a binding has no shortcuts", () => {
   const keymaps = [{ context: "os == linux", bindings: { "ctrl+f1": "open_context_menu" } }];
   assert.deepStrictEqual(actionShortcuts(keymaps, "clear_context", "linux"), []);
