@@ -9,3 +9,13 @@ export function agentModelName(surfaces: Surfaces, models: ModelConfig[]): strin
   const model = id ? models.find((m) => m.id === id) : undefined;
   return model ? model.display_name || model.model : "No model";
 }
+
+export function agentModelHasBuiltinSearch(surfaces: Surfaces, models: ModelConfig[]): boolean {
+  const id = agentModelId(surfaces);
+  const model = id ? models.find((m) => m.id === id) : undefined;
+  if (!model) return false;
+  return (
+    (model.provider === null || model.provider === "openai") &&
+    (model.api_mode === null || model.api_mode === "responses")
+  );
+}
