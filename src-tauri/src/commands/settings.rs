@@ -162,14 +162,27 @@ pub async fn update_setting(
 }
 
 #[tauri::command]
-pub async fn set_shortcut(
+pub async fn add_shortcut(
     app: AppHandle,
     config: State<'_, Arc<Mutex<ConfigService>>>,
     action: String,
-    shortcut: Option<String>,
+    shortcut: String,
 ) -> crate::Result<()> {
     try_mutate_settings(&app, &config, SettingWrite::Shortcut, |c| {
-        c.set_shortcut(&action, shortcut.as_deref())
+        c.add_shortcut(&action, &shortcut)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn remove_shortcut(
+    app: AppHandle,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+    action: String,
+    shortcut: String,
+) -> crate::Result<()> {
+    try_mutate_settings(&app, &config, SettingWrite::Shortcut, |c| {
+        c.remove_shortcut(&action, &shortcut)
     })
     .await
 }

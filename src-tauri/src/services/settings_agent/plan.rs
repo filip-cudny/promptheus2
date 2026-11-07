@@ -523,8 +523,9 @@ fn apply(state: &mut State, current: &Current, op: &Operation) -> Result<Vec<Eff
             }
             set_webview_providers(state, providers)?;
         }
-        Operation::SetShortcut { action, shortcut } => {
-            state.config.set_shortcut(action, shortcut.as_deref())?
+        Operation::AddShortcut { action, shortcut } => state.config.add_shortcut(action, shortcut)?,
+        Operation::RemoveShortcut { action, shortcut } => {
+            state.config.remove_shortcut(action, shortcut)?
         }
         Operation::AddEnvVar { name, description, secret } => {
             add_env_var(state, name, description, *secret)?

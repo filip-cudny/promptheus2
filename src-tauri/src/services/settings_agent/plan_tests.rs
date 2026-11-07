@@ -319,7 +319,8 @@ fn every_operation_type_plans_on_the_fixture() {
         Operation::AddWebviewProvider { provider: provider("chatgpt", "https://chatgpt.com/") },
         Operation::UpdateWebviewProvider { id: "claude".into(), provider: provider("claude", "https://claude.ai/new") },
         Operation::DeleteWebviewProvider { id: "claude".into() },
-        Operation::SetShortcut { action: "clear_context".into(), shortcut: Some("ctrl+f2".into()) },
+        Operation::AddShortcut { action: "clear_context".into(), shortcut: "ctrl+f2".into() },
+        Operation::RemoveShortcut { action: "open_context_menu".into(), shortcut: "ctrl+f1".into() },
     ];
 
     for operation in operations {
@@ -348,6 +349,29 @@ fn operation_deserializes_from_its_tagged_form_and_labels_itself() {
     }))
     .unwrap();
     assert_eq!(add.label(&Settings::default()), "Add model Model x");
+}
+
+#[test]
+fn shortcut_operations_label_themselves() {
+    let settings = Settings::default();
+    let add = Operation::AddShortcut { action: "clear_context".into(), shortcut: "ctrl+f2".into() };
+    let remove = Operation::RemoveShortcut { action: "open_context_menu".into(), shortcut: "ctrl+f1".into() };
+
+    assert_eq!(add.label(&settings), "Add shortcut ctrl+f2 to clear_context");
+    assert_eq!(remove.label(&settings), "Remove shortcut ctrl+f1 from open_context_menu");
+}
+
+#[test]
+fn removing_a_shortcut_not_bound_to_the_action_fails_its_row() {
+    let (settings, dir) = (fixture_settings(), config_dir());
+    let ops = vec![Operation::RemoveShortcut { action: "clear_context".into(), shortcut: "ctrl+f1".into() }];
+
+    let errors = plan_all(&ops, &settings, &dir).unwrap_err();
+
+    assert_eq!(errors.len(), 1);
+    assert_eq!(errors[0].row, 0);
+    assert_eq!(errors[0].key.as_deref(), Some("keymaps.clear_context"));
+    assert!(errors[0].message.contains("is not bound to"), "{}", errors[0].message);
 }
 
 #[test]

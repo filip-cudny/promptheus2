@@ -52,12 +52,13 @@ fn index_of(operation: &Operation) -> usize {
         Operation::AddWebviewProvider { .. } => 12,
         Operation::UpdateWebviewProvider { .. } => 13,
         Operation::DeleteWebviewProvider { .. } => 14,
-        Operation::SetShortcut { .. } => 15,
-        Operation::AddEnvVar { .. } => 16,
-        Operation::UpdateEnvVar { .. } => 17,
-        Operation::RenameEnvVar { .. } => 18,
-        Operation::DeleteEnvVar { .. } => 19,
-        Operation::SetEnvValue { .. } => 20,
+        Operation::AddShortcut { .. } => 15,
+        Operation::RemoveShortcut { .. } => 16,
+        Operation::AddEnvVar { .. } => 17,
+        Operation::UpdateEnvVar { .. } => 18,
+        Operation::RenameEnvVar { .. } => 19,
+        Operation::DeleteEnvVar { .. } => 20,
+        Operation::SetEnvValue { .. } => 21,
     }
 }
 

@@ -55,7 +55,8 @@ pub enum Operation {
     AddWebviewProvider { provider: WebviewProvider },
     UpdateWebviewProvider { id: String, provider: WebviewProvider },
     DeleteWebviewProvider { id: String },
-    SetShortcut { action: String, shortcut: Option<String> },
+    AddShortcut { action: String, shortcut: String },
+    RemoveShortcut { action: String, shortcut: String },
     AddEnvVar {
         name: String,
         #[serde(default)]
@@ -76,7 +77,7 @@ pub enum Operation {
 }
 
 impl Operation {
-    pub const NAMES: [&'static str; 21] = [
+    pub const NAMES: [&'static str; 22] = [
         "set_setting",
         "add_model",
         "update_model",
@@ -92,7 +93,8 @@ impl Operation {
         "add_webview_provider",
         "update_webview_provider",
         "delete_webview_provider",
-        "set_shortcut",
+        "add_shortcut",
+        "remove_shortcut",
         "add_env_var",
         "update_env_var",
         "rename_env_var",
@@ -117,7 +119,8 @@ impl Operation {
             Self::AddWebviewProvider { .. } => "add_webview_provider",
             Self::UpdateWebviewProvider { .. } => "update_webview_provider",
             Self::DeleteWebviewProvider { .. } => "delete_webview_provider",
-            Self::SetShortcut { .. } => "set_shortcut",
+            Self::AddShortcut { .. } => "add_shortcut",
+            Self::RemoveShortcut { .. } => "remove_shortcut",
             Self::AddEnvVar { .. } => "add_env_var",
             Self::UpdateEnvVar { .. } => "update_env_var",
             Self::RenameEnvVar { .. } => "rename_env_var",
@@ -147,8 +150,10 @@ impl Operation {
             Self::DeleteWebviewProvider { id } => {
                 format!("Delete web provider {}", provider_name(settings, id))
             }
-            Self::SetShortcut { action, shortcut: Some(_) } => format!("Set shortcut for {action}"),
-            Self::SetShortcut { action, shortcut: None } => format!("Clear shortcut for {action}"),
+            Self::AddShortcut { action, shortcut } => format!("Add shortcut {shortcut} to {action}"),
+            Self::RemoveShortcut { action, shortcut } => {
+                format!("Remove shortcut {shortcut} from {action}")
+            }
             Self::AddEnvVar { name, .. } => format!("Add variable {name}"),
             Self::UpdateEnvVar { name, secret: false, .. } if is_secret_variable(settings, name) => {
                 format!("Update variable {name} (value becomes visible to the agent)")

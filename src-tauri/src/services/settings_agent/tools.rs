@@ -213,10 +213,16 @@ fn operation_branches() -> Vec<Value> {
             &["id"],
         ),
         branch(
-            "set_shortcut",
-            "Binds a keyboard shortcut to the action `action`; leave `shortcut` out or null to clear the binding.",
+            "add_shortcut",
+            "Binds the keyboard shortcut `shortcut` to the action `action`, next to the action's other shortcuts.",
             vec![("action", string()), ("shortcut", string())],
-            &["action"],
+            &["action", "shortcut"],
+        ),
+        branch(
+            "remove_shortcut",
+            "Unbinds the keyboard shortcut `shortcut` from the action `action`; the action's other shortcuts stay. To change a shortcut, remove the old one and add the new one in the same proposal.",
+            vec![("action", string()), ("shortcut", string())],
+            &["action", "shortcut"],
         ),
         branch(
             "add_env_var",

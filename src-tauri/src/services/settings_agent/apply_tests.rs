@@ -281,7 +281,8 @@ fn every_operation() -> Vec<Operation> {
             provider: provider("claude", "https://claude.ai/new"),
         },
         Operation::DeleteWebviewProvider { id: "claude".into() },
-        Operation::SetShortcut { action: "clear_context".into(), shortcut: Some("ctrl+f2".into()) },
+        Operation::AddShortcut { action: "clear_context".into(), shortcut: "ctrl+f2".into() },
+        Operation::RemoveShortcut { action: "open_context_menu".into(), shortcut: "ctrl+f1".into() },
     ]
 }
 
@@ -309,6 +310,29 @@ fn apply_then_undo_is_byte_equal_for_every_operation_type() {
         assert_eq!(undo_entry.kind, EntryKind::Undo);
         assert_eq!(undo_entry.undoes.as_deref(), Some(card_id.as_str()));
     }
+}
+
+#[test]
+fn a_remove_and_add_shortcut_card_changes_a_shortcut_and_undoes_to_the_start() {
+    let mut settings = fixture_settings();
+    settings.keymaps[0].bindings.insert("shift+f1".into(), "open_context_menu".into());
+    let (dir, mut config) = setup_with(settings);
+    let start = tree(dir.path());
+    let ops = vec![
+        Operation::RemoveShortcut { action: "open_context_menu".into(), shortcut: "ctrl+f1".into() },
+        Operation::AddShortcut { action: "open_context_menu".into(), shortcut: "alt+f3".into() },
+    ];
+    let planned = make_plan(&ops, &config, dir.path());
+
+    let card_id = run_apply(&planned, &mut config, dir.path()).unwrap();
+
+    let expected = HashMap::from([
+        ("alt+f3".to_string(), "open_context_menu".to_string()),
+        ("shift+f1".to_string(), "open_context_menu".to_string()),
+    ]);
+    assert_eq!(config.settings().keymaps[0].bindings, expected);
+    undone_id(run_undo(&card_id, false, &mut config, dir.path()));
+    assert_eq!(tree(dir.path()), start);
 }
 
 #[test]

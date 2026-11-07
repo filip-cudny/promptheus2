@@ -1,5 +1,6 @@
 use super::*;
 use crate::models::settings::{KeymapGroup, ModelConfig, Settings, ModelType, Provider, Skin};
+use std::collections::HashMap;
 use std::fs;
 use tempfile::TempDir;
 
@@ -990,7 +991,10 @@ fn service_with_linux_ctrl_f1() -> (TempDir, ConfigService) {
     let dir = setup_test_dir();
     let mut service = ConfigService::load(dir.path()).expect("load");
     service
-        .try_mutate(|c| c.set_shortcut_for_os("linux", "open_context_menu", Some("ctrl+f1")))
+        .try_mutate(|c| {
+            c.settings.keymaps = vec![keymap_group("os == linux", &[])];
+            c.add_shortcut_for_os("linux", "open_context_menu", "ctrl+f1")
+        })
         .expect("bind");
     (dir, service)
 }
@@ -1016,13 +1020,13 @@ fn update_setting_launch_at_startup_writes_file() {
 }
 
 #[test]
-fn set_shortcut_rejects_collision_in_same_os_set_ignoring_case() {
+fn add_shortcut_rejects_collision_in_same_os_set_ignoring_case() {
     for shortcut in ["ctrl+f1", "CTRL+F1"] {
         let (dir, mut service) = service_with_linux_ctrl_f1();
         let bytes_before = fs::read(dir.path().join("settings.json")).unwrap();
 
         let err = service
-            .try_mutate(|c| c.set_shortcut_for_os("linux", "clear_context", Some(shortcut)))
+            .try_mutate(|c| c.add_shortcut_for_os("linux", "clear_context", shortcut))
             .unwrap_err();
 
         let (key, message) = invalid_key_and_message(err);
@@ -1033,12 +1037,190 @@ fn set_shortcut_rejects_collision_in_same_os_set_ignoring_case() {
 }
 
 #[test]
-fn set_shortcut_accepts_same_shortcut_in_other_os_set() {
+fn add_shortcut_accepts_same_shortcut_in_other_os_set() {
     let (_dir, mut service) = service_with_linux_ctrl_f1();
 
     service
-        .try_mutate(|c| c.set_shortcut_for_os("macos", "clear_context", Some("ctrl+f1")))
+        .try_mutate(|c| c.add_shortcut_for_os("macos", "clear_context", "ctrl+f1"))
         .expect("other os set");
+}
+
+fn two_linux_groups_service() -> (TempDir, ConfigService) {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+    service
+        .try_mutate(|c| {
+            c.settings.keymaps = vec![
+                keymap_group("os == linux", &[("ctrl+f1", "open_context_menu")]),
+                keymap_group("os==linux", &[("ctrl+f3", "clear_context")]),
+            ];
+            Ok(())
+        })
+        .expect("seed");
+    (dir, service)
+}
+
+fn keymap_group(context: &str, bindings: &[(&str, &str)]) -> KeymapGroup {
+    KeymapGroup {
+        context: context.to_string(),
+        bindings: bindings.iter().map(|(k, a)| (k.to_string(), a.to_string())).collect(),
+    }
+}
+
+fn bindings_of(service: &ConfigService, index: usize) -> HashMap<String, String> {
+    service.settings().keymaps[index].bindings.clone()
+}
+
+#[test]
+fn add_shortcut_keeps_the_other_shortcuts_of_the_action() {
+    let (_dir, mut service) = service_with_linux_ctrl_f1();
+
+    service
+        .try_mutate(|c| c.add_shortcut_for_os("linux", "open_context_menu", "shift+f1"))
+        .expect("add");
+
+    let linux = service.settings().keymaps.iter().find(|g| g.context == "os == linux").unwrap();
+    assert_eq!(linux.bindings.get("ctrl+f1").map(String::as_str), Some("open_context_menu"));
+    assert_eq!(linux.bindings.get("shift+f1").map(String::as_str), Some("open_context_menu"));
+}
+
+#[test]
+fn add_shortcut_rejects_collision_in_a_second_matching_group() {
+    let (dir, mut service) = two_linux_groups_service();
+    let bytes_before = fs::read(dir.path().join("settings.json")).unwrap();
+
+    let err = service
+        .try_mutate(|c| c.add_shortcut_for_os("linux", "open_context_menu", "CTRL+F3"))
+        .unwrap_err();
+
+    let (key, message) = invalid_key_and_message(err);
+    assert_eq!(key.as_deref(), Some("keymaps.open_context_menu"));
+    assert_eq!(message, "CTRL+F3 is already used by clear_context");
+    assert_eq!(fs::read(dir.path().join("settings.json")).unwrap(), bytes_before);
+}
+
+#[test]
+fn add_shortcut_of_the_same_action_with_other_case_changes_nothing() {
+    let (_dir, mut service) = service_with_linux_ctrl_f1();
+
+    service
+        .try_mutate(|c| c.add_shortcut_for_os("linux", "open_context_menu", "Ctrl+F1"))
+        .expect("no-op");
+
+    let linux = service.settings().keymaps.iter().find(|g| g.context == "os == linux").unwrap();
+    assert_eq!(linux.bindings.keys().collect::<Vec<_>>(), vec!["ctrl+f1"]);
+}
+
+#[test]
+fn add_shortcut_rejects_an_invalid_shortcut() {
+    let (_dir, mut service) = service_with_linux_ctrl_f1();
+
+    let err = service
+        .try_mutate(|c| c.add_shortcut_for_os("linux", "open_context_menu", "f5"))
+        .unwrap_err();
+
+    let (key, message) = invalid_key_and_message(err);
+    assert_eq!(key.as_deref(), Some("keymaps.open_context_menu"));
+    assert_eq!(message, "f5 is not a valid shortcut");
+}
+
+#[test]
+fn add_shortcut_rejects_an_unknown_action() {
+    let (_dir, mut service) = service_with_linux_ctrl_f1();
+
+    let err = service
+        .try_mutate(|c| c.add_shortcut_for_os("linux", "no_such_action", "ctrl+f5"))
+        .unwrap_err();
+
+    let (key, message) = invalid_key_and_message(err);
+    assert_eq!(key.as_deref(), Some("keymaps.no_such_action"));
+    assert_eq!(message, "unknown shortcut action");
+}
+
+#[test]
+fn add_shortcut_creates_the_group_of_the_os_when_missing() {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+    let macos = keymap_group("os == macos", &[("cmd+f1", "open_context_menu")]);
+    service
+        .try_mutate(|c| {
+            c.settings.keymaps = vec![macos.clone()];
+            Ok(())
+        })
+        .expect("seed");
+
+    service
+        .try_mutate(|c| c.add_shortcut_for_os("linux", "clear_context", "ctrl+f2"))
+        .expect("add");
+
+    let keymaps = &service.settings().keymaps;
+    assert_eq!(keymaps.len(), 2);
+    assert_eq!(keymaps[0].context, macos.context);
+    assert_eq!(keymaps[0].bindings, macos.bindings);
+    assert_eq!(keymaps[1].context, "os == linux");
+    assert_eq!(
+        keymaps[1].bindings,
+        HashMap::from([("ctrl+f2".to_string(), "clear_context".to_string())])
+    );
+}
+
+#[test]
+fn remove_shortcut_leaves_the_other_shortcuts_of_the_action() {
+    let (_dir, mut service) = service_with_linux_ctrl_f1();
+    service
+        .try_mutate(|c| c.add_shortcut_for_os("linux", "open_context_menu", "shift+f1"))
+        .expect("add");
+
+    service
+        .try_mutate(|c| c.remove_shortcut_for_os("linux", "open_context_menu", "shift+f1"))
+        .expect("remove");
+
+    let linux = service.settings().keymaps.iter().find(|g| g.context == "os == linux").unwrap();
+    assert_eq!(linux.bindings.keys().collect::<Vec<_>>(), vec!["ctrl+f1"]);
+}
+
+#[test]
+fn remove_shortcut_reaches_a_second_matching_group() {
+    let (_dir, mut service) = two_linux_groups_service();
+
+    service
+        .try_mutate(|c| c.remove_shortcut_for_os("linux", "clear_context", "ctrl+f3"))
+        .expect("remove");
+
+    assert_eq!(
+        bindings_of(&service, 0),
+        HashMap::from([("ctrl+f1".to_string(), "open_context_menu".to_string())])
+    );
+    assert!(bindings_of(&service, 1).is_empty());
+}
+
+#[test]
+fn remove_shortcut_not_bound_to_the_action_is_rejected() {
+    let (dir, mut service) = service_with_linux_ctrl_f1();
+    let bytes_before = fs::read(dir.path().join("settings.json")).unwrap();
+
+    for (action, shortcut) in [("open_context_menu", "alt+f9"), ("clear_context", "ctrl+f1")] {
+        let err = service
+            .try_mutate(|c| c.remove_shortcut_for_os("linux", action, shortcut))
+            .unwrap_err();
+
+        let (key, message) = invalid_key_and_message(err);
+        assert_eq!(key.as_deref(), Some(format!("keymaps.{action}").as_str()));
+        assert_eq!(message, format!("{shortcut} is not bound to {action}"));
+        assert_eq!(fs::read(dir.path().join("settings.json")).unwrap(), bytes_before);
+    }
+}
+
+#[test]
+fn remove_shortcut_ignores_case() {
+    let (_dir, mut service) = service_with_linux_ctrl_f1();
+
+    service
+        .try_mutate(|c| c.remove_shortcut_for_os("linux", "open_context_menu", "CTRL+F1"))
+        .expect("remove");
+
+    let linux = service.settings().keymaps.iter().find(|g| g.context == "os == linux").unwrap();
+    assert!(linux.bindings.is_empty());
 }
 
 #[test]

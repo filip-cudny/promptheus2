@@ -252,21 +252,44 @@ impl ConfigService {
         Ok(())
     }
 
-    pub fn set_shortcut(&mut self, action: &str, shortcut: Option<&str>) -> Result<(), ConfigError> {
-        self.set_shortcut_for_os(std::env::consts::OS, action, shortcut)
+    pub fn add_shortcut(&mut self, action: &str, shortcut: &str) -> Result<(), ConfigError> {
+        self.add_shortcut_for_os(std::env::consts::OS, action, shortcut)
     }
 
-    pub fn set_shortcut_for_os(
+    pub fn remove_shortcut(&mut self, action: &str, shortcut: &str) -> Result<(), ConfigError> {
+        self.remove_shortcut_for_os(std::env::consts::OS, action, shortcut)
+    }
+
+    pub fn add_shortcut_for_os(
         &mut self,
         os: &str,
         action: &str,
-        shortcut: Option<&str>,
+        shortcut: &str,
     ) -> Result<(), ConfigError> {
         let key = format!("keymaps.{action}");
         if !SHORTCUT_ACTIONS.contains(&action) {
             return Err(ConfigError::invalid_at(key, "unknown shortcut action"));
         }
+        if translate_shortcut(shortcut, os).is_none() {
+            return Err(ConfigError::invalid_at(key, format!("{shortcut} is not a valid shortcut")));
+        }
         let keymaps = &mut self.settings.keymaps;
+        let bound_to = keymaps
+            .iter()
+            .filter(|g| matches_current_os(&g.context, os))
+            .flat_map(|g| g.bindings.iter())
+            .find(|(bound, _)| bound.eq_ignore_ascii_case(shortcut))
+            .map(|(_, bound_action)| bound_action.as_str());
+        match bound_to {
+            Some(bound_action) if bound_action == action => return Ok(()),
+            Some(other) => {
+                return Err(ConfigError::invalid_at(
+                    key,
+                    format!("{shortcut} is already used by {other}"),
+                ));
+            }
+            None => {}
+        }
         let index = match keymaps.iter().position(|g| matches_current_os(&g.context, os)) {
             Some(index) => index,
             None => {
@@ -277,27 +300,30 @@ impl ConfigService {
                 keymaps.len() - 1
             }
         };
-        let bindings = &mut keymaps[index].bindings;
-        if let Some(shortcut) = shortcut {
-            if translate_shortcut(shortcut, os).is_none() {
-                return Err(ConfigError::invalid_at(key, format!("{shortcut} is not a valid shortcut")));
-            }
-            let other = bindings
-                .iter()
-                .find(|(bound, bound_action)| {
-                    bound.eq_ignore_ascii_case(shortcut) && bound_action.as_str() != action
-                })
-                .map(|(_, bound_action)| bound_action);
-            if let Some(other) = other {
-                return Err(ConfigError::invalid_at(
-                    key,
-                    format!("{shortcut} is already used by {other}"),
-                ));
-            }
+        keymaps[index].bindings.insert(shortcut.to_string(), action.to_string());
+        Ok(())
+    }
+
+    pub fn remove_shortcut_for_os(
+        &mut self,
+        os: &str,
+        action: &str,
+        shortcut: &str,
+    ) -> Result<(), ConfigError> {
+        let key = format!("keymaps.{action}");
+        if !SHORTCUT_ACTIONS.contains(&action) {
+            return Err(ConfigError::invalid_at(key, "unknown shortcut action"));
         }
-        bindings.retain(|_, bound_action| bound_action.as_str() != action);
-        if let Some(shortcut) = shortcut {
-            bindings.insert(shortcut.to_string(), action.to_string());
+        let mut removed = false;
+        for group in self.settings.keymaps.iter_mut().filter(|g| matches_current_os(&g.context, os)) {
+            let before = group.bindings.len();
+            group.bindings.retain(|bound, bound_action| {
+                !(bound.eq_ignore_ascii_case(shortcut) && bound_action.as_str() == action)
+            });
+            removed |= group.bindings.len() != before;
+        }
+        if !removed {
+            return Err(ConfigError::invalid_at(key, format!("{shortcut} is not bound to {action}")));
         }
         Ok(())
     }
