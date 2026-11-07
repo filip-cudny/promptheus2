@@ -389,7 +389,7 @@ fn process_event(state: &mut StreamState, event: ResponseEvent) {
                 state.push_reasoning_item(raw);
                 return;
             }
-            let Some(item) = parse_output_item(raw) else {
+            let Some(item) = parse_output_item(raw.clone()) else {
                 return;
             };
             match item.item_type.as_deref() {
@@ -406,6 +406,8 @@ fn process_event(state: &mut StreamState, event: ResponseEvent) {
                         result,
                         error: None,
                     });
+                    log::trace!("responses: web_search_call item kept for replay");
+                    state.push_reasoning_item(raw);
                 }
                 Some("function_call") => {
                     let tool_call_id = item.call_id.unwrap_or_default();
@@ -671,6 +673,60 @@ mod tests {
             vec!["started:ws_1:web_search", r#"done:ws_1:Some("a\nb"):None"#]
         );
         assert_eq!(chunks[0].accumulated, "{{tool_call:ws_1}}");
+        let items: Vec<_> = chunks.iter().filter_map(|c| c.reasoning_item.as_ref()).collect();
+        assert_eq!(
+            items,
+            vec![&serde_json::json!({"type":"web_search_call","id":"ws_1","action":{"queries":["a","b"]}})]
+        );
+    }
+
+    #[tokio::test]
+    async fn web_search_call_is_replayed_in_stream_order_among_reasoning_items() {
+        use crate::models::capabilities::ModelCapabilities;
+
+        let chunks = run(&[
+            r#"{"type":"response.output_item.done","item":{"type":"reasoning","id":"rs_1","summary":[]}}"#,
+            r#"{"type":"response.output_item.added","item":{"type":"web_search_call","id":"ws_1"}}"#,
+            r#"{"type":"response.output_item.done","item":{"type":"web_search_call","id":"ws_1","action":{"queries":["a"]}}}"#,
+            r#"{"type":"response.output_item.done","item":{"type":"reasoning","id":"rs_2","summary":[]}}"#,
+            ADDED_1,
+            r#"{"type":"response.output_item.done","item":{"type":"function_call","id":"fc_1","call_id":"call_1","name":"lookup","arguments":"{}"}}"#,
+        ])
+        .await;
+        let items: Vec<serde_json::Value> = chunks
+            .iter()
+            .filter_map(|c| c.reasoning_item.clone())
+            .collect();
+        let request = request_with(
+            vec![
+                ProcessedMessage::text("user", "hi"),
+                ProcessedMessage {
+                    tool_calls: Some(vec![tool_call_payload("call_1")]),
+                    reasoning_items: Some(items),
+                    ..ProcessedMessage::text("assistant", "")
+                },
+                ProcessedMessage {
+                    tool_call_id: Some("call_1".into()),
+                    ..ProcessedMessage::text("tool", "ok")
+                },
+            ],
+            ModelCapabilities::minimal(),
+        );
+
+        let body = build_request_body(&request, true, false);
+
+        let input = body["input"].as_array().unwrap();
+        assert_eq!(input.len(), 6);
+        assert_eq!(input[1], serde_json::json!({"type":"reasoning","id":"rs_1","summary":[]}));
+        assert_eq!(
+            input[2],
+            serde_json::json!({"type":"web_search_call","id":"ws_1","action":{"queries":["a"]}})
+        );
+        assert_eq!(input[3], serde_json::json!({"type":"reasoning","id":"rs_2","summary":[]}));
+        assert_eq!(input[4]["type"], "function_call");
+        assert_eq!(input[4]["call_id"], "call_1");
+        assert_eq!(input[5]["type"], "function_call_output");
+        assert_eq!(input[5]["call_id"], "call_1");
     }
 
     #[tokio::test]

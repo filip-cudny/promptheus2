@@ -15,6 +15,11 @@ pub enum MockReply {
         reasoning_item: serde_json::Value,
         calls: Vec<(String, String, serde_json::Value)>,
     },
+    WebSearchThen {
+        id: String,
+        queries: Vec<String>,
+        then: Box<MockReply>,
+    },
     Error(AiError),
 }
 
@@ -80,12 +85,59 @@ fn tool_call_chunks(calls: Vec<(String, String, serde_json::Value)>) -> Vec<Stre
         .collect()
 }
 
+fn reply_chunks(reply: MockReply) -> Result<Vec<StreamChunk>, AiError> {
+    match reply {
+        MockReply::Text(text) => Ok(vec![StreamChunk::content(text.clone(), &text, None, "")]),
+        MockReply::ToolCalls(calls) => Ok(tool_call_chunks(calls)),
+        MockReply::ReasoningThenToolCalls { reasoning_item, calls } => {
+            let mut chunks = vec![StreamChunk::reasoning_item("", reasoning_item)];
+            chunks.extend(tool_call_chunks(calls));
+            Ok(chunks)
+        }
+        MockReply::WebSearchThen { id, queries, then } => {
+            let item = serde_json::json!({
+                "type": "web_search_call",
+                "id": id,
+                "status": "completed",
+                "action": {"type": "search", "queries": queries},
+            });
+            let mut chunks = vec![
+                StreamChunk::tool_call(
+                    "",
+                    ToolCallEvent::Started {
+                        tool_call_id: id.clone(),
+                        tool_name: "web_search".into(),
+                    },
+                ),
+                StreamChunk::tool_call(
+                    "",
+                    ToolCallEvent::Done {
+                        tool_call_id: id,
+                        result: Some(queries.join("\n")),
+                        error: None,
+                    },
+                ),
+                StreamChunk::reasoning_item("", item),
+            ];
+            chunks.extend(reply_chunks(*then)?);
+            Ok(chunks)
+        }
+        MockReply::Error(error) => Err(error),
+    }
+}
+
 #[async_trait]
 impl AiProvider for MockProvider {
     async fn complete(&self, request: CompletionRequest) -> Result<String, AiError> {
-        match self.next_reply(&request) {
+        let mut reply = self.next_reply(&request);
+        while let MockReply::WebSearchThen { then, .. } = reply {
+            reply = *then;
+        }
+        match reply {
             MockReply::Text(text) => Ok(text),
-            MockReply::ToolCalls(_) | MockReply::ReasoningThenToolCalls { .. } => Ok(String::new()),
+            MockReply::ToolCalls(_) | MockReply::ReasoningThenToolCalls { .. } | MockReply::WebSearchThen { .. } => {
+                Ok(String::new())
+            }
             MockReply::Error(error) => Err(error),
         }
     }
@@ -94,16 +146,7 @@ impl AiProvider for MockProvider {
         &self,
         request: CompletionRequest,
     ) -> Result<Pin<Box<dyn Stream<Item = Result<StreamChunk, AiError>> + Send>>, AiError> {
-        let chunks = match self.next_reply(&request) {
-            MockReply::Text(text) => vec![StreamChunk::content(text.clone(), &text, None, "")],
-            MockReply::ToolCalls(calls) => tool_call_chunks(calls),
-            MockReply::ReasoningThenToolCalls { reasoning_item, calls } => {
-                let mut chunks = vec![StreamChunk::reasoning_item("", reasoning_item)];
-                chunks.extend(tool_call_chunks(calls));
-                chunks
-            }
-            MockReply::Error(error) => return Err(error),
-        };
+        let chunks = reply_chunks(self.next_reply(&request))?;
         Ok(Box::pin(stream::iter(chunks.into_iter().map(Ok))))
     }
 }
