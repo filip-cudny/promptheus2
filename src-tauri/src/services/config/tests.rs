@@ -310,6 +310,77 @@ fn test_migrate_minimal_legacy() {
     assert_eq!(s.surfaces.quick_actions.generation.model_id.as_deref(), Some("m1"));
 }
 
+fn two_text_models_settings(chat_model_id: Option<&str>) -> String {
+    let chat_generation = match chat_model_id {
+        Some(id) => format!(r#"{{ "model_id": "{id}", "parameters": {{}}, "enabled_tools": [] }}"#),
+        None => r#"{ "parameters": {}, "enabled_tools": [] }"#.to_string(),
+    };
+    format!(
+        r#"{{
+        "surfaces": {{
+            "chat": {{ "generation": {chat_generation} }},
+            "quick_actions": {{ "generation": {{ "model_id": null, "parameters": {{}}, "enabled_tools": [] }} }}
+        }},
+        "models": [
+            {{ "id": "m1", "type": "text", "model": "gpt-4", "display_name": "M1", "provider": "openai", "api_key": "${{OPENAI_API_KEY}}" }},
+            {{ "id": "m2", "type": "text", "model": "gpt-4", "display_name": "M2", "provider": "openai", "api_key": "${{OPENAI_API_KEY}}" }}
+        ]
+    }}"#
+    )
+}
+
+fn written_settings(dir: &TempDir) -> serde_json::Value {
+    let content = fs::read_to_string(dir.path().join("settings.json")).unwrap();
+    serde_json::from_str(&content).unwrap()
+}
+
+#[test]
+fn test_load_keeps_quick_actions_and_title_generation_empty() {
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("settings.json"), two_text_models_settings(Some("m2"))).unwrap();
+
+    let service = ConfigService::load(dir.path()).expect("load");
+    let surfaces = &service.settings().surfaces;
+    assert_eq!(surfaces.chat.generation.model_id.as_deref(), Some("m2"));
+    assert_eq!(surfaces.quick_actions.generation.model_id, None);
+    assert_eq!(surfaces.title_generation.generation.model_id, None);
+
+    let written = written_settings(&dir);
+    assert_eq!(written["surfaces"]["chat"]["generation"]["model_id"], "m2");
+    assert!(written["surfaces"]["quick_actions"]["generation"]["model_id"].is_null());
+    assert!(written["surfaces"]["title_generation"]["generation"]["model_id"].is_null());
+}
+
+#[test]
+fn test_load_with_unset_chat_model_picks_first_text_model_only_for_chat() {
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("settings.json"), two_text_models_settings(None)).unwrap();
+
+    let service = ConfigService::load(dir.path()).expect("load");
+    let surfaces = &service.settings().surfaces;
+    assert_eq!(surfaces.chat.generation.model_id.as_deref(), Some("m1"));
+    assert_eq!(surfaces.quick_actions.generation.model_id, None);
+    assert_eq!(surfaces.title_generation.generation.model_id, None);
+}
+
+#[test]
+fn test_deleted_quick_actions_and_title_generation_model_stay_empty_after_reload() {
+    let dir = TempDir::new().unwrap();
+    fs::write(dir.path().join("settings.json"), two_text_models_settings(Some("m1"))).unwrap();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+    service.settings.surfaces.quick_actions.generation.model_id = Some("m2".to_string());
+    service.settings.surfaces.title_generation.generation.model_id = Some("m2".to_string());
+
+    service.delete_model("m2");
+    service.save().expect("save");
+
+    let reloaded = ConfigService::load(dir.path()).expect("reload");
+    let surfaces = &reloaded.settings().surfaces;
+    assert_eq!(surfaces.chat.generation.model_id.as_deref(), Some("m1"));
+    assert_eq!(surfaces.quick_actions.generation.model_id, None);
+    assert_eq!(surfaces.title_generation.generation.model_id, None);
+}
+
 #[test]
 fn test_migrate_chat_prompt_fields_into_prompt_base() {
     let dir = TempDir::new().unwrap();

@@ -17,16 +17,6 @@ pub(super) fn ensure_surface_defaults(settings: &mut Settings) {
     } else {
         settings.surfaces.chat.generation.model_id = chat_model;
     }
-
-    if settings.surfaces.quick_actions.generation.model_id.is_none() {
-        settings.surfaces.quick_actions.generation.model_id =
-            settings.surfaces.chat.generation.model_id.clone();
-    }
-
-    if settings.surfaces.title_generation.generation.model_id.is_none() {
-        settings.surfaces.title_generation.generation.model_id =
-            settings.surfaces.chat.generation.model_id.clone();
-    }
 }
 
 pub(super) fn ensure_generation(
@@ -263,7 +253,7 @@ mod tests {
     }
 
     #[test]
-    fn ensure_surface_defaults_picks_text_fallback() {
+    fn ensure_surface_defaults_leaves_quick_actions_and_title_generation_empty() {
         let mut settings = Settings {
             models: vec![text_model("m1")],
             ..Default::default()
@@ -273,13 +263,27 @@ mod tests {
             settings.surfaces.chat.generation.model_id.as_deref(),
             Some("m1")
         );
+        assert_eq!(settings.surfaces.quick_actions.generation.model_id, None);
+        assert_eq!(settings.surfaces.title_generation.generation.model_id, None);
+    }
+
+    #[test]
+    fn ensure_surface_defaults_keeps_explicit_quick_actions_and_title_generation() {
+        let mut settings = Settings {
+            models: vec![text_model("m1"), text_model("m2"), text_model("m3")],
+            ..Default::default()
+        };
+        settings.surfaces.chat.generation.model_id = Some("m1".into());
+        settings.surfaces.quick_actions.generation.model_id = Some("m2".into());
+        settings.surfaces.title_generation.generation.model_id = Some("m3".into());
+        ensure_surface_defaults(&mut settings);
         assert_eq!(
             settings.surfaces.quick_actions.generation.model_id.as_deref(),
-            Some("m1")
+            Some("m2")
         );
         assert_eq!(
             settings.surfaces.title_generation.generation.model_id.as_deref(),
-            Some("m1")
+            Some("m3")
         );
     }
 
