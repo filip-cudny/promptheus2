@@ -104,6 +104,7 @@
 
   .bar {
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     align-items: center;
     gap: 4px;

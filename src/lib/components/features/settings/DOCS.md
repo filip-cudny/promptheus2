@@ -57,6 +57,8 @@ Every control bound to a settings key is wrapped in `<SettingField key="<catalog
 
 The "Ask agent" row (lucide `Sparkles`, no accent colour) directly under the search in `SettingsSidebar` toggles `agent/AgentPanel.svelte`. The panel header has `Sparkles`, the title and the model the agent uses (muted, one line with ellipsis; effective id from `$lib/utils/agentModel.ts`: the settings agent model, else the chat model; "No model" when unset or unknown; nothing until settings load) on the left, "New conversation" (`SquarePen`, disabled while the agent runs) and "Close" (`X`) on the right.
 
+The composer bar shows `ModelSelector` (model chip, effort chip when the model has effort levels) before the mic with the agent's effective model and effort (`agentModelId`, `agentReasoningEffort` in `$lib/utils/agentModel.ts`). A pick writes an explicit value to `surfaces.settings_agent.generation` via `updateSurfaceModel` / `updateSurfaceReasoningEffort`, so the agent stops following the chat model or effort. The picker is hidden while the effective id is not a text model; reset to "Same as Chat" stays in Settings → Chat. The bar wraps in a narrow panel.
+
 Layout depends only on the width of `.dialog-body` (measured with `bind:clientWidth` in `App.svelte`) and the saved panel width, not on the panel mode. `agentPanelLayout(containerWidth, savedWidth)` in `$lib/utils/agentPanelLayout.ts` (tested in `tests/agentPanelLayout.test.mjs`) returns `{ docked, width }`:
 
 - `containerWidth >= CONTENT_MIN_WIDTH + 300` (`PANEL_MIN_WIDTH`): docked. sidebar | content (`flex: 1`) | panel in one row, panel `position: relative` at `min(max(saved, 300), containerWidth − CONTENT_MIN_WIDTH)`, no shadow.

@@ -1,8 +1,12 @@
 <script lang="ts">
   import { Sparkles, SquarePen, X } from "lucide-svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
-  import { agentModelName } from "$lib/utils/agentModel";
+  import { error as logError } from "@tauri-apps/plugin-log";
+  import { agentModelId, agentModelName, agentReasoningEffort } from "$lib/utils/agentModel";
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
+  import { getCachedCapabilities, prefetchCapabilities } from "$lib/stores/capabilities.svelte";
+  import { updateSurfaceModel, updateSurfaceReasoningEffort } from "$lib/services/settings";
+  import ModelSelector from "$lib/components/shared/widgets/ModelSelector.svelte";
   import AgentMessages from "./AgentMessages.svelte";
   import AgentComposer from "./AgentComposer.svelte";
 
@@ -25,6 +29,27 @@
   const modelName = $derived(
     store.settings ? agentModelName(store.settings.surfaces, store.models) : null,
   );
+  const textModels = $derived(store.models.filter((m) => m.type === "text"));
+  const effectiveId = $derived(store.settings ? agentModelId(store.settings.surfaces) : null);
+  const effectiveEffort = $derived(
+    store.settings ? agentReasoningEffort(store.settings.surfaces) : null,
+  );
+  const pickerVisible = $derived(textModels.some((m) => m.id === effectiveId));
+
+  $effect(() => prefetchCapabilities(effectiveId));
+  const capabilities = $derived(getCachedCapabilities(effectiveId));
+
+  function selectModel(id: string) {
+    updateSurfaceModel("settings_agent", id).catch((e) =>
+      logError(`update_surface_model settings_agent failed: ${e}`),
+    );
+  }
+
+  function selectEffort(effort: string | null) {
+    updateSurfaceReasoningEffort("settings_agent", effort).catch((e) =>
+      logError(`update reasoning_effort settings_agent failed: ${e}`),
+    );
+  }
 
   function startResize(e: PointerEvent) {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
@@ -63,8 +88,26 @@
     </button>
   </header>
   <AgentMessages />
-  <AgentComposer running={agent.running} onsend={agent.send} oncancel={agent.cancel} />
+  <AgentComposer
+    running={agent.running}
+    onsend={agent.send}
+    oncancel={agent.cancel}
+    beforeSend={modelPicker}
+  />
 </aside>
+
+{#snippet modelPicker()}
+  {#if pickerVisible}
+    <ModelSelector
+      models={textModels}
+      selectedModelId={effectiveId}
+      reasoningEffort={effectiveEffort}
+      {capabilities}
+      onModelSelect={selectModel}
+      onReasoningSelect={selectEffort}
+    />
+  {/if}
+{/snippet}
 
 <style>
   .panel {

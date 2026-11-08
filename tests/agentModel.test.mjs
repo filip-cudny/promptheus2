@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert";
 import {
   agentModelId,
+  agentReasoningEffort,
   agentModelName,
   agentModelHasBuiltinSearch,
 } from "../src/lib/utils/agentModel.ts";
@@ -40,6 +41,33 @@ test("agent id missing from models gives No model", () => {
 
 test("empty display_name falls back to the model field", () => {
   assert.strictEqual(agentModelName(surfaces("c", null), models), "gpt-c");
+});
+
+function effortSurfaces(agentEffort, chatEffort) {
+  return {
+    chat: { generation: { parameters: { reasoning_effort: chatEffort } } },
+    settings_agent: { generation: { parameters: { reasoning_effort: agentEffort } } },
+  };
+}
+
+test("agent effort set overrides the chat effort", () => {
+  assert.strictEqual(agentReasoningEffort(effortSurfaces("low", "high")), "low");
+});
+
+test("agent effort null falls back to the chat effort", () => {
+  assert.strictEqual(agentReasoningEffort(effortSurfaces(null, "high")), "high");
+});
+
+test("both efforts null gives null", () => {
+  assert.strictEqual(agentReasoningEffort(effortSurfaces(null, null)), null);
+});
+
+test("agent effort none overrides the chat effort", () => {
+  assert.strictEqual(agentReasoningEffort(effortSurfaces("none", "high")), "none");
+});
+
+test("agent effort empty string overrides the chat effort", () => {
+  assert.strictEqual(agentReasoningEffort(effortSurfaces("", "high")), "");
 });
 
 const searchModels = [

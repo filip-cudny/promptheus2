@@ -4,6 +4,14 @@ export function agentModelId(surfaces: Surfaces): string | null {
   return surfaces.settings_agent.generation.model_id || surfaces.chat.generation.model_id || null;
 }
 
+export function agentReasoningEffort(surfaces: Surfaces): string | null {
+  return (
+    surfaces.settings_agent.generation.parameters.reasoning_effort ??
+    surfaces.chat.generation.parameters.reasoning_effort ??
+    null
+  );
+}
+
 export function agentModelName(surfaces: Surfaces, models: ModelConfig[]): string {
   const id = agentModelId(surfaces);
   const model = id ? models.find((m) => m.id === id) : undefined;
