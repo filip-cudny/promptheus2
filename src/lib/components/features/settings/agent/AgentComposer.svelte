@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { onMount, tick, type Snippet } from "svelte";
+  import { tick, type Snippet } from "svelte";
   import { ArrowUp, Mic, Square } from "lucide-svelte";
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
-  import { onSettingsAgentDictation } from "$lib/services/settingsAgent";
+  import { insertText } from "$lib/utils/insertText";
+  import ComposerDictationBar from "$lib/components/shared/widgets/ComposerDictationBar.svelte";
+  import { useComposerDictation } from "$lib/components/shared/widgets/useComposerDictation.svelte";
 
   let {
     running,
@@ -21,25 +23,31 @@
   const agent = getSettingsAgent();
 
   let input = $state<HTMLTextAreaElement>();
+  const dictation = useComposerDictation({ owner: "settings", insert: insertDictation });
 
   $effect(() => {
     if (agent.focusRequest === 0) return;
     tick().then(() => input?.focus());
   });
 
-  onMount(() => {
-    const unlisten = onSettingsAgentDictation(async (dictated) => {
-      agent.setDraft(agent.draft ? `${agent.draft} ${dictated}` : dictated);
-      await tick();
-      input?.focus();
+  async function insertDictation(_tabId: string | undefined, start: number, end: number, text: string) {
+    const result = insertText(agent.draft, start, end, text);
+    agent.setDraft(result.text);
+    await tick();
+    input?.focus();
+    input?.setSelectionRange(result.caret, result.caret);
+  }
+
+  function startDictation() {
+    const length = agent.draft.length;
+    dictation.start(undefined, {
+      start: input?.selectionStart ?? length,
+      end: input?.selectionEnd ?? length,
     });
-    return () => {
-      unlisten.then((fn) => fn());
-    };
-  });
+  }
 
   function submit() {
-    if (!agent.draft.trim() || running || !modelReady) return;
+    if (!agent.draft.trim() || running || !modelReady || dictation.active) return;
     onsend(agent.draft);
     agent.setDraft("");
   }
@@ -59,19 +67,29 @@
       bind:value={() => agent.draft, agent.setDraft}
       onkeydown={handleKeydown}
       rows="2"
+      readonly={dictation.active}
       placeholder={modelReady ? "Ask about or change a setting…" : "Pick a model to start"}
     ></textarea>
     <div class="bar">
-      {@render beforeSend?.()}
-      <button class="icon" title="Dictate" disabled={running} onclick={() => agent.dictate()}>
-        <Mic size={14} />
-      </button>
-      {#if running}
-        <button class="send" title="Stop" onclick={oncancel}><Square size={14} strokeWidth={3.4} /></button>
+      {#if dictation.active}
+        <ComposerDictationBar {dictation} />
       {:else}
-        <button class="send" title="Send" disabled={!agent.draft.trim() || !modelReady} onclick={submit}>
-          <ArrowUp size={14} strokeWidth={3.4} />
+        {@render beforeSend?.()}
+        <button
+          class="icon"
+          title={dictation.blockedTitle ?? "Dictate"}
+          disabled={running || !!dictation.blockedTitle}
+          onclick={startDictation}
+        >
+          <Mic size={14} />
         </button>
+        {#if running}
+          <button class="send" title="Stop" onclick={oncancel}><Square size={14} strokeWidth={3.4} /></button>
+        {:else}
+          <button class="send" title="Send" disabled={!agent.draft.trim() || !modelReady} onclick={submit}>
+            <ArrowUp size={14} strokeWidth={3.4} />
+          </button>
+        {/if}
       {/if}
     </div>
   </div>

@@ -80,6 +80,16 @@ This avoids feedback loops while preserving the cursor on user typing and resett
 
 Both also carry a nullable `copy_token`, set only by pill stop + chat. With a token, `handleVoiceInput` calls `copy_chat_answer_if_unchanged(token, text)` once after the auto-sent first answer, only when the send succeeded, its tab is still open and its assistant node is not `cancelled`; `text` is the send's `result`. The backend command decides on the clipboard fingerprint. On `true`, `store.markAutoCopied(nodeId)` sets `autoCopiedNodeId` for 1200 ms: `ConversationArea` passes `autoCopied` to that `AssistantBubble`, which shows its footer and the Copy button's check. No toast. A window that reconnects (accepted limit in "One window") or is closed before the answer ends copies nothing. Follow-ups, regenerate and "Send and copy" never carry a token.
 
+## Dictation
+
+`InputArea` has a mic (`Mic`, left of Send & Copy) that records into the composer without the pill (backend: `src-tauri/src/services/speech/DOCS.md` "Composer dictation"; unrelated to "Voice-input source"). `useComposerDictation({ owner: "chat", insert })` (`shared/widgets/`, shared with the settings agent composer) holds the state `idle | recording | transcribing | error`.
+
+- Press: `start(store.activeTabId, skillEditable.getSelection())` saves the tab id and the textarea selection and calls `start_composer_dictation`. Until the transcript is inserted, the session is cancelled or the error dismissed, `SkillEditable` is `readonly` and Enter sends nothing (also Ctrl/Cmd+Enter).
+- Bar: while the state is not `idle`, `ComposerDictationBar` replaces the button bar: level meter and `m:ss` with Cancel and Finish (the send circle); "Transcribing…" with Cancel; the error message with Retry and Dismiss (a start refusal: Dismiss only).
+- Insertion: the transcript goes to the tab that started the session, whichever tab is active when it arrives: `store.insertInputText(tabId, start, end, text)` replaces the saved selection of that tab's `input_text` (`insertText`; a closed tab drops it). `useInputSync` shows it when the tab is active, and `InputArea` then focuses the field and restores the caret after the inserted text (one frame after the sync's own caret-to-end). An empty transcript inserts nothing. The transcript is never sent, copied or logged.
+- Busy: the mic is disabled while `dictation-busy-changed` / `get_dictation_busy` name another owner, with the tooltip "The pill is recording" or "Dictation is running in Settings".
+- Unmount of `InputArea` while recording or transcribing calls `cancel_composer_dictation`; hiding the chat window is cancelled by the backend (`composer-dictation-cancelled` resets the composer).
+
 ## One window
 
 `conversation-dialog` is the only chat window; no command takes a host label. `open_conversation_dialog` writes `PENDING` only when it creates the window; when the window exists (visible or hidden) it goes through the surface step and delivers by event, so input is never re-sent.

@@ -1,6 +1,7 @@
 import { tick } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import { error as logError } from "@tauri-apps/plugin-log";
+import { insertText } from "$lib/utils/insertText";
 import { generateId } from "$lib/utils/id";
 import { COPY_FEEDBACK_MS } from "$lib/utils/copyFeedback.svelte";
 import {
@@ -1122,6 +1123,14 @@ export function createConversationStore(
     tab.input_text = text;
   }
 
+  function insertInputText(tabId: string, start: number, end: number, inserted: string): number | null {
+    const tab = getTab(tabId);
+    if (!tab) return null;
+    const result = insertText(tab.input_text, start, end, inserted);
+    tab.input_text = result.text;
+    return result.caret;
+  }
+
   function updateInputImages(images: ConversationImage[]): void {
     const tab = getTab(activeTabId);
     if (tab) tab.input_images = images;
@@ -1471,6 +1480,7 @@ export function createConversationStore(
     updateContextText,
     updateContextImages,
     updateInputText,
+    insertInputText,
     updateInputImages,
     updateInputTextAttachments,
     updateModelId,

@@ -14,7 +14,6 @@ import {
   settingsAgentReject,
   settingsAgentReset,
   settingsAgentSend,
-  settingsAgentStartDictation,
   settingsAgentTestRow,
   type PanelMode,
   type ProposalData,
@@ -100,15 +99,6 @@ async function send(text: string) {
     const last = lastAssistant();
     if (last) last.isThinking = false;
     running = false;
-  }
-}
-
-async function dictate() {
-  error = null;
-  try {
-    await settingsAgentStartDictation();
-  } catch (e) {
-    error = String(e);
   }
 }
 
@@ -299,7 +289,6 @@ export function getSettingsAgent() {
     resizePanel,
     savePanelWidth,
     send,
-    dictate,
     cancel,
     reset,
     applyInitialPanel,

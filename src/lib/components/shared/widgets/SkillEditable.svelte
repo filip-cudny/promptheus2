@@ -10,6 +10,7 @@
     text = $bindable(""),
     placeholder = "",
     editableClass = "",
+    readonly = false,
     oninput,
     onkeydown,
     onpaste,
@@ -17,6 +18,7 @@
     text?: string;
     placeholder?: string;
     editableClass?: string;
+    readonly?: boolean;
     oninput?: () => void;
     onkeydown?: (e: KeyboardEvent) => void;
     onpaste?: (e: ClipboardEvent) => void;
@@ -53,6 +55,10 @@
 
   export function setTextAndHighlight(newText: string) {
     text = newText;
+  }
+
+  export function getSelection(): { start: number; end: number } {
+    return { start: textarea?.selectionStart ?? text.length, end: textarea?.selectionEnd ?? text.length };
   }
 
   export function restoreCursor(offset: number) {
@@ -266,6 +272,7 @@
     bind:value={text}
     class="skill-textarea {editableClass}"
     {placeholder}
+    {readonly}
     rows={1}
     oninput={handleInput}
     onkeydown={handleKeydown}

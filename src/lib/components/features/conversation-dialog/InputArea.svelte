@@ -1,14 +1,16 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte";
+  import { onMount, onDestroy, tick } from "svelte";
   import ContextSection from "./ContextSection.svelte";
   import AttachMenu from "./AttachMenu.svelte";
   import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import SkillEditable from "$lib/components/shared/widgets/SkillEditable.svelte";
   import ModelSelector from "$lib/components/shared/widgets/ModelSelector.svelte";
+  import ComposerDictationBar from "$lib/components/shared/widgets/ComposerDictationBar.svelte";
+  import { useComposerDictation } from "$lib/components/shared/widgets/useComposerDictation.svelte";
   import ToolChip from "./ToolChip.svelte";
   import AttachmentRow from "./components/AttachmentRow.svelte";
   import { prefetchCapabilities, getCachedCapabilities } from "$lib/stores/capabilities.svelte";
-  import { ArrowUp, RefreshCw, Square, CopyCheck, Globe } from "lucide-svelte";
+  import { ArrowUp, RefreshCw, Square, CopyCheck, Globe, Mic } from "lucide-svelte";
   import type { ComponentType, SvelteComponent } from "svelte";
   import type { IconProps } from "lucide-svelte";
 
@@ -56,6 +58,7 @@
 
   const sync = useInputSync({ store, getSkillEditable: () => skillEditable });
   const mcp = useMcpTools();
+  const dictation = useComposerDictation({ owner: "chat", insert: insertDictation });
   const attachmentBridge = useTextAttachmentBridge({
     getAttachments: () => sync.localTextAttachments,
     setAttachments: (next) => {
@@ -167,6 +170,22 @@
     window.removeEventListener("keyup", onKeyUp);
   });
 
+  async function insertDictation(tabId: string | undefined, start: number, end: number, text: string) {
+    if (!tabId) return;
+    const caret = store.insertInputText(tabId, start, end, text);
+    if (caret === null || tabId !== store.activeTabId) return;
+    await tick();
+    requestAnimationFrame(() => {
+      skillEditable?.focus();
+      skillEditable?.restoreCursor(caret);
+    });
+  }
+
+  function startDictation() {
+    const caret = skillEditable?.getSelection() ?? { start: sync.localText.length, end: sync.localText.length };
+    dictation.start(store.activeTabId, caret);
+  }
+
   function sendOrRegenerate() {
     const abortNodeId = store.abortRegenerateNodeId;
     if (abortNodeId) {
@@ -190,6 +209,11 @@
       } else if (result?.kind === "image") {
         sync.localImages = [...sync.localImages, { data: result.data, media_type: result.mediaType }];
       }
+      return;
+    }
+
+    if (e.key === "Enter" && dictation.active) {
+      e.preventDefault();
       return;
     }
 
@@ -245,62 +269,74 @@
       bind:text={sync.localText}
       placeholder="Type a message… (use /skill-name for skills)"
       editableClass="input-editable"
+      readonly={dictation.active}
       onkeydown={handleKeydown}
       onpaste={handlePaste}
     />
   </div>
 
   <div class="button-bar">
-    <div class="bar-left">
-      <AttachMenu
-        onSelectContext={onToggleContext}
-        {contextDisabled}
-        {availableTools}
-        onToggleTool={handleToggleTool}
-      />
-      {#each availableTools.filter(t => t.active) as tool (tool.id)}
-        <ToolChip label={tool.label} icon={tool.icon} ondismiss={() => handleDismissTool(tool.id)} />
-      {/each}
-    </div>
-
-    <div class="bar-right">
-      {#if store.totalTokens > 0}
-        <span class="token-count" data-tone={contextFillTone} title={contextFillTitle}>
-          ~{formatTokenCount(store.totalTokens)}{#if contextWindowSize > 0}&nbsp;/ {formatTokenCount(contextWindowSize)}{/if}
-        </span>
-      {/if}
-      {#if models.length > 0}
-        <ModelSelector
-          {models}
-          selectedModelId={store.modelId}
-          reasoningEffort={store.reasoningEffort}
-          capabilities={activeModelCapabilities}
-          onModelSelect={handleSelectModel}
-          onReasoningSelect={handleSelectReasoning}
+    {#if dictation.active}
+      <ComposerDictationBar {dictation} />
+    {:else}
+      <div class="bar-left">
+        <AttachMenu
+          onSelectContext={onToggleContext}
+          {contextDisabled}
+          {availableTools}
+          onToggleTool={handleToggleTool}
         />
-      {/if}
+        {#each availableTools.filter(t => t.active) as tool (tool.id)}
+          <ToolChip label={tool.label} icon={tool.icon} ondismiss={() => handleDismissTool(tool.id)} />
+        {/each}
+      </div>
 
-      <ActionIconButton
-        icon={CopyCheck}
-        onclick={onSendAndCopy}
-        disabled={!store.canSend || store.isExecuting}
-        title="Send & Copy (Ctrl+Enter)"
-      />
+      <div class="bar-right">
+        {#if store.totalTokens > 0}
+          <span class="token-count" data-tone={contextFillTone} title={contextFillTitle}>
+            ~{formatTokenCount(store.totalTokens)}{#if contextWindowSize > 0}&nbsp;/ {formatTokenCount(contextWindowSize)}{/if}
+          </span>
+        {/if}
+        {#if models.length > 0}
+          <ModelSelector
+            {models}
+            selectedModelId={store.modelId}
+            reasoningEffort={store.reasoningEffort}
+            capabilities={activeModelCapabilities}
+            onModelSelect={handleSelectModel}
+            onReasoningSelect={handleSelectReasoning}
+          />
+        {/if}
 
-      {#if store.isExecuting}
-        <button class="send" title="Stop" onclick={() => store.stopExecution()}>
-          <Square size={14} strokeWidth={3.4} />
-        </button>
-      {:else if store.abortRegenerateNodeId || store.isRegenerateMode}
-        <button class="send" title="Regenerate (Enter)" onclick={sendOrRegenerate}>
-          <RefreshCw size={14} strokeWidth={3.4} />
-        </button>
-      {:else}
-        <button class="send" title="Send (Enter)" disabled={!store.canSend} onclick={sendOrRegenerate}>
-          <ArrowUp size={14} strokeWidth={3.4} />
-        </button>
-      {/if}
-    </div>
+        <ActionIconButton
+          icon={Mic}
+          onclick={startDictation}
+          disabled={!!dictation.blockedTitle}
+          title={dictation.blockedTitle ?? "Dictate"}
+        />
+
+        <ActionIconButton
+          icon={CopyCheck}
+          onclick={onSendAndCopy}
+          disabled={!store.canSend || store.isExecuting}
+          title="Send & Copy (Ctrl+Enter)"
+        />
+
+        {#if store.isExecuting}
+          <button class="send" title="Stop" onclick={() => store.stopExecution()}>
+            <Square size={14} strokeWidth={3.4} />
+          </button>
+        {:else if store.abortRegenerateNodeId || store.isRegenerateMode}
+          <button class="send" title="Regenerate (Enter)" onclick={sendOrRegenerate}>
+            <RefreshCw size={14} strokeWidth={3.4} />
+          </button>
+        {:else}
+          <button class="send" title="Send (Enter)" disabled={!store.canSend} onclick={sendOrRegenerate}>
+            <ArrowUp size={14} strokeWidth={3.4} />
+          </button>
+        {/if}
+      </div>
+    {/if}
   </div>
 </div>
 
