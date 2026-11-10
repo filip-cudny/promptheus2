@@ -60,6 +60,7 @@ pub fn conversation_dialog_config() -> DialogConfig {
         default_width: 700.0,
         default_height: 600.0,
         geometry_key: "conversation-dialog".into(),
+        added_width: 0.0,
     }
 }
 

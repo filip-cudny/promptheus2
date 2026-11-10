@@ -22,6 +22,7 @@ pub struct DialogConfig {
     pub default_width: f64,
     pub default_height: f64,
     pub geometry_key: String,
+    pub added_width: f64,
 }
 
 pub fn window(app: &tauri::AppHandle, label: &str) -> crate::Result<WebviewWindow> {
@@ -272,6 +273,7 @@ pub async fn open_or_focus(
         .as_ref()
         .map(|g| (g.width, g.height))
         .unwrap_or((config.default_width, config.default_height));
+    let width = width + config.added_width;
 
     let custom_titlebar = uses_custom_titlebar(&config.label);
 

@@ -74,7 +74,9 @@ The window minimum is 800 px, so the panel always overlays there.
 
 Drag handle: a 6 px strip on the panel's left edge (`col-resize`, pointer capture). While dragging, the store's `panelWidth` follows `panelRight − pointerX`, clamped by `clampPanelWidth` (`[300, containerWidth − CONTENT_MIN_WIDTH]` docked, `[300, containerWidth]` overlaid); on pointer up the store saves the integer px with `setUiState("settings-dialog.agent_panel_width", px)` (`ui_state.json`, local to the machine). `setPanelOpen(true)` reads it with `getUiState` (`DEFAULT_PANEL_WIDTH` 380 when absent or not a number). A failed read or write lands in the store's `error`. There is no keyboard resize.
 
-`settings_agent_panel(open)` still returns a mode (`widened` or `overlay`) that drives only the window widening; the UI does not read it:
+Creation: `open_settings_window` decides the panel before the window exists (keys `settings-dialog.agent_panel_open` and `settings-dialog.agent_panel_width`, the monitor work area; see `src-tauri/src/services/settings_agent/DOCS.md` "Panel at window creation"). It creates the window already widened by the saved panel width (`DialogConfig.added_width`) and evals `window.__settingsAgentPanel = "hidden" | "widened" | "overlay"` (and calls `window.__onSettingsAgentPanel?.(mode)`) into the page; the frontend use is in task 111-04.
+
+`settings_agent_panel(open)` still returns a mode (`widened` or `overlay`) for later opens and closes; it drives only the window widening and the UI does not read it:
 
 - `widened`: the window grew by the saved panel width (the same key, read by `services/settings_agent/panel.rs` from the managed `UiStateService`; absent or not a number: 380; at least 300).
 - `overlay`: the window did not grow. Chosen when the window is maximized, the monitor work area has no room for width + the panel width, or the size did not change within ~300 ms of the resize (tiled window; GNOME Wayland ignores the resize).

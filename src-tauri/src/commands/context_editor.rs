@@ -9,6 +9,7 @@ pub async fn open_context_editor(app: tauri::AppHandle) -> crate::Result<()> {
         default_width: 500.0,
         default_height: 400.0,
         geometry_key: "context-editor".into(),
+        added_width: 0.0,
     };
 
     dialog::open_or_focus(&app, &config).await?;

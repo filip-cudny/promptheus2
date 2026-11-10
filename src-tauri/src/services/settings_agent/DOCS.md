@@ -59,6 +59,16 @@ Pruning: `transcript::prune(dir, retention_days, now)` deletes files whose `star
 - `settings_agent_refresh(proposal_id)` re-plans the same operations on the current settings and re-emits the proposal; row tests are kept.
 - `settings_agent_test_row(proposal_id, row, values)` (`values`: variable name to the typed value, camelCase arg `values`) runs `run_row_test` for one row with the command's fresh settings as "before", the proposal's operations and plan, the given values and new destinations allowed. A tested result is stored in the proposal (the row's waits and new destination are cleared) and returned; a waits result is the error `row <n> waits for a value of <names>` (its destination text is dropped), a row without a test `row <n> has no test` (`<n>` the 0-based row).
 
+## Panel at window creation
+
+`open_settings_window` decides the panel before it creates the `settings-dialog` window (`panel::initial_for_new_window`; a focused existing window is left alone). It reads the `ui_state` keys `settings-dialog.agent_panel_open` (bool, written by the frontend; absent or not a bool counts as open) and `settings-dialog.agent_panel_width` (`saved_width`: 380 when absent or not a number, at least 300), the saved geometry, and the work area (logical px: x and width) of the monitor whose logical rect contains the saved (x, y), else the primary monitor (GNOME Wayland places new windows itself). `panel::initial_panel` returns:
+
+- `Hidden`: the open key is `false`.
+- `Widened(w)`: open, the work area is known and (saved x, else the work area x) + window width + panel width fits in it.
+- `Overlay`: open and no room, or no work area.
+
+On `Widened(w)` the command passes `DialogConfig.added_width = w` (added to the saved or default width only when `open_or_focus` creates the window; 0 for every other dialog) and after creation sets `PanelState` to `w`, so `save_geometry`, `settings_agent_panel` and the `Destroyed` reset behave as after a later widening. It then evals `window.__settingsAgentPanel = "<hidden|widened|overlay>"; window.__onSettingsAgentPanel?.("<same>");` into the `settings-dialog` webview (the second call is for a page that mounted before the eval). The decision is logged at `debug` (target `app_lib::services::settings_agent::panel`).
+
 ## Row tests
 
 `testing::run_row_test(&RowTestRequest)` is the only way a row is tested (no `AppHandle`; `Dispatcher::run_tests` and `settings_agent_test_row` both call it). The request carries the row index, all operations, the `Plan`, the settings before the plan, the staged `values`, the AI factory (`&(dyn Fn(&Settings) -> AiService + Sync)`), placeholders, the config dir and `allow_new_destinations` (`true` only from the card's test button). It returns `RowTest`: `NotTestable`, `Waits { names, new_destination }`, `NewDestination(text)` or `Tested(TestResult)`; `debug` logs the row index and the kind, never a value. Testable rows: `add_model`/`update_model`, `create_skill`/`update_skill` (on `skill_model_id`), `add_mcp_server`/`update_mcp_server`.

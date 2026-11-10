@@ -3,24 +3,36 @@ use std::sync::Arc;
 use crate::commands::settings::{emit_changed, rebuild_ai};
 use crate::services::ai::AiService;
 use crate::services::config::ConfigService;
-use crate::services::dialog::{self, DialogConfig};
+use crate::services::dialog::{self, DialogConfig, SETTINGS_DIALOG_LABEL};
+use crate::services::settings_agent::panel;
 use crate::services::secrets;
 use crate::services::settings_sync::SettingsSync;
 use tauri::{Emitter, Manager};
 use tokio::sync::Mutex;
+
+const DEFAULT_WIDTH: f64 = 960.0;
 
 #[tauri::command]
 pub async fn open_settings_window(
     app: tauri::AppHandle,
     section: Option<String>,
 ) -> crate::Result<()> {
+    let initial_panel = if app.get_webview_window(SETTINGS_DIALOG_LABEL).is_none() {
+        Some(panel::initial_for_new_window(&app, SETTINGS_DIALOG_LABEL, DEFAULT_WIDTH).await)
+    } else {
+        None
+    };
     let config = DialogConfig {
-        label: "settings-dialog".into(),
+        label: SETTINGS_DIALOG_LABEL.into(),
         url: "settings-dialog.html".into(),
         title: "Settings".into(),
-        default_width: 960.0,
+        default_width: DEFAULT_WIDTH,
         default_height: 640.0,
         geometry_key: "settings-dialog".into(),
+        added_width: match initial_panel {
+            Some(panel::InitialPanel::Widened(width)) => width,
+            _ => 0.0,
+        },
     };
 
     let (win, created) = dialog::open_or_focus(&app, &config).await?;
@@ -28,6 +40,18 @@ pub async fn open_settings_window(
     if created {
         if let Err(e) = win.set_min_size(Some(tauri::LogicalSize::new(800.0, 560.0))) {
             log::warn!("settings-dialog: failed to set min size: {e}");
+        }
+    }
+
+    if let (true, Some(initial_panel)) = (created, &initial_panel) {
+        if let panel::InitialPanel::Widened(width) = initial_panel {
+            panel::adopt_widened(&app, *width);
+        }
+        if let Some(webview) = app.get_webview(&config.label) {
+            let mode = initial_panel.mode();
+            let _ = webview.eval(format!(
+                "window.__settingsAgentPanel = \"{mode}\"; window.__onSettingsAgentPanel?.(\"{mode}\");"
+            ));
         }
     }
 
