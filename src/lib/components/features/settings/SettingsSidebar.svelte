@@ -57,11 +57,7 @@
 <script lang="ts">
   import Sidebar from "$lib/components/shared/ui/Sidebar.svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
-  import { Sparkles } from "lucide-svelte";
-  import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import SettingsSearch from "./SettingsSearch.svelte";
-
-  const agent = getSettingsAgent();
 
   const navigation = getSettingsNavigation();
 
@@ -76,15 +72,6 @@
   <div class="sidebar-inner">
     <h1 class="sidebar-title">Settings</h1>
     <SettingsSearch {sectionLabel} />
-
-    <button
-      class="ask-agent"
-      class:active={agent.panelOpen}
-      onclick={() => agent.setPanelOpen(!agent.panelOpen)}
-    >
-      <Sparkles size={14} />
-      Ask agent
-    </button>
 
     {#each SIDEBAR_GROUPS as group (group.label)}
       <div class="group-label">{group.label}</div>
@@ -160,41 +147,6 @@
     outline: 2px solid var(--accent);
     outline-offset: -2px;
     background: var(--accent-bg-soft);
-  }
-
-  .ask-agent {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    width: 100%;
-    margin: var(--space-2) var(--space-0);
-    padding: 6px var(--space-8);
-    background: transparent;
-    border: none;
-    border-left: 2px solid transparent;
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-base);
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .ask-agent :global(svg) {
-    color: var(--text-muted);
-  }
-
-  .ask-agent:hover {
-    background: var(--surface-overlay-faint);
-    color: var(--text-primary);
-  }
-
-  .ask-agent.active {
-    background: var(--surface-overlay-strong);
-    color: var(--text-primary);
-  }
-
-  .ask-agent.active :global(svg) {
-    color: var(--text-primary);
   }
 
   .group-label {

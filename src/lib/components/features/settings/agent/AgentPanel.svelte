@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Sparkles, SquarePen, X } from "lucide-svelte";
+  import { PanelRightClose, Sparkles, SquarePen } from "lucide-svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { error as logError } from "@tauri-apps/plugin-log";
   import { agentModelId, agentModelName, agentReasoningEffort } from "$lib/utils/agentModel";
@@ -83,11 +83,11 @@
     <button title="New conversation" disabled={agent.running} onclick={() => agent.reset()}>
       <SquarePen size={14} />
     </button>
-    <button title="Close" onclick={() => agent.setPanelOpen(false)}>
-      <X size={14} />
+    <button class="hide" title="Hide panel" onclick={() => agent.hidePanel("hide")}>
+      <PanelRightClose size={14} />Hide
     </button>
   </header>
-  <AgentMessages />
+  <AgentMessages {docked} />
   <AgentComposer
     running={agent.running}
     onsend={agent.send}
@@ -143,9 +143,26 @@
     touch-action: none;
   }
 
+  .resize-handle::after {
+    content: "";
+    position: absolute;
+    left: 1px;
+    top: 50%;
+    width: 4px;
+    height: 28px;
+    margin-top: -14px;
+    border-radius: 2px;
+    background: var(--border-strong);
+  }
+
   .resize-handle:hover,
   .resize-handle.dragging {
     background: var(--accent-bg-soft);
+  }
+
+  .resize-handle:hover::after,
+  .resize-handle.dragging::after {
+    background: var(--accent);
   }
 
   header {
@@ -196,6 +213,15 @@
   header button:hover:not(:disabled) {
     background: var(--surface-overlay);
     color: var(--text-primary);
+  }
+
+  header button.hide {
+    width: auto;
+    gap: 6px;
+    padding: 0 8px;
+    border: 1px solid var(--border-default);
+    font: inherit;
+    font-size: var(--font-size-xs);
   }
 
   header button:disabled {

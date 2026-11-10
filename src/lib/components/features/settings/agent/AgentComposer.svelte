@@ -21,6 +21,11 @@
   let text = $state("");
   let input = $state<HTMLTextAreaElement>();
 
+  $effect(() => {
+    if (agent.focusRequest === 0) return;
+    tick().then(() => input?.focus());
+  });
+
   onMount(() => {
     const unlisten = onSettingsAgentDictation(async (dictated) => {
       text = text ? `${text} ${dictated}` : dictated;

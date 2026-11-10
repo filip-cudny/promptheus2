@@ -509,7 +509,7 @@
 
 <style>
   .model-editor {
-    padding: 18px var(--space-12) var(--space-16);
+    padding: 48px var(--space-12) var(--space-16);
     display: flex;
     flex-direction: column;
     gap: var(--space-8);

@@ -1,6 +1,7 @@
 import type { StreamEvent } from "$lib/types/ai";
 import { applyStreamEvent, emptyReply, type AgentReply } from "$lib/utils/agentReply";
 import { DEFAULT_PANEL_WIDTH } from "$lib/utils/agentPanelLayout";
+import { initialPanelOpen, panelOpenWrite, type PanelOpenAction } from "$lib/utils/agentPanelOpen";
 import { undoChange, type UndoConflict } from "$lib/services/changeLog";
 import { getUiState, setUiState } from "$lib/services/uiState";
 import {
@@ -30,8 +31,11 @@ let error = $state<string | null>(null);
 let panelOpen = $state(false);
 let panelMode = $state<PanelMode>("overlay");
 let panelWidth = $state(DEFAULT_PANEL_WIDTH);
+let focusRequest = $state(0);
+let appliedInitialPanel: unknown;
 
 const PANEL_WIDTH_KEY = "settings-dialog.agent_panel_width";
+const PANEL_OPEN_KEY = "settings-dialog.agent_panel_open";
 
 export type ProposalOutcome =
   | { kind: "applied"; entryId: string; conflicts?: UndoConflict[]; message?: string }
@@ -223,6 +227,40 @@ async function setPanelOpen(open: boolean) {
   if (!open) await settingsAgentPanel(false);
 }
 
+async function rememberPanelOpen(action: PanelOpenAction) {
+  const value = panelOpenWrite(action);
+  if (value === null) return;
+  try {
+    await setUiState(PANEL_OPEN_KEY, value);
+  } catch (e) {
+    error = String(e);
+  }
+}
+
+function requestComposerFocus() {
+  focusRequest++;
+}
+
+async function applyInitialPanel(value: unknown) {
+  if (value === appliedInitialPanel) return;
+  appliedInitialPanel = value;
+  if (!initialPanelOpen(value)) return;
+  await loadPanelWidth();
+  panelOpen = true;
+  requestComposerFocus();
+}
+
+async function openPanel(action: "reopen" | "search-row") {
+  await rememberPanelOpen(action);
+  await setPanelOpen(true);
+  requestComposerFocus();
+}
+
+async function hidePanel(action: "hide" | "show-link") {
+  await rememberPanelOpen(action);
+  await setPanelOpen(false);
+}
+
 export function getSettingsAgent() {
   return {
     get messages() { return messages; },
@@ -241,12 +279,16 @@ export function getSettingsAgent() {
     get panelOpen() { return panelOpen; },
     get panelMode() { return panelMode; },
     get panelWidth() { return panelWidth; },
+    get focusRequest() { return focusRequest; },
     resizePanel,
     savePanelWidth,
     send,
     dictate,
     cancel,
     reset,
-    setPanelOpen,
+    applyInitialPanel,
+    openPanel,
+    hidePanel,
+    requestComposerFocus,
   };
 }

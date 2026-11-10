@@ -13,13 +13,19 @@
   import { parseContentSegments, toRenderBlocks } from "$lib/utils/toolCallMarkers";
   import type { ToolCall } from "$lib/types/ai";
 
+  let { docked }: { docked: boolean } = $props();
+
   const agent = getSettingsAgent();
   const navigation = getSettingsNavigation();
 
-  function open(url: string) {
+  async function open(url: string) {
     const key = parseSettingLink(url);
-    if (key) navigation.navigateTo(key);
-    else openUrl(url);
+    if (!key) {
+      openUrl(url);
+      return;
+    }
+    if (!docked) await agent.hidePanel("show-link");
+    navigation.navigateTo(key);
   }
 
   function groupCalls(ids: string[], calls: ToolCall[]): ToolCall[] {
