@@ -1,5 +1,6 @@
 <script lang="ts">
   import { PanelRightClose, Sparkles, SquarePen } from "lucide-svelte";
+  import { ICON_SIZE } from "$lib/constants/ui";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { error as logError } from "@tauri-apps/plugin-log";
   import { agentModelId, agentModelName, agentReasoningEffort } from "$lib/utils/agentModel";
@@ -84,7 +85,7 @@
       <SquarePen size={14} />
     </button>
     <button class="hide" title="Hide panel" onclick={() => agent.hidePanel("hide")}>
-      <PanelRightClose size={14} />Hide
+      <PanelRightClose size={ICON_SIZE.md} />Hide
     </button>
   </header>
   <AgentMessages {docked} />

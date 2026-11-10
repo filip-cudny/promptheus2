@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { Sparkles } from "lucide-svelte";
+  import { ICON_SIZE } from "$lib/constants/ui";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { syncTheme } from "$lib/stores/theme.svelte";
   import SettingsSidebar from "$lib/components/features/settings/SettingsSidebar.svelte";
@@ -60,7 +61,7 @@
     <SettingsContent />
     {#if !agent.panelOpen}
       <button class="agent-button" title="Show agent panel" onclick={() => agent.openPanel("reopen")}>
-        <Sparkles size={14} />Agent
+        <Sparkles size={ICON_SIZE.md} />Agent
       </button>
     {/if}
     {#if agent.panelOpen}
