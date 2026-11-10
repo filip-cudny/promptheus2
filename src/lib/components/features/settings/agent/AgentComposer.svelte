@@ -6,11 +6,13 @@
 
   let {
     running,
+    modelReady,
     onsend,
     oncancel,
     beforeSend,
   }: {
     running: boolean;
+    modelReady: boolean;
     onsend: (text: string) => void;
     oncancel: () => void;
     beforeSend?: Snippet;
@@ -37,7 +39,7 @@
   });
 
   function submit() {
-    if (!agent.draft.trim() || running) return;
+    if (!agent.draft.trim() || running || !modelReady) return;
     onsend(agent.draft);
     agent.setDraft("");
   }
@@ -57,7 +59,7 @@
       bind:value={() => agent.draft, agent.setDraft}
       onkeydown={handleKeydown}
       rows="2"
-      placeholder="Ask about or change a setting…"
+      placeholder={modelReady ? "Ask about or change a setting…" : "Pick a model to start"}
     ></textarea>
     <div class="bar">
       {@render beforeSend?.()}
@@ -67,7 +69,7 @@
       {#if running}
         <button class="send" title="Stop" onclick={oncancel}><Square size={14} /></button>
       {:else}
-        <button class="send" title="Send" disabled={!agent.draft.trim()} onclick={submit}>
+        <button class="send" title="Send" disabled={!agent.draft.trim() || !modelReady} onclick={submit}>
           <ArrowUp size={14} />
         </button>
       {/if}

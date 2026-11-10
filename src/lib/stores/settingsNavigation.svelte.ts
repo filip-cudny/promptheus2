@@ -1,5 +1,6 @@
 import { tick } from "svelte";
 import { warn } from "@tauri-apps/plugin-log";
+import type { ModelType } from "$lib/types";
 import type { SettingsSection } from "$lib/components/features/settings/SettingsSidebar.svelte";
 import { getSettingsCatalogStore } from "$lib/stores/settingsCatalog.svelte";
 import { isSectionKey, parseSectionLink } from "$lib/utils/settingLinks";
@@ -7,9 +8,11 @@ import { catalogPath, listItemOf, type ListItemRef } from "$lib/utils/settingsSe
 
 const HIGHLIGHT_MS = 2000;
 const ELEMENT_WAIT_FRAMES = 20;
+const NEW_MODEL_KEY = "models:new";
 
 let activeSection = $state<SettingsSection>("models");
 let selectedItem = $state.raw<ListItemRef | null>(null);
+let createModelType = $state<ModelType | null>(null);
 let highlighted = $state<string | null>(null);
 let highlightedSection = $state<SettingsSection | null>(null);
 let highlightTimer: ReturnType<typeof setTimeout> | undefined;
@@ -52,6 +55,11 @@ function scrollContentToTop() {
 }
 
 async function navigateTo(key: string) {
+  if (key === NEW_MODEL_KEY) {
+    activeSection = "models";
+    createModelType = "text";
+    return;
+  }
   if (isSectionKey(key)) {
     await navigateToSection(key);
     return;
@@ -95,6 +103,12 @@ export function getSettingsNavigation() {
     },
     get selectedItem() {
       return selectedItem;
+    },
+    get createModelType() {
+      return createModelType;
+    },
+    clearCreateModelType() {
+      createModelType = null;
     },
     get highlighted() {
       return highlighted;

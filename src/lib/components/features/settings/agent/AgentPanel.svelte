@@ -3,7 +3,12 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { error as logError } from "@tauri-apps/plugin-log";
-  import { agentModelId, agentModelName, agentReasoningEffort } from "$lib/utils/agentModel";
+  import {
+    agentModelId,
+    agentModelName,
+    agentModelState,
+    agentReasoningEffort,
+  } from "$lib/utils/agentModel";
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import { getCachedCapabilities, prefetchCapabilities } from "$lib/stores/capabilities.svelte";
   import { updateSurfaceModel, updateSurfaceReasoningEffort } from "$lib/services/settings";
@@ -27,9 +32,13 @@
   let panel: HTMLElement;
   let dragging = $state(false);
   const store = getSettingsStore();
-  const modelName = $derived(
-    store.settings ? agentModelName(store.settings.surfaces, store.models) : null,
+  const modelState = $derived(
+    store.settings ? agentModelState(store.settings.surfaces, store.models) : "ok",
   );
+  const modelName = $derived.by(() => {
+    if (!store.settings) return null;
+    return modelState === "ok" ? agentModelName(store.settings.surfaces, store.models) : "No model";
+  });
   const textModels = $derived(store.models.filter((m) => m.type === "text"));
   const effectiveId = $derived(store.settings ? agentModelId(store.settings.surfaces) : null);
   const effectiveEffort = $derived(
@@ -80,7 +89,7 @@
     onpointercancel={endResize}
   ></div>
   <header>
-    <span class="title"><Sparkles size={14} />Settings agent{#if modelName}<span class="model" title={modelName}>{modelName}</span>{/if}</span>
+    <span class="title"><Sparkles size={14} />Settings agent{#if modelName}<span class="model" class:none={modelState !== "ok"} title={modelName}>{modelName}</span>{/if}</span>
     <button title="New conversation" disabled={agent.running} onclick={() => agent.reset()}>
       <SquarePen size={14} />
     </button>
@@ -91,6 +100,7 @@
   <AgentMessages {docked} />
   <AgentComposer
     running={agent.running}
+    modelReady={modelState === "ok"}
     onsend={agent.send}
     oncancel={agent.cancel}
     beforeSend={modelPicker}
@@ -192,6 +202,10 @@
     font-size: var(--font-size-xs);
     font-weight: var(--font-weight-regular);
     color: var(--text-muted);
+  }
+
+  .model.none {
+    color: var(--warning);
   }
 
   .title :global(svg) {

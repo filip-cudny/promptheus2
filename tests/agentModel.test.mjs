@@ -6,6 +6,8 @@ import {
   agentModelName,
   agentModelHasBuiltinSearch,
   agentHasUsableModel,
+  agentModelState,
+  useModelWrites,
 } from "../src/lib/utils/agentModel.ts";
 
 const models = [
@@ -145,4 +147,71 @@ test("usable model: non-text model is not usable", () => {
 
 test("usable model: no ids is not usable", () => {
   assert.strictEqual(agentHasUsableModel(surfaces(null, null), usableModels), false);
+});
+
+test("model state: no text model", () => {
+  assert.strictEqual(agentModelState(surfaces(null, null), []), "no_text_model");
+  assert.strictEqual(
+    agentModelState(surfaces(null, null), [{ id: "stt", type: "stt" }]),
+    "no_text_model",
+  );
+});
+
+test("model state: effective id is a text model", () => {
+  assert.strictEqual(agentModelState(surfaces("t1", null), usableModels), "ok");
+  assert.strictEqual(agentModelState(surfaces(null, "t2"), usableModels), "ok");
+});
+
+test("model state: no ids gives no usable model", () => {
+  assert.strictEqual(agentModelState(surfaces(null, null), usableModels), "no_usable_model");
+});
+
+test("model state: stale chat id only gives no usable model", () => {
+  assert.strictEqual(agentModelState(surfaces(null, "zzz"), usableModels), "no_usable_model");
+});
+
+test("model state: agent id missing from models is stale", () => {
+  assert.strictEqual(agentModelState(surfaces("zzz", "t1"), usableModels), "stale_agent_model");
+});
+
+test("model state: agent id of a non-text model gives no usable model", () => {
+  assert.strictEqual(agentModelState(surfaces("stt", "t1"), usableModels), "no_usable_model");
+});
+
+function applyWrites(current, writes) {
+  const next = structuredClone(current);
+  for (const w of writes) next[w.surface].generation.model_id = w.modelId;
+  return next;
+}
+
+test("use writes: no agent id writes only the chat model", () => {
+  assert.deepStrictEqual(useModelWrites(surfaces(null, null), usableModels, "t1"), [
+    { surface: "chat", modelId: "t1" },
+  ]);
+});
+
+test("use writes: stale agent id is cleared before the chat write", () => {
+  assert.deepStrictEqual(useModelWrites(surfaces("zzz", null), usableModels, "t1"), [
+    { surface: "settings_agent", modelId: null },
+    { surface: "chat", modelId: "t1" },
+  ]);
+});
+
+test("use writes: applied to a stale agent id the state is ok", () => {
+  const stale = surfaces("zzz", "yyy");
+  const next = applyWrites(stale, useModelWrites(stale, usableModels, "t2"));
+  assert.strictEqual(agentModelState(next, usableModels), "ok");
+  assert.strictEqual(agentModelId(next), "t2");
+});
+
+test("use writes: applied to a non-text agent id the state is ok", () => {
+  const nonText = surfaces("stt", null);
+  const next = applyWrites(nonText, useModelWrites(nonText, usableModels, "t1"));
+  assert.strictEqual(agentModelState(next, usableModels), "ok");
+});
+
+test("use writes: applied with no agent id the state is ok", () => {
+  const none = surfaces(null, null);
+  const next = applyWrites(none, useModelWrites(none, usableModels, "t1"));
+  assert.strictEqual(agentModelState(next, usableModels), "ok");
 });

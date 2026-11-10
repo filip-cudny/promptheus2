@@ -34,6 +34,13 @@
 
   let creatingType = $state<ModelType | null>(null);
 
+  $effect(() => {
+    const type = navigation.createModelType;
+    if (!type) return;
+    creatingType = type;
+    navigation.clearCreateModelType();
+  });
+
   let highlightedSurface = $state<SurfaceKind | null>(null);
   let highlightTimer: ReturnType<typeof setTimeout> | null = null;
 
