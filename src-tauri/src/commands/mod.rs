@@ -180,7 +180,12 @@ macro_rules! handlers {
             $crate::commands::skills::preview_skill_message,
             // === speech ===
             $crate::commands::speech::toggle_speech_recording,
-            $crate::commands::speech::start_settings_agent_dictation,
+            $crate::commands::speech::get_dictation_busy,
+            $crate::commands::speech::start_composer_dictation,
+            $crate::commands::speech::finish_composer_dictation,
+            $crate::commands::speech::cancel_composer_dictation,
+            $crate::commands::speech::retry_composer_dictation,
+            $crate::commands::speech::dismiss_composer_dictation,
             $crate::commands::speech::pause_speech_recording,
             $crate::commands::speech::resume_speech_recording,
             $crate::commands::speech::cancel_speech_recording,

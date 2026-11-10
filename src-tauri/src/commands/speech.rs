@@ -2,13 +2,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, State, Webview};
 use tokio::sync::Mutex;
 
 use crate::commands::settings::apply_settings_reload;
 use crate::models::speech::AudioClipInfo;
 use crate::services::config::{ConfigService, KeytermsDoc};
-use crate::services::speech::{session, AudioClipStore, SpeechError, SpeechService};
+use crate::models::speech::DictationBusy;
+use crate::services::speech::composer::{self, AppEffects};
+use crate::services::speech::{session, AudioClipStore, ComposerOwner, SpeechError, SpeechService};
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
 
@@ -18,11 +20,6 @@ pub async fn toggle_speech_recording(
     action_id: Option<String>,
 ) -> crate::Result<()> {
     session::toggle_speech_recording(app, action_id).await
-}
-
-#[tauri::command]
-pub async fn start_settings_agent_dictation(app: AppHandle) -> crate::Result<()> {
-    session::start_settings_agent_dictation(app).await
 }
 
 #[tauri::command]
@@ -102,6 +99,76 @@ pub async fn capture_selection_into_recording_widget(app: AppHandle) -> crate::R
 #[tauri::command]
 pub fn cancel_recording_widget_selection() {
     session::cancel_recording_widget_selection();
+}
+
+fn composer_owner(webview: &Webview, tab_id: Option<String>) -> crate::Result<ComposerOwner> {
+    ComposerOwner::new(webview.label(), tab_id)
+        .ok_or_else(|| Error::Other("Dictation is not available in this window".into()))
+}
+
+#[tauri::command]
+pub async fn get_dictation_busy(
+    speech: State<'_, Arc<Mutex<SpeechService>>>,
+) -> crate::Result<Option<DictationBusy>> {
+    Ok(speech.lock().await.busy())
+}
+
+#[tauri::command]
+pub async fn start_composer_dictation(
+    app: AppHandle,
+    webview: Webview,
+    speech: State<'_, Arc<Mutex<SpeechService>>>,
+    tab_id: Option<String>,
+) -> crate::Result<()> {
+    let owner = composer_owner(&webview, tab_id)?;
+    composer::start(&AppEffects(app), &speech, owner).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn finish_composer_dictation(
+    app: AppHandle,
+    webview: Webview,
+    speech: State<'_, Arc<Mutex<SpeechService>>>,
+) -> crate::Result<()> {
+    let effects = AppEffects(app);
+    if let Some(job) = composer::finish(&effects, &speech, webview.label()).await? {
+        let speech = Arc::clone(&*speech);
+        tauri::async_runtime::spawn(async move { composer::run(&effects, &speech, job).await });
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn cancel_composer_dictation(
+    app: AppHandle,
+    webview: Webview,
+    speech: State<'_, Arc<Mutex<SpeechService>>>,
+) -> crate::Result<()> {
+    composer::cancel(&AppEffects(app), &speech, webview.label()).await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn retry_composer_dictation(
+    app: AppHandle,
+    webview: Webview,
+    speech: State<'_, Arc<Mutex<SpeechService>>>,
+) -> crate::Result<()> {
+    let effects = AppEffects(app);
+    let job = composer::retry(&effects, &speech, webview.label()).await?;
+    let speech = Arc::clone(&*speech);
+    tauri::async_runtime::spawn(async move { composer::run(&effects, &speech, job).await });
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn dismiss_composer_dictation(
+    webview: Webview,
+    speech: State<'_, Arc<Mutex<SpeechService>>>,
+) -> crate::Result<()> {
+    composer::dismiss(&speech, webview.label()).await;
+    Ok(())
 }
 
 #[derive(Serialize)]

@@ -48,3 +48,44 @@ impl AudioClipInfo {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum DictationBy {
+    Pill,
+    Chat,
+    Settings,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct DictationBusy {
+    pub by: DictationBy,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComposerDictationLevel {
+    pub tab_id: Option<String>,
+    pub level: f64,
+    pub elapsed_ms: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComposerDictationTab {
+    pub tab_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComposerDictationTranscript {
+    pub tab_id: Option<String>,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComposerDictationError {
+    pub tab_id: Option<String>,
+    pub message: String,
+}

@@ -49,7 +49,6 @@ const WIDGET_TOOLTIP_PADDING_X = 8;
 const WIDGET_DROPDOWN_ROW_HEIGHT = 28;
 const WIDGET_DROPDOWN_PADDING = 4;
 const WIDGET_DROPDOWN_SEPARATOR_HEIGHT = 9;
-const WIDGET_SETTINGS_AGENT_ID = '__settings_agent__';
 const WIDGET_DEFAULT_TARGET_LABEL = 'Dictation';
 const WIDGET_BOTTOM_MARGIN = 24;
 const WIDGET_STATES = ['recording', 'paused', 'processing', 'done'];
@@ -1475,9 +1474,8 @@ export default class PromptheusExtension extends Extension {
 
     _fillRow2(widget) {
         this._closeTooltip(widget);
-        const {selectedId, selectedLabel, locked, stopChatDestination} = widget.model;
-        const minimalIntents = selectedId === WIDGET_SETTINGS_AGENT_ID;
-        const interactive = !locked && !minimalIntents && widget.state !== 'done';
+        const {selectedLabel, locked, stopChatDestination} = widget.model;
+        const interactive = !locked && widget.state !== 'done';
         if (!interactive) {
             widget.selection?.finish('cancelled');
             this._closeDropdown(widget);

@@ -1,5 +1,6 @@
 mod clip_store;
 pub mod claude_desktop;
+pub mod composer;
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 mod pill_previews;
 mod recorder;
@@ -12,7 +13,7 @@ pub mod session;
 mod transcriber;
 pub mod widget;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -23,6 +24,9 @@ use tokio::sync::watch;
 
 use recorder::{find_input_device, negotiate_sample_rate};
 
+use crate::models::speech::{DictationBusy, DictationBy};
+use crate::services::dialog::{CONVERSATION_DIALOG_LABEL, SETTINGS_DIALOG_LABEL};
+
 pub use clip_store::{AudioClipStore, ClipStoreError};
 pub use recorder::encode_wav;
 pub use retry::transcribe_with_retry;
@@ -32,8 +36,6 @@ const TOGGLE_DEBOUNCE_MS: u128 = 250;
 
 pub const DICTATION_ID: &str = "__dictation__";
 pub const DICTATION_LABEL: &str = "Dictation";
-pub const SETTINGS_AGENT_ID: &str = "__settings_agent__";
-pub const SETTINGS_AGENT_LABEL: &str = "Settings agent";
 pub const WEBVIEW_TARGET_PREFIX: &str = "webview:";
 
 pub fn webview_target_id(provider_id: &str) -> String {
@@ -100,6 +102,8 @@ pub enum SpeechError {
     ClipStore(#[from] ClipStoreError),
     #[error("Cancelled")]
     Cancelled,
+    #[error("{0}")]
+    Busy(String),
 }
 
 impl SpeechError {
@@ -147,7 +151,47 @@ impl SpeechError {
     }
 }
 
+/// A composer (main chat or settings agent) that records and transcribes as its own session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ComposerOwner {
+    pub label: String,
+    pub tab_id: Option<String>,
+    by: DictationBy,
+}
+
+impl ComposerOwner {
+    pub fn new(label: &str, tab_id: Option<String>) -> Option<Self> {
+        let by = match label {
+            CONVERSATION_DIALOG_LABEL => DictationBy::Chat,
+            SETTINGS_DIALOG_LABEL => DictationBy::Settings,
+            _ => return None,
+        };
+        Some(Self { label: label.to_string(), tab_id, by })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum SessionOwner {
+    Pill,
+    Composer(ComposerOwner),
+}
+
+struct HeldRecording {
+    tab_id: Option<String>,
+    wav: Vec<u8>,
+}
+
+fn busy_message(by: DictationBy) -> &'static str {
+    match by {
+        DictationBy::Pill => "The recording pill is already in use",
+        DictationBy::Chat => "Dictation is already running in Chat",
+        DictationBy::Settings => "Dictation is already running in Settings",
+    }
+}
+
 pub struct SpeechService {
+    owner: SessionOwner,
+    held: HashMap<String, HeldRecording>,
     is_recording: bool,
     is_transcribing: bool,
     recording_action_id: Option<String>,
@@ -236,6 +280,8 @@ fn elapsed_excluding_pauses(
 impl SpeechService {
     pub fn new() -> Self {
         Self {
+            owner: SessionOwner::Pill,
+            held: HashMap::new(),
             is_recording: false,
             is_transcribing: false,
             recording_action_id: None,
@@ -309,6 +355,7 @@ impl SpeechService {
         self.paused_total = Duration::ZERO;
         self.sample_rate = sample_rate;
         self.is_recording = true;
+        self.owner = SessionOwner::Pill;
         self.recording_action_id = action_id;
         self.stop_sender = Some(stop_tx);
         self.session = self.session.wrapping_add(1);
@@ -346,6 +393,97 @@ impl SpeechService {
         let audio = self.stop_recording_raw()?;
         self.clear_pending_prompt();
         Ok(audio)
+    }
+
+    pub fn busy(&self) -> Option<DictationBusy> {
+        if !self.is_recording && !self.is_transcribing {
+            return None;
+        }
+        let by = match &self.owner {
+            SessionOwner::Pill => DictationBy::Pill,
+            SessionOwner::Composer(owner) => owner.by,
+        };
+        Some(DictationBusy { by })
+    }
+
+    /// The single guard every pill entry point asks first: the window whose composer
+    /// owns the session, `None` when the pill may act.
+    pub fn composer_window(&self) -> Option<&'static str> {
+        match self.busy()?.by {
+            DictationBy::Pill => None,
+            DictationBy::Chat => Some("Chat"),
+            DictationBy::Settings => Some("Settings"),
+        }
+    }
+
+    pub fn composer_session(&self, label: &str) -> Option<ComposerOwner> {
+        match &self.owner {
+            SessionOwner::Composer(owner)
+                if owner.label == label && (self.is_recording || self.is_transcribing) =>
+            {
+                Some(owner.clone())
+            }
+            _ => None,
+        }
+    }
+
+    fn ensure_idle(&self) -> Result<(), SpeechError> {
+        match self.busy() {
+            Some(busy) => Err(SpeechError::Busy(busy_message(busy.by).to_string())),
+            None => Ok(()),
+        }
+    }
+
+    pub fn start_composer_recording(&mut self, owner: ComposerOwner) -> Result<u32, SpeechError> {
+        self.ensure_idle()?;
+        self.held.remove(&owner.label);
+        let sample_rate = self.start_recording(None)?;
+        self.owner = SessionOwner::Composer(owner);
+        Ok(sample_rate)
+    }
+
+    /// Starts transcribing the held audio of `label`; the returned session id tells a late
+    /// result of an earlier transcription apart.
+    pub fn begin_held_transcription(&mut self, label: &str) -> Result<(ComposerOwner, u64, Vec<u8>), SpeechError> {
+        self.ensure_idle()?;
+        let held = self.held.remove(label).ok_or(SpeechError::AudioUnavailable)?;
+        let owner = ComposerOwner::new(label, held.tab_id).ok_or(SpeechError::AudioUnavailable)?;
+        self.owner = SessionOwner::Composer(owner.clone());
+        self.is_transcribing = true;
+        self.session = self.session.wrapping_add(1);
+        Ok((owner, self.session, held.wav))
+    }
+
+    pub fn owns_composer_transcription(&self, owner: &ComposerOwner, session: u64) -> bool {
+        self.is_transcribing && self.session == session && self.owner == SessionOwner::Composer(owner.clone())
+    }
+
+    pub fn release_composer(&mut self) {
+        self.is_transcribing = false;
+        self.owner = SessionOwner::Pill;
+        self.retry_abort = None;
+    }
+
+    pub fn hold_recording(&mut self, owner: &ComposerOwner, wav: Vec<u8>) {
+        self.held.insert(owner.label.clone(), HeldRecording { tab_id: owner.tab_id.clone(), wav });
+    }
+
+    pub fn drop_held_recording(&mut self, label: &str) {
+        self.held.remove(label);
+    }
+
+    /// Ends the composer session of `label`, discarding its audio, and returns its owner when
+    /// a recording or transcription was running. A held recording of the label is dropped too.
+    pub fn cancel_composer(&mut self, label: &str) -> Option<ComposerOwner> {
+        self.held.remove(label);
+        let owner = self.composer_session(label)?;
+        if self.is_recording {
+            let _ = self.cancel_recording();
+        } else {
+            self.cancel_retry();
+        }
+        self.release_composer();
+        Some(owner)
     }
 
     pub fn arm_retry_abort(&mut self, tx: watch::Sender<bool>) {
@@ -480,17 +618,6 @@ impl SpeechService {
             origin: PendingOrigin::Pill,
         });
         Ok(())
-    }
-
-    /// Makes the settings agent the destination of the recording just started and locks it.
-    pub fn lock_settings_agent_target(&mut self) {
-        self.pending = Some(PendingPrompt {
-            id: SETTINGS_AGENT_ID.to_string(),
-            name: SETTINGS_AGENT_LABEL.to_string(),
-            origin: PendingOrigin::Pill,
-        });
-        self.taken = self.pending.clone();
-        self.target_locked = true;
     }
 
     /// Takes the pending skill and locks the target in one step, so a pill
@@ -800,17 +927,93 @@ mod tests {
         assert_eq!(service.shown_target().map(|p| p.name.as_str()), Some("Claude"));
     }
 
-    #[test]
-    fn a_settings_agent_session_is_locked_from_the_start_and_refuses_stop_chat_and_selection() {
+    fn composer(label: &str) -> ComposerOwner {
+        ComposerOwner::new(label, Some("tab-1".into())).unwrap()
+    }
+
+    fn service_recording_for(owner: SessionOwner) -> SpeechService {
         let mut service = SpeechService::new();
-        service.lock_settings_agent_target();
-        assert!(service.target_locked());
-        assert_eq!(service.shown_target().map(|p| p.id.as_str()), Some(SETTINGS_AGENT_ID));
-        assert_eq!(service.select_target("fix", "Fix"), Err(TargetLocked));
-        assert_eq!(service.request_stop_chat(), Err(TargetLocked));
-        let (taken, stop_chat) = service.take_pending_prompt();
-        assert_eq!(taken.map(|p| p.id), Some(SETTINGS_AGENT_ID.to_string()));
-        assert!(!stop_chat);
+        start_fake(&mut service, || Ok(FakeStream { play_result: || Ok(()) })).unwrap();
+        service.owner = owner;
+        service
+    }
+
+    #[test]
+    fn busy_names_who_records_or_transcribes() {
+        let mut service = SpeechService::new();
+        assert_eq!(service.busy(), None);
+
+        let by = |service: &SpeechService| service.busy().map(|busy| busy.by);
+        let mut pill = service_recording_for(SessionOwner::Pill);
+        assert_eq!(by(&pill), Some(DictationBy::Pill));
+        pill.stop_recording_raw().unwrap();
+        assert_eq!(by(&pill), None);
+        pill.set_transcribing(true);
+        assert_eq!(by(&pill), Some(DictationBy::Pill));
+
+        for (label, expected) in [
+            (CONVERSATION_DIALOG_LABEL, DictationBy::Chat),
+            (SETTINGS_DIALOG_LABEL, DictationBy::Settings),
+        ] {
+            let mut service = service_recording_for(SessionOwner::Composer(composer(label)));
+            assert_eq!(by(&service), Some(expected));
+            service.stop_recording_raw().unwrap();
+            service.set_transcribing(true);
+            assert_eq!(by(&service), Some(expected));
+            service.release_composer();
+            assert_eq!(by(&service), None);
+        }
+    }
+
+    #[test]
+    fn the_guard_names_the_window_of_a_composer_session_and_lets_the_pill_through() {
+        let mut service = SpeechService::new();
+        assert_eq!(service.composer_window(), None);
+
+        let pill = service_recording_for(SessionOwner::Pill);
+        assert_eq!(pill.composer_window(), None);
+
+        let mut chat = service_recording_for(SessionOwner::Composer(composer(CONVERSATION_DIALOG_LABEL)));
+        assert_eq!(chat.composer_window(), Some("Chat"));
+        chat.stop_recording_raw().unwrap();
+        chat.set_transcribing(true);
+        assert_eq!(chat.composer_window(), Some("Chat"));
+
+        service = service_recording_for(SessionOwner::Composer(composer(SETTINGS_DIALOG_LABEL)));
+        assert_eq!(service.composer_window(), Some("Settings"));
+    }
+
+    #[test]
+    fn a_composer_start_is_refused_during_a_pill_session_and_during_another_composers() {
+        let mut pill = service_recording_for(SessionOwner::Pill);
+        let refused = pill.start_composer_recording(composer(CONVERSATION_DIALOG_LABEL));
+        assert!(matches!(refused, Err(SpeechError::Busy(_))));
+        assert_eq!(pill.busy().map(|busy| busy.by), Some(DictationBy::Pill));
+
+        let mut chat = service_recording_for(SessionOwner::Composer(composer(CONVERSATION_DIALOG_LABEL)));
+        let refused = chat.start_composer_recording(composer(SETTINGS_DIALOG_LABEL));
+        assert!(matches!(&refused, Err(SpeechError::Busy(message)) if message.contains("Chat")));
+        assert_eq!(chat.busy().map(|busy| busy.by), Some(DictationBy::Chat));
+
+        chat.stop_recording_raw().unwrap();
+        chat.set_transcribing(true);
+        let refused = chat.start_composer_recording(composer(SETTINGS_DIALOG_LABEL));
+        assert!(matches!(refused, Err(SpeechError::Busy(_))));
+    }
+
+    #[test]
+    fn only_the_two_composer_windows_can_own_a_session() {
+        assert!(ComposerOwner::new("palette", None).is_none());
+        assert!(ComposerOwner::new(CONVERSATION_DIALOG_LABEL, None).is_some());
+        assert!(ComposerOwner::new(SETTINGS_DIALOG_LABEL, None).is_some());
+    }
+
+    #[test]
+    fn a_pill_start_takes_the_session_back_from_a_finished_composer() {
+        let mut service = service_recording_for(SessionOwner::Composer(composer(CONVERSATION_DIALOG_LABEL)));
+        service.cancel_composer(CONVERSATION_DIALOG_LABEL).unwrap();
+        start_fake(&mut service, || Ok(FakeStream { play_result: || Ok(()) })).unwrap();
+        assert_eq!(service.busy().map(|busy| busy.by), Some(DictationBy::Pill));
     }
 
     #[test]

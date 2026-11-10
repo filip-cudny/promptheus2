@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 use super::ai_webview;
 use super::dock::DockManager;
 use super::settings_agent::{self, engine::{lock, SharedSession}};
+use super::speech;
 use super::ui_state::{UiStateService, WindowGeometry};
 
 pub const CONVERSATION_DIALOG_LABEL: &str = "conversation-dialog";
@@ -402,6 +403,7 @@ pub async fn open_or_focus(
             ai_webview::cleanup_host_state(&app_handle, &destroy_label);
             if destroy_label == SETTINGS_DIALOG_LABEL {
                 settings_agent::panel::reset(&app_handle);
+                speech::composer::cancel_owned_by(&app_handle, SETTINGS_DIALOG_LABEL);
                 if let Some(session) = app_handle.try_state::<SharedSession>() {
                     lock(&session).reset();
                 }

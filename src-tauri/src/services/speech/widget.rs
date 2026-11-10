@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use super::{
     lock_active_session, start_session_task, tail_rms, webview_target_id, PendingPrompt,
-    SpeechService, DICTATION_ID, DICTATION_LABEL, SETTINGS_AGENT_ID,
+    SpeechService, DICTATION_ID, DICTATION_LABEL,
 };
 use crate::commands::context::current_context_version;
 use crate::models::context::ContextItem;
@@ -30,7 +30,7 @@ const MODEL_EVENT: &str = "recording-widget-model";
 const PREVIEW_FRAME_HEIGHT: f64 = 166.0;
 const TOOLTIP_FRAME_HEIGHT: f64 = 30.0;
 const DROPDOWN_CLOSED_EVENT: &str = "recording-widget-dropdown-closed";
-const TICK: Duration = Duration::from_millis(50);
+pub(super) const TICK: Duration = Duration::from_millis(50);
 const DONE_VISIBLE: Duration = Duration::from_secs(1);
 const MOVE_DEBOUNCE: Duration = Duration::from_millis(500);
 const FULL_SCALE_RMS: f64 = 32768.0;
@@ -166,7 +166,6 @@ pub struct PillModel {
     pub selected_id: String,
     pub selected_label: String,
     pub target_locked: bool,
-    pub minimal_intents: bool,
     pub items: Vec<PillItem>,
     pub item_rows: u32,
     pub context_version: u64,
@@ -482,13 +481,11 @@ pub fn build_model(
         None => (DICTATION_ID.to_string(), DICTATION_LABEL.to_string()),
     };
     let items = pill_items(context_items);
-    let minimal_intents = selected_id == SETTINGS_AGENT_ID;
     PillModel {
         targets,
         selected_id,
         selected_label,
         target_locked,
-        minimal_intents,
         item_rows: item_rows(items.len()),
         items,
         context_version,
@@ -574,7 +571,7 @@ fn is_inside_any(point: (i32, i32), work_areas: &[Rect]) -> bool {
     })
 }
 
-fn elapsed_ms(elapsed: Duration) -> u32 {
+pub(super) fn elapsed_ms(elapsed: Duration) -> u32 {
     elapsed.as_millis().min(u32::MAX as u128) as u32
 }
 
@@ -1886,17 +1883,6 @@ mod tests {
     }
 
     #[test]
-    fn a_settings_agent_session_serializes_a_locked_minimal_pill() {
-        let mut speech = SpeechService::new();
-        speech.lock_settings_agent_target();
-        let model = build_model(vec![], speech.shown_target(), speech.target_locked(), &[], 0, (0, 0), "");
-        let json = serde_json::to_value(&model).unwrap();
-        assert_eq!(json["selectedLabel"], "Settings agent");
-        assert_eq!(json["targetLocked"], true);
-        assert_eq!(json["minimalIntents"], true);
-    }
-
-    #[test]
     fn the_taken_skill_stays_on_the_locked_pill() {
         let mut speech = SpeechService::new();
         speech.select_target("assistant", "Assistant").unwrap();
@@ -2023,7 +2009,6 @@ mod tests {
             selected_id: "__dictation__".into(),
             selected_label: "Dictation".into(),
             target_locked: false,
-            minimal_intents: false,
             items: vec![PillItem {
                 index: 0,
                 kind: "text".into(),
@@ -2043,7 +2028,6 @@ mod tests {
                 "selectedId": "__dictation__",
                 "selectedLabel": "Dictation",
                 "targetLocked": false,
-                "minimalIntents": false,
                 "items": [{ "index": 0, "kind": "text", "label": "Text #1", "preview": "hello" }],
                 "itemRows": 1,
                 "contextVersion": 7,

@@ -22,24 +22,19 @@ use crate::services::speech::widget::{
     configured_claude_target, configured_providers, configured_stop_chat_target, pill_targets, RecordingWidget, Transport,
 };
 use crate::services::speech::{
-    self, claude_desktop, screenshot, selection, webview_provider_of, AudioClipStore, PendingOrigin, PendingPrompt, SpeechError,
-    SpeechService, SttOptions, SETTINGS_AGENT_ID,
+    self, claude_desktop, composer, screenshot, selection, webview_provider_of, AudioClipStore, PendingOrigin, PendingPrompt, SpeechError,
+    SpeechService, SttOptions,
 };
 use crate::services::sqlite_history::SqliteHistoryService;
 use crate::Error;
 
-const MIN_RECORDING_SAMPLES_SECS: f64 = 1.0;
+pub(super) const MIN_RECORDING_SAMPLES_SECS: f64 = 1.0;
 
 #[derive(Clone, Serialize)]
 struct TranscriptionComplete {
     text: String,
     duration_secs: f64,
     entry_id: Option<String>,
-}
-
-#[derive(Clone, Serialize)]
-struct SettingsAgentDictation {
-    text: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -50,15 +45,15 @@ struct AlternativeExecutePayload {
 }
 
 
-struct SttRuntime {
-    model: ModelConfig,
-    options: SttOptions,
-    auto_retry_attempts: u32,
+pub(super) struct SttRuntime {
+    pub(super) model: ModelConfig,
+    pub(super) options: SttOptions,
+    pub(super) auto_retry_attempts: u32,
     audio_retention_hours: u32,
     keep_audio_on_success: bool,
 }
 
-async fn load_stt_runtime(
+pub(super) async fn load_stt_runtime(
     config_state: &Arc<Mutex<ConfigService>>,
 ) -> Result<SttRuntime, SpeechError> {
     let guard = config_state.lock().await;
@@ -182,7 +177,6 @@ enum TranscriptPlan {
     Chat(ChatRequest),
     Webview { provider_id: String },
     ClaudeDesktop,
-    SettingsAgent,
 }
 
 fn transcript_plan(
@@ -203,7 +197,6 @@ fn transcript_plan(
         })
     };
     match pending {
-        Some(p) if p.id == SETTINGS_AGENT_ID => TranscriptPlan::SettingsAgent,
         Some(p) if p.origin == PendingOrigin::ShiftClick => TranscriptPlan::AlternativeExecute,
         Some(_) if text.trim().is_empty() => TranscriptPlan::NoSpeech,
         _ if stop_chat && stop_chat_target == StopChatTarget::Claude => match claude_target {
@@ -231,8 +224,7 @@ fn speech_output_route(plan: &TranscriptPlan) -> Option<String> {
         TranscriptPlan::Webview { provider_id } => Some(format!("webview:{provider_id}")),
         TranscriptPlan::AlternativeExecute
         | TranscriptPlan::NoSpeech
-        | TranscriptPlan::SkillRun { .. }
-        | TranscriptPlan::SettingsAgent => None,
+        | TranscriptPlan::SkillRun { .. } => None,
     }
 }
 
@@ -341,26 +333,46 @@ fn emit_empty_transcription(app: &AppHandle, duration_secs: f64) {
 async fn abort_transcription(app: &AppHandle) {
     app.state::<RecordingWidget>().close(app).await;
     let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
-    let mut s = speech_state.lock().await;
-    s.set_transcribing(false);
-    s.clear_pending_prompt();
+    {
+        let mut s = speech_state.lock().await;
+        s.set_transcribing(false);
+        s.clear_pending_prompt();
+    }
+    composer::emit_busy_changed(app).await;
+}
+
+async fn end_transcription(app: &AppHandle, speech: &Mutex<SpeechService>) {
+    speech.lock().await.set_transcribing(false);
+    composer::emit_busy_changed(app).await;
+}
+
+async fn warn_composer_running(app: &AppHandle, window: &str) {
+    log::debug!("pill entry point refused: dictation is running in {window}");
+    NotificationService::notify_now(
+        app,
+        "speech_recording_start",
+        NotificationLevel::Warning,
+        format!("Dictation is running in {window}"),
+        None::<String>,
+    )
+    .await;
+}
+
+/// Warns and returns `true` while a composer owns the session, so the pill entry point stops.
+async fn refused_during_composer(app: &AppHandle) -> bool {
+    let window = app.state::<Arc<Mutex<SpeechService>>>().lock().await.composer_window();
+    match window {
+        Some(window) => {
+            warn_composer_running(app, window).await;
+            true
+        }
+        None => false,
+    }
 }
 
 pub async fn toggle_speech_recording(
     app: AppHandle,
     action_id: Option<String>,
-) -> crate::Result<()> {
-    toggle_recording(app, action_id, false).await
-}
-
-pub async fn start_settings_agent_dictation(app: AppHandle) -> crate::Result<()> {
-    toggle_recording(app, None, true).await
-}
-
-async fn toggle_recording(
-    app: AppHandle,
-    action_id: Option<String>,
-    settings_agent: bool,
 ) -> crate::Result<()> {
     let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
     let config_state = app.state::<Arc<Mutex<ConfigService>>>();
@@ -376,6 +388,11 @@ async fn toggle_recording(
     {
         let mut s = speech_state.lock().await;
 
+        if let Some(window) = s.composer_window() {
+            warn_composer_running(&app, window).await;
+            return Ok(());
+        }
+
         if s.is_transcribing() {
             log::debug!("toggle_speech_recording: ignored, transcription in progress");
             NotificationService::notify_now(
@@ -390,10 +407,6 @@ async fn toggle_recording(
         }
 
         was_recording = s.is_recording();
-
-        if settings_agent && was_recording {
-            return Err(SpeechError::AlreadyRecording.into());
-        }
 
         if !was_recording {
             if s.is_debouncing() {
@@ -412,15 +425,13 @@ async fn toggle_recording(
         } else {
             raw_audio = None;
             s.start_recording(action_id.clone())?;
-            if settings_agent {
-                s.lock_settings_agent_target();
-            }
             started_action_id = action_id;
             started_session = Some(s.session());
         }
     }
 
     if !was_recording {
+        composer::emit_busy_changed(&app).await;
         let _ = app.emit(
             "speech-recording-started",
             SpeechRecordingStartedEvent {
@@ -680,18 +691,6 @@ async fn toggle_recording(
                         )
                         .await;
                     }
-                    TranscriptPlan::SettingsAgent => {
-                        widget_inner.close_if_current(&app_clone, generation).await;
-                        if text.trim().is_empty() {
-                            log::debug!("settings agent dictation: empty transcript, nothing emitted");
-                        } else if let Err(e) = app_clone.emit_to(
-                            "settings-dialog",
-                            "settings-agent-dictation",
-                            SettingsAgentDictation { text: text.clone() },
-                        ) {
-                            log::warn!("settings agent dictation: emit failed: {e}");
-                        }
-                    }
                     TranscriptPlan::ClaudeDesktop => {
                         created_entry_id = record_speech_entry(&app_clone, &history_inner, &text, output_route.as_deref()).await;
                         widget_inner.close_if_current(&app_clone, generation).await;
@@ -721,7 +720,7 @@ async fn toggle_recording(
                     }
                 }
 
-                speech_inner.lock().await.set_transcribing(false);
+                end_transcription(&app_clone, &speech_inner).await;
             }
             Err(SpeechError::NoSpeechDetected) => {
                 widget_inner.close(&app_clone).await;
@@ -756,6 +755,8 @@ async fn toggle_recording(
                 .await;
 
                 s.set_transcribing(false);
+                drop(s);
+                composer::emit_busy_changed(&app_clone).await;
             }
             Err(SpeechError::Cancelled) => {
                 let (entry_id, has_audio) = add_failed_entry(
@@ -791,7 +792,7 @@ async fn toggle_recording(
                     .await;
                 }
 
-                speech_inner.lock().await.set_transcribing(false);
+                end_transcription(&app_clone, &speech_inner).await;
                 let _ = app_clone.emit(
                     "speech-transcription-error",
                     SpeechTranscriptionError {
@@ -849,7 +850,7 @@ async fn toggle_recording(
                 )
                 .await;
 
-                speech_inner.lock().await.set_transcribing(false);
+                end_transcription(&app_clone, &speech_inner).await;
             }
         }
     });
@@ -1033,6 +1034,9 @@ pub async fn retry_transcription(app: AppHandle, entry_id: String) -> crate::Res
 }
 
 pub async fn pause_speech_recording(app: AppHandle) -> crate::Result<()> {
+    if refused_during_composer(&app).await {
+        return Ok(());
+    }
     let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
     {
         let mut s = speech_state.lock().await;
@@ -1044,6 +1048,9 @@ pub async fn pause_speech_recording(app: AppHandle) -> crate::Result<()> {
 }
 
 pub async fn resume_speech_recording(app: AppHandle) -> crate::Result<()> {
+    if refused_during_composer(&app).await {
+        return Ok(());
+    }
     let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
     {
         let mut s = speech_state.lock().await;
@@ -1055,6 +1062,9 @@ pub async fn resume_speech_recording(app: AppHandle) -> crate::Result<()> {
 }
 
 pub async fn cancel_speech_recording(app: AppHandle) -> crate::Result<()> {
+    if refused_during_composer(&app).await {
+        return Ok(());
+    }
     let speech_state = app.state::<Arc<Mutex<SpeechService>>>();
     let (samples, sample_rate) = {
         let mut s = speech_state.lock().await;
@@ -1071,6 +1081,7 @@ pub async fn cancel_speech_recording(app: AppHandle) -> crate::Result<()> {
         audio
     };
 
+    composer::emit_busy_changed(&app).await;
     let widget = app.state::<RecordingWidget>();
     let pill_shown = widget.is_shown().await;
     widget.close(&app).await;
@@ -1251,6 +1262,9 @@ pub async fn remove_recording_widget_item(
 
 pub async fn stop_chat_speech_recording(app: AppHandle) -> crate::Result<()> {
     log::debug!("recording widget intent: stop chat");
+    if refused_during_composer(&app).await {
+        return Ok(());
+    }
     if !recording_widget_shown(&app, "stop chat").await {
         return Ok(());
     }
@@ -1404,26 +1418,6 @@ mod tests {
             auto_send: true,
             source: InvocationSource::Pill,
         })
-    }
-
-    fn settings_agent_target() -> PendingPrompt {
-        PendingPrompt {
-            id: SETTINGS_AGENT_ID.into(),
-            name: "Settings agent".into(),
-            origin: PendingOrigin::Pill,
-        }
-    }
-
-    #[test]
-    fn plan_settings_agent_target_delivers_to_the_agent_with_and_without_stop_chat() {
-        for stop_chat in [true, false] {
-            for stop_chat_target in [StopChatTarget::Chat, StopChatTarget::Claude] {
-                assert_eq!(
-                    transcript_plan(Some(&settings_agent_target()), stop_chat, "hello", None, ClaudeTarget::Webview, stop_chat_target),
-                    TranscriptPlan::SettingsAgent
-                );
-            }
-        }
     }
 
     #[test]
