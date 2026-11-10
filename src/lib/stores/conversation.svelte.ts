@@ -283,6 +283,8 @@ export function createConversationStore(
   let tabs = $state<TabState[]>([createTabState()]);
   let activeTabId = $state(tabs[0].tab_id);
   let autoCopiedNodeId = $state<string | null>(null);
+  let pinRequest = $state(0);
+  let scrollResetRequest = $state(0);
 
   const activeTab = $derived(
     tabs.find((t) => t.tab_id === activeTabId) ?? tabs[0],
@@ -751,6 +753,7 @@ export function createConversationStore(
     tab.tree.nodes.set(assistantNode.node_id, assistantNode);
     userNode.children.push(assistantNode.node_id);
     tab.tree.current_path.push(assistantNode.node_id);
+    pinRequest++;
 
     tab.input_text = "";
     tab.input_images = [];
@@ -855,6 +858,7 @@ export function createConversationStore(
         newAssistant.node_id,
       ];
     }
+    pinRequest++;
 
     await executeOnTree(tab, newAssistant);
   }
@@ -868,6 +872,7 @@ export function createConversationStore(
     if (newIdx < 0 || newIdx >= siblings.length) return;
 
     switchBranchInTree(tab.tree, nodeId, newIdx);
+    scrollResetRequest++;
   }
 
   function getBranchInfo(
@@ -1363,6 +1368,12 @@ export function createConversationStore(
     },
     get autoCopiedNodeId() {
       return autoCopiedNodeId;
+    },
+    get pinRequest() {
+      return pinRequest;
+    },
+    get scrollResetRequest() {
+      return scrollResetRequest;
     },
     markAutoCopied,
     get tree() {

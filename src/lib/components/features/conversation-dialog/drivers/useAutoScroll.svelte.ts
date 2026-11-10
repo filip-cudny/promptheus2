@@ -1,28 +1,53 @@
+import { createScrollFollower } from "$lib/utils/scrollFollow";
+
 export function useAutoScroll(opts: {
   getContainer: () => HTMLDivElement | undefined;
   pageSize: number;
   totalCount: () => number;
   trackChange: () => unknown;
   resetKey: () => unknown;
+  pinRequest: () => number;
+  resetRequest: () => number;
 }) {
-  let userScrolledUp = $state(false);
+  let spacer = $state(false);
   let visibleCount = $state(opts.pageSize);
+  let handledPin = opts.pinRequest();
+  let handledReset = opts.resetRequest();
 
   const hasMore = $derived(visibleCount < opts.totalCount());
+
+  const follower = createScrollFollower({
+    getContainer: opts.getContainer,
+    getPinnedTarget: () =>
+      opts.getContainer()?.querySelector<HTMLElement>(".pair:last-child > :first-child"),
+    onChange: (state) => {
+      spacer = state.spacer;
+    },
+  });
 
   $effect(() => {
     opts.resetKey();
     visibleCount = opts.pageSize;
+    follower.dispatch({ type: "reset" });
+  });
+
+  $effect(() => {
+    const request = opts.resetRequest();
+    if (request === handledReset) return;
+    handledReset = request;
+    follower.dispatch({ type: "reset" });
+  });
+
+  $effect(() => {
+    const request = opts.pinRequest();
+    if (request === handledPin) return;
+    handledPin = request;
+    follower.dispatch({ type: "pin" });
   });
 
   $effect(() => {
     opts.trackChange();
-    const el = opts.getContainer();
-    if (!userScrolledUp && el) {
-      requestAnimationFrame(() => {
-        el.scrollTop = el.scrollHeight;
-      });
-    }
+    follower.dispatch({ type: "contentChange" });
   });
 
   $effect(() => {
@@ -45,9 +70,7 @@ export function useAutoScroll(opts: {
   function onScroll() {
     const el = opts.getContainer();
     if (!el) return;
-    const distanceFromBottom =
-      el.scrollHeight - el.scrollTop - el.clientHeight;
-    userScrolledUp = distanceFromBottom > 50;
+    follower.onScroll();
     if (el.scrollTop < 100 && hasMore) loadMore();
   }
 
@@ -58,7 +81,13 @@ export function useAutoScroll(opts: {
     get hasMore() {
       return hasMore;
     },
+    get spacer() {
+      return spacer;
+    },
     onScroll,
+    onWheel: follower.onWheel,
+    onKeydown: follower.onKeydown,
+    onPointerdown: follower.onPointerdown,
   };
 }
 

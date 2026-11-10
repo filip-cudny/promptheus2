@@ -32,6 +32,7 @@ let panelOpen = $state(false);
 let panelMode = $state<PanelMode>("overlay");
 let panelWidth = $state(DEFAULT_PANEL_WIDTH);
 let focusRequest = $state(0);
+let pinRequest = $state(0);
 let draft = $state("");
 let appliedInitialPanel: unknown;
 
@@ -88,6 +89,7 @@ async function send(text: string) {
   error = null;
   messages.push({ id: nextId++, role: "user", text: message });
   messages.push({ id: nextId++, role: "assistant", ...emptyReply() });
+  pinRequest++;
   running = true;
   try {
     await settingsAgentSend(message, onEvent);
@@ -290,6 +292,7 @@ export function getSettingsAgent() {
     get panelMode() { return panelMode; },
     get panelWidth() { return panelWidth; },
     get focusRequest() { return focusRequest; },
+    get pinRequest() { return pinRequest; },
     get draft() { return draft; },
     setDraft,
     fillDraft,

@@ -12,12 +12,56 @@
   import { parseSettingLink, showSettingLinks } from "$lib/utils/settingLinks";
   import { showsProcessing, thinkingText } from "$lib/utils/agentReply";
   import { parseContentSegments, toRenderBlocks } from "$lib/utils/toolCallMarkers";
+  import { createScrollFollower } from "$lib/utils/scrollFollow";
   import type { ToolCall } from "$lib/types/ai";
+  import type { AgentMessage } from "$lib/stores/settingsAgent.svelte";
 
   let { docked }: { docked: boolean } = $props();
 
   const agent = getSettingsAgent();
   const navigation = getSettingsNavigation();
+
+  let container: HTMLDivElement | undefined = $state();
+  let column: HTMLDivElement | undefined = $state();
+  let viewportHeight = $state(0);
+  let spacer = $state(false);
+  let handledPin = agent.pinRequest;
+
+  const follower = createScrollFollower({
+    getContainer: () => container,
+    getPinnedTarget: () =>
+      container?.querySelector<HTMLElement>(".pair:last-child > :first-child"),
+    onChange: (state) => {
+      spacer = state.spacer;
+    },
+  });
+
+  const pairs = $derived(
+    agent.messages.reduce<AgentMessage[][]>((acc, message) => {
+      if (message.role === "user" || acc.length === 0) acc.push([message]);
+      else acc[acc.length - 1].push(message);
+      return acc;
+    }, []),
+  );
+  const lastMessageId = $derived(agent.messages[agent.messages.length - 1]?.id);
+
+  $effect(() => {
+    if (agent.messages.length === 0) follower.dispatch({ type: "reset" });
+  });
+
+  $effect(() => {
+    const request = agent.pinRequest;
+    if (request === handledPin) return;
+    handledPin = request;
+    follower.dispatch({ type: "pin" });
+  });
+
+  $effect(() => {
+    if (!column) return;
+    const observer = new ResizeObserver(() => follower.dispatch({ type: "contentChange" }));
+    observer.observe(column);
+    return () => observer.disconnect();
+  });
 
   async function open(url: string) {
     const key = parseSettingLink(url);
@@ -36,55 +80,79 @@
   }
 </script>
 
-<div class="messages" class:empty={agent.messages.length === 0}>
-  <div class="column">
-    {#if agent.messages.length === 0}
+<svelte:window onkeydown={follower.onKeydown} />
+
+{#snippet tail()}
+  {#if agent.proposal}
+    {#key agent.proposal.proposal_id}
+      <ProposalCard proposal={agent.proposal} />
+    {/key}
+  {/if}
+  {#if agent.error}
+    <div class="error">{agent.error}</div>
+  {/if}
+{/snippet}
+
+<div
+  class="messages"
+  role="presentation"
+  class:empty={agent.messages.length === 0}
+  bind:this={container}
+  bind:clientHeight={viewportHeight}
+  style:--viewport-height="{viewportHeight}px"
+  onscroll={follower.onScroll}
+  onwheel={follower.onWheel}
+  onpointerdown={follower.onPointerdown}
+>
+  <div class="column" bind:this={column}>
+    {#if pairs.length === 0}
       <AgentEmptyState />
+      {@render tail()}
     {/if}
-    {#each agent.messages as message, i (message.id)}
-      {#if message.role === "user"}
-        <div class="user">{message.text}</div>
-      {:else}
-        {@const reasoning = thinkingText(message)}
-        <div class="assistant">
-          {#if reasoning || message.isThinking}
-            <ThinkingBlock
-              thinkingContent={reasoning}
-              isThinkingActive={message.isThinking}
-              isStreaming={agent.running && i === agent.messages.length - 1}
-            />
-          {/if}
-          {#each toRenderBlocks(parseContentSegments(message.text)) as block}
-            {#if block.kind === "text"}
-              <MarkdownRenderer
-                content={showSettingLinks(block.text)}
-                isStreaming={agent.running && i === agent.messages.length - 1}
-                onopen={open}
-              />
-            {:else}
-              {@const calls = groupCalls(block.toolCallIds, message.toolCalls)}
-              {#if calls.length > 0}
-                <ToolCallGroup toolCalls={calls} isStreaming={agent.running && i === agent.messages.length - 1} />
+    {#each pairs as pair, p (pair[0].id)}
+      <div class="pair" class:spacer={spacer && p === pairs.length - 1}>
+        {#each pair as message (message.id)}
+          {#if message.role === "user"}
+            <div class="user">{message.text}</div>
+          {:else}
+            {@const reasoning = thinkingText(message)}
+            {@const last = message.id === lastMessageId}
+            <div class="assistant">
+              {#if reasoning || message.isThinking}
+                <ThinkingBlock
+                  thinkingContent={reasoning}
+                  isThinkingActive={message.isThinking}
+                  isStreaming={agent.running && last}
+                />
               {/if}
-            {/if}
-          {/each}
-          {#each message.secretViews as name, view (view)}
-            <SecretField {name} readonly />
-          {/each}
-          {#if i === agent.messages.length - 1 && showsProcessing(message, agent.running)}
-            <ProcessingIndicator />
+              {#each toRenderBlocks(parseContentSegments(message.text)) as block}
+                {#if block.kind === "text"}
+                  <MarkdownRenderer
+                    content={showSettingLinks(block.text)}
+                    isStreaming={agent.running && last}
+                    onopen={open}
+                  />
+                {:else}
+                  {@const calls = groupCalls(block.toolCallIds, message.toolCalls)}
+                  {#if calls.length > 0}
+                    <ToolCallGroup toolCalls={calls} isStreaming={agent.running && last} />
+                  {/if}
+                {/if}
+              {/each}
+              {#each message.secretViews as name, view (view)}
+                <SecretField {name} readonly />
+              {/each}
+              {#if last && showsProcessing(message, agent.running)}
+                <ProcessingIndicator />
+              {/if}
+            </div>
           {/if}
-        </div>
-      {/if}
+        {/each}
+        {#if p === pairs.length - 1}
+          {@render tail()}
+        {/if}
+      </div>
     {/each}
-    {#if agent.proposal}
-      {#key agent.proposal.proposal_id}
-        <ProposalCard proposal={agent.proposal} />
-      {/key}
-    {/if}
-    {#if agent.error}
-      <div class="error">{agent.error}</div>
-    {/if}
   </div>
 </div>
 
@@ -109,6 +177,17 @@
     width: 100%;
     max-width: 760px;
     margin: 0 auto;
+  }
+
+  .pair {
+    display: contents;
+  }
+
+  .pair.spacer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    min-height: calc(var(--viewport-height) - 2 * var(--space-6));
   }
 
   .user {

@@ -43,6 +43,15 @@ Files whose role does not follow from the name:
 3. User hits Ctrl+Enter / Save → `edit.rebuild()` collapses segments back into `{{tool_call:id}}` markers. `onContentChange(rebuilt)` propagates to store.
 4. `edit.exit()` clears segments + textareaRefs.
 
+### Scroll
+
+Rule in `$lib/utils/scrollFollow.ts` (`reduceScroll`, tested in `tests/scrollFollow.test.mjs`), driven by `useAutoScroll` through `createScrollFollower`; mode is `follow`, `pinned` or `free`, plus a `spacer` flag.
+
+1. `store.pinRequest` is bumped by `sendMessage` and `regenerate` only (edit-and-resend goes through `regenerate`). `useAutoScroll` then pins: the mode becomes `pinned`, `spacer` true, and the view scrolls once so the new user bubble sits at the container's top padding offset. Content changes (`trackChange`: pairs, streamed content) do not scroll while pinned or `free`.
+2. `ConversationArea` wraps each `UserBubble` + `AssistantBubble` in `.pair` (`display: contents`). With `spacer` the last pair becomes a flex column with `min-height` = the container's client height (`bind:clientHeight`, exposed as `--viewport-height`) minus its vertical padding, so the reply streams into empty space and the pinned position is also the bottom. The spacer stays until the next reset or pin, so reaching the bottom does not make the content jump.
+3. Following the bottom resumes only on a scroll made by the user that ends within 4 px of the bottom. A scroll counts as the user's for 250 ms after a `wheel` or `keydown` (window-level, since the container is not focusable) and while a pointer is held on the container (scrollbar drag). Scrolls the code makes (pin, scroll-to-bottom, `loadMore`) never count, so the pin ending at the bottom does not resume following.
+4. Tab switch (`activeTabId`, covers load and tab close) and `switchBranch` (`store.scrollResetRequest`) reset: `follow`, no spacer, scroll to the bottom. `loadMore` keeps its scroll-height restore.
+
 ### Input sync
 
 `useInputSync` runs four `$effect`s:

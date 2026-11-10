@@ -24,6 +24,7 @@
 
   let container: HTMLDivElement | undefined = $state();
   let scrolled = $state(false);
+  let viewportHeight = $state(0);
 
   const allPairs = $derived(store.messagePairs);
 
@@ -33,6 +34,8 @@
     totalCount: () => allPairs.length,
     trackChange: () => [store.messagePairs, store.streamedContent],
     resetKey: () => store.activeTabId,
+    pinRequest: () => store.pinRequest,
+    resetRequest: () => store.scrollResetRequest,
   });
 
   const visiblePairs = $derived(
@@ -50,11 +53,18 @@
   }
 </script>
 
+<svelte:window onkeydown={scroll.onKeydown} />
+
 <div
   class="conversation-area"
+  role="presentation"
   class:scrolled
   bind:this={container}
+  bind:clientHeight={viewportHeight}
+  style:--viewport-height="{viewportHeight}px"
   onscroll={handleScroll}
+  onwheel={scroll.onWheel}
+  onpointerdown={scroll.onPointerdown}
 >
   <div class="messages-column">
     {#if allPairs.length === 0}
@@ -67,38 +77,40 @@
         </div>
       {/if}
       {#each visiblePairs as pair (pair.user.node_id)}
-        <UserBubble
-          node={pair.user}
-          showDelete={false}
-          {classifyToken}
-          onContentChange={(content) => store.updateUserNodeContent(pair.user.node_id, content)}
-          onDelete={() => {}}
-          onRegenerate={() => { if (pair.assistant) store.regenerate(pair.assistant.node_id); }}
-          onRemoveTextAttachment={(index) => store.removeNodeTextAttachment(pair.user.node_id, index)}
-          onRemoveImage={(index) => store.removeNodeImage(pair.user.node_id, index)}
-          onAddTextAttachment={(text) => store.addNodeTextAttachment(pair.user.node_id, text)}
-          onAddImage={(data, mediaType) => store.addNodeImage(pair.user.node_id, data, mediaType)}
-        />
-        {#if pair.assistant}
-          {@const assistant = pair.assistant}
-          {@const streaming = store.isStreaming && isLastAssistant(pair)}
-          <AssistantBubble
-            node={assistant}
-            displayContent={streaming ? store.streamedContent : assistant.content}
+        <div class="pair" class:spacer={scroll.spacer && isLastAssistant(pair)}>
+          <UserBubble
+            node={pair.user}
             showDelete={false}
-            isStreaming={streaming}
-            autoCopied={store.autoCopiedNodeId === assistant.node_id}
-            thinkingContent={streaming ? store.streamedThinking : (assistant.thinking ?? "")}
-            isThinkingActive={streaming && store.isThinking}
-            branchInfo={store.getBranchInfo(assistant.node_id)}
-            activeToolCalls={streaming ? store.activeToolCalls : []}
-            onRegenerate={() => store.regenerate(assistant.node_id)}
-            onBranchPrev={() => store.switchBranch(assistant.node_id, -1)}
-            onBranchNext={() => store.switchBranch(assistant.node_id, 1)}
-            onContentChange={(content) => store.updateNodeContent(assistant.node_id, content)}
+            {classifyToken}
+            onContentChange={(content) => store.updateUserNodeContent(pair.user.node_id, content)}
             onDelete={() => {}}
+            onRegenerate={() => { if (pair.assistant) store.regenerate(pair.assistant.node_id); }}
+            onRemoveTextAttachment={(index) => store.removeNodeTextAttachment(pair.user.node_id, index)}
+            onRemoveImage={(index) => store.removeNodeImage(pair.user.node_id, index)}
+            onAddTextAttachment={(text) => store.addNodeTextAttachment(pair.user.node_id, text)}
+            onAddImage={(data, mediaType) => store.addNodeImage(pair.user.node_id, data, mediaType)}
           />
-        {/if}
+          {#if pair.assistant}
+            {@const assistant = pair.assistant}
+            {@const streaming = store.isStreaming && isLastAssistant(pair)}
+            <AssistantBubble
+              node={assistant}
+              displayContent={streaming ? store.streamedContent : assistant.content}
+              showDelete={false}
+              isStreaming={streaming}
+              autoCopied={store.autoCopiedNodeId === assistant.node_id}
+              thinkingContent={streaming ? store.streamedThinking : (assistant.thinking ?? "")}
+              isThinkingActive={streaming && store.isThinking}
+              branchInfo={store.getBranchInfo(assistant.node_id)}
+              activeToolCalls={streaming ? store.activeToolCalls : []}
+              onRegenerate={() => store.regenerate(assistant.node_id)}
+              onBranchPrev={() => store.switchBranch(assistant.node_id, -1)}
+              onBranchNext={() => store.switchBranch(assistant.node_id, 1)}
+              onContentChange={(content) => store.updateNodeContent(assistant.node_id, content)}
+              onDelete={() => {}}
+            />
+          {/if}
+        </div>
       {/each}
     {/if}
   </div>
@@ -130,6 +142,17 @@
     flex-direction: column;
     gap: var(--space-1);
     flex: 1;
+  }
+
+  .pair {
+    display: contents;
+  }
+
+  .pair.spacer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-height: calc(var(--viewport-height) - 40px - var(--space-8));
   }
 
   .empty-state {
