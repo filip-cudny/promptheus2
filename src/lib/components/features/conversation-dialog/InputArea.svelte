@@ -8,7 +8,7 @@
   import ToolChip from "./ToolChip.svelte";
   import AttachmentRow from "./components/AttachmentRow.svelte";
   import { prefetchCapabilities, getCachedCapabilities } from "$lib/stores/capabilities.svelte";
-  import { SendHorizonal, RefreshCw, Square, CopyCheck, Globe } from "lucide-svelte";
+  import { ArrowUp, RefreshCw, Square, CopyCheck, Globe } from "lucide-svelte";
   import type { ComponentType, SvelteComponent } from "svelte";
   import type { IconProps } from "lucide-svelte";
 
@@ -288,24 +288,17 @@
       />
 
       {#if store.isExecuting}
-        <ActionIconButton
-          icon={Square}
-          onclick={() => store.stopExecution()}
-          title="Stop"
-        />
+        <button class="send" title="Stop" onclick={() => store.stopExecution()}>
+          <Square size={14} strokeWidth={3.4} />
+        </button>
       {:else if store.abortRegenerateNodeId || store.isRegenerateMode}
-        <ActionIconButton
-          icon={RefreshCw}
-          onclick={sendOrRegenerate}
-          title="Regenerate (Enter)"
-        />
+        <button class="send" title="Regenerate (Enter)" onclick={sendOrRegenerate}>
+          <RefreshCw size={14} strokeWidth={3.4} />
+        </button>
       {:else}
-        <ActionIconButton
-          icon={SendHorizonal}
-          onclick={sendOrRegenerate}
-          disabled={!store.canSend}
-          title="Send (Enter)"
-        />
+        <button class="send" title="Send (Enter)" disabled={!store.canSend} onclick={sendOrRegenerate}>
+          <ArrowUp size={14} strokeWidth={3.4} />
+        </button>
       {/if}
     </div>
   </div>
@@ -389,5 +382,23 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
+  }
+
+  .send {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border: none;
+    border-radius: 50%;
+    background: var(--text-primary);
+    color: var(--surface-base);
+    cursor: pointer;
+  }
+
+  .send:disabled {
+    opacity: 0.4;
+    cursor: default;
   }
 </style>

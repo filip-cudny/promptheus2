@@ -488,7 +488,7 @@
               <X size={16} />
             </button>
             <button type="button" class="primary" tabindex="-1" aria-label="Finish" onclick={() => run("toggle_speech_recording")}>
-              <ArrowUp size={16} strokeWidth={2.5} />
+              <ArrowUp size={16} strokeWidth={3} />
             </button>
           </div>
         </div>

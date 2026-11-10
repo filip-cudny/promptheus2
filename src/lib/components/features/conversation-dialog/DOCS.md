@@ -17,6 +17,7 @@ Each entrypoint is a thin orchestrator. IPC, listeners, timers, and pagination l
 Files whose role does not follow from the name:
 
 - `AssistantBubble.svelte`, `UserBubble.svelte`, `InputArea.svelte`, `TabSidebar.svelte` — orchestrators; the two bubbles use `ActionIconButton` for the footer buttons (`active` on the Edit button, `variant="danger"` on Delete); `AssistantBubble` edits its segments through `drivers/useEditSegments`, `UserBubble` through `BubbleEditField` and `SkillEditable` with its own `editMode`/`editText`.
+- `InputArea.svelte` button bar — Send, Stop and Regenerate share one look, a 26 px filled circle (`--text-primary` background, `--surface-base` icon `ArrowUp` / `Square` / `RefreshCw` at 14 px, stroke 3.4, the same as the agent composer's send; disabled opacity 0.4); Send & Copy stays a plain `ActionIconButton`.
 - `ContextSection.svelte` — inline context bar (text/image chips + clear/edit).
 - `AttachMenu.svelte`, `components/SidebarMoreMenu.svelte` — `FloatingPanel` + `MenuList` dropdowns (the attach menu opens above its button, the sidebar menu aligns to the end of its button).
 - `sidebarItems.ts` — pure helpers building `SidebarItem[]` from history.

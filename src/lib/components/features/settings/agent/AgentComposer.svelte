@@ -67,10 +67,10 @@
         <Mic size={14} />
       </button>
       {#if running}
-        <button class="send" title="Stop" onclick={oncancel}><Square size={14} /></button>
+        <button class="send" title="Stop" onclick={oncancel}><Square size={14} strokeWidth={3.4} /></button>
       {:else}
         <button class="send" title="Send" disabled={!agent.draft.trim() || !modelReady} onclick={submit}>
-          <ArrowUp size={14} />
+          <ArrowUp size={14} strokeWidth={3.4} />
         </button>
       {/if}
     </div>
