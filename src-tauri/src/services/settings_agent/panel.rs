@@ -138,7 +138,7 @@ fn work_area_for(app: &tauri::AppHandle, saved_origin: Option<(f64, f64)>) -> Op
         })
     });
     let primary = app.primary_monitor().ok().flatten();
-    let monitor = containing.or(primary.as_ref())?;
+    let monitor = containing.or(primary.as_ref()).or(monitors.first())?;
     let scale = monitor.scale_factor();
     let work = monitor.work_area();
     Some((work.position.x as f64 / scale, work.size.width as f64 / scale))

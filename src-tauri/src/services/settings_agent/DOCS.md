@@ -61,7 +61,7 @@ Pruning: `transcript::prune(dir, retention_days, now)` deletes files whose `star
 
 ## Panel at window creation
 
-`open_settings_window` decides the panel before it creates the `settings-dialog` window (`panel::initial_for_new_window`; a focused existing window is left alone). It reads the `ui_state` keys `settings-dialog.agent_panel_open` (bool, written by the frontend; absent or not a bool counts as open) and `settings-dialog.agent_panel_width` (`saved_width`: 380 when absent or not a number, at least 300), the saved geometry, and the work area (logical px: x and width) of the monitor whose logical rect contains the saved (x, y), else the primary monitor (GNOME Wayland places new windows itself). `panel::initial_panel` returns:
+`open_settings_window` decides the panel before it creates the `settings-dialog` window (`panel::initial_for_new_window`; a focused existing window is left alone). It reads the `ui_state` keys `settings-dialog.agent_panel_open` (bool, written by the frontend; absent or not a bool counts as open) and `settings-dialog.agent_panel_width` (`saved_width`: 380 when absent or not a number, at least 300), the saved geometry, and the work area (logical px: x and width) of the monitor whose logical rect contains the saved (x, y), else the primary monitor, else the first monitor (GNOME Wayland places new windows itself and reports no primary monitor). `panel::initial_panel` returns:
 
 - `Hidden`: the open key is `false`.
 - `Widened(w)`: open, the work area is known and (saved x, else the work area x) + window width + panel width fits in it.

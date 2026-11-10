@@ -49,9 +49,11 @@ pub async fn open_settings_window(
         }
         if let Some(webview) = app.get_webview(&config.label) {
             let mode = initial_panel.mode();
-            let _ = webview.eval(format!(
+            if let Err(e) = webview.eval(format!(
                 "window.__settingsAgentPanel = \"{mode}\"; window.__onSettingsAgentPanel?.(\"{mode}\");"
-            ));
+            )) {
+                log::warn!("settings-dialog: failed to pass the agent panel mode to the page: {e}");
+            }
         }
     }
 
