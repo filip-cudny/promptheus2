@@ -14,6 +14,9 @@ const RECENCY_FLOOR: f64 = 0.3;
 const PROXIMITY_WINDOW_CHARS: u32 = 50;
 const PROXIMITY_BONUS: f32 = 1.5;
 const TITLE_EARLY_EXIT_SCORE: i32 = 240;
+const TYPO_MIN_TOKEN_LEN: usize = 4;
+const TYPO_LONG_TOKEN_LEN: usize = 7;
+const TYPO_MAX_EXPANSIONS: usize = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -223,6 +226,111 @@ fn build_fts_query(tokens: &[String]) -> Option<String> {
     Some(parts.join(" "))
 }
 
+fn typo_max_distance(token_len: usize) -> usize {
+    if token_len >= TYPO_LONG_TOKEN_LEN {
+        2
+    } else {
+        1
+    }
+}
+
+fn osa_distance(a: &[char], b: &[char]) -> usize {
+    let width = b.len() + 1;
+    let mut rows = vec![0usize; (a.len() + 1) * width];
+    for j in 0..=b.len() {
+        rows[j] = j;
+    }
+    for i in 1..=a.len() {
+        rows[i * width] = i;
+        for j in 1..=b.len() {
+            let cost = usize::from(a[i - 1] != b[j - 1]);
+            let mut best = (rows[(i - 1) * width + j] + 1)
+                .min(rows[i * width + j - 1] + 1)
+                .min(rows[(i - 1) * width + j - 1] + cost);
+            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
+                best = best.min(rows[(i - 2) * width + j - 2] + 1);
+            }
+            rows[i * width + j] = best;
+        }
+    }
+    rows[a.len() * width + b.len()]
+}
+
+/// Terms per query token of ≥ 2 chars, in token order. A token without a
+/// candidate (or shorter than `TYPO_MIN_TOKEN_LEN`) keeps itself as its only term.
+///
+/// Deliberate simplification: each lookup scans the whole `conversations_vocab`
+/// rows of the length window and measures the distance in Rust. Stops being
+/// adequate when the vocabulary reaches hundreds of thousands of terms (a typo
+/// search then takes visibly long); upgrade by caching the vocabulary per
+/// `history-changed` or by a BK-tree.
+fn expand_tokens(history: &SqliteHistoryService, tokens: &[String]) -> Vec<Vec<String>> {
+    tokens
+        .iter()
+        .filter(|t| t.chars().count() >= 2)
+        .map(|token| expand_token(history, token))
+        .collect()
+}
+
+fn expand_token(history: &SqliteHistoryService, token: &str) -> Vec<String> {
+    let exact = vec![token.to_string()];
+    if token.chars().count() < TYPO_MIN_TOKEN_LEN {
+        return exact;
+    }
+    let folded = match history.fold_token(token).as_deref() {
+        Ok([term]) => term.chars().collect::<Vec<char>>(),
+        Ok(_) => return exact,
+        Err(e) => {
+            log::warn!(target: "app_lib::history_search", "typo fold failed: {}", e);
+            return exact;
+        }
+    };
+    let max_distance = typo_max_distance(folded.len());
+    let vocab = match history
+        .vocab_terms_of_length(folded.len().saturating_sub(max_distance), folded.len() + max_distance)
+    {
+        Ok(vocab) => vocab,
+        Err(e) => {
+            log::warn!(target: "app_lib::history_search", "typo vocabulary read failed: {}", e);
+            return exact;
+        }
+    };
+
+    let mut candidates: Vec<(usize, i64, String)> = vocab
+        .into_iter()
+        .filter_map(|(term, doc)| {
+            let term_chars: Vec<char> = term.chars().collect();
+            let distance = osa_distance(&folded, &term_chars);
+            (distance <= max_distance).then_some((distance, doc, term))
+        })
+        .collect();
+    candidates.sort_by(|a, b| a.0.cmp(&b.0).then(b.1.cmp(&a.1)).then(a.2.cmp(&b.2)));
+    candidates.truncate(TYPO_MAX_EXPANSIONS);
+
+    if candidates.is_empty() {
+        return exact;
+    }
+    candidates.into_iter().map(|(_, _, term)| term).collect()
+}
+
+fn build_expanded_fts_query(expansions: &[Vec<String>]) -> Option<String> {
+    if expansions.is_empty() {
+        return None;
+    }
+    let parts: Vec<String> = expansions
+        .iter()
+        .map(|terms| {
+            let quoted: Vec<String> = terms.iter().map(|t| escape_fts_token(t)).collect();
+            if quoted.len() == 1 {
+                quoted.join("")
+            } else {
+                format!("({})", quoted.join(" OR "))
+            }
+        })
+        .collect();
+    Some(parts.join(" "))
+}
+
 fn collect_token_indices(text: &str, token: &str) -> Vec<u32> {
     let token_lower: String = token.to_lowercase();
     let token_chars: Vec<char> = token_lower.chars().collect();
@@ -251,12 +359,16 @@ fn collect_token_indices(text: &str, token: &str) -> Vec<u32> {
 
 pub struct HistorySearch {
     matcher: Matcher,
+    #[cfg(test)]
+    typo_passes: usize,
 }
 
 impl HistorySearch {
     pub fn new() -> Self {
         Self {
             matcher: Matcher::new(Config::DEFAULT),
+            #[cfg(test)]
+            typo_passes: 0,
         }
     }
 
@@ -271,9 +383,16 @@ impl HistorySearch {
         let max_token_len = tokens.iter().map(|t| t.chars().count()).max().unwrap_or(0);
 
         if max_token_len >= FTS_MIN_QUERY_LEN {
-            if let Some(response) = self.run_fts(history, query, &tokens) {
-                if !response.results.is_empty() {
-                    return response;
+            if let Some(fts_query) = build_fts_query(&tokens) {
+                if let Some(response) = self.run_fts(history, query, &fts_query, &tokens) {
+                    if !response.results.is_empty() {
+                        return response;
+                    }
+                }
+                if let Some(response) = self.run_typo_fts(history, query, &tokens) {
+                    if !response.results.is_empty() {
+                        return response;
+                    }
                 }
             }
         }
@@ -296,16 +415,40 @@ impl HistorySearch {
         })
     }
 
-    fn run_fts(
-        &self,
+    fn run_typo_fts(
+        &mut self,
         history: &SqliteHistoryService,
         query: &SearchQuery,
         tokens: &[String],
     ) -> Option<SearchResponse> {
-        let fts_query = build_fts_query(tokens)?;
+        #[cfg(test)]
+        {
+            self.typo_passes += 1;
+        }
+        let expansions = expand_tokens(history, tokens);
+        let fts_query = build_expanded_fts_query(&expansions)?;
+        let terms: Vec<String> = expansions.into_iter().flatten().collect();
+        let response = self.run_fts(history, query, &fts_query, &terms)?;
+        log::debug!(
+            target: "app_lib::history_search",
+            "typo pass: tokens={} terms={} results={}",
+            tokens.len(),
+            terms.len(),
+            response.results.len()
+        );
+        Some(response)
+    }
+
+    fn run_fts(
+        &self,
+        history: &SqliteHistoryService,
+        query: &SearchQuery,
+        fts_query: &str,
+        tokens: &[String],
+    ) -> Option<SearchResponse> {
         let raw_hits = history
             .search_fts(
-                &fts_query,
+                fts_query,
                 query.type_filter,
                 query.status_filter,
                 &query.skill_ids,
@@ -928,5 +1071,70 @@ mod tests {
         let response = search.run(&history, &q);
         assert!(response.total >= 1);
         assert_eq!(response.results[0].entry.id, "cluster");
+    }
+
+    fn titled_entry(id: &str, title: &str) -> HistoryEntry {
+        let mut e = make_entry(id, "unrelated body");
+        e.title = Some(title.into());
+        e
+    }
+
+    fn query_for(text: &str) -> SearchQuery {
+        let mut q = empty_query();
+        q.query = text.into();
+        q
+    }
+
+    #[test]
+    fn typo_pass_finds_entry_of_correct_spelling_with_highlights() {
+        let history = make_history(vec![
+            titled_entry("a", "react"),
+            titled_entry("b", "svelte stores"),
+        ]);
+        let mut search = HistorySearch::new();
+        let exact = search.run(&history, &query_for("react"));
+        assert_eq!(exact.results.len(), 1);
+
+        for typo in ["reactt", "raect"] {
+            let response = search.run(&history, &query_for(typo));
+            assert_eq!(response.results.len(), 1, "query {typo}");
+            assert_eq!(response.results[0].entry.id, exact.results[0].entry.id);
+            let title_match = response.results[0]
+                .matches
+                .iter()
+                .find(|m| m.field == SearchField::Title)
+                .expect("title match present");
+            assert!(!title_match.indices.is_empty(), "query {typo}");
+        }
+    }
+
+    #[test]
+    fn exact_hit_skips_typo_pass() {
+        let history = make_history(vec![titled_entry("a", "react"), titled_entry("b", "reacts")]);
+        let mut search = HistorySearch::new();
+
+        let response = search.run(&history, &query_for("react"));
+        assert_eq!(response.results.len(), 1);
+        assert_eq!(response.results[0].entry.id, "a");
+        assert_eq!(search.typo_passes, 0);
+
+        search.run(&history, &query_for("reactt"));
+        assert_eq!(search.typo_passes, 1);
+    }
+
+    #[test]
+    fn typo_expansion_keeps_at_most_five_terms_nearest_first() {
+        let history = make_history(vec![
+            titled_entry("1", "reacts"),
+            titled_entry("2", "reacts reacta"),
+            titled_entry("3", "reactb reactc"),
+            titled_entry("4", "reactd reacte"),
+        ]);
+
+        let expansions = expand_tokens(&history, &["react".to_string()]);
+        assert_eq!(
+            expansions,
+            vec![vec!["reacts", "reacta", "reactb", "reactc", "reactd"]]
+        );
     }
 }

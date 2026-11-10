@@ -482,6 +482,34 @@ impl SqliteHistoryService {
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
+    pub fn fold_token(&self, token: &str) -> Result<Vec<String>, HistoryError> {
+        let conn = self.db.conn();
+        conn.execute("DELETE FROM temp.fold_fts", [])?;
+        conn.execute("INSERT INTO temp.fold_fts (term) VALUES (?1)", [token])?;
+        let mut stmt = conn.prepare("SELECT term FROM temp.fold_vocab ORDER BY term")?;
+        let terms = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<String>, _>>()?;
+        conn.execute("DELETE FROM temp.fold_fts", [])?;
+        Ok(terms)
+    }
+
+    pub fn vocab_terms_of_length(
+        &self,
+        min_chars: usize,
+        max_chars: usize,
+    ) -> Result<Vec<(String, i64)>, HistoryError> {
+        let mut stmt = self.db.conn().prepare(
+            "SELECT term, doc FROM temp.conversations_vocab WHERE length(term) BETWEEN ?1 AND ?2",
+        )?;
+        let terms = stmt
+            .query_map([min_chars as i64, max_chars as i64], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?
+            .collect::<Result<Vec<(String, i64)>, _>>()?;
+        Ok(terms)
+    }
+
     fn insert_images(
         &self,
         tx: &rusqlite::Transaction,

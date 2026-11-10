@@ -28,6 +28,7 @@ impl Database {
         conn.pragma_update(None, "foreign_keys", "ON")?;
 
         run_migrations(&conn)?;
+        create_search_helpers(&conn)?;
 
         log::info!("database opened at {}", db_path.display());
         Ok(Self { conn })
@@ -38,12 +39,25 @@ impl Database {
         let conn = Connection::open_in_memory()?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         run_migrations(&conn)?;
+        create_search_helpers(&conn)?;
         Ok(Self { conn })
     }
 
     pub fn conn(&self) -> &Connection {
         &self.conn
     }
+}
+
+fn create_search_helpers(conn: &Connection) -> Result<(), DatabaseError> {
+    conn.execute_batch(
+        "CREATE VIRTUAL TABLE IF NOT EXISTS temp.conversations_vocab
+             USING fts5vocab(main, conversations_fts, row);
+         CREATE VIRTUAL TABLE IF NOT EXISTS temp.fold_fts
+             USING fts5(term, tokenize='unicode61 remove_diacritics 2');
+         CREATE VIRTUAL TABLE IF NOT EXISTS temp.fold_vocab
+             USING fts5vocab(temp, fold_fts, row);",
+    )?;
+    Ok(())
 }
 
 fn get_schema_version(conn: &Connection) -> i32 {
