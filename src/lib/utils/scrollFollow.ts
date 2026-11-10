@@ -61,12 +61,11 @@ export function createScrollFollower(opts: {
     requestAnimationFrame(() => {
       const el = opts.getContainer();
       if (!el) return;
-      gestureUntil = 0;
-      pointerHeld = false;
       if (action === "toBottom") {
         el.scrollTop = el.scrollHeight;
         return;
       }
+      gestureUntil = 0;
       const target = opts.getPinnedTarget();
       if (target) scrollToPinned(el, target);
     });
