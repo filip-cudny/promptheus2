@@ -63,6 +63,10 @@ The panel header has `Sparkles`, the title and the model the agent uses (muted, 
 
 The composer bar shows `ModelSelector` (model chip, effort chip when the model has effort levels) before the mic with the agent's effective model and effort (`agentModelId`, `agentReasoningEffort` in `$lib/utils/agentModel.ts`). A pick writes an explicit value to `surfaces.settings_agent.generation` via `updateSurfaceModel` / `updateSurfaceReasoningEffort`, so the agent stops following the chat model or effort. The picker is hidden while the effective id is not a text model; reset to "Same as Chat" stays in Settings → Chat. The bar wraps in a narrow panel.
 
+The composer text is the store's `draft` (`setDraft(text)`, `fillDraft(text)` = set and request composer focus); `AgentComposer` binds its textarea to it, a submit sends and clears it, and the dictation event appends to it. Placeholder: "Ask about or change a setting…".
+
+`AgentMessages` renders `AgentEmptyState` while there are no messages: a faint-bordered island "Ask instead of searching" with four icon lines (find where an option is, ask how something is set, change it behind a card, secrets are shown masked and never to the agent) and three chips ("Where is the context menu shortcut?", "Which model does Quick actions use?", "Where do I set the speech language?"). A chip calls `fillDraft(<its text>)` and never sends. Chips only ask where something is: none sets a value or names a variable. Under the read-only `SecretField` a caption (`EyeOff`, muted) says "Only you see this value. The agent did not receive it."
+
 Layout depends only on the width of `.dialog-body` (measured with `bind:clientWidth` in `App.svelte`) and the saved panel width, not on the panel mode. `agentPanelLayout(containerWidth, savedWidth)` in `$lib/utils/agentPanelLayout.ts` (tested in `tests/agentPanelLayout.test.mjs`) returns `{ docked, width }`:
 
 - `containerWidth >= CONTENT_MIN_WIDTH + 300` (`PANEL_MIN_WIDTH`): docked. sidebar | content (`flex: 1`) | panel in one row, panel `position: relative` at `min(max(saved, 300), containerWidth − CONTENT_MIN_WIDTH)`, no shadow.
@@ -298,7 +302,9 @@ Env rows have column headers ("Name in server", "Value"), shown when the server 
 
 ### Search and navigation
 
-`SettingsSearch` (top of the sidebar) searches an entry's catalog label and description with `searchCatalog` in `$lib/utils/settingsSearch.ts` (see "Settings search"). Arrow keys move, Enter or click navigates and clears the query, Escape clears; its keydown handler stops propagation.
+`SettingsSearch` (top of the sidebar) searches an entry's catalog label and description with `searchCatalog` in `$lib/utils/settingsSearch.ts` (see "Settings search"). Arrow keys move over the results and the last row, Enter or click on a result navigates and clears the query, Escape clears; its keydown handler stops propagation.
+
+Every non-empty query ends with the row "Ask agent: <query>" (`Sparkles`, an `Enter` hint while highlighted), also after "No matching settings". It is part of the arrow-key cycle and is preselected when there is no result; otherwise the first result is. Choosing it clears the query and calls `openPanel("search-row")`, then `send(query)` when `agentHasUsableModel(surfaces, models)` (`$lib/utils/agentModel.ts`: the effective id of `agentModelId` is a `text` model of `models`) holds and the agent is not `running`, else `fillDraft(query)`: the query waits unsent in the composer.
 
 #### Settings search
 

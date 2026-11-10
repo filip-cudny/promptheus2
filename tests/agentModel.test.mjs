@@ -5,6 +5,7 @@ import {
   agentReasoningEffort,
   agentModelName,
   agentModelHasBuiltinSearch,
+  agentHasUsableModel,
 } from "../src/lib/utils/agentModel.ts";
 
 const models = [
@@ -118,4 +119,30 @@ test("built-in search: no agent and no chat model is not eligible", () => {
 test("built-in search: agent model null follows the chat model", () => {
   assert.strictEqual(agentModelHasBuiltinSearch(surfaces(null, "oai"), searchModels), true);
   assert.strictEqual(agentModelHasBuiltinSearch(surfaces(null, "claude"), searchModels), false);
+});
+
+const usableModels = [
+  { id: "t1", type: "text" },
+  { id: "t2", type: "text" },
+  { id: "stt", type: "stt" },
+];
+
+test("usable model: settings agent id is a text model", () => {
+  assert.strictEqual(agentHasUsableModel(surfaces("t1", "t2"), usableModels), true);
+});
+
+test("usable model: chat id only is a text model", () => {
+  assert.strictEqual(agentHasUsableModel(surfaces(null, "t2"), usableModels), true);
+});
+
+test("usable model: settings agent id missing from models is not usable", () => {
+  assert.strictEqual(agentHasUsableModel(surfaces("zzz", "t1"), usableModels), false);
+});
+
+test("usable model: non-text model is not usable", () => {
+  assert.strictEqual(agentHasUsableModel(surfaces("stt", "t1"), usableModels), false);
+});
+
+test("usable model: no ids is not usable", () => {
+  assert.strictEqual(agentHasUsableModel(surfaces(null, null), usableModels), false);
 });

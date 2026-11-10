@@ -18,7 +18,6 @@
 
   const agent = getSettingsAgent();
 
-  let text = $state("");
   let input = $state<HTMLTextAreaElement>();
 
   $effect(() => {
@@ -28,7 +27,7 @@
 
   onMount(() => {
     const unlisten = onSettingsAgentDictation(async (dictated) => {
-      text = text ? `${text} ${dictated}` : dictated;
+      agent.setDraft(agent.draft ? `${agent.draft} ${dictated}` : dictated);
       await tick();
       input?.focus();
     });
@@ -38,9 +37,9 @@
   });
 
   function submit() {
-    if (!text.trim() || running) return;
-    onsend(text);
-    text = "";
+    if (!agent.draft.trim() || running) return;
+    onsend(agent.draft);
+    agent.setDraft("");
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -55,10 +54,10 @@
   <div class="box">
     <textarea
       bind:this={input}
-      bind:value={text}
+      bind:value={() => agent.draft, agent.setDraft}
       onkeydown={handleKeydown}
       rows="2"
-      placeholder="Ask about settings"
+      placeholder="Ask about or change a setting…"
     ></textarea>
     <div class="bar">
       {@render beforeSend?.()}
@@ -68,7 +67,7 @@
       {#if running}
         <button class="send" title="Stop" onclick={oncancel}><Square size={14} /></button>
       {:else}
-        <button class="send" title="Send" disabled={!text.trim()} onclick={submit}>
+        <button class="send" title="Send" disabled={!agent.draft.trim()} onclick={submit}>
           <ArrowUp size={14} />
         </button>
       {/if}

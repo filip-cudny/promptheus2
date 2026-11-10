@@ -93,6 +93,7 @@
       {/if}
     </div>
     {#if error}<div class="error">{error}</div>{/if}
+    <div class="caption"><EyeOff size={ICON_SIZE.sm} />Only you see this value. The agent did not receive it.</div>
   {:else}
     <div class="input-row">
       <TextInput
@@ -164,6 +165,14 @@
     border: none;
     color: var(--text-secondary);
     cursor: pointer;
+  }
+
+  .caption {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
   }
 
   .error {

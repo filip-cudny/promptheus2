@@ -32,6 +32,7 @@ let panelOpen = $state(false);
 let panelMode = $state<PanelMode>("overlay");
 let panelWidth = $state(DEFAULT_PANEL_WIDTH);
 let focusRequest = $state(0);
+let draft = $state("");
 let appliedInitialPanel: unknown;
 
 const PANEL_WIDTH_KEY = "settings-dialog.agent_panel_width";
@@ -241,6 +242,15 @@ function requestComposerFocus() {
   focusRequest++;
 }
 
+function setDraft(text: string) {
+  draft = text;
+}
+
+function fillDraft(text: string) {
+  draft = text;
+  requestComposerFocus();
+}
+
 async function applyInitialPanel(value: unknown) {
   if (value === appliedInitialPanel) return;
   appliedInitialPanel = value;
@@ -280,6 +290,9 @@ export function getSettingsAgent() {
     get panelMode() { return panelMode; },
     get panelWidth() { return panelWidth; },
     get focusRequest() { return focusRequest; },
+    get draft() { return draft; },
+    setDraft,
+    fillDraft,
     resizePanel,
     savePanelWidth,
     send,

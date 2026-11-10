@@ -8,6 +8,7 @@
   import ProcessingIndicator from "$lib/components/features/conversation-dialog/components/ProcessingIndicator.svelte";
   import SecretField from "../SecretField.svelte";
   import ProposalCard from "./ProposalCard.svelte";
+  import AgentEmptyState from "./AgentEmptyState.svelte";
   import { parseSettingLink, showSettingLinks } from "$lib/utils/settingLinks";
   import { showsProcessing, thinkingText } from "$lib/utils/agentReply";
   import { parseContentSegments, toRenderBlocks } from "$lib/utils/toolCallMarkers";
@@ -35,8 +36,11 @@
   }
 </script>
 
-<div class="messages">
+<div class="messages" class:empty={agent.messages.length === 0}>
   <div class="column">
+    {#if agent.messages.length === 0}
+      <AgentEmptyState />
+    {/if}
     {#each agent.messages as message, i (message.id)}
       {#if message.role === "user"}
         <div class="user">{message.text}</div>
@@ -90,6 +94,12 @@
     min-height: 0;
     overflow-y: auto;
     padding: var(--space-6);
+  }
+
+  .messages.empty {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
 
   .column {

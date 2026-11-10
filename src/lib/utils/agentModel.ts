@@ -4,6 +4,11 @@ export function agentModelId(surfaces: Surfaces): string | null {
   return surfaces.settings_agent.generation.model_id || surfaces.chat.generation.model_id || null;
 }
 
+export function agentHasUsableModel(surfaces: Surfaces, models: ModelConfig[]): boolean {
+  const id = agentModelId(surfaces);
+  return id !== null && models.some((m) => m.id === id && m.type === "text");
+}
+
 export function agentReasoningEffort(surfaces: Surfaces): string | null {
   return (
     surfaces.settings_agent.generation.parameters.reasoning_effort ??
