@@ -1,6 +1,7 @@
 #![cfg(target_os = "macos")]
 
 use std::ffi::{c_void, CStr};
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::OnceLock;
 
 use objc2::ffi::object_setClass;
@@ -8,13 +9,15 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, MethodImplementation, Sel};
 use objc2::{class, msg_send, sel, AnyThread, MainThreadMarker};
 use objc2_app_kit::{
-    NSEvent, NSPanel, NSTrackingArea, NSTrackingAreaOptions, NSWindow, NSWindowCollectionBehavior,
-    NSWindowStyleMask,
+    NSApplicationActivationOptions, NSEvent, NSPanel, NSRunningApplication, NSTrackingArea,
+    NSTrackingAreaOptions, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask, NSWorkspace,
 };
 use tauri::{AppHandle, Emitter};
 
 const POINTER_EVENT: &str = "recording-widget-pointer";
 const POINTER_TARGET: &str = "recording-widget";
+
+static PREVIOUS_APP_PID: AtomicI32 = AtomicI32::new(0);
 
 extern "C-unwind" fn returns_yes(_: &AnyObject, _: Sel) -> Bool {
     Bool::YES
@@ -75,7 +78,7 @@ fn with_ns_window<R>(
 
 pub async fn on_main(
     window: &tauri::WebviewWindow,
-    f: fn(&tauri::WebviewWindow) -> Result<(), String>,
+    f: impl FnOnce(&tauri::WebviewWindow) -> Result<(), String> + Send + 'static,
 ) -> crate::Result<()> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     let target = window.clone();
@@ -130,6 +133,9 @@ pub fn make_nonactivating_widget_panel(window: &tauri::WebviewWindow) -> Result<
 // our other windows.
 pub fn show_panel_without_activating(window: &tauri::WebviewWindow) -> Result<(), String> {
     with_ns_window(window.ns_window(), |ns_window| unsafe {
+        if !ns_window.isVisible() {
+            remember_frontmost_app();
+        }
         ns_window.makeKeyAndOrderFront(None);
 
         let running: *mut AnyObject =
@@ -140,10 +146,39 @@ pub fn show_panel_without_activating(window: &tauri::WebviewWindow) -> Result<()
     })
 }
 
-pub fn hide_panel(window: &tauri::WebviewWindow) -> Result<(), String> {
+fn remember_frontmost_app() {
+    let pid = NSWorkspace::sharedWorkspace()
+        .frontmostApplication()
+        .map(|app| app.processIdentifier())
+        .filter(|&pid| pid != std::process::id() as i32)
+        .unwrap_or(0);
+    PREVIOUS_APP_PID.store(pid, Ordering::Relaxed);
+}
+
+// Showing the panel activated our app, so hiding it alone leaves our app active
+// with no key window. Focus goes back to the app that was frontmost before the
+// show only while the panel still had it: when another app or one of our
+// windows took focus, that one keeps it. The caller passes `restore_focus:
+// false` when it opens one of our windows right after the hide.
+pub fn hide_panel(window: &tauri::WebviewWindow, restore_focus: bool) -> Result<(), String> {
     with_ns_window(window.ns_window(), |ns_window| {
+        let panel_has_focus =
+            ns_window.isKeyWindow() && NSRunningApplication::currentApplication().isActive();
         ns_window.orderOut(None);
+        let pid = PREVIOUS_APP_PID.swap(0, Ordering::Relaxed);
+        if restore_focus && panel_has_focus && pid != 0 {
+            activate_app(pid);
+        }
     })
+}
+
+fn activate_app(pid: i32) {
+    let Some(app) = NSRunningApplication::runningApplicationWithProcessIdentifier(pid) else {
+        log::debug!("context menu hidden: previous app pid={pid} is gone");
+        return;
+    };
+    let activated = app.activateWithOptions(NSApplicationActivationOptions::empty());
+    log::debug!("context menu hidden: previous app pid={pid} re-activated={activated}");
 }
 
 // Force the green traffic-light button into native fullscreen-arrows mode.

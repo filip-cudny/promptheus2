@@ -183,14 +183,14 @@ async function openMenu(workArea: WorkArea | null) {
   }
 }
 
-async function closeMenu() {
+async function closeMenu(restoreFocus = true) {
   if (!_visible) return;
   _visible = false;
   _items = [];
   _selectedIndex = -1;
   digitSelector.reset();
 
-  await invoke("hide_context_menu_panel");
+  await invoke("hide_context_menu_panel", { restoreFocus });
 }
 
 function moveSelection(direction: 1 | -1) {
@@ -310,7 +310,7 @@ async function runInDialog(index: number, skillId: string, skillName: string) {
     return;
   }
   const skillModel = await fetchSkillModel(skillId);
-  await closeMenu();
+  await closeMenu(false);
   try {
     await openConversationDialog(skillId, skillName, undefined, false, text, true, false, skillModel, "alternative_execute");
   } catch (e) {
@@ -471,7 +471,7 @@ async function openDialogForItem(index: number) {
   const skillId = data.skill_id;
   const skillName = data.skill_name ?? item.label;
   const skillModel = await fetchSkillModel(skillId);
-  await closeMenu();
+  await closeMenu(false);
   await openConversationDialog(skillId, skillName, undefined, undefined, undefined, undefined, undefined, skillModel);
 }
 

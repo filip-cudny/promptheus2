@@ -97,7 +97,7 @@
 
   async function pickChatProvider(providerId: string) {
     panels.closeChatProviders();
-    await menu.closeMenu();
+    await menu.closeMenu(false);
     try {
       await newTab(providerId);
     } catch (err) {
@@ -160,12 +160,12 @@
   }
 
   async function handleOpenLastInteraction(entry: LastTextEntryRef) {
-    await menu.closeMenu();
+    await menu.closeMenu(false);
     await openConversationDialog(entry.skill_id ?? "", entry.skill_name ?? "", entry.id, true);
   }
 
   async function handleOpenHistory() {
-    await menu.closeMenu();
+    await menu.closeMenu(false);
     await openHistoryDialog();
   }
 
@@ -215,7 +215,7 @@
           }}
           onclick={async () => {
             if (chatDisabled) return;
-            await menu.closeMenu();
+            await menu.closeMenu(false);
             await focusOrOpenChat();
           }}
         >
@@ -246,7 +246,7 @@
           onclick={() => panels.openSettings(settingsToggleEl)}
           onOpenSettings={async () => {
             panels.closeSettings();
-            await menu.closeMenu();
+            await menu.closeMenu(false);
             await openSettingsWindow();
           }}
         />

@@ -327,16 +327,23 @@ async fn place_context_menu_through_shell(
 }
 
 #[tauri::command]
-pub async fn hide_context_menu_panel(app: tauri::AppHandle) -> crate::Result<()> {
+pub async fn hide_context_menu_panel(
+    app: tauri::AppHandle,
+    restore_focus: bool,
+) -> crate::Result<()> {
     let win = window(&app, "context-menu")?;
 
     #[cfg(target_os = "macos")]
     {
-        crate::services::macos_panel::on_main(&win, crate::services::macos_panel::hide_panel).await
+        crate::services::macos_panel::on_main(&win, move |win| {
+            crate::services::macos_panel::hide_panel(win, restore_focus)
+        })
+        .await
     }
 
     #[cfg(not(target_os = "macos"))]
     {
+        let _ = restore_focus;
         win.hide()?;
         Ok(())
     }
