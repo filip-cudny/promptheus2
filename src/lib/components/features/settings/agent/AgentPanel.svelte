@@ -147,7 +147,7 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    left: -3px;
+    left: 0;
     width: 6px;
     cursor: col-resize;
     z-index: 1;
