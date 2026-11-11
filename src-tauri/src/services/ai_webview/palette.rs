@@ -265,8 +265,9 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
     let inner_size = host.inner_size().map_err(|e| e.to_string())?;
     let host_logical_x = inner_pos.x as f64 / scale;
     let host_logical_y = inner_pos.y as f64 / scale;
-    let host_logical_w = inner_size.width as f64 / scale;
-    let host_logical_h = inner_size.height as f64 / scale;
+    let shadow = crate::services::chat_corners::shadow_width();
+    let host_logical_w = inner_size.width as f64 / scale - f64::from(shadow.left + shadow.right);
+    let host_logical_h = inner_size.height as f64 / scale - f64::from(shadow.top + shadow.bottom);
     let palette_y = host_logical_y + TOOLBAR_HEIGHT;
     let palette_h = (host_logical_h - TOOLBAR_HEIGHT).max(0.0);
 

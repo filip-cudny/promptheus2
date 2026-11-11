@@ -5,6 +5,8 @@ use tauri::{LogicalPosition, LogicalSize, Manager, Rect, WebviewWindow, Window, 
 use tokio::sync::Mutex;
 
 use super::ai_webview;
+#[cfg(target_os = "linux")]
+use super::chat_corners::{ShadowWidth, RESIZE_BAND_IN_SHADOW};
 use super::dock::DockManager;
 use super::settings_agent::{self, engine::{lock, SharedSession}};
 use super::speech;
@@ -120,10 +122,9 @@ const BORDERLESS_RESIZE_INSET: f64 = 5.0;
 pub fn attach_undecorated_resize_handler(webview: &tauri::Webview) {
     let label = webview.label().to_string();
     if let Err(e) = webview.with_webview(move |pv| {
-        use gtk::gdk::{EventMask, WindowEdge};
-        
+        use gtk::gdk::EventMask;
         use gtk::glib::Propagation;
-        use gtk::prelude::{GtkWindowExt, WidgetExt, WidgetExtManual};
+        use gtk::prelude::{WidgetExt, WidgetExtManual};
 
         let wv = pv.inner();
         WidgetExtManual::add_events(
@@ -134,49 +135,16 @@ pub fn attach_undecorated_resize_handler(webview: &tauri::Webview) {
         );
 
         wv.connect_button_press_event(move |wv, event| {
-            if event.button() != 1 {
-                return Propagation::Proceed;
+            if let Some(window) = ancestor_gtk_window(wv) {
+                begin_edge_resize(&window, event);
             }
-            let Some(window) = ancestor_gtk_window(wv) else {
-                return Propagation::Proceed;
-            };
-            if window.is_decorated() || !window.is_resizable() || window.is_maximized() {
-                return Propagation::Proceed;
-            }
-            let Some(gdk_win) = WidgetExt::window(&window) else {
-                return Propagation::Proceed;
-            };
-            let Some(edge) = edge_for_pointer(&gdk_win, event.root()) else {
-                return Propagation::Proceed;
-            };
-            let (root_x, root_y) = event.root();
-            window.begin_resize_drag(edge, 1, root_x as i32, root_y as i32, event.time());
             Propagation::Proceed
         });
 
         wv.connect_motion_notify_event(move |wv, event| {
-            let Some(window) = ancestor_gtk_window(wv) else {
-                return Propagation::Proceed;
-            };
-            if window.is_decorated() || !window.is_resizable() || window.is_maximized() {
-                return Propagation::Proceed;
+            if let Some(window) = ancestor_gtk_window(wv) {
+                set_edge_cursor(&window, event);
             }
-            let Some(gdk_win) = WidgetExt::window(&window) else {
-                return Propagation::Proceed;
-            };
-            let cursor_name = match edge_for_pointer(&gdk_win, event.root()) {
-                Some(WindowEdge::North) => "n-resize",
-                Some(WindowEdge::South) => "s-resize",
-                Some(WindowEdge::East) => "e-resize",
-                Some(WindowEdge::West) => "w-resize",
-                Some(WindowEdge::NorthEast) => "ne-resize",
-                Some(WindowEdge::NorthWest) => "nw-resize",
-                Some(WindowEdge::SouthEast) => "se-resize",
-                Some(WindowEdge::SouthWest) => "sw-resize",
-                _ => "default",
-            };
-            let cursor = gtk::gdk::Cursor::from_name(&gdk_win.display(), cursor_name);
-            gdk_win.set_cursor(cursor.as_ref());
             Propagation::Proceed
         });
     }) {
@@ -185,6 +153,69 @@ pub fn attach_undecorated_resize_handler(webview: &tauri::Webview) {
             "attach_undecorated_resize_handler failed for {label}: {e}",
         );
     }
+}
+
+/// Resize from the band of the window's shadow margin outside the child webviews.
+/// Connected after tao's handlers on the same window, so its cursor wins.
+#[cfg(target_os = "linux")]
+pub fn attach_shadow_resize_handler(window: &gtk::Window) {
+    use gtk::glib::Propagation;
+    use gtk::prelude::WidgetExt;
+
+    window.connect_button_press_event(|window, event| {
+        begin_edge_resize(window, event);
+        Propagation::Proceed
+    });
+    window.connect_motion_notify_event(|window, event| {
+        set_edge_cursor(window, event);
+        Propagation::Proceed
+    });
+}
+
+#[cfg(target_os = "linux")]
+fn resizable_gdk_window(window: &gtk::Window) -> Option<gtk::gdk::Window> {
+    use gtk::prelude::{GtkWindowExt, WidgetExt};
+    if window.is_decorated() || !window.is_resizable() || window.is_maximized() {
+        return None;
+    }
+    WidgetExt::window(window)
+}
+
+#[cfg(target_os = "linux")]
+fn begin_edge_resize(window: &gtk::Window, event: &gtk::gdk::EventButton) {
+    use gtk::prelude::GtkWindowExt;
+    if event.button() != 1 {
+        return;
+    }
+    let Some(gdk_win) = resizable_gdk_window(window) else {
+        return;
+    };
+    let Some(edge) = edge_for_pointer(window, &gdk_win, event.root()) else {
+        return;
+    };
+    let (root_x, root_y) = event.root();
+    window.begin_resize_drag(edge, 1, root_x as i32, root_y as i32, event.time());
+}
+
+#[cfg(target_os = "linux")]
+fn set_edge_cursor(window: &gtk::Window, event: &gtk::gdk::EventMotion) {
+    use gtk::gdk::WindowEdge;
+    let Some(gdk_win) = resizable_gdk_window(window) else {
+        return;
+    };
+    let cursor_name = match edge_for_pointer(window, &gdk_win, event.root()) {
+        Some(WindowEdge::North) => "n-resize",
+        Some(WindowEdge::South) => "s-resize",
+        Some(WindowEdge::East) => "e-resize",
+        Some(WindowEdge::West) => "w-resize",
+        Some(WindowEdge::NorthEast) => "ne-resize",
+        Some(WindowEdge::NorthWest) => "nw-resize",
+        Some(WindowEdge::SouthEast) => "se-resize",
+        Some(WindowEdge::SouthWest) => "sw-resize",
+        _ => "default",
+    };
+    let cursor = gtk::gdk::Cursor::from_name(&gdk_win.display(), cursor_name);
+    gdk_win.set_cursor(cursor.as_ref());
 }
 
 #[cfg(target_os = "linux")]
@@ -203,18 +234,52 @@ fn ancestor_gtk_window(wv: &webkit2gtk::WebView) -> Option<gtk::Window> {
 
 #[cfg(target_os = "linux")]
 fn edge_for_pointer(
+    window: &gtk::Window,
     gdk_win: &gtk::gdk::Window,
     root: (f64, f64),
 ) -> Option<gtk::gdk::WindowEdge> {
-    use gtk::gdk::WindowEdge;
+    use gtk::prelude::{BinExt, WidgetExt};
     let (wx, wy) = gdk_win.position();
-    let (cx, cy) = (root.0 - wx as f64, root.1 - wy as f64);
-    let (w, h) = (gdk_win.width() as f64, gdk_win.height() as f64);
-    let border = gdk_win.scale_factor() as f64 * BORDERLESS_RESIZE_INSET;
-    let left = cx < border;
-    let right = cx >= w - border;
-    let top = cy < border;
-    let bottom = cy >= h - border;
+    let point = (root.0 - wx as f64, root.1 - wy as f64);
+    let size = (gdk_win.width() as f64, gdk_win.height() as f64);
+    let shadow = window.child().map_or(ShadowWidth::NONE, |child| ShadowWidth {
+        left: child.margin_start(),
+        right: child.margin_end(),
+        top: child.margin_top(),
+        bottom: child.margin_bottom(),
+    });
+    let inset = gdk_win.scale_factor() as f64 * BORDERLESS_RESIZE_INSET;
+    edge_at(size, shadow, point, inset)
+}
+
+/// Edge under `point` (surface coordinates) of a surface of `size` whose visible
+/// window lies inside `shadow`: from `RESIZE_BAND_IN_SHADOW` outside the visible
+/// edge to `inset` inside it.
+#[cfg(target_os = "linux")]
+fn edge_at(
+    size: (f64, f64),
+    shadow: ShadowWidth,
+    point: (f64, f64),
+    inset: f64,
+) -> Option<gtk::gdk::WindowEdge> {
+    use gtk::gdk::WindowEdge;
+    let (x, y) = point;
+    let band = f64::from(RESIZE_BAND_IN_SHADOW);
+    let visible_left = f64::from(shadow.left);
+    let visible_top = f64::from(shadow.top);
+    let visible_right = size.0 - f64::from(shadow.right);
+    let visible_bottom = size.1 - f64::from(shadow.bottom);
+    if x < visible_left - band
+        || x >= visible_right + band
+        || y < visible_top - band
+        || y >= visible_bottom + band
+    {
+        return None;
+    }
+    let left = x < visible_left + inset;
+    let right = x >= visible_right - inset;
+    let top = y < visible_top + inset;
+    let bottom = y >= visible_bottom - inset;
     Some(match (left, right, top, bottom) {
         (true, _, true, _) => WindowEdge::NorthWest,
         (_, true, true, _) => WindowEdge::NorthEast,
@@ -515,6 +580,11 @@ pub fn save_geometry(app: &tauri::AppHandle, window_label: &str, geometry_key: &
     if window_label == SETTINGS_DIALOG_LABEL {
         geom = settings_agent::panel::geometry_without_panel(geom, settings_agent::panel::added_width(app));
     }
+    if is_conversation_dialog_host(window_label) {
+        let shadow = super::chat_corners::shadow_width();
+        geom.width -= f64::from(shadow.left + shadow.right);
+        geom.height -= f64::from(shadow.top + shadow.bottom);
+    }
 
     let app = app.clone();
     let key = geometry_key.to_string();
@@ -575,4 +645,66 @@ pub fn activate_window(win: &Window, title: String) -> Result<(), String> {
         }
     }
     win.set_focus().map_err(|e| e.to_string())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+    use gtk::gdk::WindowEdge;
+
+    const SIZE: (f64, f64) = (856.0, 656.0);
+    const SHADOW: ShadowWidth = ShadowWidth { left: 28, right: 28, top: 18, bottom: 38 };
+    const INSET: f64 = 5.0;
+
+    fn edge(x: f64, y: f64) -> Option<WindowEdge> {
+        edge_at(SIZE, SHADOW, (x, y), INSET)
+    }
+
+    #[test]
+    fn band_outside_the_visible_edge_resizes() {
+        assert_eq!(edge(19.0, 300.0), Some(WindowEdge::West));
+        assert_eq!(edge(837.0, 300.0), Some(WindowEdge::East));
+        assert_eq!(edge(400.0, 8.0), Some(WindowEdge::North));
+        assert_eq!(edge(400.0, 627.0), Some(WindowEdge::South));
+    }
+
+    #[test]
+    fn inset_inside_the_visible_edge_resizes() {
+        assert_eq!(edge(32.0, 300.0), Some(WindowEdge::West));
+        assert_eq!(edge(824.0, 300.0), Some(WindowEdge::East));
+        assert_eq!(edge(400.0, 22.0), Some(WindowEdge::North));
+        assert_eq!(edge(400.0, 614.0), Some(WindowEdge::South));
+    }
+
+    #[test]
+    fn shadow_beyond_the_band_does_not_resize() {
+        assert_eq!(edge(17.0, 300.0), None);
+        assert_eq!(edge(400.0, 7.0), None);
+        assert_eq!(edge(400.0, 628.0), None);
+        assert_eq!(edge(838.0, 300.0), None);
+    }
+
+    #[test]
+    fn inside_the_visible_window_does_not_resize() {
+        assert_eq!(edge(33.0, 300.0), None);
+        assert_eq!(edge(400.0, 23.0), None);
+    }
+
+    #[test]
+    fn corners_cover_the_band_and_the_inset() {
+        assert_eq!(edge(20.0, 10.0), Some(WindowEdge::NorthWest));
+        assert_eq!(edge(32.0, 22.0), Some(WindowEdge::NorthWest));
+        assert_eq!(edge(836.0, 10.0), Some(WindowEdge::NorthEast));
+        assert_eq!(edge(20.0, 626.0), Some(WindowEdge::SouthWest));
+        assert_eq!(edge(836.0, 626.0), Some(WindowEdge::SouthEast));
+    }
+
+    #[test]
+    fn without_shadow_only_the_inset_resizes() {
+        let edge = |x, y| edge_at((800.0, 600.0), ShadowWidth::NONE, (x, y), INSET);
+        assert_eq!(edge(0.0, 300.0), Some(WindowEdge::West));
+        assert_eq!(edge(4.0, 4.0), Some(WindowEdge::NorthWest));
+        assert_eq!(edge(795.0, 595.0), Some(WindowEdge::SouthEast));
+        assert_eq!(edge(5.0, 300.0), None);
+    }
 }

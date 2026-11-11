@@ -11,6 +11,57 @@ pub fn is_rounded() -> bool {
     ROUNDED.load(Ordering::Relaxed)
 }
 
+/// Transparent margin of the chat host surface around its visible window, per side,
+/// in logical px (`gdk_window_set_shadow_width`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ShadowWidth {
+    pub left: i32,
+    pub right: i32,
+    pub top: i32,
+    pub bottom: i32,
+}
+
+impl ShadowWidth {
+    pub const NONE: ShadowWidth = ShadowWidth { left: 0, right: 0, top: 0, bottom: 0 };
+}
+
+// Each side ends 28 px, two standard deviations of GTK's 14 px blur, past the edge of
+// the shadow box (offset 10 px down); GTK draws the blur out to 40 px, so the shadow
+// is cut at the surface border at about 1 % alpha. Stops being correct when a hard
+// edge shows at the surface border; upgrade path: GTK's own extents, 30 top, 40
+// sides, 50 bottom.
+const ROUNDED_SHADOW_WIDTH: ShadowWidth = ShadowWidth { left: 28, right: 28, top: 18, bottom: 38 };
+
+/// Resize grab outside the visible window edge, inside the shadow margin; it never
+/// exceeds the smallest side of `ROUNDED_SHADOW_WIDTH`.
+pub const RESIZE_BAND_IN_SHADOW: i32 = 10;
+
+fn shadow_width_for(rounded: bool) -> ShadowWidth {
+    if rounded {
+        ROUNDED_SHADOW_WIDTH
+    } else {
+        ShadowWidth::NONE
+    }
+}
+
+/// Shadow margin the chat host surface has now; the host's `inner_size` includes it.
+pub fn shadow_width() -> ShadowWidth {
+    shadow_width_for(is_rounded())
+}
+
+#[cfg(target_os = "linux")]
+const SHADOW_CLASS: &str = "chat-window-shadow";
+
+/// GTK blurs with a standard deviation about equal to the CSS blur radius, browsers
+/// with half of it: 14px here looks like the 28px of the mockup.
+#[cfg(target_os = "linux")]
+fn shadow_css() -> String {
+    format!(
+        ".{SHADOW_CLASS} {{ border-radius: {CORNER_RADIUS}px; \
+box-shadow: 0 10px 14px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.35); }}"
+    )
+}
+
 #[cfg(target_os = "linux")]
 pub fn rounded_for_state(state: gtk::gdk::WindowState) -> bool {
     use gtk::gdk::WindowState;
@@ -46,8 +97,9 @@ pub fn install(_window: &tauri::Window) {}
 #[cfg(target_os = "linux")]
 fn install_on_main_thread(window: &tauri::Window) {
     use gtk::gdk::WindowState;
+    use gtk::glib::object::Cast;
     use gtk::glib::Propagation;
-    use gtk::prelude::WidgetExt;
+    use gtk::prelude::{CssProviderExt, StyleContextExt, WidgetExt};
     use tauri::Manager;
 
     let gtk_window = match window.gtk_window() {
@@ -62,11 +114,38 @@ fn install_on_main_thread(window: &tauri::Window) {
         }
     };
 
+    let vbox = match window.default_vbox() {
+        Ok(vbox) => vbox,
+        Err(e) => {
+            log::warn!(
+                target: "app_lib::services::chat_corners",
+                "no default vbox for {}: {e}",
+                window.label(),
+            );
+            return;
+        }
+    };
+    let provider = gtk::CssProvider::new();
+    if let Err(e) = provider.load_from_data(shadow_css().as_bytes()) {
+        log::warn!(target: "app_lib::services::chat_corners", "shadow css not loaded: {e}");
+    }
+    vbox.style_context()
+        .add_provider(&provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION);
+
+    gtk_window.connect_configure_event(|gtk_window, event| {
+        let (width, height) = event.size();
+        gtk_window.input_shape_combine_region(input_region(width as i32, height as i32).as_ref());
+        false
+    });
+    super::dialog::attach_shadow_resize_handler(gtk_window.upcast_ref());
+
     let app = window.app_handle().clone();
-    gtk_window.connect_window_state_event(move |_, event| {
+    let state_vbox = vbox.clone();
+    gtk_window.connect_window_state_event(move |gtk_window, event| {
         let rounded = rounded_for_state(event.new_window_state());
         if rounded != is_rounded() {
             apply(&app, rounded);
+            apply_shadow(gtk_window, &state_vbox, rounded);
         }
         Propagation::Proceed
     });
@@ -74,7 +153,56 @@ fn install_on_main_thread(window: &tauri::Window) {
     let initial_state = WidgetExt::window(&gtk_window)
         .map(|w| w.state())
         .unwrap_or_else(WindowState::empty);
-    apply(window.app_handle(), rounded_for_state(initial_state));
+    let rounded = rounded_for_state(initial_state);
+    apply(window.app_handle(), rounded);
+    apply_shadow(&gtk_window, &vbox, rounded);
+}
+
+/// The surface grows or shrinks by the margin change on `set_shadow_width`, keeping
+/// the visible size; GDK then sends the visible rect as the xdg window geometry.
+/// A `gtk_window_set_decorated` call on the host resets the shadow width to 0.
+#[cfg(target_os = "linux")]
+fn apply_shadow(gtk_window: &gtk::ApplicationWindow, vbox: &gtk::Box, rounded: bool) {
+    use gtk::prelude::{StyleContextExt, WidgetExt};
+
+    let shadow = shadow_width_for(rounded);
+    let style = vbox.style_context();
+    if rounded {
+        style.add_class(SHADOW_CLASS);
+    } else {
+        style.remove_class(SHADOW_CLASS);
+    }
+    vbox.set_margin_start(shadow.left);
+    vbox.set_margin_end(shadow.right);
+    vbox.set_margin_top(shadow.top);
+    vbox.set_margin_bottom(shadow.bottom);
+    match WidgetExt::window(gtk_window) {
+        Some(gdk_window) => {
+            gdk_window.set_shadow_width(shadow.left, shadow.right, shadow.top, shadow.bottom)
+        }
+        None => log::warn!(
+            target: "app_lib::services::chat_corners",
+            "no gdk window, shadow width not set",
+        ),
+    }
+}
+
+/// Visible window grown by the resize band; clicks on the rest of the shadow reach
+/// the window below. Set on every configure, which GDK Wayland also sends after each
+/// map: the region is lost with the surface on hide.
+#[cfg(target_os = "linux")]
+fn input_region(width: i32, height: i32) -> Option<gtk::cairo::Region> {
+    if !is_rounded() {
+        return None;
+    }
+    let shadow = ROUNDED_SHADOW_WIDTH;
+    let band = RESIZE_BAND_IN_SHADOW;
+    Some(gtk::cairo::Region::create_rectangle(&gtk::cairo::RectangleInt::new(
+        shadow.left - band,
+        shadow.top - band,
+        width - shadow.left - shadow.right + 2 * band,
+        height - shadow.top - shadow.bottom + 2 * band,
+    )))
 }
 
 #[cfg(target_os = "linux")]

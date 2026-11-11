@@ -1,8 +1,8 @@
-# Rounded corners and border of the chat window on Linux
+# Rounded corners, border and shadow of the chat window on Linux
 
 ## Rule
 
-On GNOME Wayland the chat window's corners are cut and its border is drawn by the pages, over a transparent host. Do not move that work to the GTK side: a cairo clip or stroke on the box holding the child webviews has no effect on WebKitGTK children.
+On GNOME Wayland the chat window's corners are cut and its border is drawn by the pages, over a transparent host. Do not move that work to the GTK side: a cairo clip or stroke on the box holding the child webviews has no effect on WebKitGTK children. The shadow is the exception: it lies outside the webviews, in a transparent margin of the host surface, so GTK CSS on that box draws it.
 
 ## Symptom
 
@@ -25,6 +25,19 @@ Only on GNOME Wayland (`gnome_shell::is_gnome_wayland()`); other sessions keep t
 - Palette and backdrop pages: bottom corners and left, right, bottom border from the same state, sent when the palette opens.
 - State (`chat_corners::rounded_for_state`): square while maximized, fullscreen or tiled (including `*_TILED` flags), rounded otherwise; sent to the pages as `shell:corners` and read on mount with `get_chat_corners`.
 
+## Shadow (rounded state only)
+
+`chat_corners::apply_shadow` on each state change, on the GTK main thread:
+
+1. `default_vbox()` gets the style class `chat-window-shadow` (own `CssProvider`: `border-radius: 10px; box-shadow: 0 10px 14px rgba(0,0,0,.55), 0 0 0 1px rgba(0,0,0,.35)`); a `GtkBox` draws outset shadows outside its border box.
+2. Widget margins on the box, 28 left and right, 18 top, 38 bottom (`ROUNDED_SHADOW_WIDTH`), make room for the shadow inside the surface.
+3. `gdk::Window::set_shadow_width` with the same values: GDK Wayland grows the surface by them, keeping the visible size, and sends the visible rect as the xdg window geometry on every commit, so Mutter maximizes, tiles and places `PlaceWindowOnParent` children against the visible window.
+4. Square state: no class, margins and shadow width 0.
+
+- Input region: on every `configure-event` (GDK Wayland also sends one after each map) the GtkWindow gets `input_shape_combine_region` of the visible rect grown by `RESIZE_BAND_IN_SHADOW` (10 px), `None` while square; clicks on the rest of the shadow reach the window below.
+- Resize: `dialog::edge_at` (unit-tested) takes the box margins: from 10 px outside the visible edge to 5 px × scale inside it. The webview handlers cover the inside, `attach_shadow_resize_handler` on the GtkWindow (connected after tao's, so its cursor wins) the band in the margin.
+- Size: tao's `inner_size` is the whole surface, margin included. The window is built at the saved visible size; `save_geometry` and the palette and backdrop size subtract `chat_corners::shadow_width()`.
+
 ## Traps
 
 - A `body` background with `html` transparent moves to the canvas (CSS Backgrounds 3 §2.11.2), and the canvas ignores `border-radius` and `clip-path` of `body`: square corners filled with the dim or colour. Keep `html` painted by `linear-gradient(transparent, transparent)` or paint on a pseudo-element.
@@ -32,5 +45,9 @@ Only on GNOME Wayland (`gnome_shell::is_gnome_wayland()`); other sessions keep t
 - The provider script runs before `<head>` exists on first load: it waits for `DOMContentLoaded` when `document.documentElement` is missing.
 - Whether a provider page's own `html`/`body` background, painted on the canvas, stays inside the injected root `clip-path` depends on the page: the Claude tab was OK live (2026-11-11), ChatGPT not confirmed.
 - The state is one process-wide flag (one chat host window).
+- A `gtk_window_set_decorated` call on the host (tao `set_decorations`) resets the GDK shadow width to 0: the visible rect is then the whole surface again, margin and shadow included, until the next state change. Call `apply_shadow` after it.
+- GTK's CSS blur radius is about the standard deviation of its blur, a browser's twice that: the mockup's `28px` is `14px` in GTK CSS. GTK draws that blur out to 40 px; the margins cut it at 28 px from the shadow box, at about 1 % alpha (upgrade path in the comment on `ROUNDED_SHADOW_WIDTH`).
+- GDK Wayland drops the input region with the surface on hide and only re-sends it after `input_shape_combine_region` marks it dirty: set it again after each map, or a reopened window blocks clicks on its whole shadow.
+- Window position is not restored on Wayland, so `save_geometry` does not adjust x and y by the margin.
 
 Live results per criterion: `src-tauri/src/services/DOCS.md`, "Chat window corners (GNOME Wayland)". Watch the state with `RUST_LOG=app_lib::services::chat_corners=debug`.
