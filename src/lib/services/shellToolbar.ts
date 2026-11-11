@@ -50,3 +50,7 @@ export async function showProviderMenu(
 export async function hideProviderMenu(): Promise<void> {
   await invoke("hide_provider_menu");
 }
+
+export async function getChatCorners(): Promise<boolean> {
+  return invoke<boolean>("get_chat_corners");
+}

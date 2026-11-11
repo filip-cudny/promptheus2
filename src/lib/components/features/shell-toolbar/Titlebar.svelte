@@ -10,6 +10,7 @@
     activeId,
     providers,
     isMaximized = false,
+    rounded = false,
     onActivate,
     onClose,
     onOpenPlus,
@@ -23,6 +24,7 @@
     activeId: string | null;
     providers: WebviewProvider[];
     isMaximized?: boolean;
+    rounded?: boolean;
     onActivate: (id: string) => void;
     onClose: (id: string) => void;
     onOpenPlus: (anchor: HTMLElement) => void;
@@ -33,7 +35,7 @@
   } = $props();
 </script>
 
-<div class="titlebar" class:mac={isMac} data-tauri-drag-region>
+<div class="titlebar" class:mac={isMac} class:rounded data-tauri-drag-region>
   <TabStrip {tabs} {activeId} {providers} {onActivate} {onClose} {onOpenPlus} {onOpenOverflow} />
 
   {#if !isMac}
@@ -57,6 +59,11 @@
     user-select: none;
     -webkit-user-select: none;
     box-sizing: border-box;
+  }
+
+  .titlebar.rounded {
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
   }
 
   .titlebar.mac {

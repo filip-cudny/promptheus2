@@ -5,6 +5,8 @@
   import { createHostShortcutHandler } from "$lib/shortcuts";
   import { isMac } from "$lib/utils/platform";
   import { attachEdgeResizeCursor } from "$lib/utils/edgeResizeCursor";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+  import { getChatCorners } from "$lib/services/shellToolbar";
   import { initLogo } from "$lib/stores/logo.svelte";
   import Titlebar from "$lib/components/features/shell-toolbar/Titlebar.svelte";
   import { useShellToolbar } from "$lib/components/features/shell-toolbar/drivers/useShellToolbar.svelte";
@@ -15,6 +17,12 @@
   const toolbar = useShellToolbar({ hostLabel: HOST_LABEL, selfTarget: SELF_TARGET });
 
   let isMaximized = $state(false);
+  let rounded = $state(false);
+  let unlistenCorners: UnlistenFn | null = null;
+
+  $effect(() => {
+    document.documentElement.classList.toggle("rounded", rounded);
+  });
 
   async function handleMinimize() {
     try {
@@ -50,6 +58,18 @@
     window.addEventListener("keydown", handleGlobalKeydown);
     detachEdgeResizeCursor = attachEdgeResizeCursor("toolbar");
     await toolbar.init();
+    unlistenCorners = await listen<{ rounded: boolean }>(
+      "shell:corners",
+      (ev) => {
+        rounded = ev.payload.rounded;
+      },
+      { target: SELF_TARGET },
+    );
+    try {
+      rounded = await getChatCorners();
+    } catch (e) {
+      console.error("get_chat_corners failed", e);
+    }
     try {
       isMaximized = await getCurrentWindow().isMaximized();
     } catch {}
@@ -61,6 +81,8 @@
       detachEdgeResizeCursor();
       detachEdgeResizeCursor = null;
     }
+    unlistenCorners?.();
+    unlistenCorners = null;
     toolbar.destroy();
   });
 </script>
@@ -71,6 +93,7 @@
   activeId={toolbar.activeId}
   providers={toolbar.webviewProviders}
   {isMaximized}
+  {rounded}
   onActivate={toolbar.activate}
   onClose={toolbar.close}
   onOpenPlus={toolbar.openPlusMenu}
@@ -84,5 +107,10 @@
   :global(html),
   :global(body) {
     background: var(--surface-base);
+  }
+
+  :global(html.rounded),
+  :global(html.rounded body) {
+    background: transparent;
   }
 </style>

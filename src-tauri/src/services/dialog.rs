@@ -15,6 +15,7 @@ pub const SETTINGS_DIALOG_LABEL: &str = "settings-dialog";
 pub const SHELL_TOOLBAR_LABEL: &str = "shell-toolbar";
 pub const TOOLBAR_HEIGHT: f64 = 40.0;
 pub const SHELL_BG: Color = Color(0x1e, 0x1e, 0x1e, 0xff);
+const TRANSPARENT: Color = Color(0, 0, 0, 0);
 
 pub struct DialogConfig {
     pub label: String,
@@ -55,10 +56,11 @@ fn add_child_webview(
     app_url: &str,
     position: LogicalPosition<f64>,
     size: LogicalSize<f64>,
+    background: Color,
 ) -> Result<tauri::Webview, String> {
     let builder = tauri::webview::WebviewBuilder::new(label, tauri::WebviewUrl::App(app_url.into()))
         .auto_resize()
-        .background_color(SHELL_BG);
+        .background_color(background);
     window
         .add_child(builder, position, size)
         .map_err(|e| e.to_string())
@@ -284,6 +286,16 @@ pub async fn open_or_focus(
         .resizable(true)
         .background_color(SHELL_BG);
 
+    #[cfg(target_os = "linux")]
+    let rounded_host = custom_titlebar && super::gnome_shell::is_gnome_wayland();
+    #[cfg(not(target_os = "linux"))]
+    let rounded_host = false;
+
+    #[cfg(target_os = "linux")]
+    if rounded_host {
+        window_builder = window_builder.transparent(true).background_color(TRANSPARENT);
+    }
+
     #[cfg(target_os = "macos")]
     {
         window_builder = window_builder.decorations(true);
@@ -349,6 +361,7 @@ pub async fn open_or_focus(
             "shell-toolbar.html",
             toolbar_pos,
             toolbar_size,
+            if rounded_host { TRANSPARENT } else { SHELL_BG },
         )?;
         configure_linux_child_packing(&toolbar_webview, LinuxChildRole::Toolbar);
         if needs_undecorated_resize {
@@ -356,8 +369,14 @@ pub async fn open_or_focus(
         }
 
         let (content_pos, content_size) = content_layout(logical_w, logical_h);
-        let content_webview =
-            add_child_webview(&window, &config.label, &config.url, content_pos, content_size)?;
+        let content_webview = add_child_webview(
+            &window,
+            &config.label,
+            &config.url,
+            content_pos,
+            content_size,
+            SHELL_BG,
+        )?;
         configure_linux_child_packing(&content_webview, LinuxChildRole::Content);
         if needs_undecorated_resize {
             attach_undecorated_resize_handler(&content_webview);
@@ -377,10 +396,15 @@ pub async fn open_or_focus(
             &config.url,
             LogicalPosition::new(0.0, 0.0),
             LogicalSize::new(logical_w, logical_h),
+            SHELL_BG,
         )?;
         if needs_undecorated_resize {
             attach_undecorated_resize_handler(&content_webview);
         }
+    }
+
+    if rounded_host {
+        super::chat_corners::install(&window);
     }
 
     let app_handle = app.clone();

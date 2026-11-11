@@ -72,6 +72,7 @@ macro_rules! handlers {
             $crate::commands::conversation_dialog::open_conversation_dialog,
             $crate::commands::conversation_dialog::focus_or_open_chat,
             $crate::commands::conversation_dialog::get_dialog_init_params,
+            $crate::commands::conversation_dialog::get_chat_corners,
             // === dock ===
             $crate::commands::dock::hide_dialog_window,
             // === env_vars ===

@@ -129,6 +129,11 @@ pub fn get_dialog_init_params() -> Option<DialogInitParams> {
     PENDING.lock().unwrap_or_else(|e| e.into_inner()).take()
 }
 
+#[tauri::command]
+pub fn get_chat_corners() -> bool {
+    crate::services::chat_corners::is_rounded()
+}
+
 fn emit_reuse_event(
     app: &tauri::AppHandle,
     label: &str,
