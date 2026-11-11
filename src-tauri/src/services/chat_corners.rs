@@ -34,6 +34,7 @@ const ROUNDED_SHADOW_WIDTH: ShadowWidth = ShadowWidth { left: 28, right: 28, top
 
 /// Resize grab outside the visible window edge, inside the shadow margin; it never
 /// exceeds the smallest side of `ROUNDED_SHADOW_WIDTH`.
+#[cfg(target_os = "linux")]
 pub const RESIZE_BAND_IN_SHADOW: i32 = 10;
 
 fn shadow_width_for(rounded: bool) -> ShadowWidth {

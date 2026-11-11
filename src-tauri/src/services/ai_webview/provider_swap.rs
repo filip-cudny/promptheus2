@@ -13,7 +13,6 @@ use crate::services::dialog::{
     focus_host_window, is_shell_toolbar_label, logical_inner_size, LinuxChildRole,
     CONVERSATION_DIALOG_LABEL, SHELL_BG, SHELL_TOOLBAR_LABEL,
 };
-use crate::services::gnome_shell;
 
 use super::lifecycle::{enable_media_for_webview, CONVERSATION_DIALOG_TITLE};
 use super::palette::{handle_router_message, lookup_webview_provider, parse_router_message};
@@ -244,7 +243,11 @@ fn create_provider_child(
     let init_script = initialization_script(provider);
     let reinject = reinject_script();
     let corners_init_script = provider_corners_script(is_rounded());
-    let background = if gnome_shell::is_gnome_wayland() {
+    #[cfg(target_os = "linux")]
+    let gnome_wayland = crate::services::gnome_shell::is_gnome_wayland();
+    #[cfg(not(target_os = "linux"))]
+    let gnome_wayland = false;
+    let background = if gnome_wayland {
         Color(0, 0, 0, 0)
     } else {
         SHELL_BG
