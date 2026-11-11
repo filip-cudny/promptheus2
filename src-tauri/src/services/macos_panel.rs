@@ -133,9 +133,7 @@ pub fn make_nonactivating_widget_panel(window: &tauri::WebviewWindow) -> Result<
 // our other windows.
 pub fn show_panel_without_activating(window: &tauri::WebviewWindow) -> Result<(), String> {
     with_ns_window(window.ns_window(), |ns_window| unsafe {
-        if !ns_window.isVisible() {
-            remember_frontmost_app();
-        }
+        remember_frontmost_app();
         ns_window.makeKeyAndOrderFront(None);
 
         let running: *mut AnyObject =
@@ -146,13 +144,16 @@ pub fn show_panel_without_activating(window: &tauri::WebviewWindow) -> Result<()
     })
 }
 
+// Repositioning shows the panel again while it is key, with Promptheus
+// frontmost; that show keeps the pid remembered by an earlier one.
 fn remember_frontmost_app() {
     let pid = NSWorkspace::sharedWorkspace()
         .frontmostApplication()
         .map(|app| app.processIdentifier())
-        .filter(|&pid| pid != std::process::id() as i32)
-        .unwrap_or(0);
-    PREVIOUS_APP_PID.store(pid, Ordering::Relaxed);
+        .filter(|&pid| pid != std::process::id() as i32);
+    if let Some(pid) = pid {
+        PREVIOUS_APP_PID.store(pid, Ordering::Relaxed);
+    }
 }
 
 // Showing the panel activated our app, so hiding it alone leaves our app active
