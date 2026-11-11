@@ -44,61 +44,29 @@ pub fn install(window: &tauri::Window) {
 pub fn install(_window: &tauri::Window) {}
 
 #[cfg(target_os = "linux")]
-const BORDER_RGBA: (f64, f64, f64, f64) = (1.0, 1.0, 1.0, 0.1);
-
-#[cfg(target_os = "linux")]
 fn install_on_main_thread(window: &tauri::Window) {
     use gtk::gdk::WindowState;
-    use gtk::glib::prelude::ObjectExt;
     use gtk::glib::Propagation;
     use gtk::prelude::WidgetExt;
     use tauri::Manager;
 
-    let (vbox, gtk_window) = match (window.default_vbox(), window.gtk_window()) {
-        (Ok(vbox), Ok(gtk_window)) => (vbox, gtk_window),
-        (vbox, gtk_window) => {
+    let gtk_window = match window.gtk_window() {
+        Ok(gtk_window) => gtk_window,
+        Err(e) => {
             log::warn!(
                 target: "app_lib::services::chat_corners",
-                "no gtk window or box for {}: box={:?} window={:?}",
+                "no gtk window for {}: {e}",
                 window.label(),
-                vbox.err(),
-                gtk_window.err(),
             );
             return;
         }
     };
 
-    vbox.connect_draw(|vbox, cr| {
-        if is_rounded() {
-            let (w, h) = (vbox.allocated_width() as f64, vbox.allocated_height() as f64);
-            rounded_rect_path(cr, 0.0, 0.0, w, h, CORNER_RADIUS);
-            cr.clip();
-        }
-        Propagation::Proceed
-    });
-
-    vbox.connect_local("draw", true, |values| {
-        if is_rounded() {
-            let vbox = values[0].get::<gtk::Widget>().ok()?;
-            let cr = values[1].get::<gtk::cairo::Context>().ok()?;
-            let (w, h) = (vbox.allocated_width() as f64, vbox.allocated_height() as f64);
-            let (r, g, b, a) = BORDER_RGBA;
-            rounded_rect_path(&cr, 0.5, 0.5, w - 1.0, h - 1.0, CORNER_RADIUS - 0.5);
-            cr.set_source_rgba(r, g, b, a);
-            cr.set_line_width(1.0);
-            if let Err(e) = cr.stroke() {
-                log::warn!(target: "app_lib::services::chat_corners", "border stroke failed: {e}");
-            }
-        }
-        Some(false.into())
-    });
-
     let app = window.app_handle().clone();
-    let state_vbox = vbox.clone();
     gtk_window.connect_window_state_event(move |_, event| {
         let rounded = rounded_for_state(event.new_window_state());
         if rounded != is_rounded() {
-            apply(&app, &state_vbox, rounded);
+            apply(&app, rounded);
         }
         Propagation::Proceed
     });
@@ -106,40 +74,64 @@ fn install_on_main_thread(window: &tauri::Window) {
     let initial_state = WidgetExt::window(&gtk_window)
         .map(|w| w.state())
         .unwrap_or_else(WindowState::empty);
-    apply(window.app_handle(), &vbox, rounded_for_state(initial_state));
+    apply(window.app_handle(), rounded_for_state(initial_state));
 }
 
 #[cfg(target_os = "linux")]
-fn apply(app: &tauri::AppHandle, vbox: &gtk::Box, rounded: bool) {
-    use gtk::prelude::WidgetExt;
-    use tauri::Emitter;
+fn apply(app: &tauri::AppHandle, rounded: bool) {
+    use tauri::{Emitter, Manager};
+
+    use super::dialog::{CONVERSATION_DIALOG_LABEL, SHELL_TOOLBAR_LABEL};
 
     ROUNDED.store(rounded, Ordering::Relaxed);
-    vbox.queue_draw();
     log::debug!(target: "app_lib::services::chat_corners", "rounded={rounded}");
-    if let Err(e) = app.emit_to(
-        super::dialog::SHELL_TOOLBAR_LABEL,
-        "shell:corners",
-        serde_json::json!({ "rounded": rounded }),
-    ) {
-        log::warn!(
-            target: "app_lib::services::chat_corners",
-            "emit_to({}) shell:corners failed: {e}",
-            super::dialog::SHELL_TOOLBAR_LABEL,
-        );
+    for label in [SHELL_TOOLBAR_LABEL, CONVERSATION_DIALOG_LABEL] {
+        if let Err(e) = app.emit_to(label, "shell:corners", serde_json::json!({ "rounded": rounded })) {
+            log::warn!(
+                target: "app_lib::services::chat_corners",
+                "emit_to({label}) shell:corners failed: {e}",
+            );
+        }
+    }
+    let Some(host) = app.get_window(CONVERSATION_DIALOG_LABEL) else {
+        return;
+    };
+    let script = provider_corners_script(rounded);
+    for webview in host.webviews() {
+        let label = webview.label();
+        if label == SHELL_TOOLBAR_LABEL || label == CONVERSATION_DIALOG_LABEL {
+            continue;
+        }
+        if let Err(e) = webview.eval(&script) {
+            log::warn!(
+                target: "app_lib::services::chat_corners",
+                "corners eval failed for {label}: {e}",
+            );
+        }
     }
 }
 
-#[cfg(target_os = "linux")]
-fn rounded_rect_path(cr: &gtk::cairo::Context, x: f64, y: f64, w: f64, h: f64, r: f64) {
-    use std::f64::consts::{FRAC_PI_2, PI};
+const STYLE_ELEMENT_ID: &str = "__promptheus-corners";
 
-    cr.new_sub_path();
-    cr.arc(x + w - r, y + r, r, -FRAC_PI_2, 0.0);
-    cr.arc(x + w - r, y + h - r, r, 0.0, FRAC_PI_2);
-    cr.arc(x + r, y + h - r, r, FRAC_PI_2, PI);
-    cr.arc(x + r, y + r, r, PI, PI + FRAC_PI_2);
-    cr.close_path();
+const PROVIDER_CORNERS_CSS: &str = "html { clip-path: inset(0 round 0 0 __R__px __R__px) !important; } \
+html::after { content: \"\"; position: fixed; inset: 0; box-sizing: border-box; \
+border: 1px solid rgba(255, 255, 255, 0.1); border-top: none; border-radius: 0 0 __R__px __R__px; \
+pointer-events: none; z-index: 2147483647; }";
+
+pub fn provider_corners_script(rounded: bool) -> String {
+    if !rounded {
+        return format!(
+            "(function(){{var e=document.getElementById('{STYLE_ELEMENT_ID}');if(e)e.remove();}})();"
+        );
+    }
+    let css = PROVIDER_CORNERS_CSS.replace("__R__", &CORNER_RADIUS.to_string());
+    let css_literal = serde_json::Value::String(css);
+    format!(
+        "(function(){{function put(){{if(document.getElementById('{STYLE_ELEMENT_ID}'))return;\
+var s=document.createElement('style');s.id='{STYLE_ELEMENT_ID}';s.textContent={css_literal};\
+document.documentElement.appendChild(s);}}\
+if(document.documentElement)put();else document.addEventListener('DOMContentLoaded',put,{{once:true}});}})();"
+    )
 }
 
 #[cfg(all(test, target_os = "linux"))]
@@ -186,5 +178,20 @@ mod tests {
                 | WindowState::LEFT_RESIZABLE
                 | WindowState::FOCUSED
         ));
+    }
+
+    #[test]
+    fn rounded_script_installs_clip_and_border_style() {
+        let script = provider_corners_script(true);
+        assert!(script.contains("__promptheus-corners"));
+        assert!(script.contains("clip-path: inset(0 round 0 0 10px 10px)"));
+        assert!(script.contains("rgba(255, 255, 255, 0.1)"));
+    }
+
+    #[test]
+    fn square_script_only_removes_the_style() {
+        let script = provider_corners_script(false);
+        assert!(script.contains("__promptheus-corners"));
+        assert!(!script.contains("clip-path"));
     }
 }

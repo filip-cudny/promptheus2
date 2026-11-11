@@ -375,7 +375,7 @@ pub async fn open_or_focus(
             &config.url,
             content_pos,
             content_size,
-            SHELL_BG,
+            if rounded_host { TRANSPARENT } else { SHELL_BG },
         )?;
         configure_linux_child_packing(&content_webview, LinuxChildRole::Content);
         if needs_undecorated_resize {

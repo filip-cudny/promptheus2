@@ -3,6 +3,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { getCurrentWebview } from "@tauri-apps/api/webview";
+  import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { createConversationStore } from "$lib/stores/conversation.svelte";
   import { hasContext } from "$lib/services/context";
   import { getSettings } from "$lib/services/settings";
@@ -14,7 +15,7 @@
   import InputArea from "$lib/components/features/conversation-dialog/InputArea.svelte";
   import TabSidebar from "$lib/components/features/conversation-dialog/TabSidebar.svelte";
   import { useConversationDialogIpc } from "$lib/components/features/conversation-dialog/drivers/useConversationDialogIpc.svelte";
-  import { reloadActiveInHost } from "$lib/services/shellToolbar";
+  import { getChatCorners, reloadActiveInHost } from "$lib/services/shellToolbar";
   import { getTabs, reportNativeTabs, type NativeTabReport } from "$lib/services/tabs";
   import { SHORTCUTS, createHostShortcutHandler, matches } from "$lib/shortcuts";
   import { focusConversationInput } from "$lib/utils/conversationFocus";
@@ -42,6 +43,13 @@
   const SELF_TARGET = getCurrentWebview().label;
 
   const store = createConversationStore("", "");
+
+  let rounded = $state(false);
+  let unlistenCorners: UnlistenFn | null = null;
+
+  $effect(() => {
+    document.documentElement.classList.toggle("rounded", rounded);
+  });
 
   let sidebarOpen = $state(false);
   let contextVisible = $state(false);
@@ -255,6 +263,18 @@
     window.addEventListener("keydown", handleGlobalKeydown);
     window.addEventListener("focus", handleWindowFocus);
     detachEdgeResizeCursor = attachEdgeResizeCursor("content");
+    unlistenCorners = await listen<{ rounded: boolean }>(
+      "shell:corners",
+      (ev) => {
+        rounded = ev.payload.rounded;
+      },
+      { target: SELF_TARGET },
+    );
+    try {
+      rounded = await getChatCorners();
+    } catch (err) {
+      console.error("get_chat_corners failed", err);
+    }
     skillsStore.init();
     await store.initFromSettings();
     loadModelInfo();
@@ -312,6 +332,8 @@
       detachEdgeResizeCursor();
       detachEdgeResizeCursor = null;
     }
+    unlistenCorners?.();
+    unlistenCorners = null;
     ipc.destroy();
     store.destroy();
   });
@@ -351,6 +373,29 @@
   :global(html),
   :global(body) {
     background: var(--surface-base);
+  }
+
+  :global(html.rounded),
+  :global(html.rounded body) {
+    background: transparent;
+  }
+
+  :global(html.rounded body) {
+    height: 100vh;
+    margin: 0;
+    clip-path: inset(0 round 0 0 10px 10px);
+  }
+
+  :global(html.rounded body::after) {
+    content: "";
+    position: fixed;
+    inset: 0;
+    box-sizing: border-box;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    pointer-events: none;
+    z-index: 2147483647;
   }
 
   .dialog-shell {

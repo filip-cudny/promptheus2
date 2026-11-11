@@ -2,15 +2,18 @@ use std::time::Instant;
 
 use serde::Serialize;
 use tauri::webview::{PageLoadEvent, WebviewBuilder};
+use tauri::window::Color;
 use tauri::{Emitter, LogicalSize, Manager, WebviewUrl};
 
 use crate::commands::conversation_dialog::NewConversationEvent;
 use crate::models::settings::WebviewProvider;
+use crate::services::chat_corners::{is_rounded, provider_corners_script};
 use crate::services::dialog::{
     attach_undecorated_resize_handler, configure_linux_child_packing, content_layout,
     focus_host_window, is_shell_toolbar_label, logical_inner_size, LinuxChildRole,
     CONVERSATION_DIALOG_LABEL, SHELL_BG, SHELL_TOOLBAR_LABEL,
 };
+use crate::services::gnome_shell;
 
 use super::lifecycle::{enable_media_for_webview, CONVERSATION_DIALOG_TITLE};
 use super::palette::{handle_router_message, lookup_webview_provider, parse_router_message};
@@ -240,6 +243,12 @@ fn create_provider_child(
     let content_url = tauri::Url::parse(start_url).map_err(|e| e.to_string())?;
     let init_script = initialization_script(provider);
     let reinject = reinject_script();
+    let corners_init_script = provider_corners_script(is_rounded());
+    let background = if gnome_shell::is_gnome_wayland() {
+        Color(0, 0, 0, 0)
+    } else {
+        SHELL_BG
+    };
 
     let app_for_nav = app.clone();
     let nav_webview_label = child_label.clone();
@@ -247,10 +256,11 @@ fn create_provider_child(
 
     let builder = WebviewBuilder::new(&child_label, WebviewUrl::External(content_url))
         .auto_resize()
-        .background_color(SHELL_BG)
+        .background_color(background)
         .enable_clipboard_access()
         .disable_drag_drop_handler()
         .initialization_script(&init_script)
+        .initialization_script(&corners_init_script)
         .on_navigation(move |url| {
             if !url.as_str().starts_with(ROUTER_SENTINEL) {
                 return true;
@@ -296,6 +306,12 @@ fn create_provider_child(
                     log::warn!(
                         target: "app_lib::services::ai_webview",
                         "failed to re-inject keybind script: {e}",
+                    );
+                }
+                if let Err(e) = webview.eval(provider_corners_script(is_rounded())) {
+                    log::warn!(
+                        target: "app_lib::services::ai_webview",
+                        "failed to apply corners script: {e}",
                     );
                 }
                 deliver_pending_message(&webview);
