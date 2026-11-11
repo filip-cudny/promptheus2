@@ -42,9 +42,8 @@
     margin: var(--space-0);
   }
 
-  :global(html[data-corners="rounded"]) {
-    border-bottom-left-radius: 10px;
-    border-bottom-right-radius: 10px;
-    overflow: hidden;
+  :global(html[data-corners="rounded"] body) {
+    height: 100vh;
+    clip-path: inset(0 round 0 0 10px 10px);
   }
 </style>
