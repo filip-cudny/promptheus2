@@ -87,6 +87,7 @@
     onpointermove={resize}
     onpointerup={endResize}
     onpointercancel={endResize}
+    onlostpointercapture={endResize}
   ></div>
   <header>
     <span class="title"><Sparkles size={14} />Settings agent{#if modelName}<span class="model" class:none={modelState !== "ok"} title={modelName}>{modelName}</span>{/if}</span>
@@ -164,11 +165,6 @@
     margin-top: -14px;
     border-radius: 2px;
     background: var(--border-strong);
-  }
-
-  .resize-handle:hover,
-  .resize-handle.dragging {
-    background: var(--accent-bg-soft);
   }
 
   .resize-handle:hover::after,

@@ -95,6 +95,11 @@
     position: relative;
   }
 
+  .dialog-body:has(:global(.resize-handle:hover), :global(.resize-handle.dragging))
+    :global([data-settings-content] ::-webkit-scrollbar-thumb) {
+    background: transparent;
+  }
+
   .agent-button {
     position: absolute;
     top: 10px;
