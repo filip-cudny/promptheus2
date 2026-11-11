@@ -734,12 +734,13 @@ export default class PromptheusExtension extends Extension {
         }
         widget.selection?.finish('cancelled');
         const primary = Meta.SelectionType.SELECTION_PRIMARY;
+        const clipboard = Meta.SelectionType.SELECTION_CLIPBOARD;
         const display = global.display.get_selection();
         const held = Clutter.ModifierType.BUTTON1_MASK | Clutter.ModifierType.SHIFT_MASK;
         let done = false;
         let busy = false;
         let timerId = 0;
-        const read = () => St.Clipboard.get_default().get_text(St.ClipboardType.PRIMARY, (_clipboard, text) => {
+        const read = clipboardType => St.Clipboard.get_default().get_text(clipboardType, (_clipboard, text) => {
             if (done)
                 return;
             if (text)
@@ -747,25 +748,31 @@ export default class PromptheusExtension extends Extension {
             else
                 busy = false;
         });
-        const awaitRelease = () => {
+        const awaitRelease = clipboardType => {
             timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SELECTION_POLL_MS, () => {
                 const [, , modifiers] = global.get_pointer();
                 if (modifiers & held)
                     return GLib.SOURCE_CONTINUE;
                 timerId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SELECTION_SETTLE_MS, () => {
                     timerId = 0;
-                    read();
+                    read(clipboardType);
                     return GLib.SOURCE_REMOVE;
                 });
                 return GLib.SOURCE_REMOVE;
             });
         };
+        // CLIPBOARD counts for apps that copy on select (herdr via OSC 52) and set no PRIMARY. Wrong when the
+        // user copies elsewhere (Ctrl+C) during the wait: that copy is taken as the selection. Upgrade path:
+        // accept CLIPBOARD only when no PRIMARY-capable source exists, or only within the settle window after
+        // a button release.
         const ownerId = display.connect('owner-changed', (_display, type, source) => {
-            if (type !== primary || busy || !source ||
+            if ((type !== primary && type !== clipboard) || busy || !source ||
                 !source.get_mimetypes().some(mimetype => SELECTION_TEXT_MIMETYPES.includes(mimetype)))
                 return;
             busy = true;
-            awaitRelease();
+            const fromClipboard = type === clipboard;
+            console.log(`CaptureSelection: ${fromClipboard ? 'CLIPBOARD' : 'PRIMARY'} owner changed`);
+            awaitRelease(fromClipboard ? St.ClipboardType.CLIPBOARD : St.ClipboardType.PRIMARY);
         });
         const selection = {
             finish: (outcome, text = '') => {
