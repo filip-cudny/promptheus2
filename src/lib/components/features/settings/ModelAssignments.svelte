@@ -166,7 +166,7 @@
                     )}
                 />
               </td>
-              <td>
+              <td data-label="Reasoning effort">
                 {#if row.hasEffort}
                   <SelectDropdown
                     value={storedEffort(row.surface) ?? ""}
@@ -253,6 +253,7 @@
 
 <style>
   .model-assignments {
+    container-type: inline-size;
     padding: 48px var(--space-12) var(--space-16);
     display: flex;
     flex-direction: column;
@@ -360,5 +361,54 @@
 
   .link:hover {
     text-decoration: underline;
+  }
+
+  td :global(.trigger .label) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  @container (max-width: 600px) {
+    table,
+    tbody {
+      display: block;
+    }
+
+    thead,
+    td:empty {
+      display: none;
+    }
+
+    tr {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--space-3) var(--space-6);
+      padding: var(--space-4) var(--space-0);
+      border-top: 1px solid var(--border-faint);
+    }
+
+    td {
+      min-width: 0;
+      padding: var(--space-0);
+      border-top: none;
+      overflow-wrap: anywhere;
+    }
+
+    .feature {
+      flex-basis: 100%;
+    }
+
+    td[data-label] {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+    }
+
+    td[data-label]::before {
+      content: attr(data-label);
+      font-size: var(--font-size-sm);
+      color: var(--text-muted);
+    }
   }
 </style>
