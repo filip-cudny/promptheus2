@@ -241,22 +241,16 @@ async fn copy_fallback(app: &AppHandle, generation: u64, run: u64) -> Option<Str
 }
 
 // A pasteboard change between the left press that started a drag or multi-click outside the pill and
-// this read, at most GESTURE_WINDOW_MS after the release, counts as the frontmost app's copy-on-select.
+// the `changeCount` read in `read_after_trigger` right after the settle delay, with that read at most
+// GESTURE_WINDOW_MS after the release, counts as the frontmost app's copy-on-select. The read comes before
+// the AX read and `keep_running`, whose waits would otherwise push it past the window.
 // Wrong when a write that is not the selection lands in that window (a skill result or webview-send
 // fallback written by this app, a background write by another app) and the frontmost app gives no AX
 // selection: that content is taken as the selection. Upgrade path: record the `changeCount` each of this
 // app's own pasteboard writes produces and reject it here; writes by other apps stay indistinguishable,
 // NSPasteboard names no writer.
-async fn copy_on_select_text(app: &AppHandle, change_count_at_press: isize, released: Instant) -> Option<String> {
-    let text = on_main(app, move || {
-        let ms_since_release = released.elapsed().as_millis() as u64;
-        copied_on_select(change_count(), change_count_at_press, ms_since_release)
-            .then(pasteboard_string)
-            .flatten()
-    })
-    .await
-    .ok()?
-    .filter(|text| !text.is_empty())?;
+async fn copy_on_select_text(app: &AppHandle) -> Option<String> {
+    let text = on_main(app, pasteboard_string).await.ok()?.filter(|text| !text.is_empty())?;
     log::debug!(
         "selection capture: pasteboard changed since the press, copy-on-select, length={}",
         text.len()
@@ -272,6 +266,15 @@ async fn read_after_trigger(
     pointer_gesture: Option<(isize, Instant)>,
 ) -> Option<String> {
     tokio::time::sleep(SETTLE_DELAY).await;
+    let copied = match pointer_gesture {
+        Some((change_count_at_press, released)) => on_main(app, move || {
+            let ms_since_release = released.elapsed().as_millis() as u64;
+            copied_on_select(change_count(), change_count_at_press, ms_since_release)
+        })
+        .await
+        .ok()?,
+        None => false,
+    };
     let read = tauri::async_runtime::spawn_blocking(read_ax_selection).await.ok()?;
     if let Some(read) = read.filter(|read| !read.text.is_empty()) {
         if equals_baseline(baseline.as_ref(), &read) {
@@ -284,8 +287,8 @@ async fn read_after_trigger(
     if !keep_running(app, generation, run).await {
         return None;
     }
-    if let Some((change_count_at_press, released)) = pointer_gesture {
-        if let Some(text) = copy_on_select_text(app, change_count_at_press, released).await {
+    if copied {
+        if let Some(text) = copy_on_select_text(app).await {
             return Some(text);
         }
     }
