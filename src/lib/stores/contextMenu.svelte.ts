@@ -283,21 +283,7 @@ async function executeItem(index: number, shiftPressed: boolean = false) {
       }
       await refreshItems();
     }
-    return;
   }
-
-  if (!itemEnabled) return;
-
-  try {
-    await invoke("execute_menu_item", {
-      itemId,
-      shiftPressed,
-    });
-  } catch (e) {
-    error("Failed to execute menu item: " + e);
-  }
-
-  await closeMenu();
 }
 
 async function runInDialog(index: number, skillId: string, skillName: string) {

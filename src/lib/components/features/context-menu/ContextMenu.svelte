@@ -64,7 +64,7 @@
     closePanels: panels.closeAll,
     closeMenu: menu.closeMenu,
     moveSelection: menu.moveSelection,
-    executeSelected: menu.executeSelected,
+    executeSelected: activateSelected,
     handleNumberInput: menu.handleNumberInput,
   });
 
@@ -94,6 +94,19 @@
   let chatRowEl: HTMLElement | undefined = $state();
   let settingsToggleEl: HTMLElement | undefined = $state();
   let unlistenProviders: (() => void) | undefined;
+
+  function activateSelected(shiftPressed: boolean) {
+    const item = menu.getItems()[menu.getSelectedIndex()];
+    if (item?.item_type === "chat") return openChat();
+    if (item?.item_type === "settings_section") return panels.openSettings(settingsToggleEl);
+    return menu.executeSelected(shiftPressed);
+  }
+
+  async function openChat() {
+    if (menu.isRecording()) return;
+    await menu.closeMenu(false);
+    await focusOrOpenChat();
+  }
 
   async function pickChatProvider(providerId: string) {
     panels.closeChatProviders();
@@ -213,11 +226,7 @@
             e.stopPropagation();
             panels.openChatProviders();
           }}
-          onclick={async () => {
-            if (chatDisabled) return;
-            await menu.closeMenu(false);
-            await focusOrOpenChat();
-          }}
+          onclick={openChat}
         >
           {#snippet icon()}<MessageSquare size={ICON_SIZE.md} />{/snippet}
         </MenuItemRow>
