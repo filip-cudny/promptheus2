@@ -161,6 +161,9 @@ fn install_on_main_thread(window: &tauri::Window) {
 /// The surface grows or shrinks by the margin change on `set_shadow_width`, keeping
 /// the visible size; GDK then sends the visible rect as the xdg window geometry.
 /// A `gtk_window_set_decorated` call on the host resets the shadow width to 0.
+/// `set_shadow_width` stores the size used for the first configure of the next map
+/// with the old margins; the same-size `resize` after it recomputes it with the new
+/// ones, rounded only: in a maximized or tiled state it would break the restore size.
 #[cfg(target_os = "linux")]
 fn apply_shadow(gtk_window: &gtk::ApplicationWindow, vbox: &gtk::Box, rounded: bool) {
     use gtk::prelude::{StyleContextExt, WidgetExt};
@@ -172,13 +175,22 @@ fn apply_shadow(gtk_window: &gtk::ApplicationWindow, vbox: &gtk::Box, rounded: b
     } else {
         style.remove_class(SHADOW_CLASS);
     }
+    let old_horizontal = vbox.margin_start() + vbox.margin_end();
+    let old_vertical = vbox.margin_top() + vbox.margin_bottom();
     vbox.set_margin_start(shadow.left);
     vbox.set_margin_end(shadow.right);
     vbox.set_margin_top(shadow.top);
     vbox.set_margin_bottom(shadow.bottom);
     match WidgetExt::window(gtk_window) {
         Some(gdk_window) => {
-            gdk_window.set_shadow_width(shadow.left, shadow.right, shadow.top, shadow.bottom)
+            let (width, height) = (gdk_window.width(), gdk_window.height());
+            gdk_window.set_shadow_width(shadow.left, shadow.right, shadow.top, shadow.bottom);
+            if rounded {
+                gdk_window.resize(
+                    width - old_horizontal + shadow.left + shadow.right,
+                    height - old_vertical + shadow.top + shadow.bottom,
+                );
+            }
         }
         None => log::warn!(
             target: "app_lib::services::chat_corners",
