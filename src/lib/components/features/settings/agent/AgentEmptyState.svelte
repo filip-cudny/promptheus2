@@ -15,10 +15,26 @@
   const store = getSettingsStore();
 
   const lines = [
-    { icon: Search, text: "Find where an option is" },
-    { icon: MessageCircleQuestion, text: "Ask how something is set" },
-    { icon: PencilLine, text: "Change it: you approve a card first" },
-    { icon: KeyRound, text: "Secrets: shown to you masked, never to the agent" },
+    {
+      icon: Search,
+      label: "Find an option",
+      text: "Describe what you want to change; the answer links to the field and highlights it.",
+    },
+    {
+      icon: MessageCircleQuestion,
+      label: "Ask how it is set",
+      text: "It reads your current settings, e.g. which model a surface uses or which shortcut runs an action.",
+    },
+    {
+      icon: PencilLine,
+      label: "Change it",
+      text: "It prepares a card with the change; nothing is saved until you apply it, and you can undo it.",
+    },
+    {
+      icon: KeyRound,
+      label: "Secrets stay with you",
+      text: "API keys and passwords never reach the model; you see them masked here.",
+    },
   ];
 
   const chips = [
@@ -96,8 +112,11 @@
 
 {#snippet lineList()}
   <ul class="lines">
-    {#each lines as line (line.text)}
-      <li><line.icon size={ICON_SIZE.sm} />{line.text}</li>
+    {#each lines as line (line.label)}
+      <li>
+        <line.icon size={ICON_SIZE.sm} />
+        <div><span class="line-label">{line.label}</span>{line.text}</div>
+      </li>
     {/each}
   </ul>
 {/snippet}
@@ -176,20 +195,28 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
+    gap: var(--space-4);
     font-size: var(--font-size-md);
+    line-height: 1.4;
     color: var(--text-muted);
   }
 
   .lines li {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-4);
   }
 
   .lines :global(svg) {
     flex-shrink: 0;
+    margin-top: var(--space-1);
     color: var(--text-faint);
+  }
+
+  .line-label {
+    display: block;
+    font-weight: 500;
+    color: var(--text-secondary);
   }
 
   .chips {

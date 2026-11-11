@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Sparkles } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import FloatingPanel from "$lib/components/shared/ui/FloatingPanel.svelte";
+  import KbdHint from "$lib/components/shared/ui/KbdHint.svelte";
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { agentHasUsableModel } from "$lib/utils/agentModel";
@@ -18,6 +20,8 @@
 
   let query = $state("");
   let highlightedIndex = $state(0);
+  let focused = $state(false);
+  let inputEl: HTMLInputElement | undefined = $state();
 
   const results = $derived(searchCatalog(catalog.entries, query));
   const listed = $derived(query.trim() !== "");
@@ -74,10 +78,19 @@
     type="search"
     placeholder="Search settings"
     bind:value={query}
+    bind:this={inputEl}
     onkeydown={handleKeydown}
+    onfocus={() => (focused = true)}
+    onblur={() => (focused = false)}
   />
-  {#if listed}
-    <ul class="results">
+  <!-- FloatingPanel places the list and caps its height once on open and does not follow the input. Correct while the sidebar does not scroll and the results do not grow while it is open; it breaks when the section list is taller than the window and is scrolled, or a query opened with few rows is shortened to many. Then close it on the sidebar's scroll and re-place it on a change of results. -->
+  <FloatingPanel
+    visible={listed && focused}
+    anchorEl={inputEl}
+    fitContent
+    onclose={() => (focused = false)}
+  >
+    <ul class="results" role="presentation" onmousedown={(e) => e.preventDefault()}>
       {#each results as entry, i (entry.key)}
         <li>
           <button
@@ -87,13 +100,15 @@
             onclick={() => choose(entry)}
           >
             <span class="label">{entry.label}</span>
-            <span class="section">{sectionLabel(entry.section)}</span>
+            <span class="detail">
+              {sectionLabel(entry.section)}{#if entry.description} · {entry.description}{/if}
+            </span>
           </button>
         </li>
       {:else}
         <li class="empty">No matching settings</li>
       {/each}
-      <li>
+      <li class="ask-item">
         <button
           class="result ask"
           class:active={highlightedIndex === askIndex}
@@ -102,19 +117,16 @@
         >
           <Sparkles size={ICON_SIZE.md} />
           <span class="question">Ask agent: {query.trim()}</span>
-          {#if highlightedIndex === askIndex}<kbd>Enter</kbd>{/if}
+          {#if highlightedIndex === askIndex}<KbdHint keys={["Enter"]} />{/if}
         </button>
       </li>
     </ul>
-  {/if}
+  </FloatingPanel>
 </div>
 
 <style>
   .search {
     margin: var(--space-0) var(--space-8) var(--space-4);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
   }
 
   input {
@@ -135,9 +147,11 @@
   }
 
   .results {
+    width: 300px;
+    box-sizing: border-box;
     list-style: none;
     margin: var(--space-0);
-    padding: var(--space-0);
+    padding: var(--space-0) var(--space-2);
     display: flex;
     flex-direction: column;
   }
@@ -151,21 +165,38 @@
     background: transparent;
     border: none;
     border-radius: var(--radius-md);
-    color: var(--text-secondary);
+    color: var(--text-primary);
     font: inherit;
     font-size: var(--font-size-base);
     cursor: pointer;
   }
 
   .result.active {
-    background: var(--surface-overlay-faint);
-    color: var(--text-primary);
+    background: var(--surface-overlay);
+  }
+
+  .detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+  }
+
+  .ask-item {
+    margin-top: var(--space-2);
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--border-faint);
   }
 
   .result.ask {
     flex-direction: row;
     align-items: center;
     gap: var(--space-4);
+  }
+
+  .result.ask.active {
+    background: var(--accent-bg-soft);
   }
 
   .result.ask :global(svg) {
@@ -179,17 +210,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  kbd {
-    font: inherit;
-    font-size: var(--font-size-xs);
-    color: var(--text-faint);
-  }
-
-  .section {
-    font-size: var(--font-size-xs);
-    color: var(--text-faint);
   }
 
   .empty {
