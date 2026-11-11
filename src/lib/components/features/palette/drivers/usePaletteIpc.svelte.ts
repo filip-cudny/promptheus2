@@ -18,6 +18,7 @@ type ShowPayload = {
   providers: ProviderPayload[];
   tabs: TabsSnapshot;
   current_title: string;
+  rounded?: boolean;
 };
 
 export function usePaletteIpc(opts: {
@@ -29,6 +30,7 @@ export function usePaletteIpc(opts: {
   let openTabs = $state<TabEntry[]>([]);
   let currentTitle = $state("");
   let visible = $state(false);
+  let rounded = $state(false);
 
   let unlistens: UnlistenFn[] = [];
 
@@ -77,6 +79,7 @@ export function usePaletteIpc(opts: {
         is_current: tab.id === ev.payload.tabs.active_id,
       }));
       currentTitle = ev.payload.current_title ?? "";
+      rounded = ev.payload.rounded ?? false;
       visible = false;
       await tick();
       visible = true;
@@ -118,6 +121,9 @@ export function usePaletteIpc(opts: {
     },
     get visible() {
       return visible;
+    },
+    get rounded() {
+      return rounded;
     },
     init,
     destroy,

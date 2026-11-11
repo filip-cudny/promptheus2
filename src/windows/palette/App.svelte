@@ -17,6 +17,10 @@
     ipc.init();
   });
   onDestroy(() => ipc.destroy());
+
+  $effect(() => {
+    document.documentElement.dataset.corners = ipc.rounded ? "rounded" : "square";
+  });
 </script>
 
 <Palette
@@ -36,5 +40,11 @@
   :global(body) {
     background: transparent;
     margin: var(--space-0);
+  }
+
+  :global(html[data-corners="rounded"]) {
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+    overflow: hidden;
   }
 </style>

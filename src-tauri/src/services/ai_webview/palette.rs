@@ -285,7 +285,18 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
             .map_err(|e| e.to_string())?;
     }
 
+    let rounded = crate::services::chat_corners::is_rounded();
+
     if let Some(backdrop) = app.get_webview_window(PALETTE_BACKDROP_LABEL) {
+        let corners = if rounded { "rounded" } else { "square" };
+        if let Err(e) = backdrop.eval(format!(
+            "document.documentElement.dataset.corners = \"{corners}\""
+        )) {
+            log::warn!(
+                target: "app_lib::services::ai_webview",
+                "backdrop corners eval failed: {e}",
+            );
+        }
         if let Err(e) = backdrop.set_size(LogicalSize::new(host_logical_w, palette_h)) {
             log::warn!(
                 target: "app_lib::services::ai_webview",
@@ -318,6 +329,7 @@ pub async fn swap_to_palette(app: &tauri::AppHandle, host_label: &str) -> Result
         "providers": providers,
         "tabs": tabs,
         "current_title": current_title,
+        "rounded": rounded,
     });
     emit_logged(app, PALETTE_LABEL, "palette:show", payload);
 
