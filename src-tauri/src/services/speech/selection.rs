@@ -27,6 +27,7 @@ pub const MIN_DRAG_PX: f64 = 3.0;
 pub const DOUBLE_CLICK_MS: u64 = 500;
 pub const SETTLE_DELAY_MS: u64 = 150;
 pub const COPY_WAIT_MS: u64 = 400;
+pub const GESTURE_WINDOW_MS: u64 = 500;
 
 static RUN: AtomicU64 = AtomicU64::new(0);
 
@@ -85,6 +86,10 @@ impl Trigger {
             Trigger::SelectAll => "select-all",
         }
     }
+
+    pub fn is_pointer(self) -> bool {
+        matches!(self, Trigger::Drag | Trigger::MultiClick)
+    }
 }
 
 #[derive(Default)]
@@ -98,6 +103,10 @@ pub struct TriggerDetector {
 }
 
 impl TriggerDetector {
+    pub fn is_press(&self, s: &Sample) -> bool {
+        s.left_down && !self.left_down
+    }
+
     pub fn feed(&mut self, s: &Sample) -> Option<Trigger> {
         let pointer = self.pointer_trigger(s);
         let keys = self.key_trigger(s);
@@ -160,8 +169,8 @@ pub fn should_restore(change_count_now: isize, change_count_after_copy: isize) -
     change_count_now == change_count_after_copy
 }
 
-pub fn copied_on_select(change_count_now: isize, change_count_since: isize) -> bool {
-    change_count_now != change_count_since
+pub fn copied_on_select(change_count_now: isize, change_count_at_press: isize, ms_since_release: u64) -> bool {
+    change_count_now != change_count_at_press && ms_since_release <= GESTURE_WINDOW_MS
 }
 
 #[cfg(test)]
@@ -276,9 +285,34 @@ mod tests {
     }
 
     #[test]
-    fn selection_pasteboard_change_since_the_baseline_counts_as_copy_on_select() {
-        assert!(copied_on_select(8, 7));
-        assert!(!copied_on_select(7, 7));
+    fn selection_pasteboard_change_since_the_press_within_500_ms_of_the_release_counts_as_copy_on_select() {
+        assert!(copied_on_select(8, 7, 180));
+        assert!(copied_on_select(8, 7, 500));
+        assert!(!copied_on_select(7, 7, 180));
+    }
+
+    #[test]
+    fn selection_pasteboard_change_read_later_than_500_ms_after_the_release_does_not_count() {
+        assert!(!copied_on_select(8, 7, 501));
+    }
+
+    #[test]
+    fn selection_only_pointer_triggers_take_the_copy_on_select_path() {
+        assert!(Trigger::Drag.is_pointer());
+        assert!(Trigger::MultiClick.is_pointer());
+        assert!(!Trigger::ShiftArrow.is_pointer());
+        assert!(!Trigger::SelectAll.is_pointer());
+    }
+
+    #[test]
+    fn selection_press_is_reported_once_per_left_button_transition() {
+        let mut d = detector();
+        let down = sample(0, true, 500.0, 500.0);
+        assert!(d.is_press(&down));
+        d.feed(&down);
+        assert!(!d.is_press(&sample(30, true, 510.0, 500.0)));
+        d.feed(&sample(60, false, 510.0, 500.0));
+        assert!(d.is_press(&sample(90, true, 510.0, 500.0)));
     }
 
     #[test]

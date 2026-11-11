@@ -92,6 +92,7 @@ const WIDGET_BUTTON_PRIMARY = {rest: '#e5e5e7', hover: '#cfcfd3'};
 const WIDGET_BUTTON_SECONDARY = {rest: '#3a3a3c', hover: '#48484a'};
 const SELECTION_POLL_MS = 30;
 const SELECTION_SETTLE_MS = 150;
+const SELECTION_GESTURE_WINDOW_MS = 500;
 const SELECTION_TEXT_MIMETYPES = ['text/plain;charset=utf-8', 'text/plain', 'UTF8_STRING', 'STRING', 'TEXT'];
 const WIDGET_TARGET_PADDING_X = 8;
 const WIDGET_DRAG_THRESHOLD_PX = 4;
@@ -761,16 +762,39 @@ export default class PromptheusExtension extends Extension {
                 return GLib.SOURCE_REMOVE;
             });
         };
-        // CLIPBOARD counts for apps that copy on select (herdr via OSC 52) and set no PRIMARY. Wrong when the
-        // user copies elsewhere (Ctrl+C) during the wait: that copy is taken as the selection. Upgrade path:
-        // accept CLIPBOARD only when no PRIMARY-capable source exists, or only within the settle window after
-        // a button release.
+        let buttonDown = false;
+        let gestureHeld = false;
+        let gestureReleasedUs = null;
+        const gestureId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, SELECTION_POLL_MS, () => {
+            const [x, y, modifiers] = global.get_pointer();
+            const down = (modifiers & Clutter.ModifierType.BUTTON1_MASK) !== 0;
+            if (down && !buttonDown) {
+                gestureHeld = !pointInRect(x, y, widget.actor);
+            } else if (!down && gestureHeld) {
+                gestureHeld = false;
+                gestureReleasedUs = GLib.get_monotonic_time();
+            }
+            buttonDown = down;
+            return GLib.SOURCE_CONTINUE;
+        });
+        const inGesture = () => gestureHeld ||
+            (gestureReleasedUs !== null && elapsedMsSince(gestureReleasedUs) <= SELECTION_GESTURE_WINDOW_MS);
+        // CLIPBOARD counts for apps that copy on select (herdr via OSC 52) and set no PRIMARY, only while button 1
+        // is held for a press outside the pill or up to SELECTION_GESTURE_WINDOW_MS after its release. Wrong when a
+        // CLIPBOARD write that is not a selection lands in that window (a background write or a clipboard-manager
+        // takeover during a drag): it is taken as the selection. Upgrade path: the writers this app controls
+        // (backend clipboard writes, the PasteIntoApp restore) tell the wait to skip their owner change; writes of
+        // other clients stay indistinguishable, the owner-changed source names no client.
         const ownerId = display.connect('owner-changed', (_display, type, source) => {
             if ((type !== primary && type !== clipboard) || busy || !source ||
                 !source.get_mimetypes().some(mimetype => SELECTION_TEXT_MIMETYPES.includes(mimetype)))
                 return;
-            busy = true;
             const fromClipboard = type === clipboard;
+            if (fromClipboard && !inGesture()) {
+                console.log('CaptureSelection: CLIPBOARD owner changed outside a mouse gesture, ignored');
+                return;
+            }
+            busy = true;
             console.log(`CaptureSelection: ${fromClipboard ? 'CLIPBOARD' : 'PRIMARY'} owner changed`);
             awaitRelease(fromClipboard ? St.ClipboardType.CLIPBOARD : St.ClipboardType.PRIMARY);
         });
@@ -780,6 +804,7 @@ export default class PromptheusExtension extends Extension {
                     return;
                 done = true;
                 display.disconnect(ownerId);
+                GLib.source_remove(gestureId);
                 if (timerId)
                     GLib.source_remove(timerId);
                 if (widget.selection === selection)

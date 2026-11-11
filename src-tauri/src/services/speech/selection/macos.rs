@@ -240,14 +240,17 @@ async fn copy_fallback(app: &AppHandle, generation: u64, run: u64) -> Option<Str
     text
 }
 
-// Any pasteboard change since the click (or since the last trigger without text) counts as the
-// frontmost app's copy-on-select. Wrong when the user copies something after the click and then
-// selects in an app whose AX read gives no selected text: the copied content is taken as the selection.
-// Upgrade path: read `changeCount` on every polling tick and accept only a change first seen on the
-// trigger's tick or within its settle delay.
-async fn copy_on_select_text(app: &AppHandle, pasteboard_baseline: isize) -> Option<String> {
+// A pasteboard change between the left press that started a drag or multi-click outside the pill and
+// this read, at most GESTURE_WINDOW_MS after the release, counts as the frontmost app's copy-on-select.
+// Wrong when a write that is not the selection lands in that window (a skill result or webview-send
+// fallback written by this app, a background write by another app) and the frontmost app gives no AX
+// selection: that content is taken as the selection. Upgrade path: record the `changeCount` each of this
+// app's own pasteboard writes produces and reject it here; writes by other apps stay indistinguishable,
+// NSPasteboard names no writer.
+async fn copy_on_select_text(app: &AppHandle, change_count_at_press: isize, released: Instant) -> Option<String> {
     let text = on_main(app, move || {
-        copied_on_select(change_count(), pasteboard_baseline)
+        let ms_since_release = released.elapsed().as_millis() as u64;
+        copied_on_select(change_count(), change_count_at_press, ms_since_release)
             .then(pasteboard_string)
             .flatten()
     })
@@ -255,7 +258,7 @@ async fn copy_on_select_text(app: &AppHandle, pasteboard_baseline: isize) -> Opt
     .ok()?
     .filter(|text| !text.is_empty())?;
     log::debug!(
-        "selection capture: pasteboard changed since the click, copy-on-select, length={}",
+        "selection capture: pasteboard changed since the press, copy-on-select, length={}",
         text.len()
     );
     Some(text)
@@ -266,7 +269,7 @@ async fn read_after_trigger(
     generation: u64,
     run: u64,
     baseline: &mut Option<AxSelection<Cf>>,
-    pasteboard_baseline: isize,
+    pointer_gesture: Option<(isize, Instant)>,
 ) -> Option<String> {
     tokio::time::sleep(SETTLE_DELAY).await;
     let read = tauri::async_runtime::spawn_blocking(read_ax_selection).await.ok()?;
@@ -281,8 +284,10 @@ async fn read_after_trigger(
     if !keep_running(app, generation, run).await {
         return None;
     }
-    if let Some(text) = copy_on_select_text(app, pasteboard_baseline).await {
-        return Some(text);
+    if let Some((change_count_at_press, released)) = pointer_gesture {
+        if let Some(text) = copy_on_select_text(app, change_count_at_press, released).await {
+            return Some(text);
+        }
     }
     copy_fallback(app, generation, run).await
 }
@@ -293,7 +298,7 @@ pub async fn capture(app: &AppHandle, generation: u64, run: u64) -> Option<Strin
         return None;
     }
     let mut baseline = tauri::async_runtime::spawn_blocking(read_ax_selection).await.ok()?;
-    let mut pasteboard_baseline = on_main(app, change_count).await.ok()?;
+    let mut change_count_at_press = None;
     let started = Instant::now();
     let mut detector = TriggerDetector::default();
     loop {
@@ -302,14 +307,19 @@ pub async fn capture(app: &AppHandle, generation: u64, run: u64) -> Option<Strin
             return None;
         }
         if let Some(sample) = read_sample(started) {
+            if detector.is_press(&sample) {
+                change_count_at_press = Some(on_main(app, change_count).await.ok()?);
+            }
             detector.pill = pill_frame(app);
             if let Some(trigger) = detector.feed(&sample) {
                 log::debug!("selection capture: trigger {}", trigger.name());
-                let read = read_after_trigger(app, generation, run, &mut baseline, pasteboard_baseline).await;
+                let pointer_gesture = change_count_at_press
+                    .filter(|_| trigger.is_pointer())
+                    .map(|count| (count, Instant::now()));
+                let read = read_after_trigger(app, generation, run, &mut baseline, pointer_gesture).await;
                 if let Some(text) = read {
                     return Some(text);
                 }
-                pasteboard_baseline = on_main(app, change_count).await.ok()?;
             }
         }
         tokio::time::sleep(POLL_INTERVAL).await;
