@@ -11,8 +11,8 @@ use tauri::{AppHandle, Manager};
 use tokio::sync::Mutex;
 
 use super::{
-    equals_baseline, is_current, should_restore, AxSelection, Rect, Sample, TriggerDetector, COPY_WAIT_MS,
-    POLL_INTERVAL_MS, SETTLE_DELAY_MS,
+    copied_on_select, equals_baseline, is_current, should_restore, AxSelection, Rect, Sample, TriggerDetector,
+    COPY_WAIT_MS, POLL_INTERVAL_MS, SETTLE_DELAY_MS,
 };
 use crate::services::macos_ax::{
     AXUIElementCopyParameterizedAttributeValue, AXUIElementCreateApplication, AXUIElementCreateSystemWide,
@@ -118,6 +118,12 @@ fn change_count() -> isize {
     NSPasteboard::generalPasteboard().changeCount()
 }
 
+fn pasteboard_string() -> Option<String> {
+    NSPasteboard::generalPasteboard()
+        .stringForType(unsafe { NSPasteboardTypeString })
+        .map(|text| text.to_string())
+}
+
 fn read_sample(started: Instant) -> Option<Sample> {
     let source = CGEventSourceStateID::CombinedSessionState;
     let flags = CGEventSource::flags_state(source);
@@ -215,9 +221,7 @@ async fn copy_fallback(app: &AppHandle, generation: u64, run: u64) -> Option<Str
         return None;
     };
     let text = on_main(app, move || {
-        let text = NSPasteboard::generalPasteboard()
-            .stringForType(unsafe { NSPasteboardTypeString })
-            .map(|text| text.to_string());
+        let text = pasteboard_string();
         let restore = should_restore(change_count(), after_copy);
         if restore {
             restore_pasteboard(saved);
@@ -236,11 +240,33 @@ async fn copy_fallback(app: &AppHandle, generation: u64, run: u64) -> Option<Str
     text
 }
 
+// Any pasteboard change since the click (or since the last trigger without text) counts as the
+// frontmost app's copy-on-select. Wrong when the user copies something after the click and then
+// selects in an app whose AX read gives no selected text: the copied content is taken as the selection.
+// Upgrade path: read `changeCount` on every polling tick and accept only a change first seen on the
+// trigger's tick or within its settle delay.
+async fn copy_on_select_text(app: &AppHandle, pasteboard_baseline: isize) -> Option<String> {
+    let text = on_main(app, move || {
+        copied_on_select(change_count(), pasteboard_baseline)
+            .then(pasteboard_string)
+            .flatten()
+    })
+    .await
+    .ok()?
+    .filter(|text| !text.is_empty())?;
+    log::debug!(
+        "selection capture: pasteboard changed since the click, copy-on-select, length={}",
+        text.len()
+    );
+    Some(text)
+}
+
 async fn read_after_trigger(
     app: &AppHandle,
     generation: u64,
     run: u64,
     baseline: &mut Option<AxSelection<Cf>>,
+    pasteboard_baseline: isize,
 ) -> Option<String> {
     tokio::time::sleep(SETTLE_DELAY).await;
     let read = tauri::async_runtime::spawn_blocking(read_ax_selection).await.ok()?;
@@ -255,6 +281,9 @@ async fn read_after_trigger(
     if !keep_running(app, generation, run).await {
         return None;
     }
+    if let Some(text) = copy_on_select_text(app, pasteboard_baseline).await {
+        return Some(text);
+    }
     copy_fallback(app, generation, run).await
 }
 
@@ -264,6 +293,7 @@ pub async fn capture(app: &AppHandle, generation: u64, run: u64) -> Option<Strin
         return None;
     }
     let mut baseline = tauri::async_runtime::spawn_blocking(read_ax_selection).await.ok()?;
+    let mut pasteboard_baseline = on_main(app, change_count).await.ok()?;
     let started = Instant::now();
     let mut detector = TriggerDetector::default();
     loop {
@@ -275,9 +305,11 @@ pub async fn capture(app: &AppHandle, generation: u64, run: u64) -> Option<Strin
             detector.pill = pill_frame(app);
             if let Some(trigger) = detector.feed(&sample) {
                 log::debug!("selection capture: trigger {}", trigger.name());
-                if let Some(text) = read_after_trigger(app, generation, run, &mut baseline).await {
+                let read = read_after_trigger(app, generation, run, &mut baseline, pasteboard_baseline).await;
+                if let Some(text) = read {
                     return Some(text);
                 }
+                pasteboard_baseline = on_main(app, change_count).await.ok()?;
             }
         }
         tokio::time::sleep(POLL_INTERVAL).await;

@@ -160,6 +160,10 @@ pub fn should_restore(change_count_now: isize, change_count_after_copy: isize) -
     change_count_now == change_count_after_copy
 }
 
+pub fn copied_on_select(change_count_now: isize, change_count_since: isize) -> bool {
+    change_count_now != change_count_since
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -269,6 +273,12 @@ mod tests {
     fn selection_pasteboard_is_restored_only_when_the_change_count_is_unchanged() {
         assert!(should_restore(7, 7));
         assert!(!should_restore(8, 7));
+    }
+
+    #[test]
+    fn selection_pasteboard_change_since_the_baseline_counts_as_copy_on_select() {
+        assert!(copied_on_select(8, 7));
+        assert!(!copied_on_select(7, 7));
     }
 
     #[test]
