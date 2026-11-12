@@ -42,6 +42,8 @@
     type SurfaceKind,
   } from "$lib/types";
 
+  let headHeight = $state(0);
+
   let {
     model,
     uses,
@@ -279,22 +281,24 @@
   It is used by {usesLabel}.
 {/snippet}
 
-<div class="model-editor">
-  <header class="editor-header">
-    <h1>{draft.display_name || "Untitled model"}</h1>
-    <SaveStatusIndicator />
-  </header>
+<div class="model-editor" style:--sticky-head-height="{headHeight}px">
+  <div class="sticky-head" bind:clientHeight={headHeight}>
+    <header class="editor-header">
+      <h1>{draft.display_name || "Untitled model"}</h1>
+      <SaveStatusIndicator />
+    </header>
 
-  <div class="used-by">
-    <span class="used-by-label">Used by</span>
-    {#if uses.length > 0}
-      <ModelUseTags {uses} {onShowUse} />
-    {:else}
-      <span class="used-by-label">
-        nothing —
-        <button class="link" onclick={onShowAssignments}>assign in Assignments ›</button>
-      </span>
-    {/if}
+    <div class="used-by">
+      <span class="used-by-label">Used by</span>
+      {#if uses.length > 0}
+        <ModelUseTags {uses} {onShowUse} />
+      {:else}
+        <span class="used-by-label">
+          nothing —
+          <button class="link" onclick={onShowAssignments}>assign in Assignments ›</button>
+        </span>
+      {/if}
+    </div>
   </div>
 
   <section class="card">
@@ -516,6 +520,23 @@
     max-width: 720px;
   }
 
+  .model-editor :global(:is(input, select, textarea, button, [tabindex])) {
+    scroll-margin-top: calc(var(--sticky-head-height) + var(--space-4));
+  }
+
+  .sticky-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    margin-inline: calc(-1 * var(--space-12));
+    padding: var(--space-8) var(--space-12) var(--space-6);
+    background: var(--surface-base);
+    border-bottom: 1px solid var(--border-faint);
+  }
+
   .editor-header {
     display: flex;
     align-items: center;
@@ -535,7 +556,6 @@
     align-items: center;
     flex-wrap: wrap;
     gap: var(--space-3);
-    margin-top: calc(-1 * var(--space-4));
   }
 
   .used-by-label {

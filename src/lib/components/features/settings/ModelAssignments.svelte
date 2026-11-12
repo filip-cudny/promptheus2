@@ -19,6 +19,8 @@
 
   let { highlighted }: { highlighted: SurfaceKind | null } = $props();
 
+  let headHeight = $state(0);
+
   type TextSurface = Exclude<SurfaceKind, "speech_to_text">;
 
   const TEXT_ROWS: ReadonlyArray<{
@@ -130,8 +132,8 @@
   }
 </script>
 
-<div class="model-assignments">
-  <header class="editor-header">
+<div class="model-assignments" style:--sticky-head-height="{headHeight}px">
+  <header class="editor-header" bind:clientHeight={headHeight}>
     <h1>Assignments</h1>
     <SaveStatusIndicator />
   </header>
@@ -265,10 +267,21 @@
     max-width: 760px;
   }
 
+  .model-assignments :global(:is(input, select, textarea, button, [tabindex])) {
+    scroll-margin-top: calc(var(--sticky-head-height) + var(--space-4));
+  }
+
   .editor-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
     display: flex;
     align-items: center;
     gap: var(--space-5);
+    margin-inline: calc(-1 * var(--space-12));
+    padding: var(--space-8) var(--space-12) var(--space-6);
+    background: var(--surface-base);
+    border-bottom: 1px solid var(--border-faint);
   }
 
   h1 {
@@ -282,7 +295,7 @@
   .lead {
     font-size: var(--font-size-md);
     color: var(--text-muted);
-    margin: calc(-1 * var(--space-4)) var(--space-0) var(--space-0);
+    margin: var(--space-0);
     line-height: 1.5;
   }
 
