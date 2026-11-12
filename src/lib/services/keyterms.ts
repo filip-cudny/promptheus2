@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { trackedInvoke } from "$lib/services/trackedInvoke";
 import type { SttKeytermsDoc } from "$lib/types";
 
 export async function getSttKeyterms(): Promise<SttKeytermsDoc> {
@@ -6,5 +7,5 @@ export async function getSttKeyterms(): Promise<SttKeytermsDoc> {
 }
 
 export async function saveSttKeyterms(content: string): Promise<SttKeytermsDoc> {
-  return invoke("save_stt_keyterms", { content });
+  return trackedInvoke("save_stt_keyterms", { content });
 }

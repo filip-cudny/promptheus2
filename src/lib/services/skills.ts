@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { trackedInvoke } from "$lib/services/trackedInvoke";
 import type {
   ExportedSkill,
   ImportConflictMode,
@@ -30,7 +31,7 @@ export async function createSkill(
   frontmatter: SkillFrontmatter,
   body: string,
 ): Promise<SkillFull> {
-  return invoke("create_skill", { slug, frontmatter, body });
+  return trackedInvoke("create_skill", { slug, frontmatter, body });
 }
 
 export async function updateSkill(
@@ -38,26 +39,26 @@ export async function updateSkill(
   frontmatter: SkillFrontmatter,
   body: string,
 ): Promise<SkillFull> {
-  return invoke("update_skill", { slug, frontmatter, body });
+  return trackedInvoke("update_skill", { slug, frontmatter, body });
 }
 
 export async function deleteSkill(slug: string): Promise<void> {
-  return invoke("delete_skill", { slug });
+  return trackedInvoke("delete_skill", { slug });
 }
 
 export async function duplicateSkill(slug: string, newSlug: string): Promise<SkillFull> {
-  return invoke("duplicate_skill", { slug, newSlug });
+  return trackedInvoke("duplicate_skill", { slug, newSlug });
 }
 
 export async function reorderSkills(order: string[]): Promise<void> {
-  return invoke("reorder_skills", { order });
+  return trackedInvoke("reorder_skills", { order });
 }
 
 export async function importSkillFile(
   content: string,
   onConflict: ImportConflictMode = "reject",
 ): Promise<SkillFull> {
-  return invoke("import_skill_file", { content, onConflict });
+  return trackedInvoke("import_skill_file", { content, onConflict });
 }
 
 export async function exportSkill(slug: string): Promise<ExportedSkill> {

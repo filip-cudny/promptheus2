@@ -1,4 +1,6 @@
 import { untrack } from "svelte";
+import { getSaveStatus } from "$lib/stores/saveStatus.svelte";
+import { formatAgo } from "$lib/utils/saveStatus";
 
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
@@ -16,6 +18,9 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
   const debounceMs = opts.debounceMs ?? DEFAULT_DEBOUNCE_MS;
   const savedTtlMs = opts.savedTtlMs ?? DEFAULT_SAVED_TTL_MS;
 
+  const saveStatus = getSaveStatus();
+  const editorId = saveStatus.registerEditor(debounceMs);
+
   let dirty = $state(false);
   let saving = $state(false);
   let error = $state<string | null>(null);
@@ -29,6 +34,12 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
   let nowTimer: ReturnType<typeof setInterval> | null = null;
   let detachKeyboard: (() => void) | null = null;
   let detachBeforeUnload: (() => void) | null = null;
+
+  function setDirty(value: boolean) {
+    if (dirty === value) return;
+    dirty = value;
+    saveStatus.editorDirtyChanged(editorId, value);
+  }
 
   function syncPendingFlag() {
     pendingFlag = pending !== null || saveTimer !== null;
@@ -70,7 +81,7 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
   function scheduleSave(fn: PersistFn) {
     untrack(() => {
       pending = fn;
-      dirty = true;
+      setDirty(true);
       if (saveTimer) clearTimeout(saveTimer);
       saveTimer = setTimeout(() => {
         saveTimer = null;
@@ -90,7 +101,7 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
       }
       pending = null;
       syncPendingFlag();
-      if (!saving) dirty = false;
+      if (!saving) setDirty(false);
     });
   }
 
@@ -102,7 +113,7 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
       }
       if (fn) {
         pending = fn;
-        dirty = true;
+        setDirty(true);
       }
       syncPendingFlag();
       return pending !== null;
@@ -167,7 +178,7 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
       await untrack(() => fn());
       lastSavedAt = Date.now();
       now = lastSavedAt;
-      if (!pending && !saveTimer) dirty = false;
+      if (!pending && !saveTimer) setDirty(false);
       return true;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
@@ -214,6 +225,7 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
       saveTimer = null;
     }
     if (pending) void runPersist();
+    saveStatus.unregisterEditor(editorId);
     if (nowTimer) {
       clearInterval(nowTimer);
       nowTimer = null;
@@ -259,12 +271,3 @@ export function useSaveTracker(opts: SaveTrackerOptions = {}) {
 }
 
 export type SaveTracker = ReturnType<typeof useSaveTracker>;
-
-function formatAgo(ms: number): string {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  const h = Math.floor(m / 60);
-  return `${h}h`;
-}

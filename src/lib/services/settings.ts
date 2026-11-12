@@ -12,6 +12,7 @@ import type {
 } from "$lib/types";
 import { invalidateCapabilities } from "$lib/stores/capabilities.svelte";
 import { getSettingsStore } from "$lib/stores/settings.svelte";
+import { trackedInvoke } from "$lib/services/trackedInvoke";
 
 const SETTING_SUFFIX = /^([\s\S]*) \(setting: (.+)\)$/;
 
@@ -32,7 +33,7 @@ async function invokeWrite(
 ): Promise<void> {
   const store = getSettingsStore();
   try {
-    await invoke(command, args);
+    await trackedInvoke(command, args);
   } catch (e) {
     store.reportWriteError(e);
     throw e;
@@ -59,7 +60,7 @@ export async function getEnvVars(): Promise<EnvVarStatus[]> {
 export async function applyEnvVarOperation(
   operation: EnvVarOperation,
 ): Promise<string> {
-  return invoke("apply_env_var_operation", { operation });
+  return trackedInvoke("apply_env_var_operation", { operation });
 }
 
 export async function updateSetting(

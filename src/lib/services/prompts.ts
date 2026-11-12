@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { trackedInvoke } from "$lib/services/trackedInvoke";
 
 export type PromptKind =
   | "system"
@@ -29,7 +30,7 @@ export async function getPrompt(kind: PromptKind): Promise<PromptDoc> {
 }
 
 export async function savePrompt(kind: PromptKind, content: string): Promise<void> {
-  return invoke("save_prompt", { kind, content });
+  return trackedInvoke("save_prompt", { kind, content });
 }
 
 export async function getEnvironmentPlaceholders(): Promise<EnvPlaceholder[]> {
