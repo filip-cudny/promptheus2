@@ -1170,6 +1170,7 @@ export default class PromptheusExtension extends Extension {
             retryLabel: null,
             retryId: 0,
             lockedLabel: null,
+            lockedTarget: null,
             dragId: 0,
             selection: null,
         };
@@ -1341,10 +1342,10 @@ export default class PromptheusExtension extends Extension {
         content.add_child(widget.timeLabel);
         content.add_child(this._widgetActions(
             state === 'paused'
-                ? this._widgetActionButton('play', 'resume')
-                : this._widgetActionButton('pause', 'pause'),
-            this._widgetActionButton('cancel', 'cancel', 'cancel-hover'),
-            this._widgetActionButton('arrow-up', 'stop', undefined, WIDGET_BUTTON_PRIMARY)));
+                ? this._widgetActionButton('Resume', 'play', 'resume')
+                : this._widgetActionButton('Pause', 'pause', 'pause'),
+            this._widgetActionButton('Cancel', 'cancel', 'cancel', 'cancel-hover'),
+            this._widgetActionButton('Finish', 'arrow-up', 'stop', undefined, WIDGET_BUTTON_PRIMARY)));
     }
 
     _widgetActions(...buttons) {
@@ -1389,7 +1390,7 @@ export default class PromptheusExtension extends Extension {
         }
         else
             this._fillWave(widget, content, WIDGET_RETRY_WAVE_BAR_COUNT);
-        content.add_child(this._widgetActions(this._widgetActionButton('cancel', 'cancel', 'cancel-hover')));
+        content.add_child(this._widgetActions(this._widgetActionButton('Cancel', 'cancel', 'cancel', 'cancel-hover')));
     }
 
     _armWidgetRetry(widget) {
@@ -1463,7 +1464,7 @@ export default class PromptheusExtension extends Extension {
         });
     }
 
-    _widgetButton(child, onClick,
+    _widgetButton(accessibleName, child, onClick,
         baseStyle = `width: ${WIDGET_BUTTON_SIZE}px; height: ${WIDGET_BUTTON_SIZE}px; border-radius: ${WIDGET_BUTTON_SIZE / 2}px;`,
         isHeld = () => false, background = WIDGET_BUTTON_PLAIN) {
         const button = new St.Button({
@@ -1472,6 +1473,7 @@ export default class PromptheusExtension extends Extension {
             track_hover: true,
             y_align: Clutter.ActorAlign.CENTER,
             style: baseStyle,
+            accessible_name: accessibleName,
             child,
         });
         const paint = () => {
@@ -1484,7 +1486,7 @@ export default class PromptheusExtension extends Extension {
     }
 
     _selectTextButton(widget) {
-        return this._widgetButton(this._widgetIcon('select-text'), () => {
+        return this._widgetButton('Select text', this._widgetIcon('select-text'), () => {
             if (widget.selection)
                 this._cancelSelectionWaiting(widget);
             else
@@ -1492,9 +1494,9 @@ export default class PromptheusExtension extends Extension {
         }, undefined, () => !!widget.selection);
     }
 
-    _widgetActionButton(iconName, action, hoverIconName = iconName, background = WIDGET_BUTTON_PLAIN) {
+    _widgetActionButton(accessibleName, iconName, action, hoverIconName = iconName, background = WIDGET_BUTTON_PLAIN) {
         const icon = this._widgetIcon(iconName);
-        const button = this._widgetButton(icon, () => this._emitRecordingWidgetAction(action),
+        const button = this._widgetButton(accessibleName, icon, () => this._emitRecordingWidgetAction(action),
             undefined, undefined, background);
         if (hoverIconName !== iconName) {
             button.connect('notify::hover', () => {
@@ -1513,6 +1515,7 @@ export default class PromptheusExtension extends Extension {
             this._closeDropdown(widget);
             if (widget.lockedLabel) {
                 widget.lockedLabel.text = selectedLabel;
+                widget.lockedTarget.accessible_name = selectedLabel;
                 return;
             }
         }
@@ -1523,27 +1526,30 @@ export default class PromptheusExtension extends Extension {
         const content = new St.BoxLayout({style: 'spacing: 4px;'});
         content.opacity = WIDGET_WAVE_OPACITY;
         const waiting = !!widget.selection;
-        const label = new St.Label({text: waiting ? 'Select text…' : selectedLabel, y_align: Clutter.ActorAlign.CENTER});
+        const labelText = waiting ? 'Select text…' : selectedLabel;
+        const label = new St.Label({text: labelText, y_align: Clutter.ActorAlign.CENTER});
         content.add_child(label);
         const chevron = waiting ? null : this._widgetIcon('chevrons-up-down', 14);
         if (chevron)
             content.add_child(chevron);
-        const target = this._widgetButton(content,
+        const target = this._widgetButton(labelText, content,
             () => waiting ? this._cancelSelectionWaiting(widget) : this._toggleDropdown(widget),
             `height: 28px; border-radius: 14px; padding: 0 ${WIDGET_TARGET_PADDING_X}px;`);
+        const stopChatText = stopChatDestination ? `Stop and send to ${stopChatDestination}` : 'Stop and open chat';
         const actions = this._widgetActions(
-            this._tooltipButton(widget, this._widgetActionButton('screenshot', 'screenshot'),
+            this._tooltipButton(widget, this._widgetActionButton('Screenshot', 'screenshot', 'screenshot'),
                 'Add screen area to context'),
             this._tooltipButton(widget, this._selectTextButton(widget), 'Add selected text to context'),
-            this._tooltipButton(widget, this._widgetActionButton('paste', 'paste'),
+            this._tooltipButton(widget, this._widgetActionButton('Paste', 'paste', 'paste'),
                 'Add clipboard to context'),
             this._tooltipButton(widget,
-                this._widgetActionButton(stopChatDestination ? 'provider-claude' : 'chat', 'stop_chat',
+                this._widgetActionButton(stopChatText, stopChatDestination ? 'provider-claude' : 'chat', 'stop_chat',
                     undefined, WIDGET_BUTTON_SECONDARY),
-                stopChatDestination ? `Stop and send to ${stopChatDestination}` : 'Stop and open chat'));
+                stopChatText));
         widget.row2.add_child(target);
         widget.row2.add_child(actions);
         widget.lockedLabel = interactive ? null : label;
+        widget.lockedTarget = interactive ? null : target;
         if (interactive)
             return;
         this._setUnreactive(widget.row2);
@@ -1596,7 +1602,7 @@ export default class PromptheusExtension extends Extension {
         labelActor.clutter_text.ellipsize = Pango.EllipsizeMode.END;
         chip.add_child(labelActor);
         if (onRemove) {
-            chip.add_child(this._widgetButton(this._widgetIcon('item-remove', 12), onRemove,
+            chip.add_child(this._widgetButton(`Remove ${label}`, this._widgetIcon('item-remove', 12), onRemove,
                 'width: 16px; height: 16px; border-radius: 8px;'));
         }
         chip.connect('notify::hover', () => {
@@ -1770,7 +1776,7 @@ export default class PromptheusExtension extends Extension {
             const weight = id === selectedId ? 'font-weight: 700;' : '';
             const top = index === 0 ? rowRadius : 0;
             const bottom = index === targets.length - 1 ? rowRadius : 0;
-            dropdown.add_child(this._widgetButton(this._dropdownRowContent(id, label),
+            dropdown.add_child(this._widgetButton(label, this._dropdownRowContent(id, label),
                 () => {
                     this._emitRecordingWidgetTargetSelected(id);
                     this._closeDropdown(widget);

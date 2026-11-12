@@ -531,7 +531,6 @@
         type="button"
         class="target"
         tabindex="-1"
-        aria-label="Target"
         onclick={() => (selecting ? run("cancel_recording_widget_selection") : dropdownOpen ? closeDropdown() : openDropdown())}
       >
         <span class="label">{selecting && interactive ? "Select text…" : model.selectedLabel}</span>
