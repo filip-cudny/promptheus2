@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use rmcp::model::{CallToolResult, Tool};
@@ -20,6 +20,7 @@ pub struct McpServerState {
 pub struct McpRegistry {
     servers: HashMap<String, McpClient>,
     start_errors: HashMap<String, String>,
+    skipped: HashSet<String>,
     qualified_index: HashMap<String, (String, String)>,
     tools: Vec<(String, Tool)>,
 }
@@ -32,10 +33,16 @@ impl McpRegistry {
     pub async fn start_all(config: &HashMap<String, McpServerConfig>) -> Self {
         let mut servers = HashMap::new();
         let mut start_errors = HashMap::new();
+        let mut skipped = HashSet::new();
         let mut qualified_index = HashMap::new();
         let mut tools = Vec::new();
 
         for (name, server_config) in config {
+            if server_config.disabled {
+                log::info!("MCP server '{}' is disabled, not starting", name);
+                skipped.insert(name.clone());
+                continue;
+            }
             let resolved_env = server_config.resolved_env();
             let resolved_command = server_config.resolved_command();
             let resolved_args = server_config.resolved_args();
@@ -81,6 +88,7 @@ impl McpRegistry {
         Self {
             servers,
             start_errors,
+            skipped,
             qualified_index,
             tools,
         }
@@ -107,6 +115,12 @@ impl McpRegistry {
                 error: Some(error.clone()),
                 tools: Vec::new(),
             }))
+            .chain(self.skipped.iter().map(|name| McpServerState {
+                name: name.clone(),
+                state: "off",
+                error: None,
+                tools: Vec::new(),
+            }))
             .collect();
         states.sort_by(|a, b| a.name.cmp(&b.name));
         states
@@ -126,11 +140,19 @@ impl McpRegistry {
                         .find(|(server, tool)| Self::qualified_name(server, &tool.name) == *qname)
                         .map(|(_, tool)| tool.clone())
                 } else {
-                    log::warn!("MCP tool '{}' not found in registry, ignoring", qname);
+                    if !self.is_of_skipped_server(qname) {
+                        log::warn!("MCP tool '{}' not found in registry, ignoring", qname);
+                    }
                     None
                 }
             })
             .collect()
+    }
+
+    fn is_of_skipped_server(&self, qname: &str) -> bool {
+        self.skipped
+            .iter()
+            .any(|server| qname.starts_with(&format!("{server}.")))
     }
 
     pub fn resolve_raw_name(&self, raw_name: &str) -> Option<String> {
@@ -187,6 +209,7 @@ mod tests {
                 env: HashMap::new(),
                 timeout_secs: 180,
                 tool_timeouts: HashMap::new(),
+                ..Default::default()
             },
         )]);
         let registry = McpRegistry::start_all(&config).await;
@@ -197,5 +220,40 @@ mod tests {
         assert_eq!(states[0].state, "error");
         assert!(!states[0].error.as_deref().unwrap_or("").is_empty());
         assert!(registry.tools_with_server().is_empty());
+    }
+
+    async fn disabled_server_registry() -> McpRegistry {
+        let config = HashMap::from([(
+            "off-server".to_string(),
+            McpServerConfig {
+                command: "/nonexistent/promptheus-mcp-test-server".to_string(),
+                disabled: true,
+                ..Default::default()
+            },
+        )]);
+        McpRegistry::start_all(&config).await
+    }
+
+    #[tokio::test]
+    async fn disabled_server_is_not_started_and_reported_off() {
+        let registry = disabled_server_registry().await;
+
+        let states = registry.server_states();
+        assert_eq!(states.len(), 1);
+        assert_eq!(states[0].name, "off-server");
+        assert_eq!(states[0].state, "off");
+        assert!(states[0].error.is_none());
+        assert!(states[0].tools.is_empty());
+    }
+
+    #[tokio::test]
+    async fn qualified_names_of_a_skipped_server_resolve_to_nothing() {
+        let registry = disabled_server_registry().await;
+
+        assert!(registry.is_of_skipped_server("off-server.search"));
+        assert!(!registry.is_of_skipped_server("off-server-two.search"));
+        assert!(registry
+            .get_tools_by_qualified_names(&["off-server.search".to_string(), "other.search".to_string()])
+            .is_empty());
     }
 }

@@ -61,6 +61,7 @@ Non-settings model files define types that cross the Rust↔TypeScript IPC bound
 ### Adding new settings fields
 
 1. Add the field to the appropriate struct with `#[serde(default)]` (or a named default fn).
+   A field of the synced `settings.json` whose default is a falsy value (`false`, empty list) also gets `skip_serializing_if` (`std::ops::Not::not`, `Vec::is_empty`): `ConfigService::load` rewrites the file, so an always-serialized new field adds a diff for every entry in the settings repo (`McpServerConfig.disabled`, `disabled_tools`).
 2. Update the `Default` impl if the struct has one.
 3. Add a catalog entry in `services/config/catalog.rs`, or list the path in `FILE_ONLY`; the coverage test (`uncovered_leaves`) fails otherwise.
 4. Run `cargo test --lib` — the round-trip test will catch serialization issues.

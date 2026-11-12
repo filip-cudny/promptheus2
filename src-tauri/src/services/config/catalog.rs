@@ -131,6 +131,8 @@ pub const ENTRIES: &[CatalogEntry] = &[
     restart("mcp_servers.*.env", McpServers, "Environment", "Environment variables set for the server process.", Kind::Map),
     restart("mcp_servers.*.timeout_secs", McpServers, "Timeout (seconds)", "Default time a tool call may take before it is abandoned.", int(None, None)),
     restart("mcp_servers.*.tool_timeouts", McpServers, "Tool timeouts", "Per-tool timeouts in seconds that override the server default.", Kind::Map),
+    restart("mcp_servers.*.disabled", McpServers, "Disabled", "Turned off: the server is not started at the next app start; its configuration and tool settings are kept.", Kind::Bool),
+    live("mcp_servers.*.disabled_tools", McpServers, "Disabled tools", "Tools of this server that are offered nowhere and sent to no model.", Kind::List),
     live("surfaces.chat.generation.model_id", Chat, "Chat model", "Model used for chat conversations.", TEXT_MODEL),
     live("surfaces.chat.generation.parameters.reasoning_effort", Chat, "Reasoning effort", "How much reasoning the chat model spends on a reply, where the model supports it.", TEXT),
     live("surfaces.chat.generation.enabled_tools", Chat, "Enabled tools", "Tools the assistant may call in chat.", Kind::List),
@@ -386,6 +388,8 @@ mod tests {
                 env: HashMap::from([("K".to_string(), "V".to_string())]),
                 timeout_secs: 5,
                 tool_timeouts: HashMap::from([("t".to_string(), 3)]),
+                disabled: true,
+                disabled_tools: vec!["t".into()],
             },
         )]);
         settings.keymaps = vec![KeymapGroup {

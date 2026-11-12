@@ -10,7 +10,7 @@ use crate::services::ai::AiService;
 use crate::services::change_log::{change_log_dir, load_all, TestResult};
 use crate::services::config::ConfigService;
 use crate::services::execution::types::{PendingToolCall, ToolExecutionResult};
-use crate::services::missing_env::{collect_missing, env_is_set, env_var_overview};
+use crate::services::missing_env::{collect_missing_enabled, env_is_set, env_var_overview};
 use crate::services::placeholder_registry::PlaceholderContext;
 use crate::services::secrets::{self, Redactor};
 use crate::services::skill::SkillService;
@@ -213,7 +213,7 @@ impl Dispatcher {
             }
             What::Prompt => self.prompt(&name()?),
             What::MissingEnv => {
-                serde_json::to_value(collect_missing(&settings, env_is_set)).map_err(|e| e.to_string())
+                serde_json::to_value(collect_missing_enabled(&settings, env_is_set)).map_err(|e| e.to_string())
             }
             What::EnvVars => {
                 let overview =

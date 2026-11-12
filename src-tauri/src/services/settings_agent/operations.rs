@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
-use crate::models::settings::{McpServerConfig, ModelConfig, Settings, WebviewProvider};
+use crate::models::settings::{default_timeout_secs, McpServerConfig, ModelConfig, Settings, WebviewProvider};
 use crate::models::skill::SkillFrontmatter;
 use crate::services::config::{catalog, PromptKind};
 
@@ -38,6 +40,54 @@ impl PromptFile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerOperationConfig {
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub env: HashMap<String, String>,
+    #[serde(default = "default_timeout_secs")]
+    pub timeout_secs: u64,
+    #[serde(default)]
+    pub tool_timeouts: HashMap<String, u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disabled_tools: Option<Vec<String>>,
+}
+
+impl McpServerOperationConfig {
+    pub fn into_server(self, current: Option<&McpServerConfig>) -> McpServerConfig {
+        McpServerConfig {
+            command: self.command,
+            args: self.args,
+            env: self.env,
+            timeout_secs: self.timeout_secs,
+            tool_timeouts: self.tool_timeouts,
+            disabled: self.disabled.unwrap_or_else(|| current.is_some_and(|c| c.disabled)),
+            disabled_tools: self
+                .disabled_tools
+                .unwrap_or_else(|| current.map(|c| c.disabled_tools.clone()).unwrap_or_default()),
+        }
+    }
+}
+
+#[cfg(test)]
+impl From<McpServerConfig> for McpServerOperationConfig {
+    fn from(config: McpServerConfig) -> Self {
+        Self {
+            command: config.command,
+            args: config.args,
+            env: config.env,
+            timeout_secs: config.timeout_secs,
+            tool_timeouts: config.tool_timeouts,
+            disabled: Some(config.disabled),
+            disabled_tools: Some(config.disabled_tools),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Operation {
     SetSetting { key: String, value: serde_json::Value },
@@ -49,8 +99,8 @@ pub enum Operation {
     DeleteSkill { slug: String },
     ReorderSkills { order: Vec<String> },
     WritePrompt { kind: PromptFile, content: String },
-    AddMcpServer { name: String, config: McpServerConfig },
-    UpdateMcpServer { name: String, config: McpServerConfig },
+    AddMcpServer { name: String, config: McpServerOperationConfig },
+    UpdateMcpServer { name: String, config: McpServerOperationConfig },
     DeleteMcpServer { name: String },
     AddWebviewProvider { provider: WebviewProvider },
     UpdateWebviewProvider { id: String, provider: WebviewProvider },

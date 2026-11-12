@@ -50,6 +50,7 @@ fn mcp(command: &str) -> McpServerConfig {
         env: HashMap::new(),
         timeout_secs: 30,
         tool_timeouts: HashMap::new(),
+        ..Default::default()
     }
 }
 
@@ -272,8 +273,8 @@ fn every_operation() -> Vec<Operation> {
         Operation::ReorderSkills { order: vec!["a-skill".into()] },
         Operation::WritePrompt { kind: PromptFile::System, content: "Be brief.".into() },
         Operation::WritePrompt { kind: PromptFile::SttKeyterms, content: "term".into() },
-        Operation::AddMcpServer { name: "more".into(), config: mcp("run-more") },
-        Operation::UpdateMcpServer { name: "tools".into(), config: mcp("run-other") },
+        Operation::AddMcpServer { name: "more".into(), config: mcp("run-more").into() },
+        Operation::UpdateMcpServer { name: "tools".into(), config: mcp("run-other").into() },
         Operation::DeleteMcpServer { name: "tools".into() },
         Operation::AddWebviewProvider { provider: provider("chatgpt", "https://chatgpt.com/") },
         Operation::UpdateWebviewProvider {

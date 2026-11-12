@@ -140,6 +140,24 @@ pub fn collect_missing(settings: &Settings, is_set: impl Fn(&str) -> bool) -> Ve
         .collect()
 }
 
+pub fn collect_missing_enabled(settings: &Settings, is_set: impl Fn(&str) -> bool) -> Vec<MissingEnvRef> {
+    let disabled_prefixes: Vec<String> = settings
+        .mcp_servers
+        .iter()
+        .filter(|(_, server)| server.disabled)
+        .map(|(name, _)| format!("mcp_servers.{name}."))
+        .collect();
+    collect_missing(settings, is_set)
+        .into_iter()
+        .filter_map(|mut missing| {
+            missing
+                .used_in
+                .retain(|u| !disabled_prefixes.iter().any(|prefix| u.key.starts_with(prefix)));
+            (!missing.used_in.is_empty()).then_some(missing)
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct EnvVarStatus {
     pub name: String,
@@ -179,7 +197,7 @@ pub fn should_toast(last_shown: &BTreeSet<String>, current: &BTreeSet<String>) -
 }
 
 pub fn check_and_toast(app: &AppHandle, settings: &Settings) {
-    let current: BTreeSet<String> = collect_missing(settings, env_is_set)
+    let current: BTreeSet<String> = collect_missing_enabled(settings, env_is_set)
         .into_iter()
         .map(|m| m.name)
         .collect();
@@ -229,6 +247,7 @@ mod tests {
                 env: HashMap::from([("K".into(), "${UNSET_C}".into())]),
                 timeout_secs: 180,
                 tool_timeouts: HashMap::new(),
+                ..Default::default()
             },
         );
         settings.prompt_base.system = "${UNSET_D}/system.md".into();
@@ -258,6 +277,7 @@ mod tests {
                 env: HashMap::from([("Z".into(), "b-z".into()), ("A".into(), "b-a".into())]),
                 timeout_secs: 180,
                 tool_timeouts: HashMap::new(),
+                ..Default::default()
             },
         );
         settings.mcp_servers.insert(
@@ -268,6 +288,7 @@ mod tests {
                 env: HashMap::new(),
                 timeout_secs: 180,
                 tool_timeouts: HashMap::new(),
+                ..Default::default()
             },
         );
         settings.surfaces.speech_to_text.prompt = Some("stt-prompt".into());
@@ -281,6 +302,25 @@ mod tests {
         assert_eq!(read, written);
         assert_eq!(read.len(), 13);
         assert_eq!(read[..6], ["key", "a-cmd", "b-cmd", "b-arg", "b-a", "b-z"]);
+    }
+
+    #[test]
+    fn off_server_env_is_not_missing_but_still_collected() {
+        let mut settings = Settings::default();
+        settings.mcp_servers.insert(
+            "off".into(),
+            McpServerConfig {
+                command: "x".into(),
+                env: HashMap::from([("K".into(), "${OFF_VAR}".into())]),
+                disabled: true,
+                ..Default::default()
+            },
+        );
+
+        assert!(collect_missing_enabled(&settings, |_| false).is_empty());
+        let collected = collect_missing(&settings, |_| false);
+        assert_eq!(collected.len(), 1);
+        assert_eq!(collected[0].name, "OFF_VAR");
     }
 
     #[test]

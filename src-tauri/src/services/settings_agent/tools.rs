@@ -69,6 +69,8 @@ fn mcp_config_schema() -> Value {
             ("env", json!({"type": "object", "additionalProperties": string()})),
             ("timeout_secs", json!({"type": "integer"})),
             ("tool_timeouts", json!({"type": "object", "additionalProperties": {"type": "integer"}})),
+            ("disabled", json!({"type": "boolean"})),
+            ("disabled_tools", json!({"type": "array", "items": string()})),
         ],
         &["command"],
     )
@@ -189,7 +191,7 @@ fn operation_branches() -> Vec<Value> {
         ),
         branch(
             "update_mcp_server",
-            "Replaces the whole configuration of the existing MCP server `name`.",
+            "Replaces the whole configuration of the existing MCP server `name`; an omitted `disabled` or `disabled_tools` keeps the current value.",
             vec![("name", string()), ("config", mcp_config_schema())],
             &["name", "config"],
         ),

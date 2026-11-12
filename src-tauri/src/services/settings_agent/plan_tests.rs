@@ -63,6 +63,7 @@ fn mcp(command: &str) -> McpServerConfig {
         env: HashMap::new(),
         timeout_secs: 30,
         tool_timeouts: HashMap::new(),
+        ..Default::default()
     }
 }
 
@@ -196,6 +197,38 @@ fn update_model_keeps_the_stored_key() {
     assert_eq!(planned.settings.models[1].display_name, "Renamed");
 }
 
+fn update_tools_server_without(settings: &mut Settings, current: McpServerConfig) -> Settings {
+    settings.mcp_servers.insert("tools".into(), current);
+    let operation: Operation = serde_json::from_value(json!({
+        "op": "update_mcp_server",
+        "name": "tools",
+        "config": { "command": "run-other" }
+    }))
+    .unwrap();
+    plan_all(&[operation], settings, &config_dir()).expect("update plans").settings
+}
+
+#[test]
+fn update_mcp_server_without_disabled_keeps_current_value() {
+    let mut settings = fixture_settings();
+
+    let planned = update_tools_server_without(&mut settings, McpServerConfig { disabled: true, ..mcp("run-tools") });
+
+    assert_eq!(planned.mcp_servers["tools"].command, "run-other");
+    assert!(planned.mcp_servers["tools"].disabled);
+}
+
+#[test]
+fn update_mcp_server_without_disabled_tools_keeps_current_list() {
+    let mut settings = fixture_settings();
+    let current = McpServerConfig { disabled_tools: vec!["search".into()], ..mcp("run-tools") };
+
+    let planned = update_tools_server_without(&mut settings, current);
+
+    assert_eq!(planned.mcp_servers["tools"].disabled_tools, vec!["search"]);
+    assert!(!planned.mcp_servers["tools"].disabled);
+}
+
 #[test]
 fn out_of_range_setting_is_a_row_error_with_its_key() {
     let (settings, dir) = (fixture_settings(), config_dir());
@@ -313,8 +346,8 @@ fn every_operation_type_plans_on_the_fixture() {
         Operation::ReorderSkills { order: vec!["a-skill".into()] },
         Operation::WritePrompt { kind: PromptFile::System, content: "Be brief.".into() },
         Operation::WritePrompt { kind: PromptFile::SttKeyterms, content: "term".into() },
-        Operation::AddMcpServer { name: "more".into(), config: mcp("run-more") },
-        Operation::UpdateMcpServer { name: "tools".into(), config: mcp("run-other") },
+        Operation::AddMcpServer { name: "more".into(), config: mcp("run-more").into() },
+        Operation::UpdateMcpServer { name: "tools".into(), config: mcp("run-other").into() },
         Operation::DeleteMcpServer { name: "tools".into() },
         Operation::AddWebviewProvider { provider: provider("chatgpt", "https://chatgpt.com/") },
         Operation::UpdateWebviewProvider { id: "claude".into(), provider: provider("claude", "https://claude.ai/new") },

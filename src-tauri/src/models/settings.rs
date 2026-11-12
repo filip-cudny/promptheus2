@@ -13,11 +13,11 @@ where
     serializer.collect_map(map.iter().collect::<BTreeMap<_, _>>())
 }
 
-const fn default_timeout_secs() -> u64 {
+pub(crate) const fn default_timeout_secs() -> u64 {
     180
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct McpServerConfig {
     pub command: String,
     #[serde(default)]
@@ -28,6 +28,10 @@ pub struct McpServerConfig {
     pub timeout_secs: u64,
     #[serde(default, serialize_with = "serialize_sorted")]
     pub tool_timeouts: HashMap<String, u64>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub disabled: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub disabled_tools: Vec<String>,
 }
 
 impl McpServerConfig {
@@ -902,6 +906,7 @@ mod tests {
             ]),
             timeout_secs: 180,
             tool_timeouts: HashMap::new(),
+            ..Default::default()
         };
         let resolved = config.resolved_env();
         assert_eq!(resolved.get("EXPLICIT").unwrap(), "direct");
@@ -918,10 +923,32 @@ mod tests {
             env: HashMap::new(),
             timeout_secs: 180,
             tool_timeouts: HashMap::new(),
+            ..Default::default()
         };
         assert_eq!(config.resolved_command(), "/opt/tools/bin/server");
         assert_eq!(config.resolved_args(), vec!["--config", "/opt/tools/config.json"]);
         std::env::remove_var("TEST_MCP_PATH");
+    }
+
+    #[test]
+    fn mcp_server_disabled_absent_is_false_and_not_serialized() {
+        let config: McpServerConfig = serde_json::from_str(r#"{ "command": "npx" }"#).unwrap();
+        assert!(!config.disabled);
+
+        let off = serde_json::to_value(&config).unwrap();
+        assert!(off.get("disabled").is_none());
+
+        let on = serde_json::to_value(McpServerConfig { disabled: true, ..config }).unwrap();
+        assert_eq!(on["disabled"], true);
+    }
+
+    #[test]
+    fn mcp_server_disabled_tools_empty_is_not_serialized() {
+        let config = McpServerConfig::default();
+        assert!(serde_json::to_value(&config).unwrap().get("disabled_tools").is_none());
+
+        let with_tools = McpServerConfig { disabled_tools: vec!["t".to_string()], ..config };
+        assert_eq!(serde_json::to_value(&with_tools).unwrap()["disabled_tools"], serde_json::json!(["t"]));
     }
 
     #[test]

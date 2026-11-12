@@ -66,7 +66,7 @@ enum Subject<'a> {
     },
     Mcp {
         name: &'a str,
-        config: &'a McpServerConfig,
+        config: McpServerConfig,
     },
 }
 
@@ -82,14 +82,16 @@ fn subject<'a>(operation: &'a Operation, settings: &'a Settings) -> Option<Subje
             Some(Subject::Skill { frontmatter, body, sample_input, model_id, model })
         }
         Operation::AddMcpServer { name, config } | Operation::UpdateMcpServer { name, config } => {
-            Some(Subject::Mcp { name, config: settings.mcp_servers.get(name).unwrap_or(config) })
+            let stored = settings.mcp_servers.get(name);
+            let config = stored.cloned().unwrap_or_else(|| config.clone().into_server(None));
+            Some(Subject::Mcp { name, config })
         }
         _ => None,
     }
 }
 
 impl<'a> Subject<'a> {
-    fn binding(&self) -> Option<Binding<'a>> {
+    fn binding(&self) -> Option<Binding<'_>> {
         match self {
             Self::Model(model) => Some(Binding::Model(model)),
             Self::Skill { model, .. } => model.map(Binding::Model),
@@ -259,7 +261,7 @@ async fn run_subject(request: &RowTestRequest<'_>, operation: &Operation) -> Row
             );
             complete_text(&(request.ai_factory)(&settings), &model_id, &message).await
         }
-        Subject::Mcp { name, config } => test_mcp(name, config).await,
+        Subject::Mcp { name, config } => test_mcp(name, &config).await,
     };
     let millis = Some(start.elapsed().as_millis() as u64);
     let redactor = Redactor::new(request.config_dir, &request.plan.settings)

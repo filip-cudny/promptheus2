@@ -471,14 +471,15 @@ fn apply(state: &mut State, current: &Current, op: &Operation) -> Result<Vec<Eff
         }
         Operation::AddMcpServer { name, config } => {
             let mut servers = state.settings().mcp_servers.clone();
-            if servers.insert(name.clone(), config.clone()).is_some() {
+            if servers.insert(name.clone(), config.clone().into_server(None)).is_some() {
                 return Err(Fail::at(format!("mcp_servers.{name}"), "MCP server already exists"));
             }
             set_mcp_servers(state, servers)?;
         }
         Operation::UpdateMcpServer { name, config } => {
             let mut servers = state.settings().mcp_servers.clone();
-            if servers.insert(name.clone(), config.clone()).is_none() {
+            let updated = config.clone().into_server(servers.get(name));
+            if servers.insert(name.clone(), updated).is_none() {
                 return Err(Fail::at(format!("mcp_servers.{name}"), "MCP server not found"));
             }
             set_mcp_servers(state, servers)?;

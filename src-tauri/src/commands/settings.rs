@@ -14,7 +14,7 @@ use crate::services::change_log;
 use crate::services::config::catalog::{CatalogEntry, ENTRIES};
 use crate::services::config::{ConfigError, ConfigService, SurfaceKind};
 use crate::services::history_events::emit_history_changed;
-use crate::services::missing_env::{collect_missing, env_is_set, MissingEnvRef};
+use crate::services::missing_env::{collect_missing_enabled, env_is_set, MissingEnvRef};
 use crate::services::settings_agent::transcript;
 use crate::services::skill::SkillService;
 use crate::services::sqlite_history::SqliteHistoryService;
@@ -140,7 +140,7 @@ pub async fn get_missing_env_refs(
     config: State<'_, Arc<Mutex<ConfigService>>>,
 ) -> crate::Result<Vec<MissingEnvRef>> {
     let settings = config.lock().await.settings().clone();
-    Ok(collect_missing(&settings, env_is_set))
+    Ok(collect_missing_enabled(&settings, env_is_set))
 }
 
 #[tauri::command]

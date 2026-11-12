@@ -54,6 +54,7 @@ fn fixture_settings() -> Settings {
                 env: HashMap::from([("TOKEN".to_string(), "${MCP_TOKEN}".to_string())]),
                 timeout_secs: 30,
                 tool_timeouts: HashMap::new(),
+                ..Default::default()
             },
         ),
         (
@@ -64,6 +65,7 @@ fn fixture_settings() -> Settings {
                 env: HashMap::from([("API_KEY".to_string(), "mcp-literal-555".to_string())]),
                 timeout_secs: 30,
                 tool_timeouts: HashMap::new(),
+                ..Default::default()
             },
         ),
     ]);

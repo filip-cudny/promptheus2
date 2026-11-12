@@ -211,8 +211,9 @@ async fn mcp_missing_command_fails_with_start_error() {
         env: HashMap::new(),
         timeout_secs: 5,
         tool_timeouts: HashMap::new(),
+        ..Default::default()
     };
-    let operation = Operation::AddMcpServer { name: "bad".into(), config: config.clone() };
+    let operation = Operation::AddMcpServer { name: "bad".into(), config: config.clone().into() };
     let mut settings = Settings::default();
     settings.mcp_servers.insert("bad".into(), config);
     let (provider, _) = MockProvider::new(vec![]);
@@ -285,13 +286,14 @@ async fn row_waits_for_every_unvalued_name_once_sorted_and_runs_nothing() {
         env: HashMap::from([("X".into(), format!("${{{b}}}")), ("Y".into(), format!("${{{a}}}${{{a}}}"))]),
         timeout_secs: 5,
         tool_timeouts: HashMap::new(),
+        ..Default::default()
     };
     let mut settings = Settings::default();
     settings.mcp_servers.insert("waiting".into(), config.clone());
     let operations = vec![
         set_value(b),
         set_value(a),
-        Operation::AddMcpServer { name: "waiting".into(), config },
+        Operation::AddMcpServer { name: "waiting".into(), config: config.into() },
     ];
     let calls = AtomicUsize::new(0);
     let ai = echoing_ai("x", "OK");
@@ -418,6 +420,7 @@ async fn mcp_server_with_a_variable_of_another_servers_command_is_not_started() 
         env,
         timeout_secs: 5,
         tool_timeouts: HashMap::new(),
+        ..Default::default()
     };
     let mut before = Settings::default();
     before.mcp_servers.insert("other".into(), server(&format!("${{{VAR}}}"), HashMap::new()));
@@ -425,7 +428,7 @@ async fn mcp_server_with_a_variable_of_another_servers_command_is_not_started() 
     let mut planned = before.clone();
     planned.mcp_servers.insert("added".into(), added.clone());
     let case = || {
-        Case::new(vec![Operation::AddMcpServer { name: "added".into(), config: added.clone() }], planned.clone())
+        Case::new(vec![Operation::AddMcpServer { name: "added".into(), config: added.clone().into() }], planned.clone())
             .before(before.clone())
     };
     let ai = echoing_ai("x", "OK");
