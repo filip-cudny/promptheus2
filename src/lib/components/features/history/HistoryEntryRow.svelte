@@ -14,7 +14,7 @@
     LoaderCircle,
   } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import { useCopyFeedback } from "$lib/utils/copyFeedback.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import { highlightFor, truncateAroundMatch } from "$lib/utils/highlightMatches";
   import { formatDuration, formatTimestamp } from "$lib/utils/format";
   import type { AudioClipInfo, HistoryEntry } from "$lib/types";
@@ -43,14 +43,6 @@
   let isTranscription = $derived(
     entry.entry_type === "speech" && !entry.skill_name && entry.quick_action,
   );
-
-  const copyFeedback = useCopyFeedback<true>();
-
-  function copyToClipboard(e: MouseEvent) {
-    e.stopPropagation();
-    oncopy(entry.id);
-    copyFeedback.flash(true);
-  }
 
   let turnCount = $derived(
     isChat && entry.conversation_data?.nodes?.length
@@ -130,6 +122,7 @@
 </script>
 
 <div class="entry-row-group">
+<div class="entry-row-wrap">
 <button
   class="entry-row"
   class:error={!entry.success}
@@ -151,7 +144,7 @@
     </div>
 
     <div class="entry-body">
-      <div class="entry-header">
+      <div class="entry-header" class:has-copy-slot={isTranscription}>
         <span class="prompt-name">{@html highlightFor(displayName, matches, ["title", "skill_name"])}</span>
         {#if turnCount}
           <span class="turn-count">({turnCount} turns)</span>
@@ -161,13 +154,7 @@
         {/if}
         <span class="timestamp">{formatTimestamp(entry.updated_at ?? entry.created_at ?? entry.timestamp, true)}</span>
         {#if isTranscription}
-          <button class="copy-btn" onclick={copyToClipboard} title="Copy transcription">
-            {#if copyFeedback.confirmed}
-              <Check size={ICON_SIZE.md} />
-            {:else}
-              <Copy size={ICON_SIZE.md} />
-            {/if}
-          </button>
+          <span class="copy-slot"></span>
         {:else}
           <span class="open-icon">
             <SquareArrowOutUpRight size={ICON_SIZE.md} />
@@ -186,6 +173,12 @@
     </div>
   </div>
 </button>
+{#if isTranscription}
+  <span class="row-copy">
+    <ActionIconButton icon={Copy} confirmIcon={Check} onclick={() => oncopy(entry.id)} label="Copy transcription" />
+  </span>
+{/if}
+</div>
 
   {#if showAudioActions}
     <div class="audio-actions">
@@ -196,31 +189,15 @@
         </span>
       {:else if hasAudio}
         {#if isFailedTranscription}
-          <button
-            class="audio-btn"
-            onclick={() => onRetry?.(entry)}
-            title="Retry transcription — result is copied to the clipboard"
-          >
-            <RotateCcw size={ICON_SIZE.sm} />
-            Retry
-          </button>
+          <ActionIconButton icon={RotateCcw} onclick={() => onRetry?.(entry)} label="Retry transcription" />
         {/if}
-        <button
-          class="audio-btn"
-          onclick={() => onExportAudio?.(entry)}
-          title="Save the recording as a WAV file"
-        >
-          <Download size={ICON_SIZE.sm} />
-          Export audio
-        </button>
-        <button
-          class="audio-btn"
+        <ActionIconButton icon={Download} onclick={() => onExportAudio?.(entry)} label="Export audio" />
+        <ActionIconButton
+          icon={Trash2}
+          variant="danger"
           onclick={() => onDiscardAudio?.(entry)}
-          title="Delete the stored recording now"
-        >
-          <Trash2 size={ICON_SIZE.sm} />
-          Discard audio
-        </button>
+          label="Discard audio"
+        />
         {#if audioExpiry}
           <span class="audio-status">{audioExpiry}</span>
         {/if}
@@ -245,25 +222,6 @@
     padding: var(--space-2) var(--space-6) 0 calc(var(--space-6) + var(--space-4) + 16px);
   }
 
-  .audio-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    padding: var(--space-1) var(--space-3);
-    border: 1px solid var(--border-default);
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-sm);
-    cursor: pointer;
-  }
-
-  .audio-btn:hover {
-    background: var(--surface-overlay);
-    color: var(--text-primary);
-  }
-
   .audio-status {
     display: inline-flex;
     align-items: center;
@@ -275,6 +233,10 @@
   .spinning {
     display: flex;
     animation: spin 1s linear infinite;
+  }
+
+  .entry-row-wrap {
+    position: relative;
   }
 
   .entry-row {
@@ -417,22 +379,20 @@
     color: var(--text-secondary);
   }
 
-  .copy-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    padding: var(--space-1);
-    border: none;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-disabled);
-    cursor: pointer;
+  .entry-header.has-copy-slot {
+    min-height: 22px;
   }
 
-  .copy-btn:hover {
-    color: var(--text-secondary);
-    background: var(--surface-overlay);
+  .copy-slot {
+    flex-shrink: 0;
+    width: 22px;
+  }
+
+  .row-copy {
+    position: absolute;
+    top: calc(var(--space-4) + 1px);
+    right: calc(var(--space-6) + 1px);
+    display: flex;
   }
 
   :global(.entry-row mark) {

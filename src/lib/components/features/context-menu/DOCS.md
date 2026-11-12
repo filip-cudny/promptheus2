@@ -92,7 +92,7 @@ Renders when `item.item_type === "context"`. Extracts `ContextItem[]` from `item
 | Append button | Appends clipboard content to context via `appendContextFromClipboard()` |
 | Edit button | Opens the context editor window via `openContextEditor` (`$lib/services/contextEditor`) |
 | Copy button | Copies concatenated text context to clipboard (disabled when no text items) |
-| Clear button | Calls `clearContext()` to remove all context items (disabled when empty) |
+| Clear button | Calls `clearContext()` to remove all context items (`variant="danger"`, disabled when empty) |
 
 Action buttons are always visible (not gated by empty state) since Replace/Append/Edit are useful even with no context.
 
@@ -133,7 +133,7 @@ The transcription chip is driven by `data.transcription`, a state object rather 
 |----------|------|
 | `ok` | Copy icon, click copies the transcription |
 | `retrying` | Spinner + "Retrying…", not clickable |
-| `failed` | Alert icon in `--danger`, tooltip carries the error; a `RotateCcw` button next to it invokes `retry_transcription` when `has_audio` is true |
+| `failed` | Alert icon in `--danger`, tooltip carries the error; a `RotateCcw` `ActionIconButton` ("Retry transcription") next to it invokes `retry_transcription` when `has_audio` is true |
 
 The backend builds this payload in `get_context_menu_items` and marks `retrying` from `SpeechService::retrying_entries()`. The store refreshes on `speech-transcription-retry` in addition to the existing complete/error events, so the chip tracks a retry that was started from the history window.
 

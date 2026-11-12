@@ -3,6 +3,7 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import type { HistorySearchStore } from "$lib/stores/historySearch.svelte";
   import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
+  import Button from "$lib/components/shared/ui/Button.svelte";
   import type {
     HistoryStatusFilter,
     HistoryTypeFilter,
@@ -110,15 +111,9 @@
     </div>
 
     {#if searchStore.activeFilterCount >= 2}
-      <button
-        type="button"
-        class="clear-all-btn"
-        onclick={() => searchStore.clear()}
-        aria-label="Clear all filters"
-      >
-        <X size={ICON_SIZE.sm} />
+      <Button icon={X} onclick={() => searchStore.clear()}>
         Clear all ({searchStore.activeFilterCount})
-      </button>
+      </Button>
     {/if}
   </div>
 </div>
@@ -180,11 +175,6 @@
     display: flex;
   }
 
-  .clear-btn-wrap :global(.action-icon-btn) {
-    padding: var(--space-1);
-    color: var(--text-disabled);
-  }
-
   .filters-row {
     display: flex;
     align-items: center;
@@ -223,27 +213,7 @@
     margin-left: auto;
   }
 
-  .clear-all-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 3px var(--space-4);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    font: inherit;
-    font-size: var(--font-size-sm);
-  }
-
-  .clear-all-btn:hover {
-    background: var(--surface-overlay);
-    color: var(--text-primary);
-  }
-
-  .segment-btn:focus-visible,
-  .clear-all-btn:focus-visible {
+  .segment-btn:focus-visible {
     outline: 2px solid var(--accent-ring);
     outline-offset: 1px;
   }

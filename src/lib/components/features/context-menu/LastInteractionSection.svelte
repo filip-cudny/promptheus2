@@ -138,14 +138,7 @@
         </Chip>
 
         {#if transcriptionFailed && transcription?.has_audio}
-          <button
-            class="retry-btn"
-            onclick={handleRetry}
-            title="Retry transcription — result goes to the clipboard"
-            aria-label="Retry transcription"
-          >
-            <RotateCcw size={ICON_SIZE.md} />
-          </button>
+          <ActionIconButton icon={RotateCcw} onclick={handleRetry} label="Retry transcription" />
         {/if}
       </div>
     </div>
@@ -183,22 +176,6 @@
   .transcription-group.failed :global(.chip) {
     color: var(--danger);
     border-color: var(--danger-border);
-  }
-
-  .retry-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 3px;
-    border: none;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--danger);
-    cursor: pointer;
-  }
-
-  .retry-btn:hover {
-    background: var(--surface-overlay);
   }
 
   .spinning {

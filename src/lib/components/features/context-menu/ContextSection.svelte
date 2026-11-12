@@ -83,6 +83,7 @@
         confirmIcon={Check}
         onclick={onClear}
         label="Clear all context"
+        variant="danger"
         disabled={isEmpty}
       />
     {/snippet}
@@ -102,7 +103,13 @@
             </span>
             <span class="chip-number">Text #{item.number}</span>
             <span class="chip-text">{truncateText(item.content)}</span>
-            <button class="chip-remove" onclick={(e) => { e.stopPropagation(); onRemoveItem(idx); }}>
+            <button
+              type="button"
+              class="chip-remove"
+              aria-label="Remove Text #{item.number}"
+              title="Remove Text #{item.number}"
+              onclick={(e) => { e.stopPropagation(); onRemoveItem(idx); }}
+            >
               <X size={11} strokeWidth={2.5} />
             </button>
           </Chip>

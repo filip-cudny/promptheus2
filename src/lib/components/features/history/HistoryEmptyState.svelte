@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { History, SearchX, FilterX } from "lucide-svelte";
+  import { History, SearchX, FilterX, X } from "lucide-svelte";
   import EmptyState from "$lib/components/shared/ui/EmptyState.svelte";
   import Button from "$lib/components/shared/ui/Button.svelte";
 
@@ -29,7 +29,7 @@
       >
         {#snippet icon()}<SearchX size={32} />{/snippet}
         {#snippet action()}
-          <Button variant="ghost" onclick={onClearFilters}>Clear search</Button>
+          <Button icon={X} onclick={onClearFilters}>Clear search</Button>
         {/snippet}
       </EmptyState>
     {:else}
@@ -47,7 +47,7 @@
     >
       {#snippet icon()}<FilterX size={32} />{/snippet}
       {#snippet action()}
-        <Button variant="primary" onclick={onClearFilters}>Clear filters</Button>
+        <Button variant="primary" icon={X} onclick={onClearFilters}>Clear filters</Button>
       {/snippet}
     </EmptyState>
   {:else}

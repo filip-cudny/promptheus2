@@ -1,6 +1,8 @@
 <script lang="ts">
   import { ChevronDown, X, Search } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
+  import Button from "$lib/components/shared/ui/Button.svelte";
   import FloatingPanel from "$lib/components/shared/ui/FloatingPanel.svelte";
   import type { HistorySearchStore } from "$lib/stores/historySearch.svelte";
 
@@ -71,15 +73,7 @@
     {/if}
   </button>
   {#if selectedCount > 0}
-    <button
-      type="button"
-      class="clear-icon"
-      onclick={handleClearAllSkills}
-      title={selectedCount === 1 ? "Clear skill" : "Clear skills"}
-      aria-label="Clear skill filter"
-    >
-      <X size={ICON_SIZE.sm} />
-    </button>
+    <ActionIconButton icon={X} onclick={handleClearAllSkills} label="Clear skill filter" />
   {/if}
 </div>
 
@@ -138,17 +132,8 @@
     </ul>
 
     <div class="footer">
-      <button
-        type="button"
-        class="footer-btn"
-        disabled={selectedCount === 0}
-        onclick={() => searchStore.clearSkills()}
-      >
-        Clear
-      </button>
-      <button type="button" class="footer-btn primary" onclick={handleClose}>
-        Done
-      </button>
+      <Button disabled={selectedCount === 0} onclick={() => searchStore.clearSkills()}>Clear</Button>
+      <Button variant="primary" onclick={handleClose}>Done</Button>
     </div>
   </div>
 </FloatingPanel>
@@ -195,22 +180,6 @@
 
   .label {
     white-space: nowrap;
-  }
-
-  .clear-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-0) var(--space-2);
-    border: none;
-    border-left: 1px solid var(--accent-bg);
-    background: transparent;
-    color: inherit;
-    cursor: pointer;
-  }
-
-  .clear-icon:hover {
-    background: rgba(255, 255, 255, 0.15);
   }
 
   .popover {
@@ -342,36 +311,5 @@
     margin-top: var(--space-3);
     padding-top: var(--space-3);
     border-top: 1px solid var(--border-default);
-  }
-
-  .footer-btn {
-    padding: 3px var(--space-5);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-secondary);
-    cursor: pointer;
-    font: inherit;
-    font-size: var(--font-size-sm);
-  }
-
-  .footer-btn:hover:not(:disabled) {
-    background: var(--surface-overlay);
-    color: var(--text-primary);
-  }
-
-  .footer-btn:disabled {
-    opacity: var(--opacity-disabled);
-    cursor: default;
-  }
-
-  .footer-btn.primary {
-    background: var(--accent-bg-soft);
-    border-color: var(--accent-bg);
-    color: var(--accent);
-  }
-
-  .footer-btn.primary:hover {
-    background: var(--accent-bg);
   }
 </style>

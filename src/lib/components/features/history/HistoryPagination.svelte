@@ -99,9 +99,4 @@
     display: flex;
     gap: var(--space-1);
   }
-
-  .page-nav :global(.action-icon-btn) {
-    border: 1px solid var(--border-strong);
-    padding: var(--space-1);
-  }
 </style>
