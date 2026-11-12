@@ -114,3 +114,8 @@ select option {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--border-strong);
 }
+
+button {
+  user-select: none;
+  -webkit-user-select: none;
+}

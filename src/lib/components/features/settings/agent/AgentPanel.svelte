@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { Globe, PanelRightClose, Sparkles, SquarePen } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
+  import { Globe, PanelRightClose, SquarePen } from "lucide-svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { error as logError } from "@tauri-apps/plugin-log";
   import {
@@ -75,6 +74,8 @@
   }
 
   function startResize(e: PointerEvent) {
+    e.preventDefault();
+    (document.activeElement as HTMLElement | null)?.blur();
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     dragging = true;
   }
@@ -103,12 +104,12 @@
     onlostpointercapture={endResize}
   ></div>
   <header>
-    <span class="title"><Sparkles size={14} />Settings agent{#if modelName}<span class="model" class:none={modelState !== "ok"} title={modelName}>{modelName}</span>{/if}</span>
-    <button title="New conversation" disabled={agent.running} onclick={() => agent.reset()}>
-      <SquarePen size={14} />
+    <button class="icon-btn" title="Hide panel" onclick={() => agent.hidePanel("hide")}>
+      <PanelRightClose size={16} />
     </button>
-    <button class="hide" title="Hide panel" onclick={() => agent.hidePanel("hide")}>
-      <PanelRightClose size={ICON_SIZE.md} />Hide
+    <span class="title">Settings agent{#if modelName}<span class="model" class:none={modelState !== "ok"} title={modelName}>{modelName}</span>{/if}</span>
+    <button class="icon-btn" title="New conversation" disabled={agent.running} onclick={() => agent.reset()}>
+      <SquarePen size={16} />
     </button>
   </header>
   <AgentMessages {docked} />
@@ -172,46 +173,53 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    left: 0;
-    width: 6px;
+    left: -5px;
+    width: 9px;
     cursor: col-resize;
     z-index: 1;
     touch-action: none;
   }
 
-  .resize-handle::after {
+  .resize-handle::before {
     content: "";
     position: absolute;
-    left: 1px;
-    top: 50%;
-    width: 4px;
-    height: 28px;
-    margin-top: -14px;
-    border-radius: 2px;
-    background: var(--border-strong);
+    top: 0;
+    bottom: 0;
+    left: 3px;
+    width: 2px;
+    background-color: transparent;
+    transition: background-color 0.12s ease 0.15s;
   }
 
-  .resize-handle:hover::after,
-  .resize-handle.dragging::after {
-    background: var(--accent);
+  .resize-handle:hover::before,
+  .resize-handle.dragging::before {
+    background-color: var(--accent);
+  }
+
+  .resize-handle.dragging::before {
+    transition: none;
   }
 
   header {
     display: flex;
     align-items: center;
-    gap: var(--space-4);
-    padding: 10px 12px 10px 16px;
+    flex-shrink: 0;
+    height: 40px;
+    gap: 4px;
+    padding: 0 6px;
     border-bottom: 1px solid var(--border-faint);
   }
 
   .title {
     display: flex;
-    align-items: center;
-    gap: var(--space-4);
+    align-items: baseline;
+    gap: 8px;
     flex: 1;
     min-width: 0;
+    padding-left: 2px;
+    font-size: var(--font-size-base);
     font-weight: var(--font-weight-semibold);
-    color: var(--text-secondary);
+    color: var(--text-primary);
   }
 
   .model {
@@ -219,8 +227,14 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
-    font-size: var(--font-size-xs);
+    font-size: var(--font-size-md);
     font-weight: var(--font-weight-regular);
+    color: var(--text-muted);
+  }
+
+  .model::before {
+    content: "·";
+    margin-right: 8px;
     color: var(--text-muted);
   }
 
@@ -228,35 +242,28 @@
     color: var(--warning);
   }
 
-  .title :global(svg) {
-    color: var(--text-muted);
-  }
-
-  header button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    background: transparent;
+  .icon-btn {
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    padding: 0;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
+    background: transparent;
     color: var(--text-muted);
     cursor: pointer;
   }
 
-  header button:hover:not(:disabled) {
-    background: var(--surface-overlay);
+  .icon-btn:hover:not(:disabled) {
+    background: var(--surface-raised);
     color: var(--text-primary);
   }
 
-  header button.hide {
-    width: auto;
-    gap: 6px;
-    padding: 0 8px;
-    border: 1px solid var(--border-default);
-    font: inherit;
-    font-size: var(--font-size-xs);
+  .icon-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
   }
 
   .web-search {
@@ -281,10 +288,5 @@
   .web-search.on:hover {
     background: var(--accent-bg-soft);
     color: var(--accent);
-  }
-
-  header button:disabled {
-    opacity: 0.4;
-    cursor: default;
   }
 </style>

@@ -95,9 +95,27 @@
     position: relative;
   }
 
-  .dialog-body:has(:global(.resize-handle:hover), :global(.resize-handle.dragging))
+  :global([data-settings-content] ::-webkit-scrollbar) {
+    width: 10px;
+  }
+
+  :global([data-settings-content] ::-webkit-scrollbar-thumb:vertical) {
+    border-right: 4px solid transparent;
+    background-clip: padding-box;
+  }
+
+  :global([data-settings-content] ::-webkit-scrollbar-thumb:vertical:hover) {
+    background-color: var(--border-strong);
+  }
+
+  .dialog-shell:has(:global(.resize-handle.dragging))
     :global([data-settings-content] ::-webkit-scrollbar-thumb) {
-    background: transparent;
+    background-color: transparent;
+  }
+
+  .dialog-shell:has(:global(.resize-handle.dragging)),
+  .dialog-shell:has(:global(.resize-handle.dragging)) :global(*) {
+    cursor: col-resize !important;
   }
 
   .agent-button {
