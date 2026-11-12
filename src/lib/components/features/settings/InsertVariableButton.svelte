@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Braces } from "lucide-svelte";
   import { warn as logWarn } from "@tauri-apps/plugin-log";
-  import { ICON_SIZE } from "$lib/constants/ui";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import FloatingPanel from "$lib/components/shared/ui/FloatingPanel.svelte";
   import MenuItem from "$lib/components/shared/ui/MenuItem.svelte";
   import MenuList from "$lib/components/shared/ui/MenuList.svelte";
@@ -67,17 +67,7 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<button
-  bind:this={buttonEl}
-  type="button"
-  class="editor-icon-btn"
-  class:active={open}
-  aria-label={ariaLabel}
-  title={ariaLabel}
-  onclick={toggle}
->
-  <Braces size={ICON_SIZE.md} />
-</button>
+<ActionIconButton icon={Braces} label={ariaLabel} active={open} bind:element={buttonEl} onclick={toggle} />
 
 <FloatingPanel visible={open} anchorEl={buttonEl} position="below" fitContent onclose={() => (open = false)}>
   <MenuList>

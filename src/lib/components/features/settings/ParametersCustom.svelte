@@ -97,9 +97,9 @@
 </script>
 
 <script lang="ts">
-  import { Plus, Trash2 } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
+  import { Plus, X } from "lucide-svelte";
   import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
+  import Button from "$lib/components/shared/ui/Button.svelte";
 
   let {
     entries = $bindable<CustomParamEntry[]>([]),
@@ -176,13 +176,12 @@
           <option value="boolean">boolean</option>
           <option value="json">json</option>
         </select>
-        <span class="delete-btn-wrap">
-          <ActionIconButton
-            icon={Trash2}
-            label="Remove parameter"
-            onclick={() => removeEntry(entry.id)}
-          />
-        </span>
+        <ActionIconButton
+          icon={X}
+          label="Remove parameter"
+          variant="danger"
+          onclick={() => removeEntry(entry.id)}
+        />
       </div>
       <div class="value-row">
         {#if entry.type === "boolean"}
@@ -236,10 +235,9 @@
     </div>
   {/each}
 
-  <button class="add-btn" onclick={addEntry}>
-    <Plus size={ICON_SIZE.md} />
-    <span>Add parameter</span>
-  </button>
+  <div>
+    <Button icon={Plus} onclick={addEntry}>Add parameter</Button>
+  </div>
 </div>
 
 <style>
@@ -302,30 +300,6 @@
     font-family: var(--font-mono);
     font-size: var(--font-size-sm);
     resize: vertical;
-  }
-
-  .delete-btn-wrap :global(.action-icon-btn:hover:not(:disabled)) {
-    color: var(--danger);
-    background: var(--danger-bg-soft);
-  }
-
-  .add-btn {
-    align-self: flex-start;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 5px var(--space-5);
-    background: var(--surface-elevated);
-    border: 1px solid var(--border-hard-2);
-    border-radius: 5px;
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-md);
-    cursor: pointer;
-  }
-
-  .add-btn:hover {
-    background: var(--surface-elevated);
   }
 
   .error {

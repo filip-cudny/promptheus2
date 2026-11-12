@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { Braces } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
   import {
     getPrompt,
     savePrompt,
@@ -12,6 +11,7 @@
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import HighlightedTextarea from "$lib/components/shared/ui/HighlightedTextarea.svelte";
   import FilePathReveal from "$lib/components/shared/ui/FilePathReveal.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import EnvPlaceholdersPopover from "./EnvPlaceholdersPopover.svelte";
 
   let {
@@ -92,17 +92,13 @@
 
       <div class="head-actions">
         {#if doc?.supports_env_placeholders}
-          <button
-            type="button"
-            class="editor-icon-btn"
-            class:active={placeholdersOpen}
-            bind:this={placeholdersBtn}
+          <ActionIconButton
+            icon={Braces}
+            label="Insert placeholder"
+            active={placeholdersOpen}
+            bind:element={placeholdersBtn}
             onclick={() => (placeholdersOpen = !placeholdersOpen)}
-            title="Insert placeholder"
-            aria-label="Insert placeholder"
-          >
-            <Braces size={ICON_SIZE.sm} />
-          </button>
+          />
         {/if}
         {#if doc?.path}
           <FilePathReveal path={doc.path} />

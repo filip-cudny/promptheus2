@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import Modal from "$lib/components/shared/ui/Modal.svelte";
+  import Button from "$lib/components/shared/ui/Button.svelte";
   import EnvVarPicker from "./EnvVarPicker.svelte";
   import { addModel } from "$lib/services/settings";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
@@ -163,14 +164,14 @@
     </div>
 
     <footer>
-      <button type="button" class="cancel" onclick={onClose}>Cancel</button>
-      <button
+      <Button onclick={onClose}>Cancel</Button>
+      <Button
+        variant="primary"
         type="submit"
-        class="primary"
         disabled={Object.keys(errors).length > 0 || submitting}
       >
         {submitting ? "Creating…" : "Create"}
-      </button>
+      </Button>
     </footer>
   </form>
 </Modal>
@@ -246,28 +247,5 @@
     justify-content: flex-end;
     gap: var(--space-3);
     padding-top: var(--space-2);
-  }
-
-  .cancel,
-  .primary {
-    padding: var(--space-2) var(--space-5);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-hard-2);
-    background: var(--surface-elevated);
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-md);
-    cursor: pointer;
-  }
-
-  .primary {
-    background: var(--accent);
-    color: var(--text-inverted, #0a0a0a);
-    border-color: var(--accent);
-  }
-
-  .primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 </style>

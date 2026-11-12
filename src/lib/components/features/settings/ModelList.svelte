@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { Plus, ChevronDown, ArrowLeftRight } from "lucide-svelte";
+  import { Plus, ArrowLeftRight } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import type { ModelConfig, ModelType, SurfaceKind } from "$lib/types";
   import type { ModelUse } from "$lib/utils/modelUses";
   import Button from "$lib/components/shared/ui/Button.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import ModelUseTags from "./ModelUseTags.svelte";
 
   let {
@@ -64,18 +65,11 @@
   <header>
     <h2>Models</h2>
     <div class="add-wrapper">
-      <button
-        class="add-btn"
-        onclick={(e) => {
-          e.stopPropagation();
-          addMenuOpen = !addMenuOpen;
-        }}
-        title="Add model"
-      >
-        <Plus size={ICON_SIZE.md} />
-        <span>Add</span>
-        <ChevronDown size={ICON_SIZE.sm} />
-      </button>
+      <ActionIconButton
+        icon={Plus}
+        label="Add model"
+        onclick={() => (addMenuOpen = !addMenuOpen)}
+      />
       {#if addMenuOpen}
         <div class="add-menu">
           <button onclick={() => handleAdd("text")}>Text model</button>
@@ -97,9 +91,7 @@
       <div class="empty">
         <p>No models configured.</p>
         <p class="muted">Add your first model to get started.</p>
-        <Button variant="primary" onclick={() => handleAdd("text")}>
-          <Plus size={ICON_SIZE.md} /> Add text model
-        </Button>
+        <Button variant="primary" icon={Plus} onclick={() => handleAdd("text")}>Add text model</Button>
       </div>
     {:else}
       {#each groups as [groupName, groupModels] (groupName)}
@@ -163,24 +155,6 @@
 
   .add-wrapper {
     position: relative;
-  }
-
-  .add-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-4);
-    background: var(--surface-elevated);
-    border: 1px solid var(--border-hard-2);
-    border-radius: 5px;
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-md);
-    cursor: pointer;
-  }
-
-  .add-btn:hover {
-    background: var(--surface-elevated);
   }
 
   .add-menu {

@@ -2,11 +2,11 @@
   import { onDestroy, onMount, untrack } from "svelte";
   import { Copy, Check, ChevronRight } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
-  import { useCopyFeedback } from "$lib/utils/copyFeedback.svelte";
   import { error as logError } from "@tauri-apps/plugin-log";
   import { save as saveDialog } from "@tauri-apps/plugin-dialog";
   import { writeTextFile } from "@tauri-apps/plugin-fs";
   import FormRow from "$lib/components/shared/ui/FormRow.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import DangerZone from "./DangerZone.svelte";
   import ParametersKnown from "./ParametersKnown.svelte";
   import ParametersCustom, {
@@ -71,7 +71,6 @@
     untrack(() => entriesFromExtra(extraOf(skill.parameters))),
   );
   let customErrors = $state<Record<string, string>>({});
-  const slugFeedback = useCopyFeedback<true>();
   let bodyError = $state<string | null>(null);
   let inheritedExpanded = $state(false);
   let suppressCustomSave = true;
@@ -297,7 +296,6 @@
   async function copySlug() {
     try {
       await navigator.clipboard.writeText(skill.name);
-      slugFeedback.flash(true);
     } catch (e) {
       logError(`Copy skill slug failed: ${e}`);
     }
@@ -382,10 +380,7 @@
       <span class="field-label">Slug</span>
       <div class="slug-row">
         <code class="slug-readonly">/{skill.name}</code>
-        <button class="icon-btn" onclick={copySlug} title="Copy slug">
-          {#if slugFeedback.confirmed}<Check size={ICON_SIZE.sm} />{:else}<Copy size={ICON_SIZE.sm} />{/if}
-          <span>{slugFeedback.confirmed ? "Copied" : "Copy"}</span>
-        </button>
+        <ActionIconButton icon={Copy} confirmIcon={Check} label="Copy slug" onclick={copySlug} />
       </div>
       <p class="helper">
         The slug cannot be changed — duplicate the skill to create a variant with a different
@@ -644,25 +639,6 @@
     font-family: var(--font-mono);
     font-size: var(--font-size-sm);
     color: var(--text-muted);
-  }
-
-  .icon-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 5px var(--space-4);
-    background: transparent;
-    border: 1px solid var(--border-hard);
-    border-radius: var(--radius-md);
-    color: var(--text-muted);
-    font: inherit;
-    font-size: var(--font-size-sm);
-    cursor: pointer;
-  }
-
-  .icon-btn:hover {
-    background: var(--surface-overlay-faint);
-    color: var(--text-primary);
   }
 
   .helper {

@@ -78,9 +78,7 @@
           <span class="title">{entryTitle(entry, entries)}</span>
         </button>
         <span class="badge" class:undone={state === "undone"}>{state}</span>
-        <Button variant="ghost" disabled={busy !== null} onclick={() => undo(entry.id, false)}>
-          <Undo2 size={ICON_SIZE.sm} /> Undo
-        </Button>
+        <Button icon={Undo2} disabled={busy !== null} onclick={() => undo(entry.id, false)}>Undo</Button>
       </div>
       <div class="meta">{formatEntryTime(entry.created_at)} · {entry.host} · {entry.kind}</div>
       {#if entry.request}<div class="request">{entry.request}</div>{/if}

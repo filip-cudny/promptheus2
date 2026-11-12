@@ -7,6 +7,8 @@
   import { readTextFile } from "@tauri-apps/plugin-fs";
   import { error as logError } from "@tauri-apps/plugin-log";
   import type { SkillFull } from "$lib/types";
+  import Button from "$lib/components/shared/ui/Button.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
 
   let {
     items,
@@ -149,13 +151,8 @@
       />
     </div>
     <div class="actions">
-      <button class="hdr-btn" onclick={onImportPick} title="Import .md file">
-        <Upload size={ICON_SIZE.sm} />
-      </button>
-      <button class="hdr-btn primary" onclick={onNew} title="Create skill">
-        <Plus size={ICON_SIZE.md} />
-        <span>New</span>
-      </button>
+      <ActionIconButton icon={Upload} label="Import .md file" onclick={onImportPick} />
+      <ActionIconButton icon={Plus} label="New skill" onclick={onNew} />
     </div>
   </header>
 
@@ -165,14 +162,8 @@
         <div class="empty">
           <p class="title">No skills yet</p>
           <p class="muted">Create one or drop a <code>.md</code> file here.</p>
-          <button class="cta" onclick={onNew}>
-            <Plus size={ICON_SIZE.md} />
-            <span>Add skill</span>
-          </button>
-          <button class="cta secondary" onclick={onImportPick}>
-            <Upload size={ICON_SIZE.sm} />
-            <span>Import .md</span>
-          </button>
+          <Button variant="primary" icon={Plus} onclick={onNew}>Add skill</Button>
+          <Button icon={Upload} onclick={onImportPick}>Import .md</Button>
         </div>
       {:else}
         <div class="empty">
@@ -265,32 +256,6 @@
     gap: var(--space-2);
   }
 
-  .hdr-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-3);
-    background: var(--surface-elevated);
-    border: 1px solid var(--border-hard-2);
-    border-radius: 5px;
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-sm);
-    cursor: pointer;
-  }
-
-  .hdr-btn:hover {
-    background: var(--surface-overlay-faint);
-    color: var(--text-primary);
-  }
-
-  .hdr-btn.primary {
-    background: var(--accent-bg-soft);
-    color: var(--accent);
-    border-color: var(--accent-border);
-    margin-left: auto;
-  }
-
   .scroll {
     flex: 1;
     overflow-y: auto;
@@ -331,27 +296,6 @@
     padding: 0 4px;
     background: var(--surface-overlay-faint);
     border-radius: var(--radius-sm);
-  }
-
-  .empty .cta {
-    margin-top: var(--space-2);
-    padding: var(--space-2) var(--space-5);
-    background: var(--accent-bg-soft);
-    border: 1px solid var(--accent-border);
-    border-radius: 5px;
-    color: var(--accent);
-    font: inherit;
-    font-size: var(--font-size-sm);
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    cursor: pointer;
-  }
-
-  .empty .cta.secondary {
-    background: transparent;
-    border-color: var(--border-faint);
-    color: var(--text-secondary);
   }
 
   .row-wrap {

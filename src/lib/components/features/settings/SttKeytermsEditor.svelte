@@ -8,6 +8,7 @@
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import HighlightedTextarea from "$lib/components/shared/ui/HighlightedTextarea.svelte";
   import FilePathReveal from "$lib/components/shared/ui/FilePathReveal.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import type { SttKeytermsDoc } from "$lib/types";
 
   let { description }: { description?: string } = $props();
@@ -205,20 +206,12 @@
       </span>
 
       <div class="head-actions">
-        <button
-          type="button"
-          class="editor-icon-btn"
-          class:active={mode === "raw"}
+        <ActionIconButton
+          icon={mode === "raw" ? Type : FileCode2}
+          label={mode === "raw" ? "Switch to chip view" : "Edit raw file"}
+          active={mode === "raw"}
           onclick={toggleMode}
-          title={mode === "raw" ? "Switch to chip view" : "Edit raw file"}
-          aria-label={mode === "raw" ? "Switch to chip view" : "Edit raw file"}
-        >
-          {#if mode === "raw"}
-            <Type size={ICON_SIZE.sm} />
-          {:else}
-            <FileCode2 size={ICON_SIZE.sm} />
-          {/if}
-        </button>
+        />
         {#if doc?.path}
           <FilePathReveal path={doc.path} />
         {/if}
@@ -268,7 +261,7 @@
               e.stopPropagation();
               removeTerm(term.index);
             }}
-            title="Remove"
+            title={`Remove ${term.text}`}
             aria-label={`Remove ${term.text}`}
           >
             <X size={10} strokeWidth={2.5} />

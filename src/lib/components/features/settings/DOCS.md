@@ -193,7 +193,7 @@ Inside a section, group related fields in `<section class="card">` with an upper
 `DangerZone.svelte` is the last card of `ModelEditor` and `SkillEditor`: red border (`var(--danger-border)`), separated visually. Props: `noun`, `name` (shown in the confirm), `compact`, `warning` snippet, `onDuplicate`, `onDelete`, optional `onExport`. Destructive actions use a two-step inline confirm — never an OS dialog or a modal-on-modal.
 
 ```
-[Delete model]  →  "Delete X? [Cancel] [Yes, delete]"
+[Delete model]  →  "Delete X? [Cancel] [Delete X]"
 ```
 
 If the action affects other state (e.g., a model referenced by a surface), surface that warning inline in the confirm prompt — don't block, just inform.
@@ -270,7 +270,7 @@ The server editor's `toolUses(server, tool, surfaces)` (`$lib/utils/toolUses.ts`
 
 `PromptEditor.svelte` is the single component for any prompt slot. It loads via `getPrompt(kind)`, autosaves on change with the `autosave_debounce_ms` debounce, and supports `Cmd/Ctrl+S` to flush immediately. There is no Save button — the only persistence affordance is the window's save status after the section title (see "Persistence" above). The file path is hidden behind a `FilePathReveal` (`…`) next to the title (custom paths require manual JSON edit).
 
-Only `kind: "environment"` shows the placeholders affordance: a `{ }` icon button in the title row opens an `EnvPlaceholdersPopover` anchored to the button. Clicking a chip calls `HighlightedTextarea.insert(token)` and closes the popover. The editor icon buttons use the global `.editor-icon-btn` class (`styles/global.css`). Other prompts get a description that says they are sent verbatim — no placeholder substitution happens for them.
+Only `kind: "environment"` shows the placeholders affordance: a `{ }` `ActionIconButton` (`Braces`, label "Insert placeholder", `active` while the popover is open) in the title row opens an `EnvPlaceholdersPopover` anchored to the button. Clicking a chip calls `HighlightedTextarea.insert(token)` and closes the popover. Other prompts get a description that says they are sent verbatim — no placeholder substitution happens for them.
 
 A `PromptEditor` or `SttKeytermsEditor` inside a fixed-height wrapper (Chat 280px, Speech 320px) must fit in it: the Chat and Speech `PromptEditor`s and the keyterms raw pane pass `minHeight={0}` to `HighlightedTextarea` (its default 320px min-height plus the editor header is taller than the wrapper), and the keyterms chip pane has no min-height, so it shrinks and scrolls. Content taller than the wrapper is painted over the next field.
 

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Braces } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
   import HighlightedTextarea from "$lib/components/shared/ui/HighlightedTextarea.svelte";
   import FilePathReveal from "$lib/components/shared/ui/FilePathReveal.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import EnvPlaceholdersPopover from "./EnvPlaceholdersPopover.svelte";
   import {
     getEnvironmentPlaceholders,
@@ -58,17 +58,13 @@
       <p class="hint">Wrapped in <code>&lt;skill&gt;…&lt;/skill&gt;</code> when invoked.</p>
     </div>
     <div class="actions">
-      <button
-        type="button"
-        class="editor-icon-btn"
-        class:active={placeholdersOpen}
-        bind:this={placeholdersBtn}
+      <ActionIconButton
+        icon={Braces}
+        label="Insert placeholder"
+        active={placeholdersOpen}
+        bind:element={placeholdersBtn}
         onclick={() => (placeholdersOpen = !placeholdersOpen)}
-        title="Insert placeholder"
-        aria-label="Insert placeholder"
-      >
-        <Braces size={ICON_SIZE.sm} />
-      </button>
+      />
       <FilePathReveal path={filePath} />
     </div>
   </header>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import Modal from "$lib/components/shared/ui/Modal.svelte";
+  import Button from "$lib/components/shared/ui/Button.svelte";
   import type { ImportConflictMode } from "$lib/types";
 
   let {
@@ -19,25 +20,25 @@
   </p>
 
   <footer>
-    <button class="cancel" onclick={onClose}>Cancel</button>
-    <button
-      class="rename"
+    <Button onclick={onClose}>Cancel</Button>
+    <Button
+      variant="primary"
       onclick={() => {
         onResolve("rename_suffix");
         onClose();
       }}
     >
       Import as <code>{existingSlug}-imported</code>
-    </button>
-    <button
-      class="overwrite"
+    </Button>
+    <Button
+      variant="danger"
       onclick={() => {
         onResolve("overwrite");
         onClose();
       }}
     >
-      Overwrite
-    </button>
+      Overwrite skill
+    </Button>
   </footer>
 </Modal>
 
@@ -62,30 +63,5 @@
     justify-content: flex-end;
     gap: var(--space-3);
     padding-top: var(--space-2);
-  }
-
-  footer button {
-    padding: var(--space-2) var(--space-5);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border-hard-2);
-    background: var(--surface-elevated);
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-md);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .rename {
-    border-color: var(--accent-border);
-    color: var(--accent);
-  }
-
-  .overwrite {
-    border-color: var(--danger-border);
-    color: var(--danger);
-    background: var(--danger-bg-soft);
   }
 </style>

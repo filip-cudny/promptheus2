@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { CopyPlus, Download, Trash2 } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
   import Button from "$lib/components/shared/ui/Button.svelte";
 
   let {
@@ -28,21 +27,18 @@
 <section class="card danger" class:compact>
   <h3>Danger zone</h3>
   <div class="danger-row">
-    <button class="action-btn" onclick={onDuplicate}>
-      <CopyPlus size={ICON_SIZE.md} />
-      <span>Duplicate {noun}</span>
-    </button>
+    <div>
+      <Button icon={CopyPlus} onclick={onDuplicate}>Duplicate {noun}</Button>
+    </div>
     {#if onExport}
-      <button class="action-btn" onclick={onExport}>
-        <Download size={ICON_SIZE.md} />
-        <span>Export .md</span>
-      </button>
+      <div>
+        <Button icon={Download} onclick={onExport}>Export .md</Button>
+      </div>
     {/if}
     {#if !confirmDelete}
-      <button class="action-btn delete-btn" onclick={() => (confirmDelete = true)}>
-        <Trash2 size={ICON_SIZE.md} />
-        <span>Delete {noun}</span>
-      </button>
+      <div>
+        <Button variant="danger" icon={Trash2} onclick={() => (confirmDelete = true)}>Delete {noun}</Button>
+      </div>
     {:else}
       <div class="delete-confirm">
         <p>
@@ -53,8 +49,8 @@
           {/if}
         </p>
         <div class="confirm-actions">
-          <button class="cancel-btn" onclick={() => (confirmDelete = false)}>Cancel</button>
-          <Button variant="danger" onclick={onDelete}>Yes, delete</Button>
+          <Button onclick={() => (confirmDelete = false)}>Cancel</Button>
+          <Button variant="danger" onclick={onDelete}>Delete {noun}</Button>
         </div>
       </div>
     {/if}
@@ -98,34 +94,6 @@
     gap: var(--danger-row-gap);
   }
 
-  .action-btn {
-    align-self: flex-start;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-3) var(--space-6);
-    background: transparent;
-    border: 1px solid var(--border-hard);
-    border-radius: 5px;
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-md);
-    cursor: pointer;
-  }
-
-  .action-btn:hover {
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .delete-btn {
-    color: var(--danger);
-    border-color: var(--danger-border);
-  }
-
-  .delete-btn:hover {
-    background: var(--danger-bg-soft);
-  }
-
   .delete-confirm p {
     font-size: var(--font-size-md);
     color: var(--text-primary);
@@ -140,16 +108,5 @@
   .confirm-actions {
     display: flex;
     gap: var(--danger-confirm-gap);
-  }
-
-  .cancel-btn {
-    padding: 5px var(--space-5);
-    background: var(--surface-elevated);
-    border: 1px solid var(--border-hard-2);
-    border-radius: var(--radius-md);
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-md);
-    cursor: pointer;
   }
 </style>

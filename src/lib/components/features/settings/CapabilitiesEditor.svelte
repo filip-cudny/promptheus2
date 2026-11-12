@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { ListChecks } from "lucide-svelte";
+  import Button from "$lib/components/shared/ui/Button.svelte";
   import type { ModelCapabilities, ReasoningMode } from "$lib/types";
   import {
     REASONING_LEVELS,
@@ -156,9 +158,9 @@
           Select at least one level, or click below to apply the OpenAI preset.
         </p>
       {/if}
-      <button class="preset-btn" onclick={applyOpenAiPreset}>
-        Apply OpenAI preset
-      </button>
+      <div>
+        <Button icon={ListChecks} onclick={applyOpenAiPreset}>Apply OpenAI preset</Button>
+      </div>
     </div>
   {:else if kind === "budget_tokens"}
     <div class="sub">
@@ -276,22 +278,6 @@
     color: var(--text-primary);
     font-size: var(--font-size-md);
     cursor: pointer;
-  }
-
-  .preset-btn {
-    align-self: flex-start;
-    padding: var(--space-2) var(--space-5);
-    background: var(--surface-elevated);
-    border: 1px solid var(--border-hard-2);
-    border-radius: var(--radius-md);
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-sm);
-    cursor: pointer;
-  }
-
-  .preset-btn:hover {
-    color: var(--text-primary);
   }
 
   .budget-row {

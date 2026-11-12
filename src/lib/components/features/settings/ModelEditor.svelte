@@ -1,8 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from "svelte";
   import { Copy, Check } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
-  import { useCopyFeedback } from "$lib/utils/copyFeedback.svelte";
   import { error as logError } from "@tauri-apps/plugin-log";
   import { modelUseLabel } from "$lib/constants/surfaces";
   import type { ModelUse } from "$lib/utils/modelUses";
@@ -17,6 +15,7 @@
   import SettingField from "./SettingField.svelte";
   import DangerZone from "./DangerZone.svelte";
   import ModelUseTags from "./ModelUseTags.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
   import {
@@ -79,7 +78,6 @@
   );
   let customErrors = $state<Record<string, string>>({});
   let validationErrors = $state<Record<string, string>>({});
-  const idFeedback = useCopyFeedback<true>();
 
   const tracker = useSaveTracker({ debounceMs: untrack(() => debounceMs) });
 
@@ -237,7 +235,6 @@
   async function copyId() {
     try {
       await navigator.clipboard.writeText(model.id);
-      idFeedback.flash(true);
     } catch (e) {
       logError(`Copy model id failed: ${e}`);
     }
@@ -504,10 +501,7 @@
 
   <footer class="meta">
     <span>ID: <code>{model.id}</code></span>
-    <button class="icon-btn" onclick={copyId} title="Copy ID">
-      {#if idFeedback.confirmed}<Check size={ICON_SIZE.sm} />{:else}<Copy size={ICON_SIZE.sm} />{/if}
-      <span>{idFeedback.confirmed ? "Copied" : "Copy"}</span>
-    </button>
+    <ActionIconButton icon={Copy} confirmIcon={Check} label="Copy ID" onclick={copyId} />
   </footer>
 </div>
 
@@ -660,25 +654,6 @@
   .segmented button.active {
     background: var(--accent-bg-soft);
     color: var(--accent);
-  }
-
-  .icon-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: 5px var(--space-4);
-    background: transparent;
-    border: 1px solid var(--border-hard);
-    border-radius: var(--radius-md);
-    color: var(--text-muted);
-    font: inherit;
-    font-size: var(--font-size-sm);
-    cursor: pointer;
-  }
-
-  .icon-btn:hover {
-    background: var(--surface-overlay-faint);
-    color: var(--text-primary);
   }
 
   .toggle-field label {
