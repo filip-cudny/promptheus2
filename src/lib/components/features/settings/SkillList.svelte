@@ -5,6 +5,7 @@
   import { getCurrentWebview } from "@tauri-apps/api/webview";
   import { onMount, onDestroy } from "svelte";
   import { readTextFile } from "@tauri-apps/plugin-fs";
+  import { error as logError } from "@tauri-apps/plugin-log";
   import type { SkillFull } from "$lib/types";
 
   let {
@@ -85,7 +86,9 @@
     resetDrag();
     try {
       await reorderSkills(order);
-    } catch {}
+    } catch (e) {
+      logError(`Reorder skills failed: ${e}`);
+    }
   }
 
   function resetDrag() {

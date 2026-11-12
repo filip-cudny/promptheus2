@@ -6,7 +6,6 @@
   import { getSttKeyterms, saveSttKeyterms } from "$lib/services/keyterms";
   import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
-  import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import HighlightedTextarea from "$lib/components/shared/ui/HighlightedTextarea.svelte";
   import FilePathReveal from "$lib/components/shared/ui/FilePathReveal.svelte";
   import type { SttKeytermsDoc } from "$lib/types";
@@ -18,6 +17,7 @@
   let doc = $state<SttKeytermsDoc | null>(null);
   let rawContent = $state("");
   let savedRaw = $state("");
+  let loadError = $state<string | null>(null);
   let mode = $state<"chips" | "raw">("chips");
   let inputValue = $state("");
   let inputEl = $state<HTMLInputElement | undefined>(undefined);
@@ -79,8 +79,9 @@
       doc = fetched;
       rawContent = fetched.content;
       savedRaw = fetched.content;
+      loadError = null;
     } catch (e) {
-      tracker.setError(e instanceof Error ? e.message : String(e));
+      loadError = e instanceof Error ? e.message : String(e);
     }
   }
 
@@ -197,7 +198,6 @@
   <header class="head">
     <div class="title-row">
       <h3 class="title">Speech-to-text keyterms</h3>
-      <SaveStatusIndicator {tracker} />
 
       <span class="count" class:empty={terms.length === 0} aria-live="polite">
         {terms.length}
@@ -236,7 +236,9 @@
     {/if}
   </header>
 
-  {#if mode === "chips"}
+  {#if loadError}
+    <p class="load-error" role="alert">Failed to load: {loadError}</p>
+  {:else if mode === "chips"}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
@@ -386,6 +388,13 @@
     margin: 0;
     font-size: var(--font-size-sm);
     color: var(--text-muted);
+  }
+
+  .load-error {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--danger);
+    overflow-wrap: anywhere;
   }
 
   .comments-note {

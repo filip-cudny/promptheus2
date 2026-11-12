@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { GripVertical } from "lucide-svelte";
   import { error as logError } from "@tauri-apps/plugin-log";
   import SelectDropdown from "$lib/components/shared/ui/SelectDropdown.svelte";
   import NumberInput from "$lib/components/shared/ui/NumberInput.svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
+  import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
   import { getCachedCapabilities, prefetchCapabilities } from "$lib/stores/capabilities.svelte";
   import {
     updateSetting,
@@ -77,26 +78,26 @@
 
   type DebouncedKey = "recent_apps_count" | "menu_digit_select_delay_ms";
 
-  const timers: Partial<Record<DebouncedKey, ReturnType<typeof setTimeout>>> = {};
+  const tracker = useSaveTracker({ debounceMs: store.settings?.autosave_debounce_ms ?? 1000 });
   const pending: Partial<Record<DebouncedKey, number>> = {};
 
-  function flush(key: DebouncedKey) {
-    clearTimeout(timers[key]);
-    const n = pending[key];
-    if (n === undefined) return;
-    delete pending[key];
-    void run(`update ${key}`, () => updateSetting(key, n));
+  async function persistPending() {
+    const entries = Object.entries(pending) as [DebouncedKey, number][];
+    for (const [key] of entries) delete pending[key];
+    await Promise.all(entries.map(([key, n]) => updateSetting(key, n)));
   }
 
   function debounceSave(key: DebouncedKey, n: number) {
-    clearTimeout(timers[key]);
     pending[key] = n;
-    timers[key] = setTimeout(() => flush(key), store.settings?.autosave_debounce_ms ?? 1000);
+    tracker.scheduleSave(persistPending);
   }
 
+  onMount(() => {
+    tracker.attachKeyboard(window);
+  });
+
   onDestroy(() => {
-    flush("recent_apps_count");
-    flush("menu_digit_select_delay_ms");
+    tracker.destroy();
   });
 
   function saveDigitDelay(e: Event) {

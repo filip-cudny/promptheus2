@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
+  import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
 
   let {
     title,
@@ -26,7 +27,10 @@
     <header class="head">
       <div class="head-text">
         {#if title}
-          <h2 class:highlighted>{title}</h2>
+          <div class="title-row">
+            <h2 class:highlighted>{title}</h2>
+            <SaveStatusIndicator />
+          </div>
         {/if}
         {#if hint}
           <p class="hint">{hint}</p>
@@ -64,6 +68,12 @@
     flex-direction: column;
     gap: var(--space-1);
     min-width: 0;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
   }
 
   h2 {

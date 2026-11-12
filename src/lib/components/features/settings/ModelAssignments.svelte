@@ -1,6 +1,7 @@
 <script lang="ts">
   import { error as logError } from "@tauri-apps/plugin-log";
   import SelectDropdown from "$lib/components/shared/ui/SelectDropdown.svelte";
+  import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { getSkillsStore } from "$lib/stores/skills.svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
@@ -130,7 +131,10 @@
 </script>
 
 <div class="model-assignments">
-  <h1>Assignments</h1>
+  <header class="editor-header">
+    <h1>Assignments</h1>
+    <SaveStatusIndicator />
+  </header>
   <p class="lead">
     Every place in the app that calls a model, in one table. The same values are still editable in
     the Chat, Context menu and Speech sections; a change here shows there and the other way round.
@@ -259,6 +263,12 @@
     flex-direction: column;
     gap: var(--space-8);
     max-width: 760px;
+  }
+
+  .editor-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-5);
   }
 
   h1 {

@@ -282,7 +282,7 @@
 <div class="model-editor">
   <header class="editor-header">
     <h1>{draft.display_name || "Untitled model"}</h1>
-    <SaveStatusIndicator {tracker} />
+    <SaveStatusIndicator />
   </header>
 
   <div class="used-by">

@@ -8,7 +8,6 @@
   import Chip from "$lib/components/shared/ui/Chip.svelte";
   import NumberInput from "$lib/components/shared/ui/NumberInput.svelte";
   import TextInput from "$lib/components/shared/ui/TextInput.svelte";
-  import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
@@ -249,7 +248,6 @@
           {@const state = stateOf.get(selected.name)}
           <header class="head">
             <h1>{selected.name || "(unnamed)"}</h1>
-            <SaveStatusIndicator {tracker} />
           </header>
 
           {#if state?.state === "error"}

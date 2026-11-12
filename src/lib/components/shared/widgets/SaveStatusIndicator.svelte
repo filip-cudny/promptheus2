@@ -2,22 +2,15 @@
   import { Check, AlertCircle } from "lucide-svelte";
   import { useCopyFeedback } from "$lib/utils/copyFeedback.svelte";
   import { error as logError } from "@tauri-apps/plugin-log";
-  import type { SaveTracker } from "$lib/stores/saveTracker.svelte";
+  import { getSaveStatus } from "$lib/stores/saveStatus.svelte";
 
-  let {
-    tracker,
-    compact = false,
-  }: {
-    tracker: SaveTracker;
-    compact?: boolean;
-  } = $props();
-
+  const status = getSaveStatus();
   const copyFeedback = useCopyFeedback<true>();
 
   async function copyError() {
-    if (!tracker.error) return;
+    if (!status.error) return;
     try {
-      await navigator.clipboard.writeText(tracker.error);
+      await navigator.clipboard.writeText(status.error);
       copyFeedback.flash(true);
     } catch (e) {
       logError(`Copy save error failed: ${e}`);
@@ -28,24 +21,24 @@
 <span class="save-status">
   <span
     class="status-dot"
-    class:dirty={tracker.state === "dirty"}
-    class:saving={tracker.state === "saving"}
-    class:saved={tracker.state === "saved"}
-    class:err={tracker.state === "error"}
-    title={tracker.tooltip}
-    aria-label={tracker.tooltip}
+    class:dirty={status.state === "dirty"}
+    class:saving={status.state === "saving"}
+    class:saved={status.state === "saved"}
+    class:err={status.state === "error"}
+    title={status.tooltip}
+    aria-label={status.tooltip}
   ></span>
-  {#if !compact && tracker.state === "saved"}
+  {#if status.state === "saved"}
     <span class="saved-stamp" aria-hidden="true">
       <Check size={10} /> saved
     </span>
   {/if}
-  {#if tracker.state === "error"}
+  {#if status.state === "error"}
     <button
       type="button"
       class="err-stamp"
       class:copied={copyFeedback.confirmed}
-      title={tracker.error ?? ""}
+      title={status.error ?? ""}
       onclick={copyError}
       aria-label="Copy error message"
     >

@@ -4,7 +4,6 @@
   import { ICON_SIZE } from "$lib/constants/ui";
   import Button from "$lib/components/shared/ui/Button.svelte";
   import TextInput from "$lib/components/shared/ui/TextInput.svelte";
-  import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { updateSetting } from "$lib/services/settings";
@@ -70,9 +69,6 @@
 </script>
 
 <div class="providers">
-  <div class="head">
-    <SaveStatusIndicator {tracker} />
-  </div>
   {#each rows as row (row.key)}
     <div class="row">
       <div class="field">

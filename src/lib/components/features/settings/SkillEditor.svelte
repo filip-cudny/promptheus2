@@ -8,7 +8,6 @@
   import { writeTextFile } from "@tauri-apps/plugin-fs";
   import FormRow from "$lib/components/shared/ui/FormRow.svelte";
   import DangerZone from "./DangerZone.svelte";
-  import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import ParametersKnown from "./ParametersKnown.svelte";
   import ParametersCustom, {
     entriesFromExtra,
@@ -363,7 +362,6 @@
   <header class="editor-header">
     <h1>{draft.display_name || skill.name}</h1>
     <code class="slug-chip">/{skill.name}</code>
-    <SaveStatusIndicator {tracker} />
   </header>
 
   <section class="card">

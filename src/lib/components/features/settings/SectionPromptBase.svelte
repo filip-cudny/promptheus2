@@ -5,7 +5,6 @@
   import PromptEditor from "./PromptEditor.svelte";
   import PromptTabs from "./PromptTabs.svelte";
   import TextInput from "$lib/components/shared/ui/TextInput.svelte";
-  import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { updateSetting } from "$lib/services/settings";
@@ -112,7 +111,6 @@
   {#snippet body()}
     <div class="prompt-base-body">
       <section class="identity-card">
-        <div class="identity-status"><SaveStatusIndicator {tracker} /></div>
         <SettingField key="preferred_name">
           <div class="identity-input">
             <TextInput
@@ -157,11 +155,6 @@
     border-radius: var(--radius-md);
     width: 100%;
     max-width: 760px;
-  }
-
-  .identity-status {
-    display: flex;
-    justify-content: flex-end;
   }
 
   .identity-input {

@@ -10,7 +10,6 @@
   } from "$lib/services/prompts";
   import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
-  import SaveStatusIndicator from "$lib/components/shared/widgets/SaveStatusIndicator.svelte";
   import HighlightedTextarea from "$lib/components/shared/ui/HighlightedTextarea.svelte";
   import FilePathReveal from "$lib/components/shared/ui/FilePathReveal.svelte";
   import EnvPlaceholdersPopover from "./EnvPlaceholdersPopover.svelte";
@@ -30,6 +29,7 @@
   let doc = $state<PromptDoc | null>(null);
   let content = $state("");
   let savedContent = $state("");
+  let loadError = $state<string | null>(null);
   let textarea = $state<ReturnType<typeof HighlightedTextarea> | undefined>(undefined);
   let placeholdersBtn = $state<HTMLButtonElement | undefined>(undefined);
   let placeholdersOpen = $state(false);
@@ -60,8 +60,9 @@
       doc = fetched;
       content = fetched.content;
       savedContent = fetched.content;
+      loadError = null;
     } catch (e) {
-      tracker.setError(e instanceof Error ? e.message : String(e));
+      loadError = e instanceof Error ? e.message : String(e);
     }
   }
 
@@ -88,7 +89,6 @@
   <header class="head">
     <div class="title-row">
       <h3 class="title">{doc?.label ?? "…"}</h3>
-      <SaveStatusIndicator {tracker} />
 
       <div class="head-actions">
         {#if doc?.supports_env_placeholders}
@@ -115,14 +115,18 @@
   </header>
 
   <div class="editor-pane">
-    <HighlightedTextarea
-      bind:this={textarea}
-      bind:value={content}
-      {highlightPattern}
-      placeholder={doc ? "" : "Loading…"}
-      disabled={!doc}
-      {minHeight}
-    />
+    {#if loadError}
+      <p class="load-error" role="alert">Failed to load: {loadError}</p>
+    {:else}
+      <HighlightedTextarea
+        bind:this={textarea}
+        bind:value={content}
+        {highlightPattern}
+        placeholder={doc ? "" : "Loading…"}
+        disabled={!doc}
+        {minHeight}
+      />
+    {/if}
   </div>
 
   {#if doc?.supports_env_placeholders}
@@ -177,6 +181,13 @@
     margin: 0;
     font-size: var(--font-size-sm);
     color: var(--text-muted);
+  }
+
+  .load-error {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--danger);
+    overflow-wrap: anywhere;
   }
 
   .editor-pane {
