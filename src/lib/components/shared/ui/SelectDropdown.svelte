@@ -60,7 +60,7 @@
   class:active={isActive}
   aria-haspopup="listbox"
   aria-expanded={open}
-  aria-label={ariaLabel}
+  aria-label="{ariaLabel}: {selectedLabel}"
   onclick={toggleOpen}
 >
   <span class="label">{selectedLabel}</span>

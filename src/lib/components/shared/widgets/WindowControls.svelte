@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Minus, Square, X } from "lucide-svelte";
+  import { ICON_SIZE } from "$lib/constants/ui";
 
   let {
     isMaximized = false,
@@ -15,14 +16,20 @@
 </script>
 
 <div class="actions">
-  <button type="button" class="win-btn" title="Minimize" onclick={onMinimize}>
-    <Minus size={14} />
+  <button type="button" class="win-btn" aria-label="Minimize" title="Minimize" onclick={onMinimize}>
+    <Minus size={ICON_SIZE.md} />
   </button>
-  <button type="button" class="win-btn" title={isMaximized ? "Restore" : "Maximize"} onclick={onToggleMaximize}>
-    <Square size={12} />
+  <button
+    type="button"
+    class="win-btn"
+    aria-label={isMaximized ? "Restore" : "Maximize"}
+    title={isMaximized ? "Restore" : "Maximize"}
+    onclick={onToggleMaximize}
+  >
+    <Square size={ICON_SIZE.sm} />
   </button>
-  <button type="button" class="win-btn close" title="Close" onclick={onClose}>
-    <X size={14} />
+  <button type="button" class="win-btn close" aria-label="Close" title="Close" onclick={onClose}>
+    <X size={ICON_SIZE.md} />
   </button>
 </div>
 

@@ -1,6 +1,5 @@
 <script lang="ts">
   import { Check, Copy, Pencil, Save } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
   import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
 
   let {
@@ -27,16 +26,13 @@
   {#if oncopy}
     <ActionIconButton icon={Copy} confirmIcon={Check} onclick={() => oncopy?.()} label="Copy" />
   {/if}
-  <span class:active={editMode}>
-    <ActionIconButton
-      icon={Pencil}
-      onclick={() => (editMode = !editMode)}
-      label={editMode ? "View" : "Edit"}
-    />
-  </span>
-  <button class="save-btn" disabled={saveDisabled} onclick={onsave}>
-    <Save size={ICON_SIZE.sm} />
-  </button>
+  <ActionIconButton
+    icon={Pencil}
+    active={editMode}
+    onclick={() => (editMode = !editMode)}
+    label={editMode ? "View" : "Edit"}
+  />
+  <ActionIconButton icon={Save} label="Save" disabled={saveDisabled} onclick={onsave} />
 </div>
 
 <style>
@@ -57,32 +53,5 @@
 
   .spacer {
     flex: 1;
-  }
-
-  span.active :global(.action-icon-btn) {
-    background: rgba(74, 158, 187, 0.2);
-    color: var(--info);
-  }
-
-  .save-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-2) var(--space-4);
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-  }
-
-  .save-btn:hover:not(:disabled) {
-    background: var(--surface-overlay);
-    color: var(--text-secondary);
-  }
-
-  .save-btn:disabled {
-    opacity: var(--opacity-disabled);
-    cursor: default;
   }
 </style>

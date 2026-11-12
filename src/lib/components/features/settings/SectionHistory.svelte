@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { HardDrive, Trash2 } from "lucide-svelte";
+  import { HardDrive } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import SettingsSection from "./SettingsSection.svelte";
   import FormRow from "$lib/components/shared/ui/FormRow.svelte";
@@ -221,7 +221,6 @@
   open={pendingDays !== null}
   message={`Conversations older than ${pendingDays} ${pendingDays === 1 ? "day" : "days"} will be deleted immediately, along with their images. This cannot be undone.`}
   confirmLabel="Apply and prune"
-  confirmIcon={Trash2}
   onConfirm={confirmPending}
   onCancel={() => (pendingDays = null)}
 />

@@ -55,7 +55,7 @@ function createRenderer(): RendererObject {
         const codeIcon = icon(icons.Code);
         const copyIcon = icon(icons.Copy);
         const dotsIcon = icon(icons.EllipsisVertical);
-        return `<div class="mermaid-wrapper"><div class="code-block-header"><span class="code-lang">Mermaid</span><div class="mermaid-actions"><button class="copy-btn" data-mermaid-toggle="${idx}">${codeIcon}</button><button class="copy-btn" data-copy-index="${idx}">${copyIcon}</button><div class="mermaid-menu-anchor"><button class="copy-btn" data-mermaid-menu="${idx}">${dotsIcon}</button><div class="mermaid-menu" data-mermaid-menu-panel="${idx}"><button class="mermaid-menu-item" data-mermaid-copy-svg="${idx}">Copy as SVG</button><button class="mermaid-menu-item" data-mermaid-save-svg="${idx}">Save as SVG</button></div></div></div></div><div class="mermaid-block" data-mermaid-index="${idx}" data-mermaid-source="${btoa(encodeURIComponent(text))}">${escaped}</div></div>`;
+        return `<div class="mermaid-wrapper"><div class="code-block-header"><span class="code-lang">Mermaid</span><div class="mermaid-actions"><button type="button" class="copy-btn" aria-label="Toggle diagram source" title="Toggle diagram source" data-mermaid-toggle="${idx}">${codeIcon}</button><button type="button" class="copy-btn" aria-label="Copy" title="Copy" data-copy-index="${idx}">${copyIcon}</button><div class="mermaid-menu-anchor"><button type="button" class="copy-btn" aria-label="More actions" title="More actions" data-mermaid-menu="${idx}">${dotsIcon}</button><div class="mermaid-menu" data-mermaid-menu-panel="${idx}"><button class="mermaid-menu-item" data-mermaid-copy-svg="${idx}">Copy as SVG</button><button class="mermaid-menu-item" data-mermaid-save-svg="${idx}">Save as SVG</button></div></div></div></div><div class="mermaid-block" data-mermaid-index="${idx}" data-mermaid-source="${btoa(encodeURIComponent(text))}">${escaped}</div></div>`;
       }
 
       let codeHtml: string;
@@ -67,7 +67,7 @@ function createRenderer(): RendererObject {
       }
 
       const copyIcon = icon(icons.Copy);
-      return `<div class="code-block"><div class="code-block-header"><span class="code-lang">${langDisplayName(lang)}</span><button class="copy-btn" data-copy-index="${idx}">${copyIcon}</button></div><pre><code class="hljs">${codeHtml}</code></pre></div>`;
+      return `<div class="code-block"><div class="code-block-header"><span class="code-lang">${langDisplayName(lang)}</span><button type="button" class="copy-btn" aria-label="Copy" title="Copy" data-copy-index="${idx}">${copyIcon}</button></div><pre><code class="hljs">${codeHtml}</code></pre></div>`;
     },
     table(token) {
       return `<div class="table-wrapper">${Renderer.prototype.table.call(this, token)}</div>`;

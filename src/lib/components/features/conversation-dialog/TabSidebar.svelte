@@ -139,6 +139,7 @@
 <ConfirmDialog
   open={mutex.confirmDelete !== null}
   message="Delete this conversation?"
+  confirmLabel="Delete conversation"
   onConfirm={confirmDelete}
   onCancel={() => mutex.clearConfirm()}
 />

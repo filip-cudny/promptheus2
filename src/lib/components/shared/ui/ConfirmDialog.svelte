@@ -1,22 +1,16 @@
 <script lang="ts">
-  import { Trash2 } from "lucide-svelte";
-  import type { ComponentType, SvelteComponent } from "svelte";
-  import type { IconProps } from "lucide-svelte";
-
-  type LucideIcon = ComponentType<SvelteComponent<IconProps>>;
+  import Button from "$lib/components/shared/ui/Button.svelte";
 
   let {
     open,
     message,
     confirmLabel = "Delete",
-    confirmIcon = Trash2,
     onConfirm,
     onCancel,
   }: {
     open: boolean;
     message: string;
     confirmLabel?: string;
-    confirmIcon?: LucideIcon | null;
     onConfirm: () => void;
     onCancel: () => void;
   } = $props();
@@ -43,19 +37,8 @@
     >
       <p class="confirm-text">{message}</p>
       <div class="confirm-actions">
-        <button class="confirm-btn cancel" onclick={onCancel}>Cancel</button>
-        <!-- svelte-ignore a11y_autofocus -->
-        <button
-          class="confirm-btn danger"
-          onclick={onConfirm}
-          autofocus
-        >
-          {#if confirmIcon}
-            {@const Icon = confirmIcon}
-            <Icon size={14} />
-          {/if}
-          <span>{confirmLabel}</span>
-        </button>
+        <Button onclick={onCancel}>Cancel</Button>
+        <Button variant="danger" onclick={onConfirm} autofocus>{confirmLabel}</Button>
       </div>
     </div>
   </div>
@@ -93,36 +76,5 @@
     display: flex;
     justify-content: flex-end;
     gap: var(--space-4);
-  }
-
-  .confirm-btn {
-    padding: 5px var(--space-7);
-    border-radius: 5px;
-    border: none;
-    font-size: var(--font-size-md);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
-  .confirm-btn.cancel {
-    background: var(--surface-overlay);
-    color: var(--text-secondary);
-  }
-
-  .confirm-btn.cancel:hover {
-    background: rgba(255, 255, 255, 0.14);
-  }
-
-  .confirm-btn.danger {
-    background: var(--surface-overlay-strong);
-    color: var(--text-primary);
-    padding: 5px var(--space-5);
-  }
-
-  .confirm-btn.danger:hover {
-    background: rgba(255, 255, 255, 0.14);
-    color: var(--text-primary);
   }
 </style>

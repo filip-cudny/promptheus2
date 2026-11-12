@@ -38,9 +38,8 @@
       type="button"
       class="err-stamp"
       class:copied={copyFeedback.confirmed}
-      title={status.error ?? ""}
+      title={status.error ? `Copy error message: ${status.error}` : "Copy error message"}
       onclick={copyError}
-      aria-label="Copy error message"
     >
       {#if copyFeedback.confirmed}
         <Check size={10} /> copied

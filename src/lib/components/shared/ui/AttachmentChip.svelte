@@ -29,7 +29,13 @@
     </button>
   </div>
   {#if !readonly}
-    <button class="chip-delete" onclick={onremove}>
+    <button
+      type="button"
+      class="chip-delete"
+      aria-label="Remove {label}"
+      title="Remove {label}"
+      onclick={onremove}
+    >
       <X size={11} strokeWidth={2.5} />
     </button>
   {/if}

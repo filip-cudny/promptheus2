@@ -1,18 +1,16 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { X } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
 
   let {
     title,
     width = 480,
-    closeHover = true,
     onClose,
     children,
   }: {
     title: string;
     width?: number;
-    closeHover?: boolean;
     onClose: () => void;
     children: Snippet;
   } = $props();
@@ -32,9 +30,7 @@
   <div class="dialog" style="--modal-width: {width}px">
     <header>
       <h2>{title}</h2>
-      <button type="button" class="close" class:hoverable={closeHover} onclick={onClose} aria-label="Close">
-        <X size={ICON_SIZE.md} />
-      </button>
+      <ActionIconButton icon={X} label="Close" size="lg" onclick={onClose} />
     </header>
     {@render children()}
   </div>
@@ -74,20 +70,6 @@
     margin: 0;
     font-size: var(--font-size-lg);
     font-weight: var(--font-weight-semibold);
-    color: var(--text-primary);
-  }
-
-  .close {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    padding: var(--space-1);
-    border-radius: var(--radius-sm);
-  }
-
-  .close.hoverable:hover {
-    background: var(--surface-overlay-faint);
     color: var(--text-primary);
   }
 </style>
