@@ -6,6 +6,7 @@
   import Button from "$lib/components/shared/ui/Button.svelte";
   import FormRow from "$lib/components/shared/ui/FormRow.svelte";
   import Chip from "$lib/components/shared/ui/Chip.svelte";
+  import Switch from "$lib/components/shared/ui/Switch.svelte";
   import NumberInput from "$lib/components/shared/ui/NumberInput.svelte";
   import TextInput from "$lib/components/shared/ui/TextInput.svelte";
   import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
@@ -13,14 +14,27 @@
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
   import { onSettingsChanged } from "$lib/services/events";
   import { applyEnvVarOperation, getEnvVars, updateSetting } from "$lib/services/settings";
-  import { listMcpServers, type McpServerConfig, type McpServerState } from "$lib/services/mcp";
+  import {
+    listMcpServers,
+    listMcpTools,
+    type McpServerConfig,
+    type McpServerState,
+    type McpToolInfo,
+  } from "$lib/services/mcp";
   import SettingsSection from "./SettingsSection.svelte";
   import SettingField from "./SettingField.svelte";
   import InsertVariableButton from "./InsertVariableButton.svelte";
   import { classifyReference, parseEnvRef } from "$lib/utils/envVarOptions";
+  import { serverChip } from "$lib/utils/mcpServerChip";
+  import { toolUses, type ToolUse } from "$lib/utils/toolUses";
+  import { SURFACE_LABELS } from "$lib/constants/surfaces";
   import type { EnvVarStatus } from "$lib/types";
 
   const ROW_PREFIX = /^row \d+: /;
+  const TOOL_LIST_KEYS: Record<ToolUse, string> = {
+    chat: "surfaces.chat.generation.enabled_tools",
+    settings_agent: "surfaces.settings_agent.generation.enabled_tools",
+  };
 
   type Pair<V> = { key: number; name: string; value: V };
   type Row = {
@@ -31,6 +45,8 @@
     env: Pair<string>[];
     timeout: number;
     toolTimeouts: Pair<number>[];
+    disabled: boolean;
+    disabledTools: string[];
   };
 
   const store = getSettingsStore();
@@ -61,12 +77,15 @@
         env: toPairs(c.env),
         timeout: c.timeout_secs,
         toolTimeouts: toPairs(c.tool_timeouts),
+        disabled: c.disabled ?? false,
+        disabledTools: c.disabled_tools ?? [],
       })),
   );
   let selectedKey = $state<number | null>(untrack(() => rows[0]?.key ?? null));
   let removedName = $state<string | null>(null);
   let confirmDelete = $state(false);
   let states = $state<McpServerState[]>([]);
+  let mcpTools = $state<McpToolInfo[]>([]);
   let commandRow = $state<HTMLElement | undefined>();
   let argsEl = $state<HTMLTextAreaElement | undefined>();
   let valueCells = $state<Record<number, HTMLElement | undefined>>({});
@@ -77,7 +96,9 @@
 
   const selected = $derived(rows.find((r) => r.key === selectedKey) ?? null);
   const stateOf = $derived(new Map(states.map((s) => [s.name, s])));
-  const removed = $derived(states.filter((s) => !rows.some((r) => r.name === s.name)));
+  const removed = $derived(
+    states.filter((s) => s.state !== "off" && !rows.some((r) => r.name === s.name)),
+  );
   const selectedRemoved = $derived(
     selected ? null : (removed.find((s) => s.name === removedName) ?? null),
   );
@@ -124,6 +145,9 @@
     listMcpServers()
       .then((s) => (states = s))
       .catch((e) => logError(`list_mcp_servers failed: ${e}`));
+    listMcpTools()
+      .then((t) => (mcpTools = t))
+      .catch((e) => logError(`list_mcp_tools failed: ${e}`));
     unlisten = await onSettingsChanged(refreshEnv);
     await refreshEnv();
   });
@@ -142,9 +166,19 @@
     if (row) select(row.key);
   });
 
-  function chip(row: Row): string {
-    const s = stateOf.get(row.name);
-    return s ? (s.state === "running" ? "running" : "error") : "starts after restart";
+  function chip(row: Row) {
+    return serverChip(stateOf.get(row.name)?.state ?? null, row.disabled);
+  }
+
+  function setServerDisabled(row: Row, disabled: boolean) {
+    row.disabled = disabled;
+    void tracker.flush(persist);
+  }
+
+  function setToolOff(row: Row, tool: string, off: boolean) {
+    const without = row.disabledTools.filter((t) => t !== tool);
+    row.disabledTools = off ? [...without, tool] : without;
+    void tracker.flush(persist);
   }
 
   function persist() {
@@ -160,6 +194,8 @@
         tool_timeouts: Object.fromEntries(
           r.toolTimeouts.filter((p) => p.name).map((p) => [p.name, p.value]),
         ),
+        disabled: r.disabled,
+        disabled_tools: r.disabledTools,
       };
     }
     return updateSetting("mcp_servers", map);
@@ -184,6 +220,8 @@
       env: [],
       timeout: 180,
       toolTimeouts: [],
+      disabled: false,
+      disabledTools: [],
     };
     rows.push(row);
     select(row.key);
@@ -217,15 +255,22 @@
   );
 </script>
 
-<SettingsSection title="MCP Servers" hint="Changes apply after restart.">
+<SettingsSection title="MCP Servers" hint="Server changes apply after restart; tool switches apply at once.">
   {#snippet body()}
     <div class="layout">
       <aside class="list">
         {#each rows as row (row.key)}
-          <button class="item" class:active={row.key === selectedKey} onclick={() => select(row.key)}>
-            <span class="name">{row.name || "(unnamed)"}</span>
-            <span class="chip {chip(row).replace(/ /g, '-')}">{chip(row)}</span>
-          </button>
+          <div class="row">
+            <Switch
+              checked={!row.disabled}
+              label={`${row.name || "(unnamed)"} server`}
+              onchange={(next) => setServerDisabled(row, !next)}
+            />
+            <button class="item" class:active={row.key === selectedKey} onclick={() => select(row.key)}>
+              <span class="name">{row.name || "(unnamed)"}</span>
+              <span class="chip {chip(row).replace(/ /g, '-')}">{chip(row)}</span>
+            </button>
+          </div>
         {/each}
         {#each removed as s (s.name)}
           <button
@@ -246,20 +291,59 @@
       <div class="editor">
         {#if selected}
           {@const state = stateOf.get(selected.name)}
+          {@const serverTools = mcpTools.filter((t) => t.server === selected.name)}
           <header class="head">
+            <Switch
+              checked={!selected.disabled}
+              label="Server on"
+              onchange={(next) => setServerDisabled(selected, !next)}
+            />
             <h1>{selected.name || "(unnamed)"}</h1>
           </header>
 
-          {#if state?.state === "error"}
+          {#if chip(selected) === "off"}
+            <p class="muted">Off: tools are listed while the server runs.</p>
+          {:else if state?.state === "error"}
             <pre class="start-error">{state.error}</pre>
-          {:else if state}
+          {:else if state?.state === "running"}
             <div class="tools">
               <h3>Tools</h3>
-              {#if state.tools.length === 0}
+              {#if serverTools.length === 0}
                 <p class="muted">No tools.</p>
               {:else}
                 <ul>
-                  {#each state.tools as tool (tool)}<li><code>{tool}</code></li>{/each}
+                  {#each serverTools as tool (tool.name)}
+                    {@const off = selected.disabledTools.includes(tool.name)}
+                    {@const uses = store.settings ? toolUses(selected.name, tool.name, store.settings.surfaces) : []}
+                    <li class="tool" class:off>
+                      <Switch
+                        checked={!off}
+                        label={`${tool.name} tool`}
+                        onchange={(next) => setToolOff(selected, tool.name, !next)}
+                      />
+                      <div class="tool-main">
+                        <code>{tool.name}</code>
+                        {#if tool.description}<p class="tool-desc">{tool.description}</p>{/if}
+                        <div class="tool-uses">
+                          {#if off}
+                            Off — not offered in Chat or Settings agent tools.
+                          {:else if uses.length === 0}
+                            Used by nothing —
+                            <button class="tag link" onclick={() => navigation.navigateTo(TOOL_LIST_KEYS.chat)}>
+                              assign in Chat ›
+                            </button>
+                          {:else}
+                            Used by
+                            {#each uses as use (use)}
+                              <button class="tag" onclick={() => navigation.navigateTo(TOOL_LIST_KEYS[use])}>
+                                {SURFACE_LABELS[use]}
+                              </button>
+                            {/each}
+                          {/if}
+                        </div>
+                      </div>
+                    </li>
+                  {/each}
                 </ul>
               {/if}
             </div>
@@ -492,7 +576,15 @@
     gap: var(--space-2);
   }
 
+  .row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
   .item {
+    flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -524,6 +616,11 @@
 
   .chip.error {
     color: var(--danger);
+  }
+
+  .chip.off,
+  .chip.stops-after-restart {
+    color: var(--text-faint);
   }
 
   .editor {
@@ -572,7 +669,70 @@
 
   .tools ul {
     margin: 0;
-    padding-left: var(--space-8);
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .tool {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-5);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-md);
+  }
+
+  .tool.off code,
+  .tool.off .tool-desc {
+    color: var(--text-faint);
+  }
+
+  .tool-main {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .tool-desc {
+    margin: 0;
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+  }
+
+  .tool-uses {
+    margin-top: var(--space-2);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-sm);
+    color: var(--text-muted);
+  }
+
+  .tag {
+    font: inherit;
+    font-size: var(--font-size-xs);
+    padding: 1px var(--space-3);
+    background: var(--accent-bg-soft);
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
+    border-radius: var(--radius-xl);
+    line-height: 1.4;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .tag:hover {
+    text-decoration: underline;
+  }
+
+  .tag.link {
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: inherit;
   }
 
   .muted {

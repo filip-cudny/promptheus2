@@ -41,6 +41,10 @@ For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconPro
 - `bind:value`, `highlightPattern` (placeholder regex), `unknownTokenChecker`, `placeholder`, `disabled`, `minHeight`.
 - Exports `insert(token)`: inserts at the caret, keeps the caret after the token and updates the bound `value`; callers use it through `bind:this`.
 
+### Switch
+
+- `checked`, `label` (`aria-label` and `title`), `onchange(next)` (called with the opposite of `checked`; the owner stores it, the component holds no state), `disabled`. A 26 × 15 px `<button type="button" role="switch">`: `--accent` when on, `--text-faint` when off.
+
 ### Modal
 
 - `title`, `width` (px, default 480), `closeHover` (default true; `false` drops the close button hover background), `onClose`, `children`. Backdrop, header with close button, panel; a mousedown on the backdrop or `Escape` calls `onClose`.
