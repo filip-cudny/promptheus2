@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { KeyRound, MessageCircleQuestion, PencilLine, Plus, Search, Sparkles } from "lucide-svelte";
+  import { CircleCheck, KeyRound, MessageCircleQuestion, PencilLine, Plus, Search, Sparkles } from "lucide-svelte";
   import { error as logError } from "@tauri-apps/plugin-log";
   import { ICON_SIZE } from "$lib/constants/ui";
   import Button from "$lib/components/shared/ui/Button.svelte";
@@ -86,9 +86,7 @@
   {:else if modelState === "no_text_model"}
     <div class="title"><Sparkles size={ICON_SIZE.md} />The agent needs a model</div>
     <p class="msg">There is no text model yet.</p>
-    <Button variant="primary" onclick={() => navigation.navigateTo("models:new")}>
-      <Plus size={ICON_SIZE.sm} />Add model
-    </Button>
+    <Button variant="primary" icon={Plus} onclick={() => navigation.navigateTo("models:new")}>Add model</Button>
     <div class="after">{@render lineList()}</div>
   {:else}
     <div class="title"><Sparkles size={ICON_SIZE.md} />Pick a model for the agent</div>
@@ -99,7 +97,7 @@
     </p>
     <div class="pick">
       <SelectDropdown bind:value={picked} options={pickOptions} ariaLabel="Agent model" />
-      <Button variant="primary" disabled={!pickedIsText || applying} onclick={useModel}>Use</Button>
+      <Button variant="primary" icon={CircleCheck} disabled={!pickedIsText || applying} onclick={useModel}>Use</Button>
     </div>
     {#if writeError}<p class="error">{writeError}</p>{/if}
     <div class="alt">

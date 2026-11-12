@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { Sparkles } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
+  import Button from "$lib/components/shared/ui/Button.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { syncTheme } from "$lib/stores/theme.svelte";
   import SettingsSidebar from "$lib/components/features/settings/SettingsSidebar.svelte";
@@ -60,9 +60,9 @@
     <SettingsSidebar />
     <SettingsContent />
     {#if !agent.panelOpen}
-      <button class="agent-button" title="Show agent panel" onclick={() => agent.openPanel("reopen")}>
-        <Sparkles size={ICON_SIZE.md} />Agent
-      </button>
+      <div class="agent-button">
+        <Button icon={Sparkles} onclick={() => agent.openPanel("reopen")}>Show agent</Button>
+      </div>
     {/if}
     {#if agent.panelOpen}
       <AgentPanel
@@ -123,28 +123,8 @@
     top: 10px;
     right: 12px;
     z-index: 5;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 28px;
-    padding: 0 10px;
-    border: 1px solid var(--border-default);
-    border-radius: 9999px;
+    border-radius: var(--radius-md);
     background: var(--surface-raised);
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-xs);
-    cursor: pointer;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  }
-
-  .agent-button :global(svg) {
-    color: var(--accent);
-  }
-
-  .agent-button:hover {
-    color: var(--text-primary);
-    border-color: var(--border-strong);
-    background: var(--surface-elevated);
   }
 </style>

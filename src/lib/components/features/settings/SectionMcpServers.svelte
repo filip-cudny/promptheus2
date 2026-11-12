@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount, untrack } from "svelte";
-  import { Plus, X } from "lucide-svelte";
+  import { Plus, Trash2, X } from "lucide-svelte";
   import { error as logError, warn as logWarn } from "@tauri-apps/plugin-log";
   import { ICON_SIZE } from "$lib/constants/ui";
   import Button from "$lib/components/shared/ui/Button.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import FormRow from "$lib/components/shared/ui/FormRow.svelte";
   import Chip from "$lib/components/shared/ui/Chip.svelte";
   import Switch from "$lib/components/shared/ui/Switch.svelte";
@@ -278,7 +279,7 @@
             <span class="chip removed">removed after restart</span>
           </button>
         {/each}
-        <Button onclick={add}><Plus size={ICON_SIZE.sm} /> Add server</Button>
+        <Button icon={Plus} onclick={add}>Add server</Button>
       </aside>
 
       <div class="editor">
@@ -434,6 +435,7 @@
                               type="button"
                               class="chip-btn clear"
                               aria-label="Clear value"
+                              title="Clear value"
                               onclick={() => setEnvValue(pair, "")}
                             >
                               <X size={ICON_SIZE.sm} />
@@ -454,22 +456,18 @@
                         oninsert={(text) => setEnvValue(pair, text)}
                       />
                     </div>
-                    <button
-                      type="button"
-                      class="icon-btn"
-                      aria-label="Remove variable"
+                    <ActionIconButton
+                      icon={X}
+                      label="Remove variable"
+                      variant="danger"
                       onclick={() => removePair(selected.env, pair.key)}
-                    >
-                      <X size={ICON_SIZE.sm} />
-                    </button>
+                    />
                   </div>
                   {#if envErrors[pair.key]}<p class="env-error">{envErrors[pair.key]}</p>{/if}
                 </div>
               {/each}
               <div>
-                <Button onclick={() => addPair(selected.env, "")}>
-                  <Plus size={ICON_SIZE.sm} /> Add variable
-                </Button>
+                <Button icon={Plus} onclick={() => addPair(selected.env, "")}>Add variable</Button>
               </div>
             </div>
           </SettingField>
@@ -513,32 +511,28 @@
                       edited();
                     }}
                   />
-                  <button
-                    type="button"
-                    class="icon-btn"
-                    aria-label="Remove tool timeout"
+                  <ActionIconButton
+                    icon={X}
+                    label="Remove tool timeout"
+                    variant="danger"
                     onclick={() => removePair(selected.toolTimeouts, pair.key)}
-                  >
-                    <X size={ICON_SIZE.sm} />
-                  </button>
+                  />
                 </div>
               {/each}
               <div>
-                <Button onclick={() => addPair(selected.toolTimeouts, 180)}>
-                  <Plus size={ICON_SIZE.sm} /> Add tool timeout
-                </Button>
+                <Button icon={Plus} onclick={() => addPair(selected.toolTimeouts, 180)}>Add tool timeout</Button>
               </div>
             </div>
           </SettingField>
 
           <section class="danger">
             {#if !confirmDelete}
-              <Button variant="danger" onclick={() => (confirmDelete = true)}>Delete server</Button>
+              <Button variant="danger" icon={Trash2} onclick={() => (confirmDelete = true)}>Delete server</Button>
             {:else}
               <p>Delete <strong>{selected.name || "this server"}</strong>?</p>
               <div class="confirm">
                 <Button onclick={() => (confirmDelete = false)}>Cancel</Button>
-                <Button variant="danger" onclick={remove}>Yes, delete</Button>
+                <Button variant="danger" onclick={remove}>Delete server</Button>
               </div>
             {/if}
           </section>
@@ -814,13 +808,6 @@
     margin: var(--space-1) 0 0;
     font-size: var(--font-size-sm);
     color: var(--danger);
-  }
-
-  .icon-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
   }
 
   .danger {

@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { AlertCircle, Check } from "lucide-svelte";
+  import { AlertCircle, ArrowRightLeft, Check, KeyRound, Pencil, Plus, Trash2 } from "lucide-svelte";
   import { warn as logWarn } from "@tauri-apps/plugin-log";
   import { ICON_SIZE } from "$lib/constants/ui";
   import Button from "$lib/components/shared/ui/Button.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import TextInput from "$lib/components/shared/ui/TextInput.svelte";
   import { onSettingsChanged } from "$lib/services/events";
   import { applyEnvVarOperation, getEnvVars } from "$lib/services/settings";
@@ -169,6 +170,7 @@
 </script>
 
 {#snippet row(v: EnvVarStatus)}
+  {@const noun = v.secret ? "secret" : "variable"}
   <div class="row">
     <div class="head">
       <code class="name">{v.name}</code>
@@ -177,16 +179,21 @@
         {v.set ? "set" : "missing"}
       </span>
       <span class="spacer"></span>
-      <Button onclick={() => (valueFor = valueFor === v.name ? null : v.name)}>
+      <Button icon={KeyRound} onclick={() => (valueFor = valueFor === v.name ? null : v.name)}>
         {v.set ? "Change value" : "Set value"}
       </Button>
-      <Button onclick={() => startEdit(v)}>Edit</Button>
+      <ActionIconButton icon={Pencil} label="Edit {noun}" onclick={() => startEdit(v)} />
       {#if confirmingDelete === v.name}
         <span class="confirm-text">Delete <strong>{v.name}</strong>?</span>
         <Button onclick={() => (confirmingDelete = null)}>Cancel</Button>
-        <Button variant="danger" onclick={() => remove(v)}>Yes, delete</Button>
+        <Button variant="danger" onclick={() => remove(v)}>Delete {noun}</Button>
       {:else}
-        <Button variant="danger" onclick={() => (confirmingDelete = v.name)}>Delete</Button>
+        <ActionIconButton
+          icon={Trash2}
+          label="Delete {noun}"
+          variant="danger"
+          onclick={() => (confirmingDelete = v.name)}
+        />
       {/if}
     </div>
 
@@ -209,7 +216,7 @@
           <Button variant="primary" onclick={() => save(v)}>Save</Button>
           <Button onclick={() => cancelEdit(v)}>Cancel</Button>
           <span class="spacer"></span>
-          <Button onclick={() => move(v)}>
+          <Button icon={ArrowRightLeft} onclick={() => move(v)}>
             {v.secret ? "Move to Variables" : "Move to Secrets"}
           </Button>
         </div>
@@ -253,7 +260,9 @@
         aria-label="{title} description"
         onkeydown={(e: KeyboardEvent) => e.key === "Enter" && add(kind)}
       />
-      <Button variant="primary" onclick={() => add(kind)}>Add</Button>
+      <Button variant="primary" icon={Plus} onclick={() => add(kind)}>
+        {kind === "secrets" ? "Add secret" : "Add variable"}
+      </Button>
     </div>
     {#if adds[kind].error}<p class="error">{adds[kind].error}</p>{/if}
   </section>

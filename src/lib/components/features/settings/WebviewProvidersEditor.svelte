@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onDestroy, untrack } from "svelte";
   import { Plus, X } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
   import Button from "$lib/components/shared/ui/Button.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import TextInput from "$lib/components/shared/ui/TextInput.svelte";
   import { useSaveTracker } from "$lib/stores/saveTracker.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
@@ -90,18 +90,13 @@
           />
         </SettingField>
       </div>
-      <button
-        type="button"
-        class="editor-icon-btn remove"
-        aria-label="Remove provider"
-        onclick={() => remove(row.key)}
-      >
-        <X size={ICON_SIZE.sm} />
-      </button>
+      <div class="remove">
+        <ActionIconButton icon={X} label="Remove provider" variant="danger" onclick={() => remove(row.key)} />
+      </div>
     </div>
   {/each}
   <div>
-    <Button onclick={add}><Plus size={ICON_SIZE.sm} /> Add provider</Button>
+    <Button icon={Plus} onclick={add}>Add provider</Button>
   </div>
 </div>
 

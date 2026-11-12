@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Eye, EyeOff } from "lucide-svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import TextInput from "$lib/components/shared/ui/TextInput.svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
   import { getSecretValue } from "$lib/services/settingsDialog";
   import { lineDiff } from "$lib/utils/lineDiff";
   import { targetLabel } from "$lib/utils/changeLog";
@@ -97,9 +97,11 @@
         onblur={onvalueblur}
       />
       {#if row.env_value.secret}
-        <button class="reveal" type="button" title={revealed ? "Hide" : "Show"} onclick={() => (revealed = !revealed)}>
-          {#if revealed}<EyeOff size={ICON_SIZE.md} />{:else}<Eye size={ICON_SIZE.md} />{/if}
-        </button>
+        <ActionIconButton
+          icon={revealed ? EyeOff : Eye}
+          label={revealed ? "Hide value" : "Show value"}
+          onclick={() => (revealed = !revealed)}
+        />
       {/if}
     </div>
     {#if loadError}<div class="load-error">{loadError}</div>{/if}
@@ -146,7 +148,7 @@
       <button type="button" disabled={testing} onclick={runTest}>{testing ? "Testing…" : "Test"}</button>
     {/if}
     {#if showable}
-      <button type="button" onclick={() => onshow(showable)}>show</button>
+      <button type="button" onclick={() => onshow(showable)}>Show</button>
     {/if}
   </div>
 </div>
@@ -189,13 +191,6 @@
   .value-input :global(.text-input) {
     flex: 1;
     min-width: 0;
-  }
-
-  .reveal {
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
   }
 
   .load-error {

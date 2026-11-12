@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { HardDrive } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
+  import { CircleCheck, HardDrive } from "lucide-svelte";
   import SettingsSection from "./SettingsSection.svelte";
   import FormRow from "$lib/components/shared/ui/FormRow.svelte";
   import SettingField from "./SettingField.svelte";
@@ -165,6 +164,7 @@
             />
             <Button
               variant="primary"
+              icon={CircleCheck}
               disabled={clamp(customDays) === savedDays}
               onclick={() => request(customDays)}
             >
@@ -199,10 +199,10 @@
       <div class="compact-row">
         <Button
           variant="ghost"
+          icon={HardDrive}
           disabled={compacting || !worthCompacting}
           onclick={compact}
         >
-          <HardDrive size={ICON_SIZE.sm} />
           {compacting ? "Compacting…" : "Compact database"}
         </Button>
         {#if compacting}

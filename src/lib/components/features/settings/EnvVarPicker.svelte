@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
+  import { ArrowRightLeft, ListPlus } from "lucide-svelte";
   import { warn as logWarn } from "@tauri-apps/plugin-log";
   import Button from "$lib/components/shared/ui/Button.svelte";
   import SelectDropdown from "$lib/components/shared/ui/SelectDropdown.svelte";
@@ -116,9 +117,9 @@
   <div class="row">
     <SelectDropdown bind:value={() => value, pick} {options} ariaLabel="API key" />
     {#if reference.kind === "unlisted"}
-      <Button disabled={busy} onclick={() => addToList(reference.name, "")}>Add to list</Button>
+      <Button icon={ListPlus} disabled={busy} onclick={() => addToList(reference.name, "")}>Add to list</Button>
     {:else if reference.kind === "literal"}
-      <Button onclick={() => startForm(true)}>Move to a variable</Button>
+      <Button icon={ArrowRightLeft} onclick={() => startForm(true)}>Move to a variable</Button>
     {/if}
   </div>
 
@@ -139,7 +140,7 @@
       />
       <div class="actions">
         <Button onclick={() => (step = null)}>Cancel</Button>
-        <Button variant="primary" disabled={busy} onclick={submitForm}>Add</Button>
+        <Button variant="primary" disabled={busy} onclick={submitForm}>Add variable</Button>
       </div>
     </div>
   {:else if step?.kind === "value"}

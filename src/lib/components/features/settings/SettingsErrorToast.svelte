@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { X } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
+  import Button from "$lib/components/shared/ui/Button.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
 
   const AUTO_DISMISS_MS = 6000;
@@ -16,9 +15,7 @@
 {#if store.toastError}
   <div class="toast error" role="alert">
     <span>{store.toastError}</span>
-    <button class="dismiss" title="Dismiss" onclick={store.dismissToast}>
-      <X size={ICON_SIZE.sm} />
-    </button>
+    <Button onclick={store.dismissToast}>Dismiss</Button>
   </div>
 {/if}
 
@@ -38,14 +35,5 @@
     color: var(--danger);
     font-size: var(--font-size-sm);
     box-shadow: var(--shadow-md);
-  }
-
-  .dismiss {
-    display: inline-flex;
-    background: transparent;
-    border: none;
-    color: inherit;
-    cursor: pointer;
-    padding: var(--space-0);
   }
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Moon, Sun } from "lucide-svelte";
   import { getTheme, setTheme } from "$lib/stores/theme.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { updateSetting } from "$lib/services/settings";
@@ -40,8 +41,11 @@
   {#snippet body()}
     <div class="group">
       <SettingField key="theme">
-        <Button onclick={() => setTheme(getTheme() === "dark" ? "light" : "dark")}>
-          {getTheme() === "dark" ? "Light mode" : "Dark mode"}
+        <Button
+          icon={getTheme() === "dark" ? Sun : Moon}
+          onclick={() => setTheme(getTheme() === "dark" ? "light" : "dark")}
+        >
+          {getTheme() === "dark" ? "Switch to light mode" : "Switch to dark mode"}
         </Button>
       </SettingField>
       {#if appearance}

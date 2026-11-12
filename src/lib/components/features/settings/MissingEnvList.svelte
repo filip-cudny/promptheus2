@@ -49,7 +49,7 @@
           <li>
             <code>{ref.name}</code>
             <span class="uses">{ref.used_in.map((u) => u.label).join(", ")}</span>
-            <button type="button" class="add" onclick={() => (adding = ref.name)}>Add</button>
+            <button type="button" class="add" onclick={() => (adding = ref.name)}>Add value</button>
             {#if adding === ref.name}
               <SecretField name={ref.name} onclose={closeAdd} />
             {/if}

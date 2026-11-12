@@ -2,7 +2,7 @@
   import { error as logError } from "@tauri-apps/plugin-log";
   import Button from "$lib/components/shared/ui/Button.svelte";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
-  import { X } from "lucide-svelte";
+  import { Plus, X } from "lucide-svelte";
   import { addShortcut, removeShortcut } from "$lib/services/settings";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { actionShortcuts, formatShortcut } from "$lib/utils/keymapShortcuts";
@@ -97,7 +97,7 @@
         {formatShortcut(shortcut)}
         <button
           type="button"
-          title="Remove"
+          title={`Remove ${formatShortcut(shortcut)}`}
           aria-label={`Remove ${formatShortcut(shortcut)}`}
           onclick={() => remove(shortcut)}
         >
@@ -120,7 +120,7 @@
         Press a shortcut… (Esc cancels)
       </span>
     {:else}
-      <Button onclick={startCapture}>+ Add</Button>
+      <Button icon={Plus} onclick={startCapture}>Add shortcut</Button>
     {/if}
   </div>
 </SettingField>

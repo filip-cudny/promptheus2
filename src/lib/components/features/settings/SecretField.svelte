@@ -6,6 +6,7 @@
   import { onMount } from "svelte";
   import { Eye, EyeOff } from "lucide-svelte";
   import Button from "$lib/components/shared/ui/Button.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import TextInput from "$lib/components/shared/ui/TextInput.svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { getSecretValue, saveSecret } from "$lib/services/settingsDialog";
@@ -75,9 +76,11 @@
 </script>
 
 {#snippet revealToggle()}
-  <button class="reveal" type="button" title={revealed ? "Hide" : "Show"} onclick={() => (revealed = !revealed)}>
-    {#if revealed}<EyeOff size={ICON_SIZE.md} />{:else}<Eye size={ICON_SIZE.md} />{/if}
-  </button>
+  <ActionIconButton
+    icon={revealed ? EyeOff : Eye}
+    label={revealed ? "Hide value" : "Show value"}
+    onclick={() => (revealed = !revealed)}
+  />
 {/snippet}
 
 <div class="secret">
@@ -158,13 +161,6 @@
     flex: 1;
     min-width: 0;
     overflow-wrap: anywhere;
-  }
-
-  .reveal {
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
   }
 
   .caption {

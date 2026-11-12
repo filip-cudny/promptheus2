@@ -1,7 +1,5 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { Undo2 } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
   import Button from "$lib/components/shared/ui/Button.svelte";
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
@@ -104,9 +102,7 @@
   <div class="actions">
     {#if outcome?.kind === "applied"}
       <span class="applied">Applied</span>
-      <Button variant="ghost" disabled={agent.undoing} onclick={() => agent.undoProposal(false)}>
-        <Undo2 size={ICON_SIZE.sm} /> Undo
-      </Button>
+      <Button variant="ghost" disabled={agent.undoing} onclick={() => agent.undoProposal(false)}>Undo</Button>
     {:else if outcome?.kind === "undone"}
       <span class="undone">Undone</span>
     {:else}

@@ -116,8 +116,7 @@
           {/if}
 
           <div class="actions">
-            <Button variant="ghost" disabled={syncing} onclick={syncNow}>
-              <RefreshCw size={ICON_SIZE.sm} />
+            <Button variant="ghost" icon={RefreshCw} disabled={syncing} onclick={syncNow}>
               {syncing ? "Syncing…" : "Sync now"}
             </Button>
             {#if syncError}
