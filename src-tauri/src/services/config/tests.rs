@@ -134,6 +134,24 @@ fn test_update_surface_enabled_tools_stores_settings_agent_list() {
 }
 
 #[test]
+fn set_surface_tool_adds_and_removes_one_name_keeping_the_rest() {
+    let dir = setup_test_dir();
+    let mut service = ConfigService::load(dir.path()).expect("load");
+    service.update_surface_enabled_tools(SurfaceKind::Chat, vec!["a.x".to_string(), "web_search".to_string()]);
+    service.update_surface_enabled_tools(SurfaceKind::SettingsAgent, vec!["c.z".to_string()]);
+
+    service.set_surface_tool(SurfaceKind::Chat, "b.y", true);
+    assert_eq!(service.settings().surfaces.chat.generation.enabled_tools, vec!["a.x", "web_search", "b.y"]);
+
+    service.set_surface_tool(SurfaceKind::Chat, "a.x", true);
+    assert_eq!(service.settings().surfaces.chat.generation.enabled_tools, vec!["a.x", "web_search", "b.y"]);
+
+    service.set_surface_tool(SurfaceKind::Chat, "web_search", false);
+    assert_eq!(service.settings().surfaces.chat.generation.enabled_tools, vec!["a.x", "b.y"]);
+    assert_eq!(service.settings().surfaces.settings_agent.generation.enabled_tools, vec!["c.z"]);
+}
+
+#[test]
 fn test_direct_api_key_preserved_on_save() {
     let dir = setup_test_dir();
     let mut service = ConfigService::load(dir.path()).expect("load");

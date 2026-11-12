@@ -17,6 +17,26 @@ pub struct McpServerState {
     pub tools: Vec<String>,
 }
 
+pub fn without_disabled_tools(
+    qualified_names: &[String],
+    servers: &HashMap<String, McpServerConfig>,
+) -> Vec<String> {
+    let disabled: HashSet<String> = servers
+        .iter()
+        .flat_map(|(server, config)| {
+            config
+                .disabled_tools
+                .iter()
+                .map(move |tool| McpRegistry::qualified_name(server, tool))
+        })
+        .collect();
+    qualified_names
+        .iter()
+        .filter(|name| !disabled.contains(*name))
+        .cloned()
+        .collect()
+}
+
 pub struct McpRegistry {
     servers: HashMap<String, McpClient>,
     start_errors: HashMap<String, String>,
@@ -255,5 +275,25 @@ mod tests {
         assert!(registry
             .get_tools_by_qualified_names(&["off-server.search".to_string(), "other.search".to_string()])
             .is_empty());
+    }
+
+    #[test]
+    fn disabled_tools_are_dropped_from_qualified_names() {
+        let servers = HashMap::from([
+            (
+                "srv".to_string(),
+                McpServerConfig { disabled_tools: vec!["web_search".to_string()], ..Default::default() },
+            ),
+            ("srv-two".to_string(), McpServerConfig::default()),
+        ]);
+        let names: Vec<String> = ["srv.web_search", "srv.echo", "srv-two.web_search", "web_search", "other.web_search"]
+            .iter()
+            .map(|name| name.to_string())
+            .collect();
+
+        assert_eq!(
+            without_disabled_tools(&names, &servers),
+            vec!["srv.echo", "srv-two.web_search", "web_search", "other.web_search"]
+        );
     }
 }

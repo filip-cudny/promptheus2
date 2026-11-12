@@ -15,6 +15,7 @@ use crate::services::execution::stream::{build_tool_loop_messages, run_stream_lo
 use crate::services::execution::types::{
     PendingToolCall, ToolExecutionResult, MAX_TOOL_LOOP_ITERATIONS,
 };
+use crate::services::mcp::registry::without_disabled_tools;
 use crate::services::placeholder_registry::PlaceholderContext;
 use crate::services::secrets;
 use crate::Error;
@@ -251,6 +252,7 @@ async fn tool_loop(
         .iter()
         .cloned()
         .partition(|name| name.contains('.'));
+    let mcp_names = without_disabled_tools(&mcp_names, &settings.mcp_servers);
     let enabled = select_enabled(&*ctx.mcp, &mcp_names);
     let request_tools: Vec<_> = tools::definitions().into_iter().chain(enabled.definitions).collect();
     let settings_source = Arc::clone(&ctx.settings);

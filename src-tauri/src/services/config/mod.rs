@@ -414,6 +414,26 @@ impl ConfigService {
         }
     }
 
+    pub fn set_surface_tool(&mut self, surface: SurfaceKind, tool: &str, enabled: bool) {
+        let tools = match surface {
+            SurfaceKind::Chat => &mut self.settings.surfaces.chat.generation.enabled_tools,
+            SurfaceKind::SettingsAgent => {
+                &mut self.settings.surfaces.settings_agent.generation.enabled_tools
+            }
+            SurfaceKind::QuickActions | SurfaceKind::TitleGeneration | SurfaceKind::SpeechToText => {
+                log::warn!("set_surface_tool: {surface:?} has no tools");
+                return;
+            }
+        };
+        if enabled {
+            if !tools.iter().any(|name| name == tool) {
+                tools.push(tool.to_string());
+            }
+        } else {
+            tools.retain(|name| name != tool);
+        }
+    }
+
     pub fn update_speech_to_text(&mut self, config: SpeechToTextConfig) {
         self.settings.surfaces.speech_to_text = config;
     }

@@ -769,6 +769,23 @@ async fn an_enabled_mcp_tool_is_sent_in_every_request_next_to_the_agent_tools() 
 }
 
 #[tokio::test]
+async fn disabled_tool_is_not_offered_to_the_agent() {
+    let mut settings = fixture_settings(Some("env-model"));
+    settings.surfaces.settings_agent.generation.enabled_tools = vec!["srv.web_search".to_string()];
+    settings.mcp_servers.get_mut("srv").unwrap().disabled_tools = vec!["web_search".to_string()];
+    let script = vec![MockReply::Text("done".into())];
+
+    let (run, _) = run_with_settings(settings, &["srv.web_search"], script).await;
+
+    run.outcome.as_ref().unwrap();
+    let requests = run.requests.lock().unwrap();
+    assert_eq!(requests.len(), 1);
+    let names = payload_names(&requests[0]);
+    assert_eq!(names.len(), 4, "{names:?}");
+    assert!(!names.contains(&"web_search".to_string()), "{names:?}");
+}
+
+#[tokio::test]
 async fn a_call_by_raw_name_reaches_the_source_qualified_and_its_result_goes_back() {
     let script = vec![
         call("c1", "web_search", json!({"query": "current model ids"})),

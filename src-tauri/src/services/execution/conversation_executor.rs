@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tauri::ipc::Channel;
@@ -13,11 +14,12 @@ use crate::models::ai::StreamEvent;
 use crate::models::message::{
     ConversationNodeForExecution, ImageData, NodeUpdate, ProcessedMessage,
 };
-use crate::models::settings::ModelParameters;
+use crate::models::settings::{McpServerConfig, ModelParameters};
 use crate::services::ai::AiService;
 use crate::services::config::ConfigService;
 use crate::services::conversation_context::ConversationContextCache;
 use crate::services::execution::lifecycle::PromptExecutionService;
+use crate::services::mcp::registry::without_disabled_tools;
 use crate::services::mcp::McpRegistry;
 use crate::services::recent_apps::RecentAppsState;
 use crate::services::skill_message;
@@ -181,6 +183,7 @@ impl ConversationExecutor {
     pub fn resolve_tools(
         mcp: &Arc<McpRegistry>,
         tools_override: Option<&[String]>,
+        servers: &HashMap<String, McpServerConfig>,
     ) -> (Option<Vec<String>>, Vec<rmcp::model::Tool>) {
         match tools_override {
             Some(requested) => {
@@ -194,7 +197,8 @@ impl ConversationExecutor {
                     .filter(|t| t.contains('.'))
                     .cloned()
                     .collect();
-                let mcp_tools = mcp.get_tools_by_qualified_names(&mcp_names);
+                let mcp_tools =
+                    mcp.get_tools_by_qualified_names(&without_disabled_tools(&mcp_names, servers));
                 (Some(builtin), mcp_tools)
             }
             None => (None, vec![]),
@@ -261,8 +265,9 @@ impl ConversationExecutor {
             let _ = on_event.send(StreamEvent::NodeUpdates { node_id, updates });
         }
 
+        let mcp_servers = config.lock().await.settings().mcp_servers.clone();
         let (builtin_tools, mcp_tools) =
-            ConversationExecutor::resolve_tools(&mcp, tools_override.as_deref());
+            ConversationExecutor::resolve_tools(&mcp, tools_override.as_deref(), &mcp_servers);
 
         let mut iteration = 0;
         let mut accumulated_prefix = String::new();

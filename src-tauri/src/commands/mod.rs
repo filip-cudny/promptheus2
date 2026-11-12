@@ -153,6 +153,7 @@ macro_rules! handlers {
             $crate::commands::settings::update_surface_model,
             $crate::commands::settings::update_surface_parameter,
             $crate::commands::settings::update_surface_enabled_tools,
+            $crate::commands::settings::set_surface_tool,
             $crate::commands::settings::update_speech_to_text_config,
             $crate::commands::settings::add_model,
             $crate::commands::settings::update_model,

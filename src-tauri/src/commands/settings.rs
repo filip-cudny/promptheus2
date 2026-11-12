@@ -225,6 +225,17 @@ pub async fn update_surface_enabled_tools(
 }
 
 #[tauri::command]
+pub async fn set_surface_tool(
+    app: AppHandle,
+    config: State<'_, Arc<Mutex<ConfigService>>>,
+    surface: SurfaceKind,
+    tool: String,
+    enabled: bool,
+) -> crate::Result<()> {
+    mutate_settings(&app, &config, |c| c.set_surface_tool(surface, &tool, enabled)).await
+}
+
+#[tauri::command]
 pub async fn update_speech_to_text_config(
     app: AppHandle,
     config_svc: State<'_, Arc<Mutex<ConfigService>>>,

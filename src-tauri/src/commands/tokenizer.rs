@@ -116,7 +116,9 @@ pub async fn count_conversation_tokens(
 
     let active_app = recent_apps.active().await;
     let recent_apps_display = recent_apps.display().await;
-    let (builtin_names, mcp_tools) = ConversationExecutor::resolve_tools(&mcp, Some(&tool_names));
+    let mcp_servers = config.lock().await.settings().mcp_servers.clone();
+    let (builtin_names, mcp_tools) =
+        ConversationExecutor::resolve_tools(&mcp, Some(&tool_names), &mcp_servers);
 
     let (messages, tool_payloads, provider) = {
         let config_guard = config.lock().await;
