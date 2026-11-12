@@ -260,17 +260,10 @@
     <div class="layout">
       <aside class="list">
         {#each rows as row (row.key)}
-          <div class="row">
-            <Switch
-              checked={!row.disabled}
-              label={`${row.name || "(unnamed)"} server`}
-              onchange={(next) => setServerDisabled(row, !next)}
-            />
-            <button class="item" class:active={row.key === selectedKey} onclick={() => select(row.key)}>
-              <span class="name">{row.name || "(unnamed)"}</span>
-              <span class="chip {chip(row).replace(/ /g, '-')}">{chip(row)}</span>
-            </button>
-          </div>
+          <button class="item" class:active={row.key === selectedKey} onclick={() => select(row.key)}>
+            <span class="name">{row.name || "(unnamed)"}</span>
+            <span class="chip {chip(row).replace(/ /g, '-')}">{chip(row)}</span>
+          </button>
         {/each}
         {#each removed as s (s.name)}
           <button
@@ -576,15 +569,7 @@
     gap: var(--space-2);
   }
 
-  .row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-  }
-
   .item {
-    flex: 1;
-    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: flex-start;

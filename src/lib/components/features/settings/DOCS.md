@@ -306,7 +306,7 @@ Save flow goes through `$lib/services/prompts.ts` → backend `save_prompt` Taur
 
 ### MCP Servers section
 
-`SectionMcpServers` edits the whole `mcp_servers` map: list on the left, one row container per server holding a `Switch` (`shared/ui`, on = not `disabled`) and the `<button class="item">` (no interactive element inside a button) with a state chip, editor on the right (a header with the server name followed by a `Switch`; then the tools block, name, command, args one per line, env rows, timeout, tool timeout rows). States come from `listMcpServers()` in `$lib/services/mcp.ts`, read once on mount, as do the tools from `listMcpTools()` (all tools of running servers, switched-off ones included). The chip is `serverChip(registry state or null, row.disabled)` (`$lib/utils/mcpServerChip.ts`):
+`SectionMcpServers` edits the whole `mcp_servers` map: list on the left, one `<button class="item">` per server with a state chip, editor on the right (a header with the server name followed by the server's only `Switch` (`shared/ui`, on = not `disabled`); then the tools block, name, command, args one per line, env rows, timeout, tool timeout rows). States come from `listMcpServers()` in `$lib/services/mcp.ts`, read once on mount, as do the tools from `listMcpTools()` (all tools of running servers, switched-off ones included). The chip is `serverChip(registry state or null, row.disabled)` (`$lib/utils/mcpServerChip.ts`):
 
 | Registry state at start | Switch | Chip |
 | --- | --- | --- |
@@ -316,7 +316,7 @@ Save flow goes through `$lib/services/prompts.ts` → backend `save_prompt` Taur
 | off or none | on | `starts after restart` |
 | off, error or none | off | `off` |
 
-A server the registry ran that is no longer configured shows `removed after restart`; a state `"off"` (skipped at start) is never listed as removed. Both switches set `row.disabled` and write at once with `tracker.flush(persist)`, as delete does.
+A server the registry ran that is no longer configured shows `removed after restart`; a state `"off"` (skipped at start) is never listed as removed. The header switch sets `row.disabled` and writes at once with `tracker.flush(persist)`, as delete does.
 
 Tools block of the editor: chip `off` shows "Off: tools are listed while the server runs." instead of it; a server that is on and failed to start shows its start error in full; a server the registry reports running lists its tools (`server === row.name`, switched-off ones included, "No tools." when none). Per tool: name, description, a `Switch` and a "Used by" line. The line has the tags `Chat` and `Settings agent` (from `toolUses(row.name, tool.name, store.settings.surfaces)`; the style of `ModelUseTags`; each tag is a button calling `navigateTo("surfaces.chat.generation.enabled_tools")` or `navigateTo("surfaces.settings_agent.generation.enabled_tools")`) or, when no surface lists the tool, "Used by nothing — assign in Chat ›" (a button navigating to the chat key); for a tool in `row.disabledTools` it reads "Off — not offered in Chat or Settings agent tools." instead of tags. The tool switch adds or removes the raw tool name in `row.disabledTools` and writes at once; `enabled_tools` entries of a switched-off tool stay, so switching it on restores them.
 
