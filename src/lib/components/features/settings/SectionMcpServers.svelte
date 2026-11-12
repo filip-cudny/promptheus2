@@ -293,12 +293,12 @@
           {@const state = stateOf.get(selected.name)}
           {@const serverTools = mcpTools.filter((t) => t.server === selected.name)}
           <header class="head">
+            <h1>{selected.name || "(unnamed)"}</h1>
             <Switch
               checked={!selected.disabled}
               label="Server on"
               onchange={(next) => setServerDisabled(selected, !next)}
             />
-            <h1>{selected.name || "(unnamed)"}</h1>
           </header>
 
           {#if chip(selected) === "off"}

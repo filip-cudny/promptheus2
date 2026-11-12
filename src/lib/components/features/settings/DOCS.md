@@ -306,7 +306,7 @@ Save flow goes through `$lib/services/prompts.ts` → backend `save_prompt` Taur
 
 ### MCP Servers section
 
-`SectionMcpServers` edits the whole `mcp_servers` map: list on the left, one row container per server holding a `Switch` (`shared/ui`, on = not `disabled`) and the `<button class="item">` (no interactive element inside a button) with a state chip, editor on the right (a header with a `Switch` and the server name; then the tools block, name, command, args one per line, env rows, timeout, tool timeout rows). States come from `listMcpServers()` in `$lib/services/mcp.ts`, read once on mount, as do the tools from `listMcpTools()` (all tools of running servers, switched-off ones included). The chip is `serverChip(registry state or null, row.disabled)` (`$lib/utils/mcpServerChip.ts`):
+`SectionMcpServers` edits the whole `mcp_servers` map: list on the left, one row container per server holding a `Switch` (`shared/ui`, on = not `disabled`) and the `<button class="item">` (no interactive element inside a button) with a state chip, editor on the right (a header with the server name followed by a `Switch`; then the tools block, name, command, args one per line, env rows, timeout, tool timeout rows). States come from `listMcpServers()` in `$lib/services/mcp.ts`, read once on mount, as do the tools from `listMcpTools()` (all tools of running servers, switched-off ones included). The chip is `serverChip(registry state or null, row.disabled)` (`$lib/utils/mcpServerChip.ts`):
 
 | Registry state at start | Switch | Chip |
 | --- | --- | --- |
