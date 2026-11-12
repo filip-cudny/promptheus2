@@ -2,6 +2,104 @@
 
 Reusable UI primitives shared across features. See [src/DOCS.md](../../../../DOCS.md) for general frontend conventions.
 
+## Buttons
+
+Rules for every button in the app.
+
+1. **Form by place.** The form of a button depends on where it stands and on its action (rules 2–4).
+2. **Icon-only** in these places, when the action has a vocabulary icon (rule 6); an action without one is icon + text. Icon-only appears nowhere else:
+   - window chrome and tab strip;
+   - message bubble footers;
+   - toolbars in section, card and panel headers;
+   - composer button bars;
+   - editor toolbars;
+   - per-row and per-chip actions in lists (remove, reorder, copy, retry, delete, export);
+   - suffixes inside an input (clear, reveal, insert placeholder);
+   - pagination.
+
+   Reason: these controls are dense and repeated next to content that explains them; a label per button would cost the width of the content. Nielsen Norman Group ("Icon Usability") finds that only a handful of icons (close, search, home, print, share) are understood without a label, so the vocabulary of rule 6 stays short and fixed.
+3. **Text-only** in:
+   - dialog and inline-confirm footers;
+   - actions inside banners and toasts (Retry, Dismiss);
+   - segmented toggles;
+   - link-style navigation, ending in `›`.
+
+   Reason: the verb is the decision; the banner's own icon already carries its state. Apple HIG and GNOME HIG both make dialog buttons text labels naming the action, not "Yes" or "OK".
+4. **Icon + text** everywhere else: a standalone action outside the places of rule 2 ("Add server", "Import .md", "Delete model" in a danger zone, empty-state actions). The icon stands left of the label.
+5. **Vocabulary is closed.** Rule 6 lists every icon allowed on an icon-only button. A new icon is added to it only when its meaning collides with no listed action and its action has no listed icon. Reason: a toolbar and header-bar icon is acceptable only while it is standard (Apple HIG, GNOME HIG); a second icon for one action, or one icon for two actions, breaks that.
+6. **One action, one icon** app-wide:
+
+   | Action | Icon |
+   |---|---|
+   | Close window, panel, modal, tab, palette | `X` |
+   | Minimize / maximize, restore window | `Minus` / `Square` |
+   | Hide side panel | `PanelRightClose` |
+   | Toggle conversation list | `PanelLeft` |
+   | Remove item from a list or chip, clear a field, cancel a running operation | `X` |
+   | Delete a stored entity or its content | `Trash2` |
+   | Copy | `Copy`, confirm `Check` |
+   | Send and copy | `CopyCheck` |
+   | Edit / view toggle | `Pencil` |
+   | Save | `Save` |
+   | Add item, attachment, tab | `Plus` |
+   | New conversation | `SquarePen` |
+   | Regenerate an answer | `RefreshCw` |
+   | Retry a failed operation | `RotateCcw` |
+   | More actions | `EllipsisVertical` |
+   | Previous / next | `ChevronLeft` / `ChevronRight` |
+   | Send, finish recording | `ArrowUp` |
+   | Stop | `Square` |
+   | Pause / resume | `Pause` / `Play` |
+   | Dictate | `Mic` |
+   | Import / export | `Upload` / `Download` |
+   | Insert placeholder or variable | `Braces` |
+   | Replace context with clipboard / append clipboard | `FileSymlink` / `FilePlus` |
+   | Paste clipboard into context | `ClipboardPaste` |
+   | Screenshot / select text into context | `ScanSquare` / `TextSelect` |
+   | Stop and send to chat | provider icon / `MessageSquareShare` |
+   | Open in its window | `SquareArrowOutUpRight` |
+   | Open history | `History` |
+   | Open settings | `SlidersHorizontal` |
+   | Web search toggle | `Globe` |
+   | Show / hide secret | `Eye` / `EyeOff` |
+   | Chip view / raw file | `Type` / `FileCode2` |
+   | Diagram source toggle | `Code` |
+
+7. **Labels** are English, sentence case, start with a verb, and name the object when the place does not ("Delete server", not "Yes").
+8. **Accessible name:**
+   - icon-only: `aria-label` is the label; `title` is the label too, except that a keyboard shortcut is added only to `title` ("Send (Enter)") and a disabled button may show its reason in `title` instead;
+   - text and icon + text: no `aria-label`, unless it contains the visible text;
+   - recording pill: every button has an accessible name (`aria-label` in the webview, `accessible_name` in the GNOME extension, same text); only row 2 actions show a tooltip, through the pill's own tooltip overlay, not `title`.
+
+   Reason: WCAG 2.2 SC 4.1.2 "Name, Role, Value" requires every control to have an accessible name, which an icon-only button gets only from `aria-label`; SC 2.5.3 "Label in Name" requires the accessible name to contain the visible text.
+9. **Destructive:**
+   - icon-only gets `variant="danger"` (red hover);
+   - a confirm button is text-only with `variant="danger"`.
+10. **Components:**
+    - icon-only through `ActionIconButton`;
+    - text and icon + text through `Button`;
+    - icon sizes from `ICON_SIZE` (`sm` 12, `md` 14, `lg` 16).
+
+    No override of a shared button's look from outside the component (for example `:global()` on its class). A raw `<button>` is allowed only for controls that are not buttons in this sense: `Switch`, `Chip` and chip remove buttons, `MenuItem`, list, menu and palette rows, tabs (with their close button), disclosures, segmented toggles, dropdown triggers, link-style buttons (inline text links and `›` navigation), scrims, `WindowControls` (OS-style minimize, maximize, close with its own close hover), the recording pill, `markdown.ts` HTML strings. They still follow rules 6–9.
+11. **Icon-only sizes and the primary circle:**
+    - default box 22 × 22 px (padding `--space-2`, icon `ICON_SIZE.md` 14 px): bubbles, sections, rows, inputs, editors, composers;
+    - large box 28 × 28 px (icon 16 px): window and panel header controls (`AgentPanel` header, `ChatTopButtons`, `TabSidebarHeader`, `Modal` close) and the tab strip "New tab";
+    - hover `--surface-overlay` in both sizes;
+    - the primary action of an icon-only bar is a filled circle, at most one per bar: 28 px, icon 16 px, stroke 3, `--text-primary` background, `--surface-base` icon, with a hover; in the composers (Send, Stop, Regenerate, Finish). The recording pill keeps its own colours with the same dimensions.
+
+### Button components
+
+- `ActionIconButton` props:
+  - `label` (required): `aria-label`, and `title` unless `title` is given;
+  - `title` (optional): only for a shortcut ("Send (Enter)") or a disabled reason;
+  - `size: "md" | "lg"` (box 22 / 28 px, icon 14 / 16 px); there is no numeric icon-px `size`;
+  - `variant: "default" | "danger" | "primary"`;
+  - `type="button"`, `{...rest}` passed to the element (`aria-pressed`, `onmousedown`), a bindable `element` for anchors and refocus;
+  - `stopPropagation` on click stays.
+- `npx svelte-check` fails on an `ActionIconButton` without `label`.
+- `Button` takes an optional `icon`: icon left, `ICON_SIZE.md`.
+- `ICON_SIZE` in `$lib/constants/ui.ts`: `sm` 12, `md` 14, `lg` 16.
+
 ## Conventions
 
 ### Component patterns
@@ -25,12 +123,13 @@ For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconPro
 
 ### ActionIconButton
 
-- `confirmIcon` swaps the icon for `COPY_FEEDBACK_MS` (1.2 s) after click through `useCopyFeedback`; a repeated click restarts the window. `confirmed` is a read-only prop that also shows `confirmIcon` (used by `AssistantBubble` auto-copy). `size` defaults to `ICON_SIZE.md`.
+- Props, sizes and variants: see "Buttons" above. `label` is required (`aria-label` and default `title`), `title` is optional, `size` is `"md"` (default) or `"lg"`, `variant` is `default`, `danger` or `primary`, `element` is bindable, other attributes go to the `<button>`.
+- `confirmIcon` swaps the icon for `COPY_FEEDBACK_MS` (1.2 s) after click through `useCopyFeedback`; a repeated click restarts the window. `confirmed` is a read-only prop that also shows `confirmIcon` (used by `AssistantBubble` auto-copy).
 - Copy feedback comes from `useCopyFeedback` (`$lib/utils/copyFeedback.svelte`) or `ActionIconButton confirmIcon`, never an own timer; the check keeps the button's normal text colour, no copied-state colour.
 - Borderless transparent button — no border, hover adds subtle background.
 - Use `confirmIcon={Check}` for actions where the user needs visual feedback (copy, save). Omit for actions with immediate visible effect (navigate, regenerate).
 - Icon sizes are defined in `$lib/constants/ui.ts` — never hardcode pixel values.
-- `active` marks a toggled-on button (tint of `--info`); `variant="danger"` turns the hover red.
+- `active` marks a toggled-on button (tint of `--info`); `variant="danger"` turns the hover red; `variant="primary"` is the filled circle.
 
 ### FilePathReveal
 
@@ -47,7 +146,7 @@ For typing dynamic Lucide icon props, use `ComponentType<SvelteComponent<IconPro
 
 ### Modal
 
-- `title`, `width` (px, default 480), `closeHover` (default true; `false` drops the close button hover background), `onClose`, `children`. Backdrop, header with close button, panel; a mousedown on the backdrop or `Escape` calls `onClose`.
+- `title`, `width` (px, default 480), `onClose`, `children`. Backdrop, header with close button (an `ActionIconButton size="lg"`), panel; a mousedown on the backdrop or `Escape` calls `onClose`.
 - The panel is a flex column; children (fields, footer) are laid out inside it. Focus is the caller's job (`onMount`).
 
 ### MenuItem
