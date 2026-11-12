@@ -25,7 +25,7 @@ import {
   getSettings,
   updateSurfaceModel,
   updateSurfaceReasoningEffort,
-  updateSurfaceEnabledTools,
+  setSurfaceTool,
 } from "$lib/services/settings";
 import type {
   ConversationNode,
@@ -1169,7 +1169,7 @@ export function createConversationStore(
       tab.selected_tools = tab.selected_tools.filter(t => t !== toolId);
     }
     windowDefaultSelectedTools = [...tab.selected_tools];
-    updateSurfaceEnabledTools("chat", tab.selected_tools);
+    setSurfaceTool("chat", toolId, enabled);
   }
 
 

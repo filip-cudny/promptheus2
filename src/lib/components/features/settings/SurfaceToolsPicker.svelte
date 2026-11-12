@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
   import { error as logError } from "@tauri-apps/plugin-log";
-  import { updateSurfaceEnabledTools } from "$lib/services/settings";
+  import { setSurfaceTool } from "$lib/services/settings";
+  import { listMcpTools } from "$lib/services/mcp";
+  import { onSettingsChanged } from "$lib/services/events";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { agentModelHasBuiltinSearch } from "$lib/utils/agentModel";
 
@@ -17,24 +18,40 @@
 
   let tools = $state<string[]>([]);
 
+  const chatModelIsOpenAi = $derived.by(() => {
+    const id = store.settings?.surfaces.chat.generation.model_id;
+    return store.models.find((m) => m.id === id)?.provider === "openai";
+  });
+
   const showBuiltinSearch = $derived(
-    surface === "settings_agent" &&
-      store.settings !== null &&
-      agentModelHasBuiltinSearch(store.settings.surfaces, store.models),
+    store.settings !== null &&
+      (surface === "chat"
+        ? chatModelIsOpenAi
+        : agentModelHasBuiltinSearch(store.settings.surfaces, store.models)),
   );
 
-  onMount(() => {
-    invoke<{ name: string; server: string }[]>("list_mcp_tools")
-      .then((list) => (tools = list.map((t) => `${t.server}.${t.name}`)))
+  function fetchTools() {
+    listMcpTools()
+      .then(
+        (list) =>
+          (tools = list.filter((t) => !t.disabled).map((t) => `${t.server}.${t.name}`)),
+      )
       .catch((e) => logError(`list_mcp_tools failed: ${e}`));
+  }
+
+  onMount(() => {
+    fetchTools();
+    const unlisten = onSettingsChanged(fetchTools);
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   });
 
   async function toggle(tool: string, on: boolean) {
-    const next = on ? [...enabled, tool] : enabled.filter((t) => t !== tool);
     try {
-      await updateSurfaceEnabledTools(surface, next);
+      await setSurfaceTool(surface, tool, on);
     } catch (e) {
-      logError(`update_surface_enabled_tools ${surface} failed: ${e}`);
+      logError(`set_surface_tool ${surface} failed: ${e}`);
     }
   }
 </script>

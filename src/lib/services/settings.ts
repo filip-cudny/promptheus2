@@ -106,11 +106,12 @@ export async function updateSurfaceReasoningEffort(
   return updateSurfaceParameter(surface, "reasoning_effort", effort);
 }
 
-export async function updateSurfaceEnabledTools(
+export async function setSurfaceTool(
   surface: SurfaceKind,
-  tools: string[],
+  tool: string,
+  enabled: boolean,
 ): Promise<void> {
-  return invokeWrite("update_surface_enabled_tools", { surface, tools });
+  return invokeWrite("set_surface_tool", { surface, tool, enabled });
 }
 
 export async function updateSpeechToTextConfig(

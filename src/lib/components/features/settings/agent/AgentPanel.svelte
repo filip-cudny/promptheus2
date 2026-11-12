@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { PanelRightClose, Sparkles, SquarePen } from "lucide-svelte";
+  import { Globe, PanelRightClose, Sparkles, SquarePen } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { error as logError } from "@tauri-apps/plugin-log";
   import {
+    agentModelHasBuiltinSearch,
     agentModelId,
     agentModelName,
     agentModelState,
@@ -11,7 +12,7 @@
   } from "$lib/utils/agentModel";
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import { getCachedCapabilities, prefetchCapabilities } from "$lib/stores/capabilities.svelte";
-  import { updateSurfaceModel, updateSurfaceReasoningEffort } from "$lib/services/settings";
+  import { setSurfaceTool, updateSurfaceModel, updateSurfaceReasoningEffort } from "$lib/services/settings";
   import ModelSelector from "$lib/components/shared/widgets/ModelSelector.svelte";
   import AgentMessages from "./AgentMessages.svelte";
   import AgentComposer from "./AgentComposer.svelte";
@@ -45,6 +46,12 @@
     store.settings ? agentReasoningEffort(store.settings.surfaces) : null,
   );
   const pickerVisible = $derived(textModels.some((m) => m.id === effectiveId));
+  const builtinSearchVisible = $derived(
+    store.settings ? agentModelHasBuiltinSearch(store.settings.surfaces, store.models) : false,
+  );
+  const webSearchOn = $derived(
+    store.settings?.surfaces.settings_agent.generation.enabled_tools.includes("web_search") ?? false,
+  );
 
   $effect(() => prefetchCapabilities(effectiveId));
   const capabilities = $derived(getCachedCapabilities(effectiveId));
@@ -58,6 +65,12 @@
   function selectEffort(effort: string | null) {
     updateSurfaceReasoningEffort("settings_agent", effort).catch((e) =>
       logError(`update reasoning_effort settings_agent failed: ${e}`),
+    );
+  }
+
+  function toggleWebSearch() {
+    setSurfaceTool("settings_agent", "web_search", !webSearchOn).catch((e) =>
+      logError(`set_surface_tool settings_agent failed: ${e}`),
     );
   }
 
@@ -118,6 +131,17 @@
       onModelSelect={selectModel}
       onReasoningSelect={selectEffort}
     />
+  {/if}
+  {#if builtinSearchVisible}
+    <button
+      class="web-search"
+      class:on={webSearchOn}
+      title="Web search"
+      aria-pressed={webSearchOn}
+      onclick={toggleWebSearch}
+    >
+      <Globe size={14} />
+    </button>
   {/if}
 {/snippet}
 
@@ -233,6 +257,30 @@
     border: 1px solid var(--border-default);
     font: inherit;
     font-size: var(--font-size-xs);
+  }
+
+  .web-search {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .web-search:hover {
+    background: var(--surface-overlay);
+    color: var(--text-primary);
+  }
+
+  .web-search.on,
+  .web-search.on:hover {
+    background: var(--accent-bg-soft);
+    color: var(--accent);
   }
 
   header button:disabled {

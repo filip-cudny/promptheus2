@@ -25,6 +25,8 @@ Files whose role does not follow from the name:
 - `tool-call/` — self-contained tool-invocation renderer; external entrypoint `ToolCallGroup` (used by `AssistantBubble`).
 - `components/ToolCall*.svelte` — pieces of `tool-call/ToolCallItem`; `ToolCallDetails` imports `tool-call/ToolResultRenderer`.
 - `drivers/useConversationDialogIpc.svelte.ts` — the dialog's IPC listeners.
+- `drivers/useMcpTools.svelte.ts` — finds the MCP `web_search` tool (`server.tool` id) in `listMcpTools()`, skipping tools with `disabled`; fetches at init and again on `mcp-ready` and `settings-changed`, so a tool switched off in Settings leaves an open chat window at once.
+- Composer tool toggle (`InputArea` → `store.toggleTool`) updates the tab's `selected_tools` and writes only that name with `setSurfaceTool("chat", id, enabled)` (`set_surface_tool`), so a change made in Settings meanwhile is not overwritten.
 - `drivers/useInputSync.svelte.ts` — local↔store sync for text/images/text attachments (see "Input sync"); `drivers/useSidebarMutex.svelte.ts` — see "Sidebar mutex".
 
 ## Layer contracts
