@@ -12,6 +12,7 @@
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import { getCachedCapabilities, prefetchCapabilities } from "$lib/stores/capabilities.svelte";
   import { setSurfaceTool, updateSurfaceModel, updateSurfaceReasoningEffort } from "$lib/services/settings";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import ModelSelector from "$lib/components/shared/widgets/ModelSelector.svelte";
   import AgentMessages from "./AgentMessages.svelte";
   import AgentComposer from "./AgentComposer.svelte";
@@ -104,13 +105,9 @@
     onlostpointercapture={endResize}
   ></div>
   <header>
-    <button class="icon-btn" title="Hide panel" onclick={() => agent.hidePanel("hide")}>
-      <PanelRightClose size={16} />
-    </button>
+    <ActionIconButton icon={PanelRightClose} size="lg" label="Hide panel" onclick={() => agent.hidePanel("hide")} />
     <span class="title">Settings agent{#if modelName}<span class="model" class:none={modelState !== "ok"} title={modelName}>{modelName}</span>{/if}</span>
-    <button class="icon-btn" title="New conversation" disabled={agent.running} onclick={() => agent.reset()}>
-      <SquarePen size={16} />
-    </button>
+    <ActionIconButton icon={SquarePen} size="lg" label="New conversation" disabled={agent.running} onclick={() => agent.reset()} />
   </header>
   <AgentMessages {docked} />
   <AgentComposer
@@ -134,15 +131,13 @@
     />
   {/if}
   {#if builtinSearchVisible}
-    <button
-      class="web-search"
-      class:on={webSearchOn}
-      title="Web search"
+    <ActionIconButton
+      icon={Globe}
+      label="Web search"
+      active={webSearchOn}
       aria-pressed={webSearchOn}
       onclick={toggleWebSearch}
-    >
-      <Globe size={14} />
-    </button>
+    />
   {/if}
 {/snippet}
 
@@ -240,53 +235,5 @@
 
   .model.none {
     color: var(--warning);
-  }
-
-  .icon-btn {
-    display: grid;
-    place-items: center;
-    flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border: none;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-  }
-
-  .icon-btn:hover:not(:disabled) {
-    background: var(--surface-raised);
-    color: var(--text-primary);
-  }
-
-  .icon-btn:disabled {
-    opacity: 0.4;
-    cursor: default;
-  }
-
-  .web-search {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    background: transparent;
-    border: none;
-    border-radius: 4px;
-    color: var(--text-muted);
-    cursor: pointer;
-  }
-
-  .web-search:hover {
-    background: var(--surface-overlay);
-    color: var(--text-primary);
-  }
-
-  .web-search.on,
-  .web-search.on:hover {
-    background: var(--accent-bg-soft);
-    color: var(--accent);
   }
 </style>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { EllipsisVertical, Pencil, Trash2 } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import FloatingPanel from "$lib/components/shared/ui/FloatingPanel.svelte";
   import MenuList from "$lib/components/shared/ui/MenuList.svelte";
   import MenuItem from "$lib/components/shared/ui/MenuItem.svelte";
@@ -22,9 +23,9 @@
   let buttonEl: HTMLButtonElement | undefined = $state();
 </script>
 
-<button class="more-btn" bind:this={buttonEl} onclick={onToggle}>
-  <EllipsisVertical size={14} />
-</button>
+<span class="more-wrap">
+  <ActionIconButton icon={EllipsisVertical} label="More actions" bind:element={buttonEl} onclick={onToggle} />
+</span>
 <FloatingPanel visible={open} anchorEl={buttonEl} align="end" fitContent onclose={onClose}>
   <MenuList role="menu">
     <MenuItem
@@ -49,29 +50,14 @@
 </FloatingPanel>
 
 <style>
-  .more-btn {
+  .more-wrap {
     flex-shrink: 0;
-    width: 20px;
-    height: 20px;
-    border-radius: var(--radius-md);
-    border: none;
-    background: transparent;
-    color: var(--text-faint);
-    cursor: pointer;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-0);
     opacity: 0;
   }
 
-  :global(.tab-item:hover) .more-btn,
-  .more-btn:focus {
+  :global(.tab-item:hover) .more-wrap,
+  .more-wrap:focus-within {
     opacity: 1;
-  }
-
-  .more-btn:hover {
-    color: var(--text-primary);
-    background: var(--surface-overlay);
   }
 </style>

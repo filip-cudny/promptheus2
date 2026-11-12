@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import CollapsibleSection from "$lib/components/shared/ui/CollapsibleSection.svelte";
   import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
+  import Button from "$lib/components/shared/ui/Button.svelte";
   import ContextEditor from "$lib/components/shared/widgets/ContextEditor.svelte";
   import { appendContext, appendContextImage, clearContext } from "$lib/services/context";
   import { Save, Check, X, Trash2 } from "lucide-svelte";
@@ -105,8 +106,8 @@
         {confirming === "close" ? "Clear context and close?" : "Clear context for this conversation?"}
       </span>
       <div class="confirm-actions">
-        <button class="confirm-btn confirm-yes" onclick={confirmAction}>Clear</button>
-        <button class="confirm-btn confirm-no" onclick={cancelConfirm}>Cancel</button>
+        <Button variant="danger" onclick={confirmAction}>Clear context</Button>
+        <Button onclick={cancelConfirm}>Cancel</Button>
       </div>
     </div>
   {:else}
@@ -114,6 +115,7 @@
       {#snippet actions()}
         <ActionIconButton
           icon={Trash2}
+          variant="danger"
           onclick={requestClear}
           label="Clear context"
           disabled={contextDisabled || !hasContent}
@@ -199,32 +201,4 @@
     gap: var(--space-3);
     flex-shrink: 0;
   }
-
-  .confirm-btn {
-    padding: var(--space-2) var(--space-5);
-    border-radius: var(--radius-md);
-    border: none;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    cursor: pointer;
-  }
-
-  .confirm-yes {
-    background: var(--danger);
-    color: var(--text-primary);
-  }
-
-  .confirm-yes:hover {
-    background: var(--danger);
-  }
-
-  .confirm-no {
-    background: var(--surface-overlay);
-    color: var(--text-primary);
-  }
-
-  .confirm-no:hover {
-    background: rgba(255, 255, 255, 0.18);
-  }
-
 </style>

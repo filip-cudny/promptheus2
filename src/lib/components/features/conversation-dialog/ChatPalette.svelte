@@ -6,6 +6,7 @@
   import { useListSelection } from "$lib/components/shared/drivers/useListSelection.svelte";
   import type { SearchResult } from "$lib/types/historySearch";
   import { useHistorySearch } from "$lib/stores/useHistorySearch.svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import CommandPalette from "$lib/components/shared/ui/CommandPalette.svelte";
   import KbdHint from "$lib/components/shared/ui/KbdHint.svelte";
   import { displayName, snippetFor, formatTimestamp } from "$lib/utils/historySearchSnippet";
@@ -92,14 +93,9 @@
   variant="overlay"
 >
   {#snippet headerExtras()}
-    <button
-      type="button"
-      class="palette-close"
-      aria-label="Close"
-      onclick={onClose}
-    >
-      <X size={ICON_SIZE.md} />
-    </button>
+    <span class="palette-close">
+      <ActionIconButton icon={X} label="Close" onclick={onClose} />
+    </span>
   {/snippet}
   {#snippet body()}
     <div class="palette-section-header">
@@ -168,20 +164,8 @@
 
 <style>
   .palette-close {
-    appearance: none;
-    border: 0;
-    background: transparent;
-    color: var(--text-disabled);
-    cursor: pointer;
-    padding: var(--space-0) var(--space-6);
     display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-  }
-
-  .palette-close:hover {
-    color: var(--text-primary);
+    padding: var(--space-0) var(--space-6);
   }
 
   .palette-section-header {

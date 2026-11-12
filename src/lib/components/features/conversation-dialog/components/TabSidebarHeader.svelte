@@ -1,6 +1,6 @@
 <script lang="ts">
   import { X } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
 
   let {
     title = "History",
@@ -13,9 +13,7 @@
 
 <div class="sidebar-header">
   <span class="sidebar-title">{title}</span>
-  <button class="close-btn" onclick={onClose}>
-    <X size={ICON_SIZE.md} />
-  </button>
+  <ActionIconButton icon={X} size="lg" label="Close conversation list" onclick={onClose} />
 </div>
 
 <style>
@@ -25,25 +23,6 @@
     justify-content: space-between;
     padding: var(--space-6) var(--space-6) var(--space-4);
     border-bottom: 1px solid var(--border-default);
-  }
-
-  .close-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: var(--radius-md);
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-0);
-  }
-
-  .close-btn:hover {
-    color: var(--text-primary);
-    background: var(--surface-overlay);
   }
 
   .sidebar-title {

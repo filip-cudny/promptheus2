@@ -16,7 +16,7 @@
   } = $props();
 </script>
 
-<button class="tool-chip" title={label} onclick={ondismiss}>
+<button class="tool-chip" title="Remove {label}" aria-label="Remove {label}" onclick={ondismiss}>
   {#if icon}
     {@const Icon = icon}
     <Icon size={14} />

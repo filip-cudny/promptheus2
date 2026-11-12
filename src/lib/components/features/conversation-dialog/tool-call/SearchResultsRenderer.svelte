@@ -89,7 +89,7 @@
               : fullContent}</pre>
           {#if isLong}
             <button class="expand-toggle" onclick={() => toggleExpand(i)}>
-              {isExpanded ? "Zwiń" : "Rozwiń"}
+              {isExpanded ? "Show less" : "Show more"}
             </button>
           {/if}
         {/if}

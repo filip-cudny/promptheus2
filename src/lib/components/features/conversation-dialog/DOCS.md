@@ -17,7 +17,7 @@ Each entrypoint is a thin orchestrator. IPC, listeners, timers, and pagination l
 Files whose role does not follow from the name:
 
 - `AssistantBubble.svelte`, `UserBubble.svelte`, `InputArea.svelte`, `TabSidebar.svelte` — orchestrators; the two bubbles use `ActionIconButton` for the footer buttons (`active` on the Edit button, `variant="danger"` on Delete); `AssistantBubble` edits its segments through `drivers/useEditSegments`, `UserBubble` through `BubbleEditField` and `SkillEditable` with its own `editMode`/`editText`.
-- `InputArea.svelte` button bar — Send, Stop and Regenerate share one look, a 26 px filled circle (`--text-primary` background, `--surface-base` icon `ArrowUp` / `Square` / `RefreshCw` at 14 px, stroke 3.4, the same as the agent composer's send; disabled opacity 0.4); Send & Copy stays a plain `ActionIconButton`.
+- `InputArea.svelte` button bar — Send, Stop and Regenerate are `ActionIconButton variant="primary"` (28 px filled circle, icon 16 px, stroke 3, hover; `ArrowUp` / `Square` / `RefreshCw`), shared with the agent composer and the `ComposerDictationBar` Finish; Send and copy is a plain `ActionIconButton`.
 - `ContextSection.svelte` — inline context bar (text/image chips + clear/edit).
 - `AttachMenu.svelte`, `components/SidebarMoreMenu.svelte` — `FloatingPanel` + `MenuList` dropdowns (the attach menu opens above its button, the sidebar menu aligns to the end of its button).
 - `sidebarItems.ts` — pure helpers building `SidebarItem[]` from history.
@@ -84,7 +84,7 @@ Both also carry a nullable `copy_token`, set only by pill stop + chat. With a to
 
 ## Dictation
 
-`InputArea` has a mic (`Mic`, left of Send & Copy) that records into the composer without the pill (backend: `src-tauri/src/services/speech/DOCS.md` "Composer dictation"; unrelated to "Voice-input source"). `useComposerDictation({ owner: "chat", insert })` (`shared/widgets/`, shared with the settings agent composer) holds the state `idle | recording | transcribing | error`.
+`InputArea` has a mic (`Mic`, left of Send and copy) that records into the composer without the pill (backend: `src-tauri/src/services/speech/DOCS.md` "Composer dictation"; unrelated to "Voice-input source"). `useComposerDictation({ owner: "chat", insert })` (`shared/widgets/`, shared with the settings agent composer) holds the state `idle | recording | transcribing | error`.
 
 - Press: `start(store.activeTabId, skillEditable.getSelection())` saves the tab id and the textarea selection and calls `start_composer_dictation`. Until the transcript is inserted, the session is cancelled or the error dismissed, `SkillEditable` is `readonly` and Enter sends nothing (also Ctrl/Cmd+Enter).
 - Bar: while the state is not `idle`, `ComposerDictationBar` replaces the button bar: level meter and `m:ss` with Cancel and Finish (the send circle); "Transcribing…" with Cancel; the error message with Retry and Dismiss (a start refusal: Dismiss only).

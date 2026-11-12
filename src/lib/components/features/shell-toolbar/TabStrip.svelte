@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Plus, X } from "lucide-svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import { providerIconSvg } from "$lib/icons/providerIcons";
   import { PROMPTHEUS_PROVIDER_ID } from "$lib/services/shellToolbar";
   import type { TabDto } from "$lib/services/tabs";
@@ -89,7 +90,7 @@
     }
   }
 
-  let plusEl = $state<HTMLButtonElement | null>(null);
+  let plusEl = $state<HTMLButtonElement | undefined>();
   let moreEl = $state<HTMLButtonElement | null>(null);
 </script>
 
@@ -122,6 +123,7 @@
             type="button"
             class="close"
             aria-label="Close tab"
+            title="Close tab"
             onclick={(e) => {
               e.stopPropagation();
               onClose(tab.id);
@@ -139,7 +141,7 @@
       bind:this={moreEl}
       type="button"
       class="more"
-      aria-label="More tabs"
+      aria-label="+{layout.hidden.length} more tabs"
       onmousedown={(e) => {
         e.stopPropagation();
         if (moreEl) onOpenOverflow(moreEl, layout.hidden);
@@ -149,18 +151,16 @@
     </button>
   {/if}
 
-  <button
-    bind:this={plusEl}
-    type="button"
-    class="strip-btn"
-    aria-label="New tab"
-    onmousedown={(e) => {
+  <ActionIconButton
+    icon={Plus}
+    size="lg"
+    label="New tab"
+    bind:element={plusEl}
+    onmousedown={(e: MouseEvent) => {
       e.stopPropagation();
       if (plusEl) onOpenPlus(plusEl);
     }}
-  >
-    <Plus size={16} />
-  </button>
+  />
 
   <div class="drag-fill" data-tauri-drag-region></div>
 </div>
@@ -298,25 +298,6 @@
   }
 
   .close:hover {
-    background: var(--surface-overlay);
-    color: var(--text-primary);
-  }
-
-  .strip-btn {
-    appearance: none;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    width: 28px;
-    height: 28px;
-    flex: 0 0 28px;
-    border-radius: var(--radius-md);
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-  }
-
-  .strip-btn:hover {
     background: var(--surface-overlay);
     color: var(--text-primary);
   }

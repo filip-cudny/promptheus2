@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick, type Snippet } from "svelte";
   import { ArrowUp, Mic, Square } from "lucide-svelte";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import { insertText } from "$lib/utils/insertText";
   import ComposerDictationBar from "$lib/components/shared/widgets/ComposerDictationBar.svelte";
@@ -75,20 +76,24 @@
         <ComposerDictationBar {dictation} />
       {:else}
         {@render beforeSend?.()}
-        <button
-          class="icon"
-          title={dictation.blockedTitle ?? "Dictate"}
+        <ActionIconButton
+          icon={Mic}
+          label="Dictate"
+          title={dictation.blockedTitle ?? undefined}
           disabled={running || !!dictation.blockedTitle}
           onclick={startDictation}
-        >
-          <Mic size={14} />
-        </button>
+        />
         {#if running}
-          <button class="send" title="Stop" onclick={oncancel}><Square size={14} strokeWidth={3.4} /></button>
+          <ActionIconButton icon={Square} variant="primary" label="Stop" onclick={oncancel} />
         {:else}
-          <button class="send" title="Send" disabled={!agent.draft.trim() || !modelReady} onclick={submit}>
-            <ArrowUp size={14} strokeWidth={3.4} />
-          </button>
+          <ActionIconButton
+            icon={ArrowUp}
+            variant="primary"
+            label="Send"
+            title="Send (Enter)"
+            disabled={!agent.draft.trim() || !modelReady}
+            onclick={submit}
+          />
         {/if}
       {/if}
     </div>
@@ -132,39 +137,5 @@
     justify-content: flex-end;
     align-items: center;
     gap: 4px;
-  }
-
-  .icon,
-  .send {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    border: none;
-    cursor: pointer;
-  }
-
-  .icon {
-    background: transparent;
-    color: var(--text-muted);
-    border-radius: 4px;
-  }
-
-  .icon:hover:not(:disabled) {
-    background: var(--surface-overlay);
-    color: var(--text-primary);
-  }
-
-  .send {
-    background: var(--text-primary);
-    color: var(--surface-base);
-    border-radius: 50%;
-  }
-
-  .icon:disabled,
-  .send:disabled {
-    opacity: 0.4;
-    cursor: default;
   }
 </style>

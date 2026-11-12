@@ -5,7 +5,7 @@
   import AttachmentRow from "./components/AttachmentRow.svelte";
   import BubbleEditField from "./components/BubbleEditField.svelte";
   import BubbleActionsFooter from "./components/BubbleActionsFooter.svelte";
-  import { Trash2, Pencil, Copy, Check, SendHorizonal } from "lucide-svelte";
+  import { Trash2, Pencil, Copy, Check, ArrowUp } from "lucide-svelte";
   import { handleEditablePaste } from "$lib/utils/paste";
   import { highlightSkills } from "$lib/utils/skillHighlight";
   import { openImagePreview, openTextPreview } from "$lib/services/windowPreviews";
@@ -133,7 +133,7 @@
     />
     {#if editMode}
       <ActionIconButton
-        icon={SendHorizonal}
+        icon={ArrowUp}
         onclick={submitEdit}
         label="Send"
         title="Send (Enter)"

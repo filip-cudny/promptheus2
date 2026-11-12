@@ -313,29 +313,30 @@
           onclick={startDictation}
           disabled={!!dictation.blockedTitle}
           label="Dictate"
-          title={dictation.blockedTitle ?? "Dictate"}
+          title={dictation.blockedTitle ?? undefined}
         />
 
         <ActionIconButton
           icon={CopyCheck}
           onclick={onSendAndCopy}
           disabled={!store.canSend || store.isExecuting}
-          label="Send & Copy"
-          title="Send & Copy (Ctrl+Enter)"
+          label="Send and copy"
+          title="Send and copy (Ctrl+Enter)"
         />
 
         {#if store.isExecuting}
-          <button class="send" title="Stop" onclick={() => store.stopExecution()}>
-            <Square size={14} strokeWidth={3.4} />
-          </button>
+          <ActionIconButton icon={Square} variant="primary" label="Stop" onclick={() => store.stopExecution()} />
         {:else if store.abortRegenerateNodeId || store.isRegenerateMode}
-          <button class="send" title="Regenerate (Enter)" onclick={sendOrRegenerate}>
-            <RefreshCw size={14} strokeWidth={3.4} />
-          </button>
+          <ActionIconButton icon={RefreshCw} variant="primary" label="Regenerate" title="Regenerate (Enter)" onclick={sendOrRegenerate} />
         {:else}
-          <button class="send" title="Send (Enter)" disabled={!store.canSend} onclick={sendOrRegenerate}>
-            <ArrowUp size={14} strokeWidth={3.4} />
-          </button>
+          <ActionIconButton
+            icon={ArrowUp}
+            variant="primary"
+            label="Send"
+            title="Send (Enter)"
+            disabled={!store.canSend}
+            onclick={sendOrRegenerate}
+          />
         {/if}
       </div>
     {/if}
@@ -420,23 +421,5 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-  }
-
-  .send {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    border: none;
-    border-radius: 50%;
-    background: var(--text-primary);
-    color: var(--surface-base);
-    cursor: pointer;
-  }
-
-  .send:disabled {
-    opacity: 0.4;
-    cursor: default;
   }
 </style>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { PanelLeft, SquarePen } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
+  import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
 
   let {
     sidebarOpen = false,
@@ -14,17 +14,10 @@
 </script>
 
 <div class="top-buttons" class:sidebar-open={sidebarOpen}>
-  <button
-    class="top-btn sidebar-toggle"
-    class:hidden={sidebarOpen}
-    onclick={onToggleSidebar}
-    title="Toggle conversations"
-  >
-    <PanelLeft size={ICON_SIZE.md} />
-  </button>
-  <button class="top-btn" onclick={onNewChat} title="New conversation">
-    <SquarePen size={ICON_SIZE.md} />
-  </button>
+  <div class="sidebar-toggle" class:hidden={sidebarOpen}>
+    <ActionIconButton icon={PanelLeft} size="lg" label="Toggle conversation list" onclick={onToggleSidebar} />
+  </div>
+  <ActionIconButton icon={SquarePen} size="lg" label="New conversation" onclick={onNewChat} />
 </div>
 
 <style>
@@ -43,6 +36,7 @@
   }
 
   .sidebar-toggle {
+    display: flex;
     width: 28px;
     overflow: visible;
     transition: width var(--motion-slow) var(--ease-default), opacity var(--motion-slow) var(--ease-default);
@@ -53,33 +47,5 @@
     opacity: 0;
     overflow: hidden;
     pointer-events: none;
-  }
-
-  .top-btn {
-    width: 28px;
-    height: 28px;
-    border-radius: var(--radius-lg);
-    border: none;
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    color: var(--text-disabled);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: var(--space-0);
-    position: relative;
-  }
-
-  :global([data-platform="linux"]) .top-btn {
-    background: var(--surface-overlay-faint);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-  }
-
-  .top-btn:hover {
-    color: var(--text-secondary);
-    background: var(--surface-overlay);
   }
 </style>

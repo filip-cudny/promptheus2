@@ -84,12 +84,4 @@
   .attach-btn-wrap {
     display: flex;
   }
-
-  .attach-btn-wrap :global(.action-icon-btn) {
-    width: 24px;
-    height: 24px;
-    padding: var(--space-0);
-    border-radius: var(--radius-lg);
-    color: var(--text-muted);
-  }
 </style>

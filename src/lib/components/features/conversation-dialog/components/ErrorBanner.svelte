@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { AlertCircle, RefreshCw } from "lucide-svelte";
+  import { AlertCircle } from "lucide-svelte";
   import { ICON_SIZE } from "$lib/constants/ui";
+  import Button from "$lib/components/shared/ui/Button.svelte";
 
   let {
     message,
@@ -20,10 +21,7 @@
     <AlertCircle size={ICON_SIZE.sm} />
     <span class="error-text">{message}</span>
     {#if onRetry}
-      <button class="retry-btn" onclick={onRetry}>
-        <RefreshCw size={ICON_SIZE.sm} />
-        Retry
-      </button>
+      <Button onclick={onRetry}>Retry</Button>
     {/if}
   </div>
 {/if}
@@ -52,26 +50,6 @@
     user-select: text;
     -webkit-user-select: text;
     cursor: text;
-  }
-
-  .retry-btn {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2) var(--space-4);
-    border: none;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-muted);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    cursor: pointer;
-  }
-
-  .retry-btn:hover {
-    background: var(--danger-bg-soft);
-    color: var(--danger);
   }
 
   .cancelled-hint {

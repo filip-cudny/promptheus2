@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ArrowUp, X } from "lucide-svelte";
   import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
+  import Button from "$lib/components/shared/ui/Button.svelte";
   import type { ComposerDictation } from "./useComposerDictation.svelte";
 
   let { dictation }: { dictation: ComposerDictation } = $props();
@@ -21,9 +22,7 @@
     <span class="time">{formatElapsed(phase.elapsedMs)}</span>
     <span class="spacer"></span>
     <ActionIconButton icon={X} label="Cancel" onclick={() => dictation.cancel()} />
-    <button class="finish" title="Finish" onclick={() => dictation.finish()}>
-      <ArrowUp size={14} strokeWidth={3.4} />
-    </button>
+    <ActionIconButton icon={ArrowUp} variant="primary" label="Finish" onclick={() => dictation.finish()} />
   {:else if phase.kind === "transcribing"}
     <span class="status">Transcribing…</span>
     <span class="spacer"></span>
@@ -32,9 +31,9 @@
     <span class="status error" title={phase.message}>{phase.message}</span>
     <span class="spacer"></span>
     {#if phase.retryable}
-      <button class="text-btn" onclick={() => dictation.retry()}>Retry</button>
+      <Button onclick={() => dictation.retry()}>Retry</Button>
     {/if}
-    <button class="text-btn" onclick={() => dictation.dismiss()}>Dismiss</button>
+    <Button onclick={() => dictation.dismiss()}>Dismiss</Button>
   {/if}
 </div>
 
@@ -82,34 +81,5 @@
 
   .spacer {
     flex: 1;
-  }
-
-  .finish {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    border: none;
-    border-radius: 50%;
-    background: var(--text-primary);
-    color: var(--surface-base);
-    cursor: pointer;
-  }
-
-  .text-btn {
-    border: none;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--text-secondary);
-    font: inherit;
-    font-size: var(--font-size-sm);
-    padding: var(--space-1) var(--space-3);
-    cursor: pointer;
-  }
-
-  .text-btn:hover {
-    background: var(--surface-overlay);
-    color: var(--text-primary);
   }
 </style>
