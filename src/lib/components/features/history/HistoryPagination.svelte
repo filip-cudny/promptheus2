@@ -1,6 +1,5 @@
 <script lang="ts">
   import { ChevronLeft, ChevronRight } from "lucide-svelte";
-  import { ICON_SIZE } from "$lib/constants/ui";
   import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
 
   let {
@@ -36,17 +35,15 @@
   <div class="page-nav">
     <ActionIconButton
       icon={ChevronLeft}
-      size={ICON_SIZE.md}
       disabled={currentPage === 0}
       onclick={() => currentPage--}
-      title="Previous page"
+      label="Previous page"
     />
     <ActionIconButton
       icon={ChevronRight}
-      size={ICON_SIZE.md}
       disabled={currentPage >= totalPages - 1}
       onclick={() => currentPage++}
-      title="Next page"
+      label="Next page"
     />
   </div>
 </div>

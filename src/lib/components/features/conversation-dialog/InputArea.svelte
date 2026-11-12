@@ -312,6 +312,7 @@
           icon={Mic}
           onclick={startDictation}
           disabled={!!dictation.blockedTitle}
+          label="Dictate"
           title={dictation.blockedTitle ?? "Dictate"}
         />
 
@@ -319,6 +320,7 @@
           icon={CopyCheck}
           onclick={onSendAndCopy}
           disabled={!store.canSend || store.isExecuting}
+          label="Send & Copy"
           title="Send & Copy (Ctrl+Enter)"
         />
 

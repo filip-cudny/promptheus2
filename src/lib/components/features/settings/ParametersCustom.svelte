@@ -179,8 +179,7 @@
         <span class="delete-btn-wrap">
           <ActionIconButton
             icon={Trash2}
-            size={ICON_SIZE.md}
-            title="Remove parameter"
+            label="Remove parameter"
             onclick={() => removeEntry(entry.id)}
           />
         </span>

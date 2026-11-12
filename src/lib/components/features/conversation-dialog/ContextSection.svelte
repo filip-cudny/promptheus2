@@ -115,20 +115,20 @@
         <ActionIconButton
           icon={Trash2}
           onclick={requestClear}
-          title="Clear context"
+          label="Clear context"
           disabled={contextDisabled || !hasContent}
         />
         <ActionIconButton
           icon={Save}
           confirmIcon={Check}
           onclick={saveContext}
-          title="Save context globally"
+          label="Save context globally"
           disabled={contextDisabled || saving}
         />
         <ActionIconButton
           icon={X}
           onclick={requestClose}
-          title="Close context"
+          label="Close context"
         />
       {/snippet}
       <ContextEditor

@@ -123,18 +123,19 @@
       icon={Copy}
       confirmIcon={Check}
       onclick={copyContent}
-      title="Copy text"
+      label="Copy text"
     />
     <ActionIconButton
       icon={Pencil}
       active={editMode}
       onclick={toggleEditMode}
-      title={editMode ? "View" : "Edit"}
+      label={editMode ? "View" : "Edit"}
     />
     {#if editMode}
       <ActionIconButton
         icon={SendHorizonal}
         onclick={submitEdit}
+        label="Send"
         title="Send (Enter)"
       />
     {/if}
@@ -143,7 +144,7 @@
         icon={Trash2}
         variant="danger"
         onclick={() => onDelete(node.node_id)}
-        title="Delete"
+        label="Delete"
       />
     {/if}
   </BubbleActionsFooter>

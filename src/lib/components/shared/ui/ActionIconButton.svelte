@@ -10,35 +10,55 @@
     icon,
     confirmIcon,
     onclick,
-    title = "",
+    label,
+    title,
     disabled = false,
-    size = ICON_SIZE.md,
+    size = "md",
     confirmed = false,
     active = false,
     variant = "default",
+    element = $bindable(),
+    ...rest
   }: {
     icon: LucideIcon;
     confirmIcon?: LucideIcon;
-    onclick: (e: MouseEvent) => void;
+    onclick?: (e: MouseEvent) => void;
+    label: string;
     title?: string;
     disabled?: boolean;
-    size?: number;
+    size?: "md" | "lg";
     confirmed?: boolean;
     active?: boolean;
-    variant?: "default" | "danger";
+    variant?: "default" | "danger" | "primary";
+    element?: HTMLButtonElement;
+    [key: string]: unknown;
   } = $props();
   const feedback = useCopyFeedback<true>();
   let ActiveIcon = $derived(confirmIcon && (confirmed || feedback.confirmed) ? confirmIcon : icon);
+  let iconSize = $derived(size === "lg" || variant === "primary" ? ICON_SIZE.lg : ICON_SIZE.md);
 
   function handleClick(e: MouseEvent) {
     e.stopPropagation();
-    onclick(e);
+    onclick?.(e);
     if (confirmIcon) feedback.flash(true);
   }
 </script>
 
-<button class="action-icon-btn" class:active class:danger={variant === "danger"} {title} {disabled} onclick={handleClick}>
-  <ActiveIcon {size} />
+<button
+  {...rest}
+  bind:this={element}
+  type="button"
+  class="action-icon-btn"
+  class:lg={size === "lg"}
+  class:active
+  class:danger={variant === "danger"}
+  class:primary={variant === "primary"}
+  aria-label={label}
+  title={title ?? label}
+  {disabled}
+  onclick={handleClick}
+>
+  <ActiveIcon size={iconSize} strokeWidth={variant === "primary" ? 3 : undefined} />
 </button>
 
 <style>
@@ -52,6 +72,10 @@
     background: transparent;
     color: var(--text-muted);
     cursor: pointer;
+  }
+
+  .action-icon-btn.lg {
+    padding: var(--space-3);
   }
 
   .action-icon-btn:hover:not(:disabled) {
@@ -68,6 +92,23 @@
   .action-icon-btn.danger:hover:not(:disabled) {
     background: var(--danger-border);
     color: var(--danger);
+  }
+
+  .action-icon-btn.primary,
+  .action-icon-btn.primary:hover:not(:disabled) {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 50%;
+    color: var(--surface-base);
+  }
+
+  .action-icon-btn.primary {
+    background: var(--text-primary);
+  }
+
+  .action-icon-btn.primary:hover:not(:disabled) {
+    background: var(--text-secondary);
   }
 
   .action-icon-btn:disabled {

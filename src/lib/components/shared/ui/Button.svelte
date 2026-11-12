@@ -1,14 +1,20 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
+  import type { ComponentType, Snippet, SvelteComponent } from "svelte";
+  import type { IconProps } from "lucide-svelte";
+  import { ICON_SIZE } from "$lib/constants/ui";
+
+  type LucideIcon = ComponentType<SvelteComponent<IconProps>>;
 
   let {
     variant = "ghost",
+    icon: Icon,
     disabled = false,
     onclick,
     children,
     ...rest
   }: {
     variant?: "primary" | "ghost" | "danger";
+    icon?: LucideIcon;
     disabled?: boolean;
     onclick?: (e: MouseEvent) => void;
     children: Snippet;
@@ -23,6 +29,7 @@
   {onclick}
   {...rest}
 >
+  {#if Icon}<Icon size={ICON_SIZE.md} />{/if}
   {@render children()}
 </button>
 

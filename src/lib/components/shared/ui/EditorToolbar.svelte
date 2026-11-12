@@ -25,13 +25,13 @@
   <span class="line-count">{lineCount} {lineCount === 1 ? "line" : "lines"}{#if tokenCount !== undefined} · ~{tokenCount} tokens{/if}</span>
   <div class="spacer"></div>
   {#if oncopy}
-    <ActionIconButton icon={Copy} confirmIcon={Check} size={ICON_SIZE.sm} onclick={() => oncopy?.()} title="Copy" />
+    <ActionIconButton icon={Copy} confirmIcon={Check} onclick={() => oncopy?.()} label="Copy" />
   {/if}
   <span class:active={editMode}>
     <ActionIconButton
       icon={Pencil}
-      size={ICON_SIZE.sm}
       onclick={() => (editMode = !editMode)}
+      label={editMode ? "View" : "Edit"}
     />
   </span>
   <button class="save-btn" disabled={saveDisabled} onclick={onsave}>

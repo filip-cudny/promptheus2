@@ -30,8 +30,7 @@
   {#snippet trailing()}
     <ActionIconButton
       icon={SlidersHorizontal}
-      size={ICON_SIZE.sm}
-      title="Open settings window"
+      label="Open settings window"
       onclick={onOpenSettings}
     />
   {/snippet}

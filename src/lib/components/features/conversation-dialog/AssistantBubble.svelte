@@ -184,25 +184,26 @@
       <ActionIconButton
         icon={RefreshCw}
         onclick={() => onRegenerate(node.node_id)}
-        title="Regenerate"
+        label="Regenerate"
       />
       <ActionIconButton
         icon={Copy}
         confirmIcon={Check}
         confirmed={autoCopied}
         onclick={copyContent}
-        title="Copy"
+        label="Copy"
       />
       <ActionIconButton
         icon={Pencil}
         active={editMode}
         onclick={toggleEditMode}
-        title={editMode ? "View" : "Edit"}
+        label={editMode ? "View" : "Edit"}
       />
       {#if editMode}
         <ActionIconButton
           icon={Save}
           onclick={submitEdit}
+          label="Save"
           title="Save (Ctrl+Enter)"
         />
       {/if}
@@ -212,7 +213,7 @@
           icon={Trash2}
           variant="danger"
           onclick={() => onDelete(node.node_id)}
-          title="Delete"
+          label="Delete"
         />
       {/if}
     </div>

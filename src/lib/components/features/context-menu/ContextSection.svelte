@@ -58,31 +58,31 @@
         icon={FileSymlink}
         confirmIcon={Check}
         onclick={onReplaceFromClipboard}
-        title="Replace context with clipboard"
+        label="Replace context with clipboard"
       />
       <ActionIconButton
         icon={FilePlus}
         confirmIcon={Check}
         onclick={onAppendFromClipboard}
-        title="Append clipboard to context"
+        label="Append clipboard to context"
       />
       <ActionIconButton
         icon={Pencil}
         onclick={onOpenEditor}
-        title="Edit context"
+        label="Edit context"
       />
       <ActionIconButton
         icon={Copy}
         confirmIcon={Check}
         onclick={onCopyAll}
-        title="Copy context text"
+        label="Copy context text"
         disabled={!hasTextItems}
       />
       <ActionIconButton
         icon={Trash2}
         confirmIcon={Check}
         onclick={onClear}
-        title="Clear all context"
+        label="Clear all context"
         disabled={isEmpty}
       />
     {/snippet}

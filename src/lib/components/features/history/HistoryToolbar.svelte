@@ -70,7 +70,7 @@
     />
     {#if searchStore.query !== ""}
       <span class="clear-btn-wrap">
-        <ActionIconButton icon={X} size={ICON_SIZE.md} onclick={clearSearch} title="Clear search" />
+        <ActionIconButton icon={X} onclick={clearSearch} label="Clear search" />
       </span>
     {/if}
   </div>

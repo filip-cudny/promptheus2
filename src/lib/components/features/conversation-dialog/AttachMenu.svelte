@@ -36,9 +36,8 @@
   <span class="attach-btn-wrap" bind:this={buttonEl}>
     <ActionIconButton
       icon={Plus}
-      size={ICON_SIZE.md}
       onclick={() => (menuOpen = !menuOpen)}
-      title="Add attachment"
+      label="Add attachment"
     />
   </span>
 

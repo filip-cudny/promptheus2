@@ -20,14 +20,14 @@
     </div>
     <span class="time">{formatElapsed(phase.elapsedMs)}</span>
     <span class="spacer"></span>
-    <ActionIconButton icon={X} title="Cancel" onclick={() => dictation.cancel()} />
+    <ActionIconButton icon={X} label="Cancel" onclick={() => dictation.cancel()} />
     <button class="finish" title="Finish" onclick={() => dictation.finish()}>
       <ArrowUp size={14} strokeWidth={3.4} />
     </button>
   {:else if phase.kind === "transcribing"}
     <span class="status">Transcribing…</span>
     <span class="spacer"></span>
-    <ActionIconButton icon={X} title="Cancel" onclick={() => dictation.cancel()} />
+    <ActionIconButton icon={X} label="Cancel" onclick={() => dictation.cancel()} />
   {:else if phase.kind === "error"}
     <span class="status error" title={phase.message}>{phase.message}</span>
     <span class="spacer"></span>

@@ -86,12 +86,12 @@
         icon={SquareArrowOutUpRight}
         onclick={handleOpenLastInteraction}
         disabled={!data?.last_text_entry}
-        title="Open last interaction"
+        label="Open last interaction"
       />
       <ActionIconButton
         icon={History}
         onclick={onOpenHistory}
-        title="View execution history"
+        label="View execution history"
       />
     {/snippet}
   </SectionHeader>
