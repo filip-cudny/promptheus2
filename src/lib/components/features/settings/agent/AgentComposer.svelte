@@ -4,6 +4,7 @@
   import ActionIconButton from "$lib/components/shared/ui/ActionIconButton.svelte";
   import { getSettingsAgent } from "$lib/stores/settingsAgent.svelte";
   import { insertText } from "$lib/utils/insertText";
+  import { autoResize, resizeTextarea } from "$lib/utils/autoResize";
   import ComposerDictationBar from "$lib/components/shared/widgets/ComposerDictationBar.svelte";
   import { useComposerDictation } from "$lib/components/shared/widgets/useComposerDictation.svelte";
 
@@ -25,6 +26,11 @@
 
   let input = $state<HTMLTextAreaElement>();
   const dictation = useComposerDictation({ owner: "settings", insert: insertDictation });
+
+  $effect(() => {
+    agent.draft;
+    if (input) resizeTextarea(input);
+  });
 
   $effect(() => {
     if (agent.focusRequest === 0) return;
@@ -67,6 +73,7 @@
       bind:this={input}
       bind:value={() => agent.draft, agent.setDraft}
       onkeydown={handleKeydown}
+      use:autoResize={"35vh"}
       rows="2"
       readonly={dictation.active}
       placeholder={modelReady ? "Ask about or change a setting…" : "Pick a model to start"}
@@ -122,7 +129,6 @@
   textarea {
     display: block;
     width: 100%;
-    resize: none;
     padding: 0;
     background: transparent;
     color: var(--text-primary);
