@@ -1,5 +1,8 @@
 <script lang="ts">
   import { Globe, PanelRightClose, SquarePen } from "lucide-svelte";
+  import { fly } from "svelte/transition";
+  import { cubicOut } from "svelte/easing";
+  import { prefersReducedMotion } from "svelte/motion";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { error as logError } from "@tauri-apps/plugin-log";
   import {
@@ -92,7 +95,13 @@
   }
 </script>
 
-<aside class="panel" class:docked style:width="{width}px" bind:this={panel}>
+<aside
+  class="panel"
+  class:docked
+  style:width="{width}px"
+  bind:this={panel}
+  transition:fly={{ x: prefersReducedMotion.current ? 0 : width, duration: agent.panelAnimated ? 200 : 0, easing: cubicOut }}
+>
   <div
     class="resize-handle"
     class:dragging

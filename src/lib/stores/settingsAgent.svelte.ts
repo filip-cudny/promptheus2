@@ -30,6 +30,7 @@ let error = $state<string | null>(null);
 let panelOpen = $state(false);
 let panelMode = $state<PanelMode>("overlay");
 let panelWidth = $state(DEFAULT_PANEL_WIDTH);
+let panelAnimated = false;
 let focusRequest = $state(0);
 let pinRequest = $state(0);
 let draft = $state("");
@@ -214,6 +215,7 @@ async function savePanelWidth() {
 }
 
 async function setPanelOpen(open: boolean) {
+  panelAnimated = true;
   if (open) await loadPanelWidth();
   panelOpen = open;
   panelMode = open ? await settingsAgentPanel(true) : "overlay";
@@ -281,6 +283,7 @@ export function getSettingsAgent() {
     get panelOpen() { return panelOpen; },
     get panelMode() { return panelMode; },
     get panelWidth() { return panelWidth; },
+    get panelAnimated() { return panelAnimated; },
     get focusRequest() { return focusRequest; },
     get pinRequest() { return pinRequest; },
     get draft() { return draft; },
