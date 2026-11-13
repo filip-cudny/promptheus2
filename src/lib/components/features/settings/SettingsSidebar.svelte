@@ -58,6 +58,9 @@
   import Sidebar from "$lib/components/shared/ui/Sidebar.svelte";
   import { getSettingsNavigation } from "$lib/stores/settingsNavigation.svelte";
   import SettingsSearch from "./SettingsSearch.svelte";
+  import { SIDEBAR_WIDTH } from "$lib/utils/agentPanelLayout";
+
+  let { lead = 0 }: { lead?: number } = $props();
 
   const navigation = getSettingsNavigation();
 
@@ -68,8 +71,8 @@
   }
 </script>
 
-<Sidebar>
-  <div class="sidebar-inner">
+<Sidebar width="{SIDEBAR_WIDTH + lead}px">
+  <div class="sidebar-inner" style:padding-left="{lead}px">
     <h1 class="sidebar-title">Settings</h1>
     <SettingsSearch {sectionLabel} />
 

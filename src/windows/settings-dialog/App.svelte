@@ -15,6 +15,7 @@
     CONTENT_MIN_WIDTH,
     agentPanelLayout,
     clampPanelWidth,
+    sidebarLead,
   } from "$lib/utils/agentPanelLayout";
 
   const store = getSettingsStore();
@@ -24,6 +25,9 @@
 
   let bodyWidth = $state(0);
   const panelLayout = $derived(agentPanelLayout(bodyWidth, agent.panelWidth));
+  const lead = $derived(
+    sidebarLead(bodyWidth, agent.panelOpen && panelLayout.docked ? panelLayout.width : 0),
+  );
 
   type AgentPanelWindow = {
     __settingsAgentPanel?: unknown;
@@ -57,7 +61,7 @@
     bind:clientWidth={bodyWidth}
     style:--content-min-width="{CONTENT_MIN_WIDTH}px"
   >
-    <SettingsSidebar />
+    <SettingsSidebar {lead} />
     <SettingsContent />
     {#if !agent.panelOpen}
       <button class="agent-button" title="Show agent panel" onclick={() => agent.openPanel("reopen")}>

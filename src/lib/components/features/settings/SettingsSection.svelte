@@ -58,7 +58,7 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--space-6);
-    margin-inline: var(--column-gutter);
+    margin-right: var(--column-gutter);
     padding: var(--space-8) var(--space-8) var(--space-6);
     border-bottom: 1px solid var(--border-faint);
   }
@@ -102,7 +102,7 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    padding: var(--space-8) calc(var(--space-8) + var(--column-gutter));
+    padding: var(--space-8) calc(var(--space-8) + var(--column-gutter)) var(--space-8) var(--space-8);
     gap: var(--space-8);
   }
 </style>

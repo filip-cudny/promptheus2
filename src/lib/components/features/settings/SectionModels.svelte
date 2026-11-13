@@ -114,10 +114,6 @@
     min-height: 0;
   }
 
-  .section-models > :global(.model-list) {
-    margin-left: var(--column-gutter);
-  }
-
   .editor-pane {
     flex: 1;
     min-width: 0;

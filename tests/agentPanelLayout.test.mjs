@@ -5,6 +5,7 @@ import {
   PANEL_MIN_WIDTH,
   agentPanelLayout,
   clampPanelWidth,
+  sidebarLead,
 } from "../src/lib/utils/agentPanelLayout.ts";
 
 const DOCK_AT = CONTENT_MIN_WIDTH + 300;
@@ -44,4 +45,16 @@ test("drag clamp is [300, container - content minimum] docked and [300, containe
   assert.strictEqual(clampPanelWidth(DOCK_AT + 200, 10_000), 500);
   assert.strictEqual(clampPanelWidth(DOCK_AT - 1, 10_000), DOCK_AT - 1);
   assert.strictEqual(clampPanelWidth(DOCK_AT - 1, 100), 300);
+});
+
+test("sidebar lead is half the free width, shrunk first by the docked panel", () => {
+  assert.strictEqual(sidebarLead(2560, 0), 650);
+  assert.strictEqual(sidebarLead(2560, 380), 650);
+  assert.strictEqual(sidebarLead(1920, 0), 330);
+  assert.strictEqual(sidebarLead(1920, 380), 280);
+});
+
+test("sidebar lead is never negative", () => {
+  assert.strictEqual(sidebarLead(1340, 380), 0);
+  assert.strictEqual(sidebarLead(1100, 0), 0);
 });

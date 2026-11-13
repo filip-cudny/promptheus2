@@ -61,7 +61,7 @@
     flex-direction: column;
     min-width: 0;
     --column-width: 1040px;
-    --column-gutter: max(0px, (100% - var(--column-width)) / 2);
+    --column-gutter: max(0px, 100% - var(--column-width));
   }
 
   .loading,
