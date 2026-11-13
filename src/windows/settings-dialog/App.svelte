@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { Sparkles } from "lucide-svelte";
+  import { Tween, prefersReducedMotion } from "svelte/motion";
+  import { cubicOut } from "svelte/easing";
   import { ICON_SIZE } from "$lib/constants/ui";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
   import { syncTheme } from "$lib/stores/theme.svelte";
@@ -25,9 +27,19 @@
 
   let bodyWidth = $state(0);
   const panelLayout = $derived(agentPanelLayout(bodyWidth, agent.panelWidth));
-  const lead = $derived(
+  const leadTarget = $derived(
     sidebarLead(bodyWidth, agent.panelOpen && panelLayout.docked ? panelLayout.width : 0),
   );
+  const lead = new Tween(0, { easing: cubicOut });
+  let previousPanelOpen = agent.panelOpen;
+
+  $effect(() => {
+    const target = leadTarget;
+    const toggled = agent.panelOpen !== previousPanelOpen;
+    previousPanelOpen = agent.panelOpen;
+    const animate = toggled && agent.panelAnimated && !prefersReducedMotion.current;
+    lead.set(target, { duration: animate ? 200 : 0 });
+  });
 
   type AgentPanelWindow = {
     __settingsAgentPanel?: unknown;
@@ -61,7 +73,7 @@
     bind:clientWidth={bodyWidth}
     style:--content-min-width="{CONTENT_MIN_WIDTH}px"
   >
-    <SettingsSidebar {lead} />
+    <SettingsSidebar lead={lead.current} />
     <SettingsContent />
     {#if !agent.panelOpen}
       <button class="agent-button" title="Show agent panel" onclick={() => agent.openPanel("reopen")}>

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Globe, PanelRightClose, SquarePen } from "lucide-svelte";
-  import { fly } from "svelte/transition";
+  import { fly, type TransitionConfig } from "svelte/transition";
   import { cubicOut } from "svelte/easing";
   import { prefersReducedMotion } from "svelte/motion";
   import { getSettingsStore } from "$lib/stores/settings.svelte";
@@ -93,40 +93,52 @@
     dragging = false;
     onresizeend();
   }
+
+  function spaceTransition(node: HTMLElement): TransitionConfig {
+    const duration = agent.panelAnimated ? 200 : 0;
+    if (!docked) {
+      return fly(node, { x: prefersReducedMotion.current ? 0 : width, duration, easing: cubicOut });
+    }
+    if (prefersReducedMotion.current) {
+      return { duration, easing: cubicOut, css: (t) => `opacity: ${t}` };
+    }
+    return { duration, easing: cubicOut, css: (t) => `width: ${t * width}px; opacity: ${t}` };
+  }
 </script>
 
-<aside
-  class="panel"
-  class:docked
-  style:width="{width}px"
-  bind:this={panel}
-  transition:fly={{ x: prefersReducedMotion.current ? 0 : width, duration: agent.panelAnimated ? 200 : 0, easing: cubicOut }}
->
-  <div
-    class="resize-handle"
-    class:dragging
-    role="separator"
-    aria-orientation="vertical"
-    onpointerdown={startResize}
-    onpointermove={resize}
-    onpointerup={endResize}
-    onpointercancel={endResize}
-    onlostpointercapture={endResize}
-  ></div>
-  <header>
-    <ActionIconButton icon={PanelRightClose} size="lg" label="Hide panel" onclick={() => agent.hidePanel("hide")} />
-    <span class="title">Settings agent{#if modelName}<span class="model" class:none={modelState !== "ok"} title={modelName}>{modelName}</span>{/if}</span>
-    <ActionIconButton icon={SquarePen} size="lg" label="New conversation" disabled={agent.running} onclick={() => agent.reset()} />
-  </header>
-  <AgentMessages {docked} />
-  <AgentComposer
-    running={agent.running}
-    modelReady={modelState === "ok"}
-    onsend={agent.send}
-    oncancel={agent.cancel}
-    beforeSend={modelPicker}
-  />
-</aside>
+<div class="space" class:docked style:width="{width}px" transition:spaceTransition>
+  <aside
+    class="panel"
+    class:docked
+    style:width={docked ? `${width}px` : "100%"}
+    bind:this={panel}
+  >
+    <div
+      class="resize-handle"
+      class:dragging
+      role="separator"
+      aria-orientation="vertical"
+      onpointerdown={startResize}
+      onpointermove={resize}
+      onpointerup={endResize}
+      onpointercancel={endResize}
+      onlostpointercapture={endResize}
+    ></div>
+    <header>
+      <ActionIconButton icon={PanelRightClose} size="lg" label="Hide panel" onclick={() => agent.hidePanel("hide")} />
+      <span class="title">Settings agent{#if modelName}<span class="model" class:none={modelState !== "ok"} title={modelName}>{modelName}</span>{/if}</span>
+      <ActionIconButton icon={SquarePen} size="lg" label="New conversation" disabled={agent.running} onclick={() => agent.reset()} />
+    </header>
+    <AgentMessages {docked} />
+    <AgentComposer
+      running={agent.running}
+      modelReady={modelState === "ok"}
+      onsend={agent.send}
+      oncancel={agent.cancel}
+      beforeSend={modelPicker}
+    />
+  </aside>
+</div>
 
 {#snippet modelPicker()}
   {#if pickerVisible}
@@ -151,26 +163,37 @@
 {/snippet}
 
 <style>
-  .panel {
-    display: flex;
-    flex-direction: column;
-    flex-shrink: 0;
+  .space {
+    flex: none;
     max-width: 100%;
     position: absolute;
     top: 0;
     right: 0;
     bottom: 0;
+    z-index: 10;
+    overflow: visible;
+  }
+
+  .space.docked {
+    position: relative;
+    max-width: calc(100% - var(--content-min-width));
+    z-index: auto;
+  }
+
+  .panel {
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
     background: var(--surface-base);
     border-left: 1px solid var(--border-default);
     box-shadow: var(--shadow-lg, -4px 0 16px rgba(0, 0, 0, 0.3));
-    z-index: 10;
   }
 
   .panel.docked {
-    position: relative;
-    max-width: calc(100% - var(--content-min-width));
     box-shadow: none;
-    z-index: auto;
   }
 
   .resize-handle {
